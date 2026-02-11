@@ -11,17 +11,13 @@ env:
 
 jobs:
   test:
-    name: Test (${{ matrix.rust }})
+    name: Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust: [stable, "1.70"]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
 
       # ---- Build ----
@@ -93,12 +89,10 @@ jobs:
 
       # ---- Clippy ----
       - name: Clippy (workspace, all features)
-        if: matrix.rust == 'stable'
         run: cargo clippy --workspace --all-features -- -D warnings
 
       # ---- Format ----
       - name: Format check
-        if: matrix.rust == 'stable'
         run: cargo fmt --all --check
 
       # ---- Playground example ----
