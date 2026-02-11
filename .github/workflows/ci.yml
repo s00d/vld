@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable, "1.70"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      # ---- Build ----
+      - name: Build workspace (all features)
+        run: cargo build --workspace --all-features
+
+      # ---- Tests: workspace ----
+      - name: Test (default features)
+        run: cargo test --workspace
+
+      - name: Test (all features)
+        run: cargo test --workspace --all-features
+
+      # ---- Tests: vld core with feature combinations ----
+      - name: Test vld (no default features)
+        run: cargo test -p vld --no-default-features
+
+      - name: Test vld (serialize only)
+        run: cargo test -p vld --no-default-features --features serialize
+
+      - name: Test vld (openapi only)
+        run: cargo test -p vld --no-default-features --features openapi
+
+      - name: Test vld (diff only)
+        run: cargo test -p vld --no-default-features --features diff
+
+      - name: Test vld (serialize + openapi + diff)
+        run: cargo test -p vld --no-default-features --features "serialize,openapi,diff"
+
+      # ---- Tests: individual crates ----
+      - name: Test vld-derive
+        run: cargo test -p vld-derive
+
+      - name: Test vld-axum
+        run: cargo test -p vld-axum
+
+      - name: Test vld-actix
+        run: cargo test -p vld-actix
+
+      - name: Test vld-ts
+        run: cargo test -p vld-ts
+
+      - name: Test vld-diesel
+        run: cargo test -p vld-diesel
+
+      - name: Test vld-utoipa
+        run: cargo test -p vld-utoipa
+
+      - name: Test vld-config (all features)
+        run: cargo test -p vld-config --all-features
+
+      - name: Test vld-tower
+        run: cargo test -p vld-tower
+
+      - name: Test vld-rocket
+        run: cargo test -p vld-rocket
+
+      - name: Test vld-poem
+        run: cargo test -p vld-poem
+
+      - name: Test vld-warp
+        run: cargo test -p vld-warp
+
+      - name: Test vld-sea
+        run: cargo test -p vld-sea
+
+      - name: Test vld-clap
+        run: cargo test -p vld-clap
+
+      # ---- Clippy ----
+      - name: Clippy (workspace, all features)
+        if: matrix.rust == 'stable'
+        run: cargo clippy --workspace --all-features -- -D warnings
+
+      # ---- Format ----
+      - name: Format check
+        if: matrix.rust == 'stable'
+        run: cargo fmt --all --check
+
+      # ---- Playground example ----
+      - name: Run playground example
+        run: cargo run -p playground

@@ -1,0 +1,27 @@
+[package]
+name = "vld-utoipa"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "utoipa integration for the vld validation library — auto-generate OpenAPI schemas from vld definitions"
+documentation = "https://docs.rs/vld-utoipa"
+readme = "README.md"
+keywords = ["validation", "utoipa", "openapi", "schema", "vld"]
+categories = ["web-programming", "development-tools"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true, features = ["openapi"] }
+utoipa = { version = "5" }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true }
+vld = { workspace = true, features = ["openapi", "serialize"] }
+
+[[example]]
+name = "utoipa_basic"
+path = "examples/utoipa_basic.rs"

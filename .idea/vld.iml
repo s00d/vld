@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="EMPTY_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-actix/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-actix/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-actix/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-axum/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-axum/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-axum/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-clap/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-clap/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-clap/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-config/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-config/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-config/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-derive/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-diesel/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-diesel/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-diesel/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-http-common/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-http-common/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-poem/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-poem/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-poem/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-rocket/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-rocket/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-rocket/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-sea/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-sea/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-sea/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-tower/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-tower/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-tower/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-ts/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-ts/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-ts/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-utoipa/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-utoipa/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-utoipa/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-warp/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-warp/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/vld-warp/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/examples/playground/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-actix/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-actix/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-actix/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-axum/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-axum/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-axum/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-clap/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-clap/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-clap/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-config/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-config/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-config/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-derive/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-diesel/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-diesel/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-diesel/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-poem/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-poem/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-poem/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-rocket/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-rocket/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-rocket/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-sea/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-sea/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-sea/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-tower/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-tower/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-tower/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-ts/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-ts/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-ts/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-utoipa/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-utoipa/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-utoipa/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-warp/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-warp/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vld-warp/tests" isTestSource="true" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

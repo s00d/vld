@@ -1,0 +1,42 @@
+[package]
+name = "vld-config"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Config validation for vld — validate TOML/YAML/JSON/ENV configs at load time"
+documentation = "https://docs.rs/vld-config"
+readme = "README.md"
+keywords = ["validation", "config", "toml", "yaml", "vld"]
+categories = ["config", "web-programming"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[features]
+default = ["config-rs"]
+config-rs = ["dep:config"]
+figment = ["dep:figment"]
+
+[dependencies]
+vld = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+config = { version = "0.14", optional = true, default-features = false, features = ["toml", "json"] }
+figment = { version = "0.10", optional = true, features = ["toml", "json", "env"] }
+
+[dev-dependencies]
+vld = { workspace = true }
+config = { version = "0.14", features = ["toml", "json", "yaml"] }
+figment = { version = "0.10", features = ["toml", "json", "env"] }
+tempfile = "3"
+
+[[example]]
+name = "config_basic"
+path = "examples/config_basic.rs"
+required-features = ["config-rs"]
+
+[[example]]
+name = "figment_basic"
+path = "examples/figment_basic.rs"
+required-features = ["figment"]

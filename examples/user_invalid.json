@@ -1,0 +1,12 @@
+{
+  "name": "X",
+  "email": "not-email",
+  "age": 25,
+  "role": "admin",
+  "nickname": "!",
+  "tags": ["", "rust"],
+  "address": {
+    "city": "London",
+    "zip": "1"
+  }
+}

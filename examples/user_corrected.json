@@ -1,0 +1,12 @@
+{
+  "name": "",
+  "email": "",
+  "age": 25,
+  "role": "admin",
+  "nickname": "anonymous",
+  "tags": [],
+  "address": {
+    "city": "",
+    "zip": ""
+  }
+}

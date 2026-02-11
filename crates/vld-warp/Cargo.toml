@@ -1,0 +1,30 @@
+[package]
+name = "vld-warp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Warp integration for the vld validation library"
+documentation = "https://docs.rs/vld-warp"
+readme = "README.md"
+keywords = ["validation", "warp", "web", "json", "filter"]
+categories = ["web-programming", "web-programming::http-server"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+vld-http-common = { workspace = true }
+warp = "0.3"
+serde_json = { workspace = true }
+bytes = "1"
+
+[dev-dependencies]
+vld = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+serde = { workspace = true }
+
+[[example]]
+name = "warp_basic"
+path = "examples/warp_basic.rs"

@@ -1,0 +1,22 @@
+[package]
+name = "vld-http-common"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Shared HTTP helpers for vld web-framework integrations (internal)"
+documentation = "https://docs.rs/vld-http-common"
+readme = "README.md"
+keywords = ["validation", "http", "helpers", "vld"]
+categories = ["web-programming"]
+exclude = [".idea/"]
+
+[dependencies]
+serde_json = { workspace = true }
+vld = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+vld = { workspace = true }

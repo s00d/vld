@@ -1,0 +1,89 @@
+[workspace]
+members = [
+    ".",
+    "crates/vld-derive",
+    "crates/vld-axum",
+    "crates/vld-actix",
+    "crates/vld-ts",
+    "crates/vld-diesel",
+    "crates/vld-utoipa",
+    "crates/vld-config",
+    "crates/vld-tower",
+    "crates/vld-rocket",
+    "crates/vld-poem",
+    "crates/vld-warp",
+    "crates/vld-sea",
+    "crates/vld-clap",
+    "crates/vld-http-common",
+    "examples/playground",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+license = "MIT"
+repository = "https://github.com/s00d/vld"
+homepage = "https://github.com/s00d/vld"
+
+[workspace.dependencies]
+# Internal crates
+vld = { path = ".", version = "0.1.0" }
+vld-derive = { path = "crates/vld-derive", version = "0.1.0" }
+vld-http-common = { path = "crates/vld-http-common", version = "0.1.0" }
+
+# Shared external
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[package]
+name = "vld"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Type-safe runtime validation library for Rust, inspired by Zod"
+documentation = "https://docs.rs/vld"
+readme = "README.md"
+keywords = ["validation", "schema", "json", "zod", "parsing"]
+categories = ["parsing", "web-programming"]
+exclude = [
+    ".idea/",
+    ".github/",
+    "tests/",
+    "benches/",
+    "examples/playground/",
+    "examples/user_saved.json",
+    "examples/user_corrected.json",
+    "crates/",
+]
+
+[features]
+default = ["std"]
+std = []
+regex = ["dep:regex-lite"]
+derive = ["dep:vld-derive"]
+serialize = []
+deserialize = []
+openapi = []
+diff = []
+chrono = ["dep:chrono"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex-lite = { version = "0.1", optional = true }
+chrono = { version = "0.4", optional = true, default-features = false, features = ["std", "clock"] }
+vld-derive = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+serde = { workspace = true }
+proptest = "1"
+
+[[bench]]
+name = "validation_bench"
+harness = false

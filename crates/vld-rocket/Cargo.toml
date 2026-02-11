@@ -1,0 +1,29 @@
+[package]
+name = "vld-rocket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Rocket integration for the vld validation library"
+documentation = "https://docs.rs/vld-rocket"
+readme = "README.md"
+keywords = ["validation", "rocket", "web", "json", "extractor"]
+categories = ["web-programming", "web-programming::http-server"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+vld-http-common = { workspace = true }
+rocket = { version = "0.5", default-features = false, features = ["json"] }
+serde_json = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+vld = { workspace = true }
+rocket = { version = "0.5", features = ["json"] }
+
+[[example]]
+name = "rocket_basic"
+path = "examples/rocket_basic.rs"

@@ -1,0 +1,6 @@
+/target
+.idea/
+examples/user_saved.json
+examples/user_corrected.json
+PUBLISHING.md
+docs.txt

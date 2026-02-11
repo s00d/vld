@@ -1,0 +1,30 @@
+[package]
+name = "vld-poem"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Poem integration for the vld validation library"
+documentation = "https://docs.rs/vld-poem"
+readme = "README.md"
+keywords = ["validation", "poem", "web", "json", "extractor"]
+categories = ["web-programming", "web-programming::http-server"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+vld-http-common = { workspace = true }
+poem = "3"
+serde_json = { workspace = true }
+
+[dev-dependencies]
+vld = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+poem = { version = "3", features = ["test"] }
+serde = { workspace = true }
+
+[[example]]
+name = "poem_basic"
+path = "examples/poem_basic.rs"

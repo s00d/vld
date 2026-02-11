@@ -1,0 +1,34 @@
+[package]
+name = "vld-axum"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Axum integration for the vld validation library"
+documentation = "https://docs.rs/vld-axum"
+readme = "README.md"
+keywords = ["validation", "axum", "web", "json", "extractor"]
+categories = ["web-programming", "web-programming::http-server"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+vld-http-common = { workspace = true }
+axum = { version = "0.8" }
+serde_json = { workspace = true }
+bytes = "1"
+http = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+hyper = "1"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+serde = { workspace = true }
+vld = { workspace = true }
+
+[[example]]
+name = "axum_basic"
+path = "examples/axum_basic.rs"

@@ -1,0 +1,27 @@
+[package]
+name = "vld-clap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Clap integration for the vld validation library — validate CLI arguments after parsing"
+documentation = "https://docs.rs/vld-clap"
+readme = "README.md"
+keywords = ["validation", "clap", "cli", "arguments", "parsing"]
+categories = ["command-line-interface", "parsing"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true, features = ["derive"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+vld = { workspace = true, features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
+
+[[example]]
+name = "clap_basic"
+path = "examples/clap_basic.rs"

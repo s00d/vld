@@ -1,0 +1,30 @@
+[package]
+name = "vld-actix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Actix-web integration for the vld validation library"
+documentation = "https://docs.rs/vld-actix"
+readme = "README.md"
+keywords = ["validation", "actix", "web", "json", "extractor"]
+categories = ["web-programming", "web-programming::http-server"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+vld-http-common = { workspace = true }
+actix-web = "4"
+serde_json = { workspace = true }
+
+[dev-dependencies]
+actix-rt = "2"
+bytes = "1"
+serde = { workspace = true }
+vld = { workspace = true }
+
+[[example]]
+name = "actix_basic"
+path = "examples/actix_basic.rs"

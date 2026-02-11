@@ -1,0 +1,12 @@
+{
+  "name": "Alex",
+  "email": "alex@example.com",
+  "age": 30,
+  "role": "admin",
+  "nickname": "alexey_dev",
+  "tags": ["rust", "validation"],
+  "address": {
+    "city": "New York",
+    "zip": "100001"
+  }
+}

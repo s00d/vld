@@ -1,0 +1,38 @@
+# cargo-release configuration
+# Install: cargo install cargo-release
+# Usage:   cargo release patch --workspace --execute
+#          cargo release minor --workspace --execute
+#          cargo release major --workspace --execute
+#
+# Dry-run (default, без --execute):
+#          cargo release patch --workspace
+
+# Sign commits/tags
+sign-commit = false
+sign-tag = false
+
+# Push to remote after release
+push = true
+push-remote = "origin"
+
+# Create git tag
+tag = true
+tag-prefix = "v"
+tag-name = "{{prefix}}{{version}}"
+consolidate-commits = true
+tag-message = "Release {{crate_name}} v{{version}}"
+
+# Commit message
+pre-release-commit-message = "chore: release v{{version}}"
+
+# Pre-release checks
+verify = true
+
+# Publish to crates.io
+publish = true
+
+# Allow dirty working directory (set false for strict mode)
+allow-branch = ["master", "main"]
+
+# Dependent version replacement — auto update `vld = { version = "X.Y.Z" }` everywhere
+dependent-version = "upgrade"

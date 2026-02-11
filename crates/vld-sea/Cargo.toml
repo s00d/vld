@@ -1,0 +1,29 @@
+[package]
+name = "vld-sea"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SeaORM integration for the vld validation library — validate ActiveModel before insert/update"
+documentation = "https://docs.rs/vld-sea"
+readme = "README.md"
+keywords = ["validation", "sea-orm", "orm", "activemodel", "database"]
+categories = ["web-programming", "database"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+sea-orm = { version = "1", default-features = false }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+vld = { workspace = true }
+sea-orm = { version = "1", default-features = false, features = ["macros"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[example]]
+name = "sea_basic"
+path = "examples/sea_basic.rs"

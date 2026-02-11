@@ -1,0 +1,36 @@
+[package]
+name = "vld-tower"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Tower middleware for vld — validate HTTP request bodies in any Tower-compatible framework"
+documentation = "https://docs.rs/vld-tower"
+readme = "README.md"
+keywords = ["validation", "tower", "middleware", "http", "vld"]
+categories = ["web-programming", "web-programming::http-server"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+serde_json = { workspace = true }
+tower-layer = "0.3"
+tower-service = "0.3"
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+bytes = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tower = { version = "0.5", features = ["util"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+serde = { workspace = true }
+vld = { workspace = true }
+
+[[example]]
+name = "tower_basic"
+path = "examples/tower_basic.rs"
