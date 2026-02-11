@@ -196,7 +196,7 @@ fn parse_result_to_json_value() {
     assert_eq!(val["name"], "Alex");
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(all(feature = "serialize", feature = "std"))]
 #[test]
 fn parse_result_save_to_file() {
     let input = json!({

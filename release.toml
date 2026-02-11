@@ -1,11 +1,40 @@
 # cargo-release configuration
 # Install: cargo install cargo-release
-# Usage:   cargo release patch --workspace --execute
-#          cargo release minor --workspace --execute
-#          cargo release major --workspace --execute
 #
-# Dry-run (default, без --execute):
-#          cargo release patch --workspace
+# crates.io has a rate limit of 5 NEW crates at a time.
+# For the first publish, use the batched approach below.
+# After all crates exist on crates.io, you can use:
+#   cargo release patch --workspace --execute
+#
+# === First-time publish (batched, 5 crates per batch) ===
+#
+# Batch 1 (foundations):
+#   cargo publish -p vld-derive
+#   cargo publish -p vld
+#   cargo publish -p vld-http-common
+#   cargo publish -p vld-ts
+#   cargo publish -p vld-clap
+#
+# (wait ~1 min for crates.io index to update)
+#
+# Batch 2 (integrations):
+#   cargo publish -p vld-config
+#   cargo publish -p vld-diesel
+#   cargo publish -p vld-utoipa
+#   cargo publish -p vld-tower
+#   cargo publish -p vld-sea
+#
+# (wait ~1 min)
+#
+# Batch 3 (web frameworks):
+#   cargo publish -p vld-axum
+#   cargo publish -p vld-actix
+#   cargo publish -p vld-rocket
+#   cargo publish -p vld-poem
+#   cargo publish -p vld-warp
+#
+# === Subsequent releases ===
+#   cargo release patch --workspace --execute
 
 # Sign commits/tags
 sign-commit = false
