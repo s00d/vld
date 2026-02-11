@@ -1,4 +1,5 @@
 use serde_json::json;
+#[allow(unused_imports)]
 use vld::prelude::*;
 
 #[test]

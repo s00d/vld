@@ -1,3 +1,10 @@
+[![Crates.io](https://img.shields.io/crates/v/vld-actix?style=for-the-badge)](https://crates.io/crates/vld-actix)
+[![docs.rs](https://img.shields.io/docsrs/vld-actix?style=for-the-badge)](https://docs.rs/vld-actix)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/s00d/vld)
+[![GitHub issues](https://img.shields.io/badge/github-issues-orange?style=for-the-badge)](https://github.com/s00d/vld/issues)
+[![GitHub stars](https://img.shields.io/badge/github-stars-yellow?style=for-the-badge)](https://github.com/s00d/vld/stargazers)
+
 # vld-actix
 
 [Actix-web](https://actix.rs/) integration for the [vld](https://crates.io/crates/vld) validation library.

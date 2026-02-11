@@ -1,3 +1,10 @@
+[![Crates.io](https://img.shields.io/crates/v/vld-clap?style=for-the-badge)](https://crates.io/crates/vld-clap)
+[![docs.rs](https://img.shields.io/docsrs/vld-clap?style=for-the-badge)](https://docs.rs/vld-clap)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/s00d/vld)
+[![GitHub issues](https://img.shields.io/badge/github-issues-orange?style=for-the-badge)](https://github.com/s00d/vld/issues)
+[![GitHub stars](https://img.shields.io/badge/github-stars-yellow?style=for-the-badge)](https://github.com/s00d/vld/stargazers)
+
 # vld-clap
 
 [Clap](https://docs.rs/clap) integration for the **vld** validation library.

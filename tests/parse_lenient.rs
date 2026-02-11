@@ -270,6 +270,7 @@ fn parse_result_display() {
 
 // ---- File input ----
 
+#[cfg(feature = "std")]
 #[test]
 fn parse_from_file_path() {
     let dir = std::env::temp_dir().join("vld_test_input");
@@ -283,6 +284,7 @@ fn parse_from_file_path() {
     let _ = std::fs::remove_file(&path);
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn parse_lenient_from_file() {
     let dir = std::env::temp_dir().join("vld_test_input2");
@@ -302,6 +304,7 @@ fn parse_lenient_from_file() {
     let _ = std::fs::remove_file(&path);
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn parse_missing_file() {
     let path = std::path::Path::new("/tmp/vld_nonexistent_file.json");

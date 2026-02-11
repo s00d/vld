@@ -1,5 +1,4 @@
 use serde_json::json;
-use utoipa::openapi::schema::Schema;
 use utoipa::openapi::RefOr;
 use utoipa::{PartialSchema, ToSchema};
 use vld::prelude::*;

@@ -1,3 +1,10 @@
+[![Crates.io](https://img.shields.io/crates/v/vld-tower?style=for-the-badge)](https://crates.io/crates/vld-tower)
+[![docs.rs](https://img.shields.io/docsrs/vld-tower?style=for-the-badge)](https://docs.rs/vld-tower)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/s00d/vld)
+[![GitHub issues](https://img.shields.io/badge/github-issues-orange?style=for-the-badge)](https://github.com/s00d/vld/issues)
+[![GitHub stars](https://img.shields.io/badge/github-stars-yellow?style=for-the-badge)](https://github.com/s00d/vld/stargazers)
+
 # vld-tower
 
 Universal [Tower](https://docs.rs/tower) middleware for validating HTTP JSON
