@@ -1065,26 +1065,26 @@ cargo bench
 
 The `vld` project is organized as a Cargo workspace with several crates:
 
-| Crate                       | Path          | Description                                                                                                                              |
-|-----------------------------|---------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| [`vld`](.)                              | `.`                    | Core validation library — schemas, parsers, macros, error handling, i18n                                                                 |
-| [`vld-derive`](crates/vld-derive/)      | `crates/vld-derive/`   | Procedural macro `#[derive(Validate)]` for automatic struct validation                                                                   |
-| [`vld-axum`](crates/vld-axum/)          | `crates/vld-axum/`     | [Axum](https://github.com/tokio-rs/axum) integration — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
-| [`vld-actix`](crates/vld-actix/)        | `crates/vld-actix/`    | [Actix-web](https://actix.rs/) integration — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie`           |
-| [`vld-diesel`](crates/vld-diesel/)      | `crates/vld-diesel/`   | [Diesel](https://diesel.rs/) ORM integration — `Validated<S, T>` wrapper, `VldText`, `VldInt` column types                               |
-| [`vld-utoipa`](crates/vld-utoipa/)      | `crates/vld-utoipa/`   | [utoipa](https://docs.rs/utoipa) integration — auto-generate `ToSchema` from `vld` definitions                                          |
-| [`vld-config`](crates/vld-config/)      | `crates/vld-config/`   | Config validation — validate TOML/YAML/JSON/ENV via [config-rs](https://docs.rs/config) or [figment](https://docs.rs/figment)            |
-| [`vld-tower`](crates/vld-tower/)        | `crates/vld-tower/`    | Universal [Tower](https://docs.rs/tower) middleware — validate JSON bodies in any Tower-compatible framework                              |
-| [`vld-rocket`](crates/vld-rocket/)      | `crates/vld-rocket/`   | [Rocket](https://rocket.rs/) integration — extractors `VldJson`, `VldQuery`, `VldForm` + JSON error catchers                             |
-| [`vld-poem`](crates/vld-poem/)          | `crates/vld-poem/`     | [Poem](https://docs.rs/poem) integration — extractors `VldJson`, `VldQuery`, `VldForm`                                                   |
-| [`vld-warp`](crates/vld-warp/)          | `crates/vld-warp/`     | [Warp](https://docs.rs/warp) integration — filters `vld_json`, `vld_query` + `handle_rejection`                                          |
-| [`vld-sea`](crates/vld-sea/)            | `crates/vld-sea/`      | [SeaORM](https://www.sea-ql.org/SeaORM/) integration — validate `ActiveModel` before insert/update                                       |
-| [`vld-clap`](crates/vld-clap/)          | `crates/vld-clap/`     | [Clap](https://docs.rs/clap) integration — validate CLI arguments via `#[derive(Validate)]`                                             |
-| [`vld-salvo`](crates/vld-salvo/)        | `crates/vld-salvo/`    | [Salvo](https://salvo.rs/) integration — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie`               |
-| [`vld-tauri`](crates/vld-tauri/)        | `crates/vld-tauri/`    | [Tauri](https://tauri.app/) integration — validate IPC commands, events, state, channels, plugin config                                  |
-| [`vld-ts`](crates/vld-ts/)              | `crates/vld-ts/`       | TypeScript codegen — generates [Zod](https://zod.dev/) schemas from `vld` JSON Schema output                                             |
-| [`vld-fake`](crates/vld-fake/)          | `crates/vld-fake/`     | Fake data generation — produce random test data conforming to `vld` schemas                                                              |
-| [`vld-http-common`](crates/vld-http-common/) | `crates/vld-http-common/` | Internal shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates)                                 |
+| Crate | Version | Description |
+|-------|---------|-------------|
+| [`vld`](.) | [![crates.io](https://img.shields.io/crates/v/vld?style=flat-square)](https://crates.io/crates/vld) | Core validation library — schemas, parsers, macros, error handling, i18n |
+| [`vld-derive`](crates/vld-derive/) | [![crates.io](https://img.shields.io/crates/v/vld-derive?style=flat-square)](https://crates.io/crates/vld-derive) | Procedural macro `#[derive(Validate)]` for automatic struct validation |
+| [`vld-axum`](crates/vld-axum/) | [![crates.io](https://img.shields.io/crates/v/vld-axum?style=flat-square)](https://crates.io/crates/vld-axum) | [Axum](https://github.com/tokio-rs/axum) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
+| [`vld-actix`](crates/vld-actix/) | [![crates.io](https://img.shields.io/crates/v/vld-actix?style=flat-square)](https://crates.io/crates/vld-actix) | [Actix-web](https://actix.rs/) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
+| [`vld-rocket`](crates/vld-rocket/) | [![crates.io](https://img.shields.io/crates/v/vld-rocket?style=flat-square)](https://crates.io/crates/vld-rocket) | [Rocket](https://rocket.rs/) — extractors `VldJson`, `VldQuery`, `VldForm` + JSON error catchers |
+| [`vld-poem`](crates/vld-poem/) | [![crates.io](https://img.shields.io/crates/v/vld-poem?style=flat-square)](https://crates.io/crates/vld-poem) | [Poem](https://docs.rs/poem) — extractors `VldJson`, `VldQuery`, `VldForm`, `VldPath`, `VldHeaders`, `VldCookie` |
+| [`vld-warp`](crates/vld-warp/) | [![crates.io](https://img.shields.io/crates/v/vld-warp?style=flat-square)](https://crates.io/crates/vld-warp) | [Warp](https://docs.rs/warp) — filters `vld_json`, `vld_query`, `vld_param`, `vld_path` + `handle_rejection` |
+| [`vld-salvo`](crates/vld-salvo/) | [![crates.io](https://img.shields.io/crates/v/vld-salvo?style=flat-square)](https://crates.io/crates/vld-salvo) | [Salvo](https://salvo.rs/) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
+| [`vld-tower`](crates/vld-tower/) | [![crates.io](https://img.shields.io/crates/v/vld-tower?style=flat-square)](https://crates.io/crates/vld-tower) | Universal [Tower](https://docs.rs/tower) middleware — validate JSON bodies in any Tower-compatible framework |
+| [`vld-diesel`](crates/vld-diesel/) | [![crates.io](https://img.shields.io/crates/v/vld-diesel?style=flat-square)](https://crates.io/crates/vld-diesel) | [Diesel](https://diesel.rs/) ORM — `Validated<S, T>` wrapper, `VldText`, `VldInt` column types |
+| [`vld-sea`](crates/vld-sea/) | [![crates.io](https://img.shields.io/crates/v/vld-sea?style=flat-square)](https://crates.io/crates/vld-sea) | [SeaORM](https://www.sea-ql.org/SeaORM/) — validate `ActiveModel` before insert/update |
+| [`vld-utoipa`](crates/vld-utoipa/) | [![crates.io](https://img.shields.io/crates/v/vld-utoipa?style=flat-square)](https://crates.io/crates/vld-utoipa) | [utoipa](https://docs.rs/utoipa) — auto-generate `ToSchema` from `vld` definitions |
+| [`vld-config`](crates/vld-config/) | [![crates.io](https://img.shields.io/crates/v/vld-config?style=flat-square)](https://crates.io/crates/vld-config) | Config validation — TOML/YAML/JSON/ENV via [config-rs](https://docs.rs/config) or [figment](https://docs.rs/figment) |
+| [`vld-clap`](crates/vld-clap/) | [![crates.io](https://img.shields.io/crates/v/vld-clap?style=flat-square)](https://crates.io/crates/vld-clap) | [Clap](https://docs.rs/clap) — validate CLI arguments via `#[derive(Validate)]` |
+| [`vld-tauri`](crates/vld-tauri/) | [![crates.io](https://img.shields.io/crates/v/vld-tauri?style=flat-square)](https://crates.io/crates/vld-tauri) | [Tauri](https://tauri.app/) — validate IPC commands, events, state, channels, plugin config |
+| [`vld-ts`](crates/vld-ts/) | [![crates.io](https://img.shields.io/crates/v/vld-ts?style=flat-square)](https://crates.io/crates/vld-ts) | TypeScript codegen — generates [Zod](https://zod.dev/) schemas from `vld` JSON Schema output |
+| [`vld-fake`](crates/vld-fake/) | [![crates.io](https://img.shields.io/crates/v/vld-fake?style=flat-square)](https://crates.io/crates/vld-fake) | Fake data generation — `User::fake()`, `fake_many()`, `fake_seeded()` with realistic dictionaries |
+| [`vld-http-common`](crates/vld-http-common/) | [![crates.io](https://img.shields.io/crates/v/vld-http-common?style=flat-square)](https://crates.io/crates/vld-http-common) | Shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates) |
 
 ### vld-derive
 
