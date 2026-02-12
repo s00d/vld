@@ -14,13 +14,16 @@ members = [
     "crates/vld-warp",
     "crates/vld-sea",
     "crates/vld-clap",
+    "crates/vld-salvo",
+    "crates/vld-tauri",
+    "crates/vld-fake",
     "crates/vld-http-common",
     "examples/playground",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.70"
 license = "MIT"
@@ -31,7 +34,7 @@ homepage = "https://github.com/s00d/vld"
 # Internal crates
 vld = { path = ".", version = "0.1.0" }
 vld-derive = { path = "crates/vld-derive", version = "0.1.0" }
-vld-http-common = { path = "crates/vld-http-common", version = "0.1.0" }
+vld-http-common = { path = "crates/vld-http-common", version = "0.1.1" }
 
 # Shared external
 serde = { version = "1", features = ["derive"] }

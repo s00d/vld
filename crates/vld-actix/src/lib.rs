@@ -77,24 +77,7 @@ impl fmt::Display for VldJsonError {
 
 impl ResponseError for VldJsonError {
     fn error_response(&self) -> HttpResponse {
-        let errors: Vec<serde_json::Value> = self
-            .error
-            .issues
-            .iter()
-            .map(|issue| {
-                let path: String = issue.path.iter().map(|p| p.to_string()).collect();
-                serde_json::json!({
-                    "path": path,
-                    "message": issue.message,
-                    "code": issue.code.key(),
-                })
-            })
-            .collect();
-
-        let body = serde_json::json!({
-            "error": "Validation failed",
-            "issues": errors,
-        });
+        let body = vld_http_common::format_vld_error(&self.error);
 
         HttpResponse::UnprocessableEntity()
             .content_type("application/json")

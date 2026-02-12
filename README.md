@@ -1080,7 +1080,11 @@ The `vld` project is organized as a Cargo workspace with several crates:
 | [`vld-warp`](crates/vld-warp/)          | `crates/vld-warp/`     | [Warp](https://docs.rs/warp) integration — filters `vld_json`, `vld_query` + `handle_rejection`                                          |
 | [`vld-sea`](crates/vld-sea/)            | `crates/vld-sea/`      | [SeaORM](https://www.sea-ql.org/SeaORM/) integration — validate `ActiveModel` before insert/update                                       |
 | [`vld-clap`](crates/vld-clap/)          | `crates/vld-clap/`     | [Clap](https://docs.rs/clap) integration — validate CLI arguments via `#[derive(Validate)]`                                             |
+| [`vld-salvo`](crates/vld-salvo/)        | `crates/vld-salvo/`    | [Salvo](https://salvo.rs/) integration — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie`               |
+| [`vld-tauri`](crates/vld-tauri/)        | `crates/vld-tauri/`    | [Tauri](https://tauri.app/) integration — validate IPC commands, events, state, channels, plugin config                                  |
 | [`vld-ts`](crates/vld-ts/)              | `crates/vld-ts/`       | TypeScript codegen — generates [Zod](https://zod.dev/) schemas from `vld` JSON Schema output                                             |
+| [`vld-fake`](crates/vld-fake/)          | `crates/vld-fake/`     | Fake data generation — produce random test data conforming to `vld` schemas                                                              |
+| [`vld-http-common`](crates/vld-http-common/) | `crates/vld-http-common/` | Internal shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates)                                 |
 
 ### vld-derive
 
@@ -1392,6 +1396,106 @@ fn main() {
     validate_or_exit(&cli);
     println!("email={}, port={}", cli.email, cli.port);
 }
+```
+
+### vld-salvo
+
+[Salvo](https://salvo.rs/) integration — extractors implement `Extractible` and work as
+`#[handler]` function parameters, just like Salvo's built-in `JsonBody` or `PathParam`.
+
+```toml
+[dependencies]
+vld-salvo = "0.1"
+salvo = "0.89"
+```
+
+```rust
+use salvo::prelude::*;
+use vld_salvo::prelude::*;
+
+vld::schema! {
+    #[derive(Debug, Clone, serde::Serialize)]
+    pub struct CreateUser {
+        pub name: String  => vld::string().min(2),
+        pub email: String => vld::string().email(),
+    }
+}
+
+#[handler]
+async fn create(body: VldJson<CreateUser>, res: &mut Response) {
+    res.render(Json(serde_json::json!({"name": body.name})));
+}
+```
+
+### vld-tauri
+
+[Tauri](https://tauri.app/) IPC validation — commands, events, state, channels, plugin config.
+**Zero dependency on `tauri`** — only `vld` + `serde` + `serde_json`.
+
+```toml
+[dependencies]
+vld-tauri = "0.1"
+tauri = "2"
+```
+
+```rust
+use vld_tauri::prelude::*;
+
+vld::schema! {
+    #[derive(Debug, Clone, serde::Serialize)]
+    pub struct CreateUser {
+        pub name: String  => vld::string().min(2),
+        pub email: String => vld::string().email(),
+    }
+}
+
+// Pattern 1 — explicit
+#[tauri::command]
+fn create_user(payload: serde_json::Value) -> Result<String, VldTauriError> {
+    let user = validate::<CreateUser>(payload)?;
+    Ok(format!("Created {}", user.name))
+}
+
+// Pattern 2 — auto-validated
+#[tauri::command]
+fn create_user2(payload: VldPayload<CreateUser>) -> Result<String, VldTauriError> {
+    Ok(format!("Created {}", payload.name))
+}
+```
+
+### vld-fake
+
+Generate **fake / test data** that satisfies `vld` validation schemas. Define rules once —
+get instant, constraint-aware random data for tests, seed scripts, and demos.
+
+```toml
+[dependencies]
+vld = { version = "0.1", features = ["openapi"] }
+vld-fake = "0.1"
+```
+
+```rust
+use vld::prelude::*;
+use vld_fake::prelude::*;
+
+vld::schema! {
+    #[derive(Debug, Clone, serde::Serialize)]
+    pub struct User {
+        pub name:  String => vld::string().min(2).max(50),
+        pub email: String => vld::string().email(),
+        pub age:   i64    => vld::number().int().min(18).max(99),
+    }
+}
+
+vld_fake::impl_fake!(User);
+
+// Typed access — user.name, user.email, user.age
+let user = User::fake();
+println!("{} <{}> age={}", user.name, user.email, user.age);
+
+// Multiple + reproducible
+let users = User::fake_many(10);
+let same  = User::fake_seeded(42);
 ```
 
 ### vld-ts

@@ -89,5 +89,67 @@ fn format_issues_basic() {
     let err = vld::error::VldError::single(vld::error::IssueCode::MissingField, "Required");
     let issues = format_issues(&err);
     assert_eq!(issues.len(), 1);
-    assert_eq!(issues[0]["message"], "Required");
+    assert_eq!(issues[0].message, "Required");
+}
+
+#[test]
+fn format_vld_error_structure() {
+    let err = vld::error::VldError::single(vld::error::IssueCode::MissingField, "Required");
+    let body = format_vld_error(&err);
+    assert_eq!(body["error"], "Validation failed");
+    assert!(body["issues"].as_array().unwrap().len() == 1);
+    assert_eq!(body["issues"][0]["message"], "Required");
+}
+
+#[test]
+fn format_json_parse_error_structure() {
+    let body = format_json_parse_error("unexpected token");
+    assert_eq!(body["error"], "Invalid JSON");
+    assert_eq!(body["message"], "unexpected token");
+}
+
+#[test]
+fn format_utf8_error_structure() {
+    let body = format_utf8_error();
+    assert_eq!(body["error"], "Invalid UTF-8");
+}
+
+#[test]
+fn format_payload_too_large_structure() {
+    let body = format_payload_too_large();
+    assert_eq!(body["error"], "Payload too large");
+}
+
+#[test]
+fn format_generic_error_structure() {
+    let body = format_generic_error("Not Found");
+    assert_eq!(body["error"], "Not Found");
+}
+
+#[test]
+fn error_body_schema_roundtrip() {
+    let body = ErrorBody {
+        error: "test".into(),
+    };
+    let json = serde_json::to_value(&body).unwrap();
+    assert_eq!(json["error"], "test");
+    let parsed = ErrorBody::parse_value(&json).unwrap();
+    assert_eq!(parsed.error, "test");
+}
+
+#[test]
+fn validation_error_body_schema_roundtrip() {
+    let body = ValidationErrorBody {
+        error: "Validation failed".into(),
+        issues: vec![ValidationIssue {
+            path: "name".into(),
+            message: "too short".into(),
+        }],
+    };
+    let json = serde_json::to_value(&body).unwrap();
+    assert_eq!(json["error"], "Validation failed");
+    assert_eq!(json["issues"][0]["path"], "name");
+    let parsed = ValidationErrorBody::parse_value(&json).unwrap();
+    assert_eq!(parsed.issues.len(), 1);
+    assert_eq!(parsed.issues[0].message, "too short");
 }

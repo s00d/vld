@@ -15,6 +15,7 @@ exclude = [".idea/", "tests/", "examples/"]
 
 [dependencies]
 vld = { workspace = true }
+vld-http-common = { workspace = true }
 serde_json = { workspace = true }
 tower-layer = "0.3"
 tower-service = "0.3"

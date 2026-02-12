@@ -105,10 +105,71 @@ pub fn cookies_to_json(cookie_header: &str) -> serde_json::Value {
     serde_json::Value::Object(map)
 }
 
-/// Format a [`VldError`](vld::error::VldError) into a JSON array of issues.
-///
-/// Each issue is `{ "path": "...", "message": "..." }`.
-pub fn format_issues(err: &vld::error::VldError) -> Vec<serde_json::Value> {
+// ---------------------------------------------------------------------------
+// Error response schemas (defined via vld::schema!)
+// ---------------------------------------------------------------------------
+
+use serde::Serialize;
+
+vld::schema! {
+    /// Simple error body: `{ "error": "..." }`.
+    ///
+    /// Used for generic HTTP errors such as "Invalid UTF-8", "Payload too large",
+    /// "Not Found", "Bad Request", etc.
+    #[derive(Debug, Clone, Serialize)]
+    pub struct ErrorBody {
+        pub error: String => vld::string(),
+    }
+}
+
+vld::schema! {
+    /// Error body with a message: `{ "error": "...", "message": "..." }`.
+    ///
+    /// Used for JSON parse errors that include a description of what went wrong.
+    #[derive(Debug, Clone, Serialize)]
+    pub struct ErrorWithMessage {
+        pub error: String   => vld::string(),
+        pub message: String => vld::string(),
+    }
+}
+
+vld::schema! {
+    /// A single validation issue: `{ "path": "...", "message": "..." }`.
+    #[derive(Debug, Clone, Serialize)]
+    pub struct ValidationIssue {
+        pub path: String    => vld::string(),
+        pub message: String => vld::string(),
+    }
+}
+
+vld::schema! {
+    /// A validation issue with an error code:
+    /// `{ "path": "...", "message": "...", "code": "..." }`.
+    #[derive(Debug, Clone, Serialize)]
+    pub struct ValidationIssueWithCode {
+        pub path: String    => vld::string(),
+        pub message: String => vld::string(),
+        pub code: String    => vld::string(),
+    }
+}
+
+vld::schema! {
+    /// Validation error response body:
+    /// `{ "error": "Validation failed", "issues": [...] }`.
+    #[derive(Debug, Clone, Serialize)]
+    pub struct ValidationErrorBody {
+        pub error: String => vld::string(),
+        pub issues: Vec<ValidationIssue> => vld::array(vld::nested(ValidationIssue::parse_value)),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Formatting helpers
+// ---------------------------------------------------------------------------
+
+/// Format a [`VldError`](vld::error::VldError) into a list of
+/// [`ValidationIssue`] structs.
+pub fn format_issues(err: &vld::error::VldError) -> Vec<ValidationIssue> {
     err.issues
         .iter()
         .map(|i| {
@@ -118,28 +179,31 @@ pub fn format_issues(err: &vld::error::VldError) -> Vec<serde_json::Value> {
                 .map(|p| p.to_string())
                 .collect::<Vec<_>>()
                 .join(".");
-            serde_json::json!({
-                "path": path,
-                "message": i.message,
-            })
+            ValidationIssue {
+                path,
+                message: i.message.clone(),
+            }
         })
         .collect()
 }
 
 /// Format a [`VldError`](vld::error::VldError) into a JSON object with
 /// `"error"` and `"issues"` keys — ready to be sent as a 422 response body.
+///
+/// Internally constructs a [`ValidationErrorBody`] and serializes it.
 pub fn format_vld_error(err: &vld::error::VldError) -> serde_json::Value {
-    serde_json::json!({
-        "error": "Validation failed",
-        "issues": format_issues(err),
-    })
+    let body = ValidationErrorBody {
+        error: "Validation failed".into(),
+        issues: format_issues(err),
+    };
+    serde_json::to_value(body).expect("ValidationErrorBody serialization cannot fail")
 }
 
 /// Format issues with an additional `"code"` key from
 /// [`IssueCode::key()`](vld::error::IssueCode::key).
 ///
-/// Used by axum/actix where the error response includes `code`.
-pub fn format_issues_with_code(err: &vld::error::VldError) -> Vec<serde_json::Value> {
+/// Returns a list of [`ValidationIssueWithCode`] structs.
+pub fn format_issues_with_code(err: &vld::error::VldError) -> Vec<ValidationIssueWithCode> {
     err.issues
         .iter()
         .map(|issue| {
@@ -149,11 +213,11 @@ pub fn format_issues_with_code(err: &vld::error::VldError) -> Vec<serde_json::Va
                 .map(|p| p.to_string())
                 .collect::<Vec<_>>()
                 .join("");
-            serde_json::json!({
-                "path": path,
-                "message": issue.message,
-                "code": issue.code.key(),
-            })
+            ValidationIssueWithCode {
+                path,
+                message: issue.message.clone(),
+                code: issue.code.key().to_string(),
+            }
         })
         .collect()
 }
@@ -179,6 +243,59 @@ pub fn url_decode(input: &str) -> String {
         }
     }
     result
+}
+
+// ---------------------------------------------------------------------------
+// Standard HTTP error response helpers
+// ---------------------------------------------------------------------------
+
+/// Build a JSON error body for invalid JSON parse errors.
+///
+/// Returns `{ "error": "Invalid JSON", "message": "..." }`.
+///
+/// Internally constructs an [`ErrorWithMessage`] and serializes it.
+pub fn format_json_parse_error(message: &str) -> serde_json::Value {
+    serde_json::to_value(ErrorWithMessage {
+        error: "Invalid JSON".into(),
+        message: message.into(),
+    })
+    .expect("ErrorWithMessage serialization cannot fail")
+}
+
+/// Build a JSON error body for invalid UTF-8 payloads.
+///
+/// Returns `{ "error": "Invalid UTF-8" }`.
+///
+/// Internally constructs an [`ErrorBody`] and serializes it.
+pub fn format_utf8_error() -> serde_json::Value {
+    serde_json::to_value(ErrorBody {
+        error: "Invalid UTF-8".into(),
+    })
+    .expect("ErrorBody serialization cannot fail")
+}
+
+/// Build a JSON error body for payloads that exceed the size limit.
+///
+/// Returns `{ "error": "Payload too large" }`.
+///
+/// Internally constructs an [`ErrorBody`] and serializes it.
+pub fn format_payload_too_large() -> serde_json::Value {
+    serde_json::to_value(ErrorBody {
+        error: "Payload too large".into(),
+    })
+    .expect("ErrorBody serialization cannot fail")
+}
+
+/// Build a generic JSON error body with a custom error string.
+///
+/// Returns `{ "error": "<error>" }`.
+///
+/// Internally constructs an [`ErrorBody`] and serializes it.
+pub fn format_generic_error(error: &str) -> serde_json::Value {
+    serde_json::to_value(ErrorBody {
+        error: error.into(),
+    })
+    .expect("ErrorBody serialization cannot fail")
 }
 
 /// Extract parameter names from a route pattern like `/users/{id}/posts/{post_id}`.

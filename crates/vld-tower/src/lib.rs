@@ -163,10 +163,7 @@ where
             let json_value: serde_json::Value = match serde_json::from_slice(&bytes) {
                 Ok(v) => v,
                 Err(e) => {
-                    let error_body = serde_json::json!({
-                        "error": "Invalid JSON",
-                        "message": e.to_string(),
-                    });
+                    let error_body = vld_http_common::format_json_parse_error(&e.to_string());
                     let resp = Response::builder()
                         .status(StatusCode::BAD_REQUEST)
                         .header(http::header::CONTENT_TYPE, "application/json")
@@ -187,24 +184,7 @@ where
                     inner.call(new_req).await.map_err(Into::into)
                 }
                 Err(vld_err) => {
-                    let issues: Vec<serde_json::Value> = vld_err
-                        .issues
-                        .iter()
-                        .map(|issue| {
-                            serde_json::json!({
-                                "path": issue.path.iter()
-                                    .map(|p| p.to_string())
-                                    .collect::<Vec<_>>()
-                                    .join("."),
-                                "message": issue.message,
-                            })
-                        })
-                        .collect();
-
-                    let error_body = serde_json::json!({
-                        "error": "Validation failed",
-                        "issues": issues,
-                    });
+                    let error_body = vld_http_common::format_vld_error(&vld_err);
 
                     let resp = Response::builder()
                         .status(StatusCode::UNPROCESSABLE_ENTITY)

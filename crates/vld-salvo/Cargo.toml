@@ -1,0 +1,29 @@
+[package]
+name = "vld-salvo"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.89"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Salvo integration for the vld validation library"
+documentation = "https://docs.rs/vld-salvo"
+readme = "README.md"
+keywords = ["validation", "salvo", "web", "json", "extractor"]
+categories = ["web-programming", "web-programming::http-server"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+vld-http-common = { workspace = true }
+salvo = { version = "0.89", default-features = false, features = ["test", "server", "http1", "cookie"] }
+serde_json = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+vld = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[example]]
+name = "salvo_basic"
+path = "examples/salvo_basic.rs"
