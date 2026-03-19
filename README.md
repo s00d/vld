@@ -1128,6 +1128,7 @@ The `vld` project is organized as a Cargo workspace with several crates:
 | [`vld-leptos`](crates/vld-leptos/) | [![crates.io](https://img.shields.io/crates/v/vld-leptos?style=flat-square)](https://crates.io/crates/vld-leptos) | [Leptos](https://leptos.dev/) — shared validation for server functions and WASM clients |
 | [`vld-dioxus`](crates/vld-dioxus/) | [![crates.io](https://img.shields.io/crates/v/vld-dioxus?style=flat-square)](https://crates.io/crates/vld-dioxus) | [Dioxus](https://dioxuslabs.com/) — shared validation for server functions and WASM clients |
 | [`vld-ntex`](crates/vld-ntex/) | [![crates.io](https://img.shields.io/crates/v/vld-ntex?style=flat-square)](https://crates.io/crates/vld-ntex) | [ntex](https://ntex.rs/) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
+| [`vld-surrealdb`](crates/vld-surrealdb/) | [![crates.io](https://img.shields.io/crates/v/vld-surrealdb?style=flat-square)](https://crates.io/crates/vld-surrealdb) | [SurrealDB](https://surrealdb.com/) — validate JSON documents before create/insert/update and after select |
 | [`vld-http-common`](crates/vld-http-common/) | [![crates.io](https://img.shields.io/crates/v/vld-http-common?style=flat-square)](https://crates.io/crates/vld-http-common) | Shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates) |
 
 ### vld-derive
@@ -1637,6 +1638,37 @@ let email = vld_sqlx::VldText::<EmailField>::new("alice@test.com")?;
 sqlx::query("INSERT INTO users (email) VALUES (?)")
     .bind(&email)
     .execute(&pool).await?;
+```
+
+### vld-surrealdb
+
+[SurrealDB](https://surrealdb.com/) integration — validate JSON documents before `create`/`insert`/`update`
+and after `select`. Zero dependency on the `surrealdb` crate — works with any SDK version.
+
+```toml
+[dependencies]
+vld-surrealdb = "0.1"
+surrealdb = "2"  # or "3"
+```
+
+```rust
+use vld_surrealdb::prelude::*;
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct PersonSchema {
+        pub name: String  => vld::string().min(1).max(100),
+        pub email: String => vld::string().email(),
+        pub age: i64      => vld::number().int().min(0).max(150),
+    }
+}
+
+#[derive(serde::Serialize)]
+struct Person { name: String, email: String, age: i64 }
+
+let person = Person { name: "Alice".into(), email: "alice@example.com".into(), age: 30 };
+validate_content::<PersonSchema, _>(&person)?;
+// db.create("person").content(person).await?;
 ```
 
 ### vld-tonic
