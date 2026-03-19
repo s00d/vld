@@ -1,0 +1,27 @@
+[package]
+name = "vld-aide"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "aide (schemars) integration for the vld validation library — auto-generate OpenAPI schemas for aide from vld definitions"
+documentation = "https://docs.rs/vld-aide"
+readme = "README.md"
+keywords = ["validation", "aide", "openapi", "schemars", "vld"]
+categories = ["web-programming", "development-tools"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true, features = ["openapi"] }
+schemars = "0.9"
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true }
+vld = { workspace = true, features = ["openapi", "serialize", "derive"] }
+
+[[example]]
+name = "aide_basic"
+path = "examples/aide_basic.rs"
