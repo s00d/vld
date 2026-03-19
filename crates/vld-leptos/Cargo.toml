@@ -1,0 +1,26 @@
+[package]
+name = "vld-leptos"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Leptos integration for the vld validation library — shared validation for server functions and WASM clients"
+documentation = "https://docs.rs/vld-leptos"
+readme = "README.md"
+keywords = ["validation", "leptos", "wasm", "server-functions", "vld"]
+categories = ["web-programming", "wasm"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+vld = { workspace = true }
+
+[[example]]
+name = "leptos_basic"
+path = "examples/leptos_basic.rs"
