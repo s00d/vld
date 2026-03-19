@@ -1,0 +1,27 @@
+[package]
+name = "vld-tonic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "tonic gRPC integration for the vld validation library — validate protobuf messages and metadata"
+documentation = "https://docs.rs/vld-tonic"
+readme = "README.md"
+keywords = ["validation", "tonic", "grpc", "protobuf", "vld"]
+categories = ["web-programming", "network-programming"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tonic = { version = "0.12", default-features = false }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[example]]
+name = "tonic_basic"
+path = "examples/tonic_basic.rs"
