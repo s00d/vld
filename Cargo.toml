@@ -25,6 +25,7 @@ members = [
     "crates/vld-ntex",
     "crates/vld-aide",
     "crates/vld-surrealdb",
+    "crates/vld-schemars",
     "examples/playground",
 ]
 resolver = "2"

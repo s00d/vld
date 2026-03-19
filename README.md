@@ -1129,6 +1129,7 @@ The `vld` project is organized as a Cargo workspace with several crates:
 | [`vld-dioxus`](crates/vld-dioxus/) | [![crates.io](https://img.shields.io/crates/v/vld-dioxus?style=flat-square)](https://crates.io/crates/vld-dioxus) | [Dioxus](https://dioxuslabs.com/) — shared validation for server functions and WASM clients |
 | [`vld-ntex`](crates/vld-ntex/) | [![crates.io](https://img.shields.io/crates/v/vld-ntex?style=flat-square)](https://crates.io/crates/vld-ntex) | [ntex](https://ntex.rs/) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
 | [`vld-surrealdb`](crates/vld-surrealdb/) | [![crates.io](https://img.shields.io/crates/v/vld-surrealdb?style=flat-square)](https://crates.io/crates/vld-surrealdb) | [SurrealDB](https://surrealdb.com/) — validate JSON documents before create/insert/update and after select |
+| [`vld-schemars`](crates/vld-schemars/) | [![crates.io](https://img.shields.io/crates/v/vld-schemars?style=flat-square)](https://crates.io/crates/vld-schemars) | [schemars](https://docs.rs/schemars) — bidirectional bridge between vld and schemars JSON Schema |
 | [`vld-http-common`](crates/vld-http-common/) | [![crates.io](https://img.shields.io/crates/v/vld-http-common?style=flat-square)](https://crates.io/crates/vld-http-common) | Shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates) |
 
 ### vld-derive
@@ -1349,6 +1350,40 @@ vld::schema! {
 }
 impl_json_schema!(CreateUser);
 // Now usable with aide::axum::Json<CreateUser> for OpenAPI 3.1 docs.
+```
+
+### vld-schemars
+
+General-purpose bidirectional bridge between `vld` and [schemars](https://docs.rs/schemars).
+Unlike `vld-aide` (which targets aide specifically), `vld-schemars` works with **any** schemars-based
+library (paperclip, okapi, dropshot, etc.). Provides conversion in both directions, introspection,
+comparison, and schema merge utilities.
+
+```toml
+[dependencies]
+vld = { version = "0.1", features = ["openapi"] }
+vld-schemars = "0.1"
+```
+
+```rust
+use vld::prelude::*;
+use vld_schemars::impl_json_schema;
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct User {
+        pub name: String  => vld::string().min(2).max(50),
+        pub email: String => vld::string().email(),
+    }
+}
+impl_json_schema!(User);
+
+// schemars → vld
+let schema = vld_schemars::generate_from_schemars::<String>();
+
+// Introspection
+let props = vld_schemars::list_properties(&User::json_schema());
+assert!(vld_schemars::is_required(&User::json_schema(), "name"));
 ```
 
 ### vld-rocket

@@ -5329,6 +5329,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vld-schemars"
+version = "0.1.3"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "vld",
+]
+
+[[package]]
 name = "vld-sea"
 version = "0.1.3"
 dependencies = [
