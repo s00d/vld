@@ -82,6 +82,40 @@ impl_to_schema!(UpdateLocationRequest);
 // "streetAddress", "streetNumber", "streetNumberAddition", "isActive"
 ```
 
+## Nested Schemas (auto-registration)
+
+When you use `vld::nested!(Type)`, the nested type is automatically registered in
+utoipa's `components/schemas`. No need to list it manually in `#[openapi(components(schemas(...)))]`.
+
+```rust
+use vld::prelude::*;
+use vld_utoipa::impl_to_schema;
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct Address {
+        pub city: String => vld::string().min(1),
+        pub zip: String => vld::string().min(5).max(10),
+    }
+}
+
+impl_to_schema!(Address);
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct CreateUser {
+        pub name: String => vld::string().min(2),
+        pub address: Address => vld::nested!(Address),
+    }
+}
+
+impl_to_schema!(CreateUser);
+
+// In OpenAPI spec:
+// - CreateUser.address → { "$ref": "#/components/schemas/Address" }
+// - Address schema is auto-registered in components
+```
+
 ## Custom Schema Name
 
 ```rust

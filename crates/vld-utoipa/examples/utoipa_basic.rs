@@ -1,13 +1,24 @@
 use vld::prelude::*;
 use vld_utoipa::impl_to_schema;
 
-// Define validated structs with vld
+// Nested struct — automatically registered as OpenAPI component
+vld::schema! {
+    #[derive(Debug, serde::Serialize)]
+    pub struct Address {
+        pub city: String => vld::string().min(1).max(100),
+        pub zip: String => vld::string().min(5).max(10),
+    }
+}
+
+impl_to_schema!(Address);
+
 vld::schema! {
     #[derive(Debug, serde::Serialize)]
     pub struct CreateUser {
         pub name: String => vld::string().min(2).max(100),
         pub email: String => vld::string().email(),
         pub age: Option<i64> => vld::number().int().gte(0).optional(),
+        pub address: Address => vld::nested!(Address),
     }
 }
 
@@ -20,11 +31,9 @@ vld::schema! {
     }
 }
 
-// Bridge to utoipa — single source of truth
 impl_to_schema!(CreateUser);
 impl_to_schema!(UserResponse);
 
-// API handlers (needed for utoipa path registration)
 #[allow(dead_code)]
 #[utoipa::path(
     post,
@@ -49,7 +58,7 @@ fn create_user() {}
 )]
 fn get_user() {}
 
-// Build the full OpenAPI spec
+// Address is auto-registered via ToSchema::schemas() — no need to list it manually!
 #[derive(utoipa::OpenApi)]
 #[openapi(
     paths(create_user, get_user),
@@ -60,20 +69,24 @@ struct ApiDoc;
 fn main() {
     use utoipa::OpenApi;
 
-    // Full OpenAPI spec as JSON
     let spec = ApiDoc::openapi();
     let json = serde_json::to_string_pretty(&spec).unwrap();
     println!("{json}");
 
-    // Validation still works as usual
     println!("\n=== Validation ===");
-    match CreateUser::parse(r#"{"name": "A", "email": "bad"}"#) {
-        Ok(_) => println!("valid"),
+    let input = r#"{
+        "name": "Alice",
+        "email": "alice@example.com",
+        "age": 30,
+        "address": {"city": "Berlin", "zip": "10115"}
+    }"#;
+    match CreateUser::parse(input) {
+        Ok(u) => println!("valid: {:?}", u),
         Err(e) => println!("errors: {e}"),
     }
 
-    match CreateUser::parse(r#"{"name": "Alice", "email": "alice@example.com", "age": 30}"#) {
-        Ok(u) => println!("valid: {:?}", u),
-        Err(e) => println!("errors: {e}"),
+    match CreateUser::parse(r#"{"name": "A", "email": "bad", "address": {"city": "", "zip": "1"}}"#) {
+        Ok(_) => println!("valid"),
+        Err(e) => println!("errors:\n{e}"),
     }
 }
