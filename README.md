@@ -1324,6 +1324,28 @@ impl_to_schema!(ApiRequest);
 // OpenAPI schema uses camelCase: "firstName", "emailAddress"
 ```
 
+**Nested schemas** are automatically registered in utoipa's `components/schemas`:
+
+```rust
+vld::schema! {
+    pub struct Address {
+        pub city: String => vld::string().min(1),
+        pub zip: String  => vld::string().min(5).max(10),
+    }
+}
+impl_to_schema!(Address);
+
+vld::schema! {
+    pub struct Order {
+        pub name: String    => vld::string().min(1),
+        pub address: Address => vld::nested!(Address),
+    }
+}
+impl_to_schema!(Order);
+// Order.address → { "$ref": "#/components/schemas/Address" }
+// Address schema is auto-registered — no manual listing needed
+```
+
 ### vld-aide
 
 Bridge between `vld` and [aide](https://docs.rs/aide) / [schemars](https://docs.rs/schemars). Define validation once, get
