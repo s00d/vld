@@ -1,0 +1,26 @@
+[package]
+name = "vld-dioxus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Dioxus integration for the vld validation library — shared validation for server functions and WASM clients"
+documentation = "https://docs.rs/vld-dioxus"
+readme = "README.md"
+keywords = ["validation", "dioxus", "wasm", "server-functions", "vld"]
+categories = ["web-programming", "wasm"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+vld = { workspace = true }
+
+[[example]]
+name = "dioxus_basic"
+path = "examples/dioxus_basic.rs"
