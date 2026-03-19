@@ -1122,6 +1122,7 @@ The `vld` project is organized as a Cargo workspace with several crates:
 | [`vld-tauri`](crates/vld-tauri/) | [![crates.io](https://img.shields.io/crates/v/vld-tauri?style=flat-square)](https://crates.io/crates/vld-tauri) | [Tauri](https://tauri.app/) — validate IPC commands, events, state, channels, plugin config |
 | [`vld-ts`](crates/vld-ts/) | [![crates.io](https://img.shields.io/crates/v/vld-ts?style=flat-square)](https://crates.io/crates/vld-ts) | TypeScript codegen — generates [Zod](https://zod.dev/) schemas from `vld` JSON Schema output |
 | [`vld-fake`](crates/vld-fake/) | [![crates.io](https://img.shields.io/crates/v/vld-fake?style=flat-square)](https://crates.io/crates/vld-fake) | Fake data generation — `User::fake()`, `fake_many()`, `fake_seeded()` with realistic dictionaries |
+| [`vld-sqlx`](crates/vld-sqlx/) | [![crates.io](https://img.shields.io/crates/v/vld-sqlx?style=flat-square)](https://crates.io/crates/vld-sqlx) | [SQLx](https://docs.rs/sqlx) — validate before insert/update, typed column wrappers |
 | [`vld-tonic`](crates/vld-tonic/) | [![crates.io](https://img.shields.io/crates/v/vld-tonic?style=flat-square)](https://crates.io/crates/vld-tonic) | [tonic](https://docs.rs/tonic) gRPC — validate protobuf messages and metadata |
 | [`vld-leptos`](crates/vld-leptos/) | [![crates.io](https://img.shields.io/crates/v/vld-leptos?style=flat-square)](https://crates.io/crates/vld-leptos) | [Leptos](https://leptos.dev/) — shared validation for server functions and WASM clients |
 | [`vld-http-common`](crates/vld-http-common/) | [![crates.io](https://img.shields.io/crates/v/vld-http-common?style=flat-square)](https://crates.io/crates/vld-http-common) | Shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates) |
@@ -1550,6 +1551,42 @@ println!("{} <{}> age={}", user.name, user.email, user.age);
 // Multiple + reproducible
 let users = User::fake_many(10);
 let same  = User::fake_seeded(42);
+```
+
+### vld-sqlx
+
+[SQLx](https://docs.rs/sqlx) integration — validate before insert/update, typed column wrappers with `Type`/`Encode`/`Decode`.
+Supports SQLite, PostgreSQL, MySQL. Generic trait impls work with any backend.
+
+```toml
+[dependencies]
+vld-sqlx = "0.1"
+vld = { version = "0.1", features = ["serialize"] }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+```
+
+```rust
+use vld_sqlx::prelude::*;
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct UserSchema {
+        pub name: String  => vld::string().min(1).max(100),
+        pub email: String => vld::string().email(),
+    }
+}
+
+#[derive(serde::Serialize)]
+struct NewUser { name: String, email: String }
+
+let user = NewUser { name: "Alice".into(), email: "alice@example.com".into() };
+validate_insert::<UserSchema, _>(&user)?;
+
+// VldText — validated column type, bindable in sqlx queries
+let email = vld_sqlx::VldText::<EmailField>::new("alice@test.com")?;
+sqlx::query("INSERT INTO users (email) VALUES (?)")
+    .bind(&email)
+    .execute(&pool).await?;
 ```
 
 ### vld-tonic
