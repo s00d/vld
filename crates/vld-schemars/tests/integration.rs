@@ -612,3 +612,44 @@ fn schemars_vld_parse_item() {
     assert_eq!(item.name, "Gadget");
     assert_eq!(item.qty, 10);
 }
+
+// ========================= Nested schema registration ========================
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct SchemarsAddr {
+        pub city: String => vld::string().min(1),
+        pub zip: String  => vld::string().min(5).max(10),
+    }
+}
+
+impl_json_schema!(SchemarsAddr);
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct SchemarsCompany {
+        pub name: String => vld::string().min(1),
+        pub hq: SchemarsAddr => vld::nested!(SchemarsAddr),
+    }
+}
+
+impl_json_schema!(SchemarsCompany);
+
+#[test]
+fn nested_schema_registered_in_generator_definitions() {
+    let mut gen = schemars::SchemaGenerator::default();
+    let schema = <SchemarsCompany as schemars::JsonSchema>::json_schema(&mut gen);
+    let props = schema.get("properties").unwrap();
+    assert_eq!(props["hq"]["$ref"], "#/components/schemas/SchemarsAddr");
+
+    let defs = gen.definitions();
+    assert!(
+        defs.contains_key("SchemarsAddr"),
+        "SchemarsAddr should be in definitions, got: {:?}",
+        defs.keys().collect::<Vec<_>>()
+    );
+    let addr = &defs["SchemarsAddr"];
+    assert_eq!(addr["type"], "object");
+    assert!(addr["properties"]["city"].is_object());
+    assert!(addr["properties"]["zip"].is_object());
+}

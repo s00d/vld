@@ -576,8 +576,15 @@ macro_rules! impl_json_schema {
             }
 
             fn json_schema(
-                _gen: &mut $crate::schemars::SchemaGenerator,
+                gen: &mut $crate::schemars::SchemaGenerator,
             ) -> $crate::schemars::Schema {
+                #[allow(unused_imports)]
+                use $crate::__VldNestedSchemasFallback as _;
+                for (name, schema_fn) in <$ty>::__vld_nested_schemas() {
+                    gen.definitions_mut()
+                        .entry(name.to_string())
+                        .or_insert_with(|| schema_fn());
+                }
                 $crate::vld_to_schemars(&<$ty>::json_schema())
             }
         }
@@ -593,13 +600,30 @@ macro_rules! impl_json_schema {
             }
 
             fn json_schema(
-                _gen: &mut $crate::schemars::SchemaGenerator,
+                gen: &mut $crate::schemars::SchemaGenerator,
             ) -> $crate::schemars::Schema {
+                #[allow(unused_imports)]
+                use $crate::__VldNestedSchemasFallback as _;
+                for (name, schema_fn) in <$ty>::__vld_nested_schemas() {
+                    gen.definitions_mut()
+                        .entry(name.to_string())
+                        .or_insert_with(|| schema_fn());
+                }
                 $crate::vld_to_schemars(&<$ty>::json_schema())
             }
         }
     };
 }
+
+#[doc(hidden)]
+pub trait __VldNestedSchemasFallback {
+    #[allow(clippy::type_complexity)]
+    fn __vld_nested_schemas() -> Vec<(&'static str, fn() -> serde_json::Value)> {
+        Vec::new()
+    }
+}
+
+impl<T: ?Sized> __VldNestedSchemasFallback for T {}
 
 // ========================= Prelude ===========================================
 

@@ -271,3 +271,48 @@ fn roundtrip_full_struct() {
     assert!(req.contains(&json!("name")));
     assert!(req.contains(&json!("email")));
 }
+
+// ---- Nested schemas ----
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct AideAddress {
+        pub city: String => vld::string().min(1),
+        pub zip: String => vld::string().min(5).max(10),
+    }
+}
+
+impl_json_schema!(AideAddress);
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct AideOrder {
+        pub name: String => vld::string().min(1),
+        pub address: AideAddress => vld::nested!(AideAddress),
+    }
+}
+
+impl_json_schema!(AideOrder);
+
+#[test]
+fn nested_schema_ref_in_schemars() {
+    let mut gen = schemars::SchemaGenerator::default();
+    let schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut gen);
+    let props = schema.get("properties").unwrap();
+    assert_eq!(props["address"]["$ref"], "#/components/schemas/AideAddress");
+}
+
+#[test]
+fn nested_schema_registered_in_definitions() {
+    let mut gen = schemars::SchemaGenerator::default();
+    let _schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut gen);
+    let defs = gen.definitions();
+    assert!(
+        defs.contains_key("AideAddress"),
+        "AideAddress should be in definitions, got: {:?}",
+        defs.keys().collect::<Vec<_>>()
+    );
+    let addr = &defs["AideAddress"];
+    assert_eq!(addr["type"], "object");
+    assert!(addr["properties"]["city"].is_object());
+}
