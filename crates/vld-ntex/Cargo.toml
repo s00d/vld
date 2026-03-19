@@ -1,0 +1,29 @@
+[package]
+name = "vld-ntex"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.75"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "ntex integration for the vld validation library — validated extractors for JSON, query, path, form, headers, cookies"
+documentation = "https://docs.rs/vld-ntex"
+readme = "README.md"
+keywords = ["validation", "ntex", "web", "json", "extractor"]
+categories = ["web-programming", "web-programming::http-server"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true }
+vld-http-common = { workspace = true }
+ntex = { version = "3", default-features = false }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+ntex = { version = "3", features = ["tokio"] }
+serde = { workspace = true }
+vld = { workspace = true }
+
+[[example]]
+name = "ntex_basic"
+path = "examples/ntex_basic.rs"
