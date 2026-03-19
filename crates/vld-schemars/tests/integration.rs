@@ -309,5 +309,254 @@ fn property_info_types() {
     assert_eq!(age_prop.schema_type.as_deref(), Some("integer"));
 }
 
-// ========================= derive(Validate) with schemars ====================
+// ========================= schemars → vld validation =========================
 
+#[test]
+fn validate_with_schema_valid_object() {
+    let schema = json!({
+        "type": "object",
+        "required": ["name", "age"],
+        "properties": {
+            "name": { "type": "string", "minLength": 1, "maxLength": 50 },
+            "age":  { "type": "integer", "minimum": 0, "maximum": 150 }
+        }
+    });
+    let value = json!({"name": "Alice", "age": 30});
+    assert!(vld_schemars::validate_with_schema(&schema, &value).is_ok());
+}
+
+#[test]
+fn validate_with_schema_missing_required() {
+    let schema = json!({
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": {"type": "string"} }
+    });
+    let value = json!({});
+    let err = vld_schemars::validate_with_schema(&schema, &value).unwrap_err();
+    assert!(err.issues.iter().any(|i| i.message.contains("name")));
+}
+
+#[test]
+fn validate_with_schema_wrong_type() {
+    let schema = json!({"type": "string"});
+    let value = json!(42);
+    assert!(vld_schemars::validate_with_schema(&schema, &value).is_err());
+}
+
+#[test]
+fn validate_with_schema_string_min_length() {
+    let schema = json!({"type": "string", "minLength": 3});
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("ab")).is_err());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("abc")).is_ok());
+}
+
+#[test]
+fn validate_with_schema_string_max_length() {
+    let schema = json!({"type": "string", "maxLength": 3});
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("abcd")).is_err());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("abc")).is_ok());
+}
+
+#[test]
+fn validate_with_schema_number_minimum() {
+    let schema = json!({"type": "number", "minimum": 10});
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(5)).is_err());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(10)).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(15)).is_ok());
+}
+
+#[test]
+fn validate_with_schema_number_maximum() {
+    let schema = json!({"type": "number", "maximum": 100});
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(150)).is_err());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(100)).is_ok());
+}
+
+#[test]
+fn validate_with_schema_exclusive_min_max() {
+    let schema = json!({"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 10});
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(0)).is_err());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(10)).is_err());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(5)).is_ok());
+}
+
+#[test]
+fn validate_with_schema_string_pattern() {
+    let schema = json!({"type": "string", "pattern": "^[a-z]+$"});
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("hello")).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("Hello123")).is_err());
+}
+
+#[test]
+fn validate_with_schema_string_format_email() {
+    let schema = json!({"type": "string", "format": "email"});
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("user@example.com")).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("not-email")).is_err());
+}
+
+#[test]
+fn validate_with_schema_enum() {
+    let schema = json!({"enum": ["red", "green", "blue"]});
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("red")).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("yellow")).is_err());
+}
+
+#[test]
+fn validate_with_schema_array_min_items() {
+    let schema = json!({"type": "array", "minItems": 2});
+    assert!(vld_schemars::validate_with_schema(&schema, &json!([1])).is_err());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!([1, 2])).is_ok());
+}
+
+#[test]
+fn validate_with_schema_array_items() {
+    let schema = json!({
+        "type": "array",
+        "items": {"type": "integer", "minimum": 0}
+    });
+    assert!(vld_schemars::validate_with_schema(&schema, &json!([1, 2, 3])).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!([1, -1, 3])).is_err());
+}
+
+#[test]
+fn validate_with_schema_nested_object() {
+    let schema = json!({
+        "type": "object",
+        "required": ["address"],
+        "properties": {
+            "address": {
+                "type": "object",
+                "required": ["city"],
+                "properties": {
+                    "city": {"type": "string", "minLength": 1}
+                }
+            }
+        }
+    });
+    assert!(vld_schemars::validate_with_schema(&schema, &json!({"address": {"city": "NYC"}})).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!({"address": {"city": ""}})).is_err());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!({"address": {}})).is_err());
+}
+
+#[test]
+fn validate_with_schema_boolean_schema() {
+    assert!(vld_schemars::validate_with_schema(&json!(true), &json!("anything")).is_ok());
+    assert!(vld_schemars::validate_with_schema(&json!(false), &json!("anything")).is_err());
+}
+
+#[test]
+fn validate_with_schema_any_of() {
+    let schema = json!({
+        "anyOf": [
+            {"type": "string"},
+            {"type": "integer"}
+        ]
+    });
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("hello")).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(42)).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(true)).is_err());
+}
+
+#[test]
+fn validate_with_schema_all_of() {
+    let schema = json!({
+        "allOf": [
+            {"type": "number", "minimum": 0},
+            {"type": "number", "maximum": 100}
+        ]
+    });
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(50)).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(150)).is_err());
+}
+
+#[test]
+fn validate_with_schema_not() {
+    let schema = json!({
+        "not": {"type": "string"}
+    });
+    assert!(vld_schemars::validate_with_schema(&schema, &json!(42)).is_ok());
+    assert!(vld_schemars::validate_with_schema(&schema, &json!("hello")).is_err());
+}
+
+// ========================= validate_with_schemars ============================
+
+#[test]
+fn validate_with_schemars_valid() {
+    let schema = vld_to_schemars(&json!({"type": "string", "minLength": 2}));
+    assert!(vld_schemars::validate_with_schemars(&schema, &json!("hello")).is_ok());
+}
+
+#[test]
+fn validate_with_schemars_invalid() {
+    let schema = vld_to_schemars(&json!({"type": "string", "minLength": 5}));
+    assert!(vld_schemars::validate_with_schemars(&schema, &json!("hi")).is_err());
+}
+
+#[test]
+fn validate_serde_with_schemars_valid() {
+    let schema = vld_to_schemars(&json!({
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": {"type": "string"} }
+    }));
+
+    #[derive(serde::Serialize)]
+    struct User {
+        name: String,
+    }
+
+    let user = User {
+        name: "Alice".into(),
+    };
+    assert!(vld_schemars::validate_serde_with_schemars(&schema, &user).is_ok());
+}
+
+// ========================= parse_with_schemars ===============================
+
+#[test]
+fn parse_with_schemars_string() {
+    let json = json!("hello");
+    let result: String = vld_schemars::parse_with_schemars::<String>(&json).unwrap();
+    assert_eq!(result, "hello");
+}
+
+#[test]
+fn parse_with_schemars_i32() {
+    let json = json!(42);
+    let result: i32 = vld_schemars::parse_with_schemars::<i32>(&json).unwrap();
+    assert_eq!(result, 42);
+}
+
+// ========================= impl_vld_parse! ===================================
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct Item {
+    name: String,
+    qty: u32,
+}
+
+vld_schemars::impl_vld_parse!(Item);
+
+#[test]
+fn impl_vld_parse_valid() {
+    use vld::schema::VldParse;
+    let json = json!({"name": "Widget", "qty": 5});
+    let item = Item::vld_parse_value(&json).unwrap();
+    assert_eq!(item.name, "Widget");
+    assert_eq!(item.qty, 5);
+}
+
+#[test]
+fn impl_vld_parse_missing_field() {
+    use vld::schema::VldParse;
+    let json = json!({"name": "Widget"});
+    assert!(Item::vld_parse_value(&json).is_err());
+}
+
+#[test]
+fn impl_vld_parse_wrong_type() {
+    use vld::schema::VldParse;
+    let json = json!({"name": 123, "qty": "not a number"});
+    assert!(Item::vld_parse_value(&json).is_err());
+}

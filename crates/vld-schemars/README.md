@@ -82,6 +82,66 @@ let schema = vld_schemars::generate_from_schemars::<Vec<String>>();
 // Returns serde_json::Value with the full JSON Schema
 ```
 
+## schemars → vld (reverse: validation using schemars schemas)
+
+### Validate with any JSON Schema
+
+```rust
+let schema = serde_json::json!({
+    "type": "object",
+    "required": ["name", "age"],
+    "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "age":  { "type": "integer", "minimum": 0 }
+    }
+});
+
+let valid = serde_json::json!({"name": "Alice", "age": 30});
+assert!(vld_schemars::validate_with_schema(&schema, &valid).is_ok());
+
+let invalid = serde_json::json!({"age": -5});
+assert!(vld_schemars::validate_with_schema(&schema, &invalid).is_err());
+```
+
+Supported JSON Schema keywords: `type`, `required`, `properties`, `items`,
+`minLength`, `maxLength`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`,
+`pattern`, `format`, `enum`, `const`, `minItems`, `maxItems`, `uniqueItems`,
+`minProperties`, `maxProperties`, `multipleOf`, `oneOf`, `anyOf`, `allOf`, `not`.
+
+### Validate with schemars::Schema
+
+```rust
+let schema = vld_schemars::vld_to_schemars(&serde_json::json!({"type": "string", "minLength": 2}));
+assert!(vld_schemars::validate_with_schemars(&schema, &serde_json::json!("hello")).is_ok());
+assert!(vld_schemars::validate_with_schemars(&schema, &serde_json::json!("x")).is_err());
+```
+
+### Validate and deserialize (parse_with_schemars)
+
+```rust
+let json = serde_json::json!("hello");
+let result: String = vld_schemars::parse_with_schemars::<String>(&json).unwrap();
+```
+
+### impl_vld_parse! — the reverse of impl_json_schema!
+
+```rust
+use vld_schemars::impl_vld_parse;
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct Item {
+    name: String,
+    qty: u32,
+}
+
+impl_vld_parse!(Item);
+
+// Now Item implements vld::schema::VldParse
+use vld::schema::VldParse;
+let json = serde_json::json!({"name": "Widget", "qty": 5});
+let item = Item::vld_parse_value(&json).unwrap();
+```
+
 ## Introspection
 
 ```rust
@@ -139,15 +199,32 @@ let result = vld_schemars::overlay_constraints(&base, &extra);
 
 ## API Reference
 
+### vld → schemars
+
 | Function | Description |
 |---|---|
 | `vld_to_schemars(&Value)` | Convert JSON value to `schemars::Schema` |
 | `vld_schema_to_schemars(&Value)` | Same, convenience alias |
+| `impl_json_schema!(Type)` | Implement `schemars::JsonSchema` for a vld type |
+| `impl_json_schema!(Type, "Name")` | Same, with custom schema name |
+
+### schemars → vld
+
+| Function | Description |
+|---|---|
 | `schemars_to_json(&Schema)` | Convert `schemars::Schema` to `serde_json::Value` |
 | `generate_from_schemars::<T>()` | Generate JSON value from `schemars::JsonSchema` type |
 | `generate_schemars::<T>()` | Generate `schemars::Schema` from `schemars::JsonSchema` type |
-| `impl_json_schema!(Type)` | Implement `schemars::JsonSchema` for a vld type |
-| `impl_json_schema!(Type, "Name")` | Same, with custom schema name |
+| `validate_with_schema(&Value, &Value)` | Validate data against a JSON Schema |
+| `validate_with_schemars(&Schema, &Value)` | Validate data against a `schemars::Schema` |
+| `validate_serde_with_schemars(&Schema, &T)` | Validate a serializable value against a `schemars::Schema` |
+| `parse_with_schemars::<T>(&Value)` | Validate and deserialize using type's schemars schema |
+| `impl_vld_parse!(Type)` | Implement `vld::VldParse` for a `schemars::JsonSchema` type |
+
+### Introspection & Composition
+
+| Function | Description |
+|---|---|
 | `list_properties(&Value)` | Extract property info from object schema |
 | `list_properties_schemars(&Schema)` | Same, for `schemars::Schema` |
 | `schema_type(&Value)` | Get the "type" field |
