@@ -43,6 +43,10 @@ impl<T: VldSchema> ZSet<T> {
         self
     }
 
+    pub(crate) fn element_schema(&self) -> &T {
+        &self.element
+    }
+
     /// Generate a JSON Schema (called by [`JsonSchema`](crate::json_schema::JsonSchema) trait impl).
     ///
     /// Requires the `openapi` feature.

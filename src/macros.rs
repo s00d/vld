@@ -265,6 +265,30 @@ macro_rules! schema {
                 pub fn to_openapi_document() -> $crate::serde_json::Value {
                     $crate::json_schema::to_openapi_document(stringify!($name), &Self::json_schema())
                 }
+
+                /// Collect `(name, json_schema_fn)` pairs for all nested schemas
+                /// used by fields of this struct.
+                ///
+                /// Used by `vld-utoipa`'s `impl_to_schema!` to automatically register
+                /// nested types as OpenAPI components.
+                #[doc(hidden)]
+                pub fn __vld_nested_schemas()
+                    -> ::std::vec::Vec<(&'static str, fn() -> $crate::serde_json::Value)>
+                {
+                    use $crate::json_schema::CollectNestedSchemas as _;
+                    let mut __vld_out: ::std::vec::Vec<
+                        (&'static str, fn() -> $crate::serde_json::Value),
+                    > = ::std::vec::Vec::new();
+
+                    $(
+                        {
+                            let __vld_field_schema = $schema;
+                            __vld_field_schema.collect_nested_schemas(&mut __vld_out);
+                        }
+                    )*
+
+                    __vld_out
+                }
             }
         }
     };

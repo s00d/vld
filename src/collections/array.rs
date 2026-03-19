@@ -53,6 +53,10 @@ impl<T: VldSchema> ZArray<T> {
         self.min_len(1)
     }
 
+    pub(crate) fn element_schema(&self) -> &T {
+        &self.element
+    }
+
     /// Generate a JSON Schema (called by [`JsonSchema`](crate::json_schema::JsonSchema) trait impl).
     ///
     /// Requires the `openapi` feature.

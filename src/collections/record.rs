@@ -44,6 +44,10 @@ impl<V: VldSchema> ZRecord<V> {
         self
     }
 
+    pub(crate) fn value_schema_ref(&self) -> &V {
+        &self.value_schema
+    }
+
     /// Generate a JSON Schema (called by [`JsonSchema`](crate::json_schema::JsonSchema) trait impl).
     ///
     /// Requires the `openapi` feature.

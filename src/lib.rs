@@ -88,6 +88,24 @@ macro_rules! __vld_if_openapi {
     ($($tt:tt)*) => {};
 }
 
+#[cfg(feature = "openapi")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __vld_nested_schema_fn {
+    ($ty:ty) => {
+        Some(<$ty>::json_schema as fn() -> $crate::serde_json::Value)
+    };
+}
+
+#[cfg(not(feature = "openapi"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __vld_nested_schema_fn {
+    ($ty:ty) => {
+        None
+    };
+}
+
 // Re-export regex_lite when the `regex` feature is enabled
 #[cfg(feature = "regex")]
 pub use regex_lite;
@@ -135,17 +153,34 @@ where
     schema::NestedSchema::new(f)
 }
 
-pub fn nested_named<T, F>(name: &'static str, f: F) -> schema::NestedSchema<T, F>
+pub fn nested_named<T, F>(
+    name: &'static str,
+    f: F,
+    json_schema_fn: Option<fn() -> serde_json::Value>,
+) -> schema::NestedSchema<T, F>
 where
     F: Fn(&serde_json::Value) -> Result<T, error::VldError>,
 {
-    schema::NestedSchema::new_named(f, name)
+    schema::NestedSchema::new_named(f, name, json_schema_fn)
 }
 
+/// Create a named nested schema with `$ref` generation and full JSON Schema.
+///
+/// ```ignore
+/// vld::schema! {
+///     pub struct User {
+///         pub address: Address => vld::nested!(Address),
+///     }
+/// }
+/// ```
 #[macro_export]
 macro_rules! nested {
     ($ty:ty) => {
-        $crate::nested_named(stringify!($ty), <$ty>::parse_value)
+        $crate::nested_named(
+            stringify!($ty),
+            <$ty>::parse_value,
+            $crate::__vld_nested_schema_fn!($ty),
+        )
     };
 }
 

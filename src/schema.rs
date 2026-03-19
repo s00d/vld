@@ -193,13 +193,16 @@ pub trait VldParse: Sized {
     fn vld_parse_value(value: &serde_json::Value) -> Result<Self, crate::error::VldError>;
 }
 
-/// Schema for parsing nested structures. Created via [`vld::nested()`](crate::nested).
+/// Schema for parsing nested structures. Created via [`vld::nested()`](crate::nested)
+/// or the [`vld::nested!`](crate::nested!) macro.
 pub struct NestedSchema<T, F>
 where
     F: Fn(&Value) -> Result<T, VldError>,
 {
     parse_fn: F,
     pub(crate) name: Option<&'static str>,
+    /// Returns the full JSON Schema of the nested type (for OpenAPI component registration).
+    pub(crate) json_schema_fn: Option<fn() -> serde_json::Value>,
     _phantom: PhantomData<T>,
 }
 
@@ -211,14 +214,20 @@ where
         Self {
             parse_fn: f,
             name: None,
+            json_schema_fn: None,
             _phantom: PhantomData,
         }
     }
 
-    pub fn new_named(f: F, name: &'static str) -> Self {
+    pub fn new_named(
+        f: F,
+        name: &'static str,
+        json_schema_fn: Option<fn() -> serde_json::Value>,
+    ) -> Self {
         Self {
             parse_fn: f,
             name: Some(name),
+            json_schema_fn,
             _phantom: PhantomData,
         }
     }
