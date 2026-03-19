@@ -199,6 +199,7 @@ where
     F: Fn(&Value) -> Result<T, VldError>,
 {
     parse_fn: F,
+    pub(crate) name: Option<&'static str>,
     _phantom: PhantomData<T>,
 }
 
@@ -209,6 +210,15 @@ where
     pub fn new(f: F) -> Self {
         Self {
             parse_fn: f,
+            name: None,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn new_named(f: F, name: &'static str) -> Self {
+        Self {
+            parse_fn: f,
+            name: Some(name),
             _phantom: PhantomData,
         }
     }
@@ -219,7 +229,6 @@ where
     F: Fn(&Value) -> Result<T, VldError>,
 {
     type Output = T;
-
     fn parse_value(&self, value: &Value) -> Result<T, VldError> {
         (self.parse_fn)(value)
     }

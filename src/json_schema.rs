@@ -247,8 +247,13 @@ where
     F: Fn(&serde_json::Value) -> Result<T, crate::error::VldError>,
 {
     fn json_schema(&self) -> Value {
-        // Nested schemas are opaque closures; emit a generic object schema.
-        serde_json::json!({"type": "object"})
+        match self.name {
+            Some(name) => serde_json::json!({
+                "$ref": format!("#/components/schemas/{}", name)
+            }),
+            // Nested schemas are opaque closures; emit a generic object schema
+            None => serde_json::json!({ "type": "object" }),
+        }
     }
 }
 
