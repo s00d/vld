@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-03-19
+
+### Added
+
+- **`vld-derive` + `vld-utoipa` integration** — `#[derive(Validate)]` now generates `json_schema()` and `to_openapi_document()` methods when the `openapi` feature is enabled. This allows `impl_to_schema!` from `vld-utoipa` to work with derive-based structs, including full `#[serde(rename_all = "camelCase")]` support. ([#1](https://github.com/s00d/vld/issues/1))
+
+### Fixed
+
+- Removed `.idea/` directory from git tracking.
+
 ## [0.1.1] - 2026-02-11
 
 ### Added
