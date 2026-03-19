@@ -23,6 +23,7 @@ members = [
     "crates/vld-sqlx",
     "crates/vld-dioxus",
     "crates/vld-ntex",
+    "crates/vld-aide",
     "examples/playground",
 ]
 resolver = "2"

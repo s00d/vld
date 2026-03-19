@@ -1117,6 +1117,7 @@ The `vld` project is organized as a Cargo workspace with several crates:
 | [`vld-diesel`](crates/vld-diesel/) | [![crates.io](https://img.shields.io/crates/v/vld-diesel?style=flat-square)](https://crates.io/crates/vld-diesel) | [Diesel](https://diesel.rs/) ORM — `Validated<S, T>` wrapper, `VldText`, `VldInt` column types |
 | [`vld-sea`](crates/vld-sea/) | [![crates.io](https://img.shields.io/crates/v/vld-sea?style=flat-square)](https://crates.io/crates/vld-sea) | [SeaORM](https://www.sea-ql.org/SeaORM/) — validate `ActiveModel` before insert/update |
 | [`vld-utoipa`](crates/vld-utoipa/) | [![crates.io](https://img.shields.io/crates/v/vld-utoipa?style=flat-square)](https://crates.io/crates/vld-utoipa) | [utoipa](https://docs.rs/utoipa) — auto-generate `ToSchema` from `vld` definitions |
+| [`vld-aide`](crates/vld-aide/) | [![crates.io](https://img.shields.io/crates/v/vld-aide?style=flat-square)](https://crates.io/crates/vld-aide) | [aide](https://docs.rs/aide) / [schemars](https://docs.rs/schemars) — auto-generate `JsonSchema` from `vld` definitions |
 | [`vld-config`](crates/vld-config/) | [![crates.io](https://img.shields.io/crates/v/vld-config?style=flat-square)](https://crates.io/crates/vld-config) | Config validation — TOML/YAML/JSON/ENV via [config-rs](https://docs.rs/config) or [figment](https://docs.rs/figment) |
 | [`vld-clap`](crates/vld-clap/) | [![crates.io](https://img.shields.io/crates/v/vld-clap?style=flat-square)](https://crates.io/crates/vld-clap) | [Clap](https://docs.rs/clap) — validate CLI arguments via `#[derive(Validate)]` |
 | [`vld-tauri`](crates/vld-tauri/) | [![crates.io](https://img.shields.io/crates/v/vld-tauri?style=flat-square)](https://crates.io/crates/vld-tauri) | [Tauri](https://tauri.app/) — validate IPC commands, events, state, channels, plugin config |
@@ -1319,6 +1320,34 @@ struct ApiRequest {
 }
 impl_to_schema!(ApiRequest);
 // OpenAPI schema uses camelCase: "firstName", "emailAddress"
+```
+
+### vld-aide
+
+Bridge between `vld` and [aide](https://docs.rs/aide) / [schemars](https://docs.rs/schemars). Define validation once, get
+`JsonSchema` for free — no need to duplicate with `#[derive(JsonSchema)]`.
+Works with both `vld::schema!` and `#[derive(Validate)]`.
+
+```toml
+[dependencies]
+vld = { version = "0.1", features = ["openapi"] }
+vld-aide = "0.1"
+aide = { version = "0.15", features = ["axum"] }
+```
+
+```rust
+use vld::prelude::*;
+use vld_aide::impl_json_schema;
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct CreateUser {
+        pub name: String => vld::string().min(2).max(100),
+        pub email: String => vld::string().email(),
+    }
+}
+impl_json_schema!(CreateUser);
+// Now usable with aide::axum::Json<CreateUser> for OpenAPI 3.1 docs.
 ```
 
 ### vld-rocket
