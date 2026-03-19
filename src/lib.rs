@@ -135,6 +135,20 @@ where
     schema::NestedSchema::new(f)
 }
 
+pub fn nested_named<T, F>(name: &'static str, f: F) -> schema::NestedSchema<T, F>
+where
+    F: Fn(&serde_json::Value) -> Result<T, error::VldError>,
+{
+    schema::NestedSchema::new_named(f, name)
+}
+
+#[macro_export]
+macro_rules! nested {
+    ($ty:ty) => {
+        $crate::nested_named(stringify!($ty), <$ty>::parse_value)
+    };
+}
+
 /// Create a literal value schema. Validates exact match.
 ///
 /// ```
