@@ -200,8 +200,10 @@ where
     F: Fn(&Value) -> Result<T, VldError>,
 {
     parse_fn: F,
+    #[allow(dead_code)]
     pub(crate) name: Option<&'static str>,
     /// Returns the full JSON Schema of the nested type (for OpenAPI component registration).
+    #[allow(dead_code)]
     pub(crate) json_schema_fn: Option<fn() -> serde_json::Value>,
     _phantom: PhantomData<T>,
 }

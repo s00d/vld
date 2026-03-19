@@ -44,6 +44,7 @@ impl<V: VldSchema> ZRecord<V> {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn value_schema_ref(&self) -> &V {
         &self.value_schema
     }

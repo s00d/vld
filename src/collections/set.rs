@@ -43,6 +43,7 @@ impl<T: VldSchema> ZSet<T> {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn element_schema(&self) -> &T {
         &self.element
     }

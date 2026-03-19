@@ -53,6 +53,7 @@ impl<T: VldSchema> ZArray<T> {
         self.min_len(1)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn element_schema(&self) -> &T {
         &self.element
     }
