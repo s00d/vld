@@ -1125,6 +1125,7 @@ The `vld` project is organized as a Cargo workspace with several crates:
 | [`vld-sqlx`](crates/vld-sqlx/) | [![crates.io](https://img.shields.io/crates/v/vld-sqlx?style=flat-square)](https://crates.io/crates/vld-sqlx) | [SQLx](https://docs.rs/sqlx) — validate before insert/update, typed column wrappers |
 | [`vld-tonic`](crates/vld-tonic/) | [![crates.io](https://img.shields.io/crates/v/vld-tonic?style=flat-square)](https://crates.io/crates/vld-tonic) | [tonic](https://docs.rs/tonic) gRPC — validate protobuf messages and metadata |
 | [`vld-leptos`](crates/vld-leptos/) | [![crates.io](https://img.shields.io/crates/v/vld-leptos?style=flat-square)](https://crates.io/crates/vld-leptos) | [Leptos](https://leptos.dev/) — shared validation for server functions and WASM clients |
+| [`vld-dioxus`](crates/vld-dioxus/) | [![crates.io](https://img.shields.io/crates/v/vld-dioxus?style=flat-square)](https://crates.io/crates/vld-dioxus) | [Dioxus](https://dioxuslabs.com/) — shared validation for server functions and WASM clients |
 | [`vld-http-common`](crates/vld-http-common/) | [![crates.io](https://img.shields.io/crates/v/vld-http-common?style=flat-square)](https://crates.io/crates/vld-http-common) | Shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates) |
 
 ### vld-derive
@@ -1647,6 +1648,37 @@ async fn create_user(name: String, email: String) -> Result<(), ServerFnError> {
 // Client component — reactive check_field
 let name_err = Memo::new(move |_| {
     vld_leptos::check_field(&name.get(), &name_schema())
+});
+```
+
+### vld-dioxus
+
+[Dioxus](https://dioxuslabs.com/) integration — **define validation rules once, use on server and client (WASM)**.
+Zero dependency on `dioxus` — works with any Dioxus version.
+
+```toml
+[dependencies]
+vld-dioxus = "0.1"
+```
+
+```rust
+// Shared schemas (server + WASM)
+fn name_schema() -> vld::primitives::ZString { vld::string().min(2).max(50) }
+fn email_schema() -> vld::primitives::ZString { vld::string().email() }
+
+// Server function — validate_args! macro
+#[server]
+async fn create_user(name: String, email: String) -> Result<(), ServerFnError> {
+    vld_dioxus::validate_args! {
+        name  => name_schema(),
+        email => email_schema(),
+    }.map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
+// Client component — reactive check_field
+let name_err = use_memo(move || {
+    vld_dioxus::check_field(&name(), &name_schema())
 });
 ```
 

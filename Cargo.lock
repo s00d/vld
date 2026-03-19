@@ -4608,6 +4608,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vld-dioxus"
+version = "0.1.3"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vld",
+]
+
+[[package]]
 name = "vld-fake"
 version = "0.1.3"
 dependencies = [
