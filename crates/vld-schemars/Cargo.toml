@@ -1,0 +1,28 @@
+[package]
+name = "vld-schemars"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Bidirectional bridge between vld and schemars — convert JSON schemas in both directions, implement schemars::JsonSchema for vld types"
+documentation = "https://docs.rs/vld-schemars"
+readme = "README.md"
+keywords = ["validation", "schemars", "json-schema", "openapi", "vld"]
+categories = ["web-programming", "development-tools"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true, features = ["openapi"] }
+schemars = "0.9"
+serde_json = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+vld = { workspace = true, features = ["openapi", "serialize", "derive"] }
+serde = { workspace = true }
+
+[[example]]
+name = "schemars_basic"
+path = "examples/schemars_basic.rs"
