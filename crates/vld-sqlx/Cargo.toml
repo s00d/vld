@@ -1,0 +1,34 @@
+[package]
+name = "vld-sqlx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SQLx integration for the vld validation library — validate before insert/update, typed column wrappers"
+documentation = "https://docs.rs/vld-sqlx"
+readme = "README.md"
+keywords = ["validation", "sqlx", "database", "sql", "vld"]
+categories = ["database", "web-programming"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[features]
+default = ["sqlite"]
+postgres = ["sqlx/postgres"]
+mysql = ["sqlx/mysql"]
+sqlite = ["sqlx/sqlite"]
+
+[dependencies]
+vld = { workspace = true, features = ["serialize"] }
+sqlx = { version = "0.8", default-features = false }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[example]]
+name = "sqlx_basic"
+path = "examples/sqlx_basic.rs"
