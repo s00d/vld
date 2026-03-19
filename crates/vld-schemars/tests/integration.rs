@@ -493,50 +493,25 @@ fn validate_with_schemars_invalid() {
     assert!(vld_schemars::validate_with_schemars(&schema, &json!("hi")).is_err());
 }
 
-#[test]
-fn validate_serde_with_schemars_valid() {
-    let schema = vld_to_schemars(&json!({
-        "type": "object",
-        "required": ["name"],
-        "properties": { "name": {"type": "string"} }
-    }));
+// ========================= impl_vld_parse! + SchemarsValidate ================
 
-    #[derive(serde::Serialize)]
-    struct User {
-        name: String,
-    }
-
-    let user = User {
-        name: "Alice".into(),
-    };
-    assert!(vld_schemars::validate_serde_with_schemars(&schema, &user).is_ok());
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+struct User {
+    name: String,
+    age: u32,
 }
 
-// ========================= parse_with_schemars ===============================
+vld_schemars::impl_vld_parse!(User);
 
-#[test]
-fn parse_with_schemars_string() {
-    let json = json!("hello");
-    let result: String = vld_schemars::parse_with_schemars::<String>(&json).unwrap();
-    assert_eq!(result, "hello");
-}
-
-#[test]
-fn parse_with_schemars_i32() {
-    let json = json!(42);
-    let result: i32 = vld_schemars::parse_with_schemars::<i32>(&json).unwrap();
-    assert_eq!(result, 42);
-}
-
-// ========================= impl_vld_parse! ===================================
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct Item {
     name: String,
     qty: u32,
 }
 
 vld_schemars::impl_vld_parse!(Item);
+
+// --- VldParse (parse from JSON) ---
 
 #[test]
 fn impl_vld_parse_valid() {
@@ -559,4 +534,76 @@ fn impl_vld_parse_wrong_type() {
     use vld::schema::VldParse;
     let json = json!({"name": 123, "qty": "not a number"});
     assert!(Item::vld_parse_value(&json).is_err());
+}
+
+// --- SchemarsValidate::vld_validate (validate existing instance) ---
+
+#[test]
+fn schemars_validate_valid_instance() {
+    use vld_schemars::SchemarsValidate;
+    let user = User {
+        name: "Alice".into(),
+        age: 30,
+    };
+    assert!(user.vld_validate().is_ok());
+}
+
+#[test]
+fn schemars_validate_item() {
+    use vld_schemars::SchemarsValidate;
+    let item = Item {
+        name: "Widget".into(),
+        qty: 5,
+    };
+    assert!(item.vld_validate().is_ok());
+}
+
+// --- SchemarsValidate::vld_validate_json (validate JSON against type's schema) ---
+
+#[test]
+fn schemars_validate_json_valid() {
+    use vld_schemars::SchemarsValidate;
+    let json = json!({"name": "Alice", "age": 30});
+    assert!(User::vld_validate_json(&json).is_ok());
+}
+
+#[test]
+fn schemars_validate_json_missing_field() {
+    use vld_schemars::SchemarsValidate;
+    let json = json!({"name": "Alice"});
+    assert!(User::vld_validate_json(&json).is_err());
+}
+
+#[test]
+fn schemars_validate_json_wrong_type() {
+    use vld_schemars::SchemarsValidate;
+    let json = json!({"name": 123, "age": "not a number"});
+    assert!(User::vld_validate_json(&json).is_err());
+}
+
+// --- SchemarsValidate::vld_parse (validate + deserialize) ---
+
+#[test]
+fn schemars_vld_parse_valid() {
+    use vld_schemars::SchemarsValidate;
+    let json = json!({"name": "Bob", "age": 25});
+    let user = User::vld_parse(&json).unwrap();
+    assert_eq!(user.name, "Bob");
+    assert_eq!(user.age, 25);
+}
+
+#[test]
+fn schemars_vld_parse_invalid() {
+    use vld_schemars::SchemarsValidate;
+    let json = json!({"name": "Bob"});
+    assert!(User::vld_parse(&json).is_err());
+}
+
+#[test]
+fn schemars_vld_parse_item() {
+    use vld_schemars::SchemarsValidate;
+    let json = json!({"name": "Gadget", "qty": 10});
+    let item = Item::vld_parse(&json).unwrap();
+    assert_eq!(item.name, "Gadget");
+    assert_eq!(item.qty, 10);
 }

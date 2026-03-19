@@ -23,28 +23,21 @@
 //! // User now implements schemars::JsonSchema
 //! ```
 //!
-//! ## schemars → vld (validation)
+//! ## schemars → vld (macro on type)
 //!
 //! ```rust
-//! // Validate data using a JSON Schema from schemars
-//! let schema = serde_json::json!({
-//!     "type": "object",
-//!     "required": ["name"],
-//!     "properties": { "name": {"type": "string", "minLength": 1} }
-//! });
-//! let data = serde_json::json!({"name": "Alice"});
-//! assert!(vld_schemars::validate_with_schema(&schema, &data).is_ok());
-//! ```
+//! use vld_schemars::{impl_vld_parse, SchemarsValidate};
 //!
-//! ```rust
-//! // Implement vld::VldParse for a schemars type (reverse of impl_json_schema!)
-//! use vld_schemars::impl_vld_parse;
+//! #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+//! struct User { name: String, age: u32 }
 //!
-//! #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-//! struct Item { name: String, qty: u32 }
-//! impl_vld_parse!(Item);
+//! impl_vld_parse!(User);
 //!
-//! // Now Item::vld_parse_value() validates using schemars-generated schema
+//! let user = User { name: "Alice".into(), age: 30 };
+//! user.vld_validate().unwrap(); // validate existing instance
+//!
+//! let json = serde_json::json!({"name": "Alice", "age": 30});
+//! let user = User::vld_parse(&json).unwrap(); // validate + deserialize
 //! ```
 
 use serde_json::Value;
@@ -212,59 +205,73 @@ pub fn validate_with_schemars(
     validate_with_schema(schema.as_value(), value)
 }
 
-/// Validate a serializable value against a `schemars::Schema`.
+// ========================= SchemarsValidate trait ============================
+
+/// Trait for types that can be validated using their `schemars::JsonSchema`.
+///
+/// Automatically implemented by [`impl_vld_parse!`].
 ///
 /// ```rust
-/// let schema = vld_schemars::vld_to_schemars(&serde_json::json!({
-///     "type": "object",
-///     "required": ["name"],
-///     "properties": { "name": {"type": "string", "minLength": 1} }
-/// }));
+/// use vld_schemars::{impl_vld_parse, SchemarsValidate};
 ///
-/// #[derive(serde::Serialize)]
-/// struct User { name: String }
+/// #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+/// struct User { name: String, age: u32 }
 ///
-/// let user = User { name: "Alice".into() };
-/// assert!(vld_schemars::validate_serde_with_schemars(&schema, &user).is_ok());
+/// impl_vld_parse!(User);
+///
+/// let user = User { name: "Alice".into(), age: 30 };
+/// assert!(user.vld_validate().is_ok());
 /// ```
-pub fn validate_serde_with_schemars<T: serde::Serialize>(
-    schema: &schemars::Schema,
-    value: &T,
-) -> Result<(), VldSchemarsError> {
-    let json = serde_json::to_value(value)
-        .map_err(|e| VldSchemarsError::Deserialization(e.to_string()))?;
-    validate_with_schemars(schema, &json).map_err(VldSchemarsError::Validation)
+pub trait SchemarsValidate: schemars::JsonSchema + serde::Serialize + Sized {
+    /// Validate this value against its schemars-generated JSON Schema.
+    fn vld_validate(&self) -> Result<(), vld::error::VldError> {
+        let schema = generate_schemars::<Self>();
+        let json = serde_json::to_value(self).map_err(|e| {
+            vld::error::VldError::single(
+                vld::error::IssueCode::ParseError,
+                format!("Serialization error: {}", e),
+            )
+        })?;
+        validate_with_schemars(&schema, &json)
+    }
+
+    /// Validate a JSON value against this type's schemars schema.
+    fn vld_validate_json(value: &Value) -> Result<(), vld::error::VldError> {
+        let schema = generate_schemars::<Self>();
+        validate_with_schemars(&schema, value)
+    }
+
+    /// Validate and deserialize a JSON value into this type.
+    fn vld_parse(value: &Value) -> Result<Self, VldSchemarsError>
+    where
+        Self: serde::de::DeserializeOwned,
+    {
+        Self::vld_validate_json(value).map_err(VldSchemarsError::Validation)?;
+        serde_json::from_value(value.clone())
+            .map_err(|e| VldSchemarsError::Deserialization(e.to_string()))
+    }
 }
 
-/// Validate and deserialize a JSON value using a type's `schemars::JsonSchema`.
-///
-/// Generates the schema from `T`, validates `value` against it, then
-/// deserializes into `T`.
-///
-/// ```rust
-/// let json = serde_json::json!("hello world");
-/// let result: String = vld_schemars::parse_with_schemars::<String>(&json).unwrap();
-/// assert_eq!(result, "hello world");
-/// ```
-pub fn parse_with_schemars<T: schemars::JsonSchema + serde::de::DeserializeOwned>(
-    value: &Value,
-) -> Result<T, VldSchemarsError> {
-    let schema = generate_schemars::<T>();
-    validate_with_schemars(&schema, value).map_err(VldSchemarsError::Validation)?;
-    serde_json::from_value(value.clone())
-        .map_err(|e| VldSchemarsError::Deserialization(e.to_string()))
-}
-
-/// Implement `vld::schema::VldParse` for a type that implements
-/// `schemars::JsonSchema + serde::de::DeserializeOwned`.
+/// Implement `vld::schema::VldParse` and [`SchemarsValidate`] for a type
+/// that derives `schemars::JsonSchema`, `serde::Serialize`, and `serde::Deserialize`.
 ///
 /// This is the **reverse** of [`impl_json_schema!`]: given a schemars type,
 /// make it usable with vld's validation framework (extractors, etc.).
 ///
-/// ```rust
-/// use vld_schemars::impl_vld_parse;
+/// # What it gives you
 ///
-/// #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+/// - `vld::schema::VldParse` — the type can be used with vld extractors
+///   (`vld-axum`, `vld-actix`, etc.)
+/// - `SchemarsValidate` — validate existing instances via `.vld_validate()`,
+///   validate JSON via `Type::vld_validate_json(&json)`,
+///   parse via `Type::vld_parse(&json)`
+///
+/// # Example
+///
+/// ```rust
+/// use vld_schemars::{impl_vld_parse, SchemarsValidate};
+///
+/// #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 /// struct Item {
 ///     name: String,
 ///     qty: u32,
@@ -272,11 +279,19 @@ pub fn parse_with_schemars<T: schemars::JsonSchema + serde::de::DeserializeOwned
 ///
 /// impl_vld_parse!(Item);
 ///
-/// // Now Item implements vld::schema::VldParse
-/// use vld::schema::VldParse;
+/// // Validate existing instance
+/// let item = Item { name: "Widget".into(), qty: 5 };
+/// assert!(item.vld_validate().is_ok());
+///
+/// // Parse from JSON (validate + deserialize)
 /// let json = serde_json::json!({"name": "Widget", "qty": 5});
-/// let item = Item::vld_parse_value(&json).unwrap();
+/// let item = Item::vld_parse(&json).unwrap();
 /// assert_eq!(item.name, "Widget");
+///
+/// // Use with vld::VldParse
+/// use vld::schema::VldParse;
+/// let item = Item::vld_parse_value(&json).unwrap();
+/// assert_eq!(item.qty, 5);
 /// ```
 #[macro_export]
 macro_rules! impl_vld_parse {
@@ -295,6 +310,8 @@ macro_rules! impl_vld_parse {
                 })
             }
         }
+
+        impl $crate::SchemarsValidate for $ty {}
     };
 }
 
@@ -589,10 +606,9 @@ pub mod prelude {
     pub use crate::impl_vld_parse;
     pub use crate::{
         generate_from_schemars, generate_schemars, get_property, is_required, list_properties,
-        list_properties_schemars, merge_schemas, overlay_constraints, parse_with_schemars,
-        schema_type, schemas_equal, schemars_to_json, validate_serde_with_schemars,
-        validate_with_schema, validate_with_schemars, vld_schema_to_schemars, vld_to_schemars,
-        PropertyInfo, VldSchemarsError,
+        list_properties_schemars, merge_schemas, overlay_constraints, schema_type, schemas_equal,
+        schemars_to_json, validate_with_schema, validate_with_schemars, vld_schema_to_schemars,
+        vld_to_schemars, PropertyInfo, SchemarsValidate, VldSchemarsError,
     };
     pub use vld::prelude::*;
 }
