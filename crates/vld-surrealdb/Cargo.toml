@@ -1,0 +1,26 @@
+[package]
+name = "vld-surrealdb"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SurrealDB integration for the vld validation library — validate JSON documents before create/insert/update and after select"
+documentation = "https://docs.rs/vld-surrealdb"
+readme = "README.md"
+keywords = ["validation", "surrealdb", "database", "document", "vld"]
+categories = ["database", "web-programming"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true, features = ["serialize"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+vld = { workspace = true, features = ["serialize"] }
+
+[[example]]
+name = "surrealdb_basic"
+path = "examples/surrealdb_basic.rs"
