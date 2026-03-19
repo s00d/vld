@@ -301,6 +301,49 @@ pub fn derive_validate(input: TokenStream) -> TokenStream {
                 Self::parse_value(value)
             }
         }
+
+        ::vld::__vld_if_openapi! {
+            impl #name {
+                /// Generate a JSON Schema / OpenAPI 3.1 representation of this struct.
+                ///
+                /// Requires the `openapi` feature on `vld`.
+                pub fn json_schema() -> ::vld::serde_json::Value {
+                    use ::vld::json_schema::JsonSchema as _;
+                    let mut __vld_properties = ::vld::serde_json::Map::new();
+                    let mut __vld_required: ::std::vec::Vec<::std::string::String> =
+                        ::std::vec::Vec::new();
+
+                    #(
+                        {
+                            let __vld_field_schema = { #field_schemas };
+                            __vld_properties.insert(
+                                ::std::string::String::from(#field_json_keys),
+                                __vld_field_schema.json_schema(),
+                            );
+                            __vld_required.push(
+                                ::std::string::String::from(#field_json_keys),
+                            );
+                        }
+                    )*
+
+                    ::vld::serde_json::json!({
+                        "type": "object",
+                        "required": __vld_required,
+                        "properties": ::vld::serde_json::Value::Object(__vld_properties),
+                    })
+                }
+
+                /// Wrap `json_schema()` in a minimal OpenAPI 3.1 document.
+                ///
+                /// Requires the `openapi` feature on `vld`.
+                pub fn to_openapi_document() -> ::vld::serde_json::Value {
+                    ::vld::json_schema::to_openapi_document(
+                        stringify!(#name),
+                        &Self::json_schema(),
+                    )
+                }
+            }
+        }
     };
 
     TokenStream::from(expanded)

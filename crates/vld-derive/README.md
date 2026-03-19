@@ -58,6 +58,41 @@ struct ApiRequest {
 
 This will expect JSON keys `firstName` and `emailAddress`.
 
+## OpenAPI / utoipa integration
+
+When the `openapi` feature is enabled on `vld`, the derive macro also generates
+`json_schema()` and `to_openapi_document()` methods. This makes `#[derive(Validate)]`
+fully compatible with `impl_to_schema!` from `vld-utoipa`:
+
+```toml
+[dependencies]
+vld = { version = "0.1", features = ["derive", "openapi"] }
+vld-utoipa = "0.1"
+utoipa = "5"
+```
+
+```rust
+use vld::Validate;
+use vld_utoipa::impl_to_schema;
+
+#[derive(Debug, serde::Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+struct UpdateLocationRequest {
+    #[vld(vld::string().min(1).max(255))]
+    name: String,
+    #[vld(vld::string())]
+    street_address: String,
+    #[vld(vld::number().int().non_negative().min(1).max(9999))]
+    street_number: i64,
+    #[vld(vld::boolean())]
+    is_active: bool,
+}
+
+impl_to_schema!(UpdateLocationRequest);
+// Now UpdateLocationRequest implements utoipa::ToSchema
+// with camelCase property names in the OpenAPI spec.
+```
+
 ## Examples
 
 See the [playground example](../../examples/playground/) for a complete usage demo, including `#[derive(Validate)]`:

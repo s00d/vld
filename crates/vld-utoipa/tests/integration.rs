@@ -225,6 +225,91 @@ fn impl_to_schema_custom_name_schema_works() {
     assert_eq!(json["type"], "object");
 }
 
+// ---- derive(Validate) + impl_to_schema! ----
+
+#[derive(Debug, vld::Validate)]
+struct DeriveUser {
+    #[vld(vld::string().min(2).max(50))]
+    name: String,
+    #[vld(vld::string().email())]
+    email: String,
+    #[vld(vld::number().int().gte(0).optional())]
+    age: Option<i64>,
+}
+
+impl_to_schema!(DeriveUser);
+
+#[test]
+fn derive_impl_to_schema_works() {
+    let schema = DeriveUser::schema();
+    let json = serde_json::to_value(&schema).unwrap();
+    assert_eq!(json["type"], "object");
+    assert_eq!(json["properties"]["name"]["type"], "string");
+    assert_eq!(json["properties"]["name"]["minLength"], 2);
+    assert_eq!(json["properties"]["name"]["maxLength"], 50);
+    assert_eq!(json["properties"]["email"]["format"], "email");
+}
+
+#[test]
+fn derive_impl_to_schema_name() {
+    let name = DeriveUser::name();
+    assert_eq!(name, "DeriveUser");
+}
+
+#[derive(Debug, serde::Deserialize, vld::Validate)]
+#[serde(rename_all = "camelCase")]
+struct DeriveRenamedRequest {
+    #[vld(vld::string().min(1).max(255))]
+    first_name: String,
+    #[vld(vld::string().email())]
+    email_address: String,
+    #[vld(vld::number().int().non_negative().min(1).max(9999))]
+    street_number: i64,
+    #[vld(vld::string().optional())]
+    street_number_addition: Option<String>,
+    #[vld(vld::boolean())]
+    is_active: bool,
+}
+
+impl_to_schema!(DeriveRenamedRequest);
+
+#[test]
+fn derive_rename_all_camel_case_schema() {
+    let schema = DeriveRenamedRequest::schema();
+    let json = serde_json::to_value(&schema).unwrap();
+    assert_eq!(json["type"], "object");
+    assert!(json["properties"]["firstName"].is_object(), "firstName property missing");
+    assert!(json["properties"]["emailAddress"].is_object(), "emailAddress property missing");
+    assert!(json["properties"]["streetNumber"].is_object(), "streetNumber property missing");
+    assert!(json["properties"]["streetNumberAddition"].is_object(), "streetNumberAddition property missing");
+    assert!(json["properties"]["isActive"].is_object(), "isActive property missing");
+
+    assert!(json["properties"]["first_name"].is_null(), "snake_case key should not exist");
+}
+
+#[test]
+fn derive_rename_all_camel_case_validation() {
+    let result = DeriveRenamedRequest::vld_parse(
+        r#"{"firstName": "John", "emailAddress": "john@example.com", "streetNumber": 42, "isActive": true}"#,
+    );
+    assert!(result.is_ok());
+    let req = result.unwrap();
+    assert_eq!(req.first_name, "John");
+    assert_eq!(req.email_address, "john@example.com");
+    assert_eq!(req.street_number, 42);
+    assert_eq!(req.is_active, true);
+}
+
+#[test]
+fn derive_rename_all_required_uses_camel_case() {
+    let json = serde_json::to_value(&DeriveRenamedRequest::schema()).unwrap();
+    let req = json["required"].as_array().unwrap();
+    assert!(req.contains(&json!("firstName")));
+    assert!(req.contains(&json!("emailAddress")));
+    assert!(req.contains(&json!("streetNumber")));
+    assert!(req.contains(&json!("isActive")));
+}
+
 // ---- Round-trip: vld json_schema -> utoipa -> JSON ----
 
 #[test]

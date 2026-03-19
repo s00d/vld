@@ -45,6 +45,43 @@ impl_to_schema!(CreateUser);
 // #[utoipa::path(post, path = "/users", request_body = CreateUser)]
 ```
 
+## Using with `#[derive(Validate)]`
+
+`impl_to_schema!` also works with `#[derive(Validate)]` from `vld-derive`.
+This lets you use standard Rust struct syntax with serde attributes like
+`#[serde(rename_all = "camelCase")]` and still get OpenAPI schema generation.
+
+```toml
+[dependencies]
+vld = { version = "0.1", features = ["derive", "openapi"] }
+vld-utoipa = "0.1"
+utoipa = "5"
+```
+
+```rust
+use vld::Validate;
+use vld_utoipa::impl_to_schema;
+
+#[derive(Debug, serde::Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+struct UpdateLocationRequest {
+    #[vld(vld::string().min(1).max(255))]
+    name: String,
+    #[vld(vld::string())]
+    street_address: String,
+    #[vld(vld::number().int().non_negative().min(1).max(9999))]
+    street_number: i64,
+    #[vld(vld::string().optional())]
+    street_number_addition: Option<String>,
+    #[vld(vld::boolean())]
+    is_active: bool,
+}
+
+impl_to_schema!(UpdateLocationRequest);
+// OpenAPI schema properties use camelCase:
+// "streetAddress", "streetNumber", "streetNumberAddition", "isActive"
+```
+
 ## Custom Schema Name
 
 ```rust

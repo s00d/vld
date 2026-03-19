@@ -1029,8 +1029,46 @@ struct User {
     age: Option<i64>,
 }
 
-// Generates: parse(), parse_value(), validate_fields(), parse_lenient()
-let user = User::parse(r#"{"name": "Alex", "email": "a@b.com"}"#).unwrap();
+// Generates: vld_parse(), parse_value(), validate_fields(), parse_lenient()
+let user = User::vld_parse(r#"{"name": "Alex", "email": "a@b.com"}"#).unwrap();
+```
+
+### Derive + utoipa (OpenAPI)
+
+`#[derive(Validate)]` works with `impl_to_schema!` from `vld-utoipa`, including
+full support for `#[serde(rename_all = "...")]`. Enable both `derive` and `openapi` features:
+
+```toml
+[dependencies]
+vld = { version = "0.1", features = ["derive", "openapi"] }
+vld-utoipa = "0.1"
+utoipa = "5"
+```
+
+```rust
+use vld::Validate;
+use vld_utoipa::impl_to_schema;
+
+#[derive(Debug, serde::Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+struct UpdateLocationRequest {
+    #[vld(vld::string().min(1).max(255))]
+    name: String,
+    #[vld(vld::string())]
+    city: String,
+    #[vld(vld::string())]
+    street_address: String,
+    #[vld(vld::number().int().non_negative().min(1).max(9999))]
+    street_number: i64,
+    #[vld(vld::string().optional())]
+    street_number_addition: Option<String>,
+    #[vld(vld::boolean())]
+    is_active: bool,
+}
+
+impl_to_schema!(UpdateLocationRequest);
+// OpenAPI schema uses camelCase keys: "streetAddress", "streetNumber", etc.
+// Validation also expects camelCase JSON input.
 ```
 
 ## Optional Regex Support
@@ -1090,6 +1128,8 @@ The `vld` project is organized as a Cargo workspace with several crates:
 
 Enable with `features = ["derive"]`. Provides `#[derive(Validate)]` with `#[vld(...)]` attributes
 on struct fields. Supports `#[serde(rename)]` and `#[serde(rename_all)]` for JSON key mapping.
+When `openapi` feature is also enabled, generates `json_schema()` and `to_openapi_document()` methods,
+making it fully compatible with `vld-utoipa`'s `impl_to_schema!`.
 
 ```rust
 use vld::Validate;
@@ -1221,6 +1261,7 @@ let settings: Settings = from_config(&config).unwrap();
 
 Bridge between `vld` and [utoipa](https://docs.rs/utoipa). Define validation once, get
 `ToSchema` for free — no need to duplicate schema definitions.
+Works with both `vld::schema!` and `#[derive(Validate)]`.
 
 ```toml
 [dependencies]
@@ -1233,6 +1274,7 @@ utoipa = "5"
 use vld::prelude::*;
 use vld_utoipa::impl_to_schema;
 
+// Option A: schema! macro
 vld::schema! {
     #[derive(Debug)]
     pub struct CreateUser {
@@ -1240,9 +1282,19 @@ vld::schema! {
         pub email: String => vld::string().email(),
     }
 }
-
 impl_to_schema!(CreateUser);
-// Now CreateUser implements utoipa::ToSchema
+
+// Option B: derive macro (requires features = ["derive", "openapi"])
+#[derive(Debug, serde::Deserialize, vld::Validate)]
+#[serde(rename_all = "camelCase")]
+struct ApiRequest {
+    #[vld(vld::string().min(1))]
+    first_name: String,
+    #[vld(vld::string().email())]
+    email_address: String,
+}
+impl_to_schema!(ApiRequest);
+// OpenAPI schema uses camelCase: "firstName", "emailAddress"
 ```
 
 ### vld-rocket
