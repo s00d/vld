@@ -1122,6 +1122,8 @@ The `vld` project is organized as a Cargo workspace with several crates:
 | [`vld-tauri`](crates/vld-tauri/) | [![crates.io](https://img.shields.io/crates/v/vld-tauri?style=flat-square)](https://crates.io/crates/vld-tauri) | [Tauri](https://tauri.app/) — validate IPC commands, events, state, channels, plugin config |
 | [`vld-ts`](crates/vld-ts/) | [![crates.io](https://img.shields.io/crates/v/vld-ts?style=flat-square)](https://crates.io/crates/vld-ts) | TypeScript codegen — generates [Zod](https://zod.dev/) schemas from `vld` JSON Schema output |
 | [`vld-fake`](crates/vld-fake/) | [![crates.io](https://img.shields.io/crates/v/vld-fake?style=flat-square)](https://crates.io/crates/vld-fake) | Fake data generation — `User::fake()`, `fake_many()`, `fake_seeded()` with realistic dictionaries |
+| [`vld-tonic`](crates/vld-tonic/) | [![crates.io](https://img.shields.io/crates/v/vld-tonic?style=flat-square)](https://crates.io/crates/vld-tonic) | [tonic](https://docs.rs/tonic) gRPC — validate protobuf messages and metadata |
+| [`vld-leptos`](crates/vld-leptos/) | [![crates.io](https://img.shields.io/crates/v/vld-leptos?style=flat-square)](https://crates.io/crates/vld-leptos) | [Leptos](https://leptos.dev/) — shared validation for server functions and WASM clients |
 | [`vld-http-common`](crates/vld-http-common/) | [![crates.io](https://img.shields.io/crates/v/vld-http-common?style=flat-square)](https://crates.io/crates/vld-http-common) | Shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates) |
 
 ### vld-derive
@@ -1548,6 +1550,67 @@ println!("{} <{}> age={}", user.name, user.email, user.age);
 // Multiple + reproducible
 let users = User::fake_many(10);
 let same  = User::fake_seeded(42);
+```
+
+### vld-tonic
+
+[tonic](https://docs.rs/tonic) gRPC integration — validate protobuf messages and metadata.
+
+```toml
+[dependencies]
+vld-tonic = "0.1"
+```
+
+```rust
+use serde::Serialize;
+use tonic::{Request, Response, Status};
+
+#[derive(Clone, Serialize)]
+pub struct CreateUserRequest {
+    pub name: String,
+    pub email: String,
+}
+
+vld_tonic::impl_validate!(CreateUserRequest {
+    name  => vld::string().min(2).max(100),
+    email => vld::string().email(),
+});
+
+async fn create_user(request: Request<CreateUserRequest>) -> Result<Response<()>, Status> {
+    let msg = vld_tonic::validate(request)?;
+    Ok(Response::new(()))
+}
+```
+
+### vld-leptos
+
+[Leptos](https://leptos.dev/) integration — **define validation rules once, use on server and client (WASM)**.
+Zero dependency on `leptos` — works with any Leptos version.
+
+```toml
+[dependencies]
+vld-leptos = "0.1"
+```
+
+```rust
+// Shared schemas (server + WASM)
+fn name_schema() -> vld::primitives::ZString { vld::string().min(2).max(50) }
+fn email_schema() -> vld::primitives::ZString { vld::string().email() }
+
+// Server function — validate_args! macro
+#[server]
+async fn create_user(name: String, email: String) -> Result<(), ServerFnError> {
+    vld_leptos::validate_args! {
+        name  => name_schema(),
+        email => email_schema(),
+    }.map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
+// Client component — reactive check_field
+let name_err = Memo::new(move |_| {
+    vld_leptos::check_field(&name.get(), &name_schema())
+});
 ```
 
 ### vld-ts

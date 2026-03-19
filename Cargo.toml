@@ -18,6 +18,8 @@ members = [
     "crates/vld-tauri",
     "crates/vld-fake",
     "crates/vld-http-common",
+    "crates/vld-tonic",
+    "crates/vld-leptos",
     "examples/playground",
 ]
 resolver = "2"
