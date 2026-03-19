@@ -1126,6 +1126,7 @@ The `vld` project is organized as a Cargo workspace with several crates:
 | [`vld-tonic`](crates/vld-tonic/) | [![crates.io](https://img.shields.io/crates/v/vld-tonic?style=flat-square)](https://crates.io/crates/vld-tonic) | [tonic](https://docs.rs/tonic) gRPC — validate protobuf messages and metadata |
 | [`vld-leptos`](crates/vld-leptos/) | [![crates.io](https://img.shields.io/crates/v/vld-leptos?style=flat-square)](https://crates.io/crates/vld-leptos) | [Leptos](https://leptos.dev/) — shared validation for server functions and WASM clients |
 | [`vld-dioxus`](crates/vld-dioxus/) | [![crates.io](https://img.shields.io/crates/v/vld-dioxus?style=flat-square)](https://crates.io/crates/vld-dioxus) | [Dioxus](https://dioxuslabs.com/) — shared validation for server functions and WASM clients |
+| [`vld-ntex`](crates/vld-ntex/) | [![crates.io](https://img.shields.io/crates/v/vld-ntex?style=flat-square)](https://crates.io/crates/vld-ntex) | [ntex](https://ntex.rs/) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
 | [`vld-http-common`](crates/vld-http-common/) | [![crates.io](https://img.shields.io/crates/v/vld-http-common?style=flat-square)](https://crates.io/crates/vld-http-common) | Shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates) |
 
 ### vld-derive
@@ -1179,6 +1180,25 @@ use vld_actix::prelude::*;
 
 async fn handler(VldJson(body): VldJson<MySchema>) -> impl Responder {
     // body is already validated
+}
+```
+
+### vld-ntex
+
+Validation extractors for [ntex](https://ntex.rs/) web framework (by the author of Actix). Same API surface as `vld-actix`.
+
+```toml
+[dependencies]
+vld-ntex = "0.1"
+ntex = "3"
+```
+
+```rust
+use ntex::web::HttpResponse;
+use vld_ntex::prelude::*;
+
+async fn handler(body: VldJson<MySchema>) -> HttpResponse {
+    HttpResponse::Ok().body(format!("name={}", body.name))
 }
 ```
 
