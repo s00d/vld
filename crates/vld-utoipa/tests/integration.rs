@@ -278,13 +278,31 @@ fn derive_rename_all_camel_case_schema() {
     let schema = DeriveRenamedRequest::schema();
     let json = serde_json::to_value(&schema).unwrap();
     assert_eq!(json["type"], "object");
-    assert!(json["properties"]["firstName"].is_object(), "firstName property missing");
-    assert!(json["properties"]["emailAddress"].is_object(), "emailAddress property missing");
-    assert!(json["properties"]["streetNumber"].is_object(), "streetNumber property missing");
-    assert!(json["properties"]["streetNumberAddition"].is_object(), "streetNumberAddition property missing");
-    assert!(json["properties"]["isActive"].is_object(), "isActive property missing");
+    assert!(
+        json["properties"]["firstName"].is_object(),
+        "firstName property missing"
+    );
+    assert!(
+        json["properties"]["emailAddress"].is_object(),
+        "emailAddress property missing"
+    );
+    assert!(
+        json["properties"]["streetNumber"].is_object(),
+        "streetNumber property missing"
+    );
+    assert!(
+        json["properties"]["streetNumberAddition"].is_object(),
+        "streetNumberAddition property missing"
+    );
+    assert!(
+        json["properties"]["isActive"].is_object(),
+        "isActive property missing"
+    );
 
-    assert!(json["properties"]["first_name"].is_null(), "snake_case key should not exist");
+    assert!(
+        json["properties"]["first_name"].is_null(),
+        "snake_case key should not exist"
+    );
 }
 
 #[test]
@@ -408,8 +426,14 @@ impl_to_schema!(Order);
 #[test]
 fn nested_schema_generates_ref() {
     let js = Order::json_schema();
-    assert_eq!(js["properties"]["shipping"]["$ref"], "#/components/schemas/Address");
-    assert_eq!(js["properties"]["billing"]["$ref"], "#/components/schemas/Address");
+    assert_eq!(
+        js["properties"]["shipping"]["$ref"],
+        "#/components/schemas/Address"
+    );
+    assert_eq!(
+        js["properties"]["billing"]["$ref"],
+        "#/components/schemas/Address"
+    );
 }
 
 #[test]
@@ -418,7 +442,11 @@ fn nested_schemas_auto_registered() {
     <Order as ToSchema>::schemas(&mut schemas);
 
     let names: Vec<&str> = schemas.iter().map(|(n, _)| n.as_str()).collect();
-    assert!(names.contains(&"Address"), "Address should be auto-registered, got: {:?}", names);
+    assert!(
+        names.contains(&"Address"),
+        "Address should be auto-registered, got: {:?}",
+        names
+    );
 
     let (_, addr_schema) = schemas.iter().find(|(n, _)| n == "Address").unwrap();
     let json = serde_json::to_value(addr_schema).unwrap();
@@ -449,19 +477,28 @@ fn nested_in_array_auto_registered() {
     let mut schemas = Vec::new();
     <Warehouse as ToSchema>::schemas(&mut schemas);
     let names: Vec<&str> = schemas.iter().map(|(n, _)| n.as_str()).collect();
-    assert!(names.contains(&"Address"), "Address should be auto-registered from array");
+    assert!(
+        names.contains(&"Address"),
+        "Address should be auto-registered from array"
+    );
 }
 
 #[test]
 fn derive_type_has_empty_nested_schemas() {
     let mut schemas = Vec::new();
     <DeriveUser as ToSchema>::schemas(&mut schemas);
-    assert!(schemas.is_empty(), "derive-based types should have no nested schemas");
+    assert!(
+        schemas.is_empty(),
+        "derive-based types should have no nested schemas"
+    );
 }
 
 #[test]
 fn flat_schema_has_empty_nested_schemas() {
     let mut schemas = Vec::new();
     <TestUser as ToSchema>::schemas(&mut schemas);
-    assert!(schemas.is_empty(), "flat schema should have no nested schemas");
+    assert!(
+        schemas.is_empty(),
+        "flat schema should have no nested schemas"
+    );
 }

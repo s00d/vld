@@ -353,6 +353,7 @@ pub use utoipa;
 
 #[doc(hidden)]
 pub trait __VldNestedSchemasFallback {
+    #[allow(clippy::type_complexity)]
     fn __vld_nested_schemas() -> Vec<(&'static str, fn() -> serde_json::Value)> {
         Vec::new()
     }

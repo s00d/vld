@@ -130,9 +130,7 @@ macro_rules! impl_json_schema {
             }
 
             fn schema_id() -> ::std::borrow::Cow<'static, str> {
-                ::std::borrow::Cow::Owned(
-                    format!("{}::{}", module_path!(), $name),
-                )
+                ::std::borrow::Cow::Owned(format!("{}::{}", module_path!(), $name))
             }
 
             fn json_schema(

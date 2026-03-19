@@ -1,13 +1,21 @@
 use serde::Serialize;
-use vld_leptos::{check_all_fields, check_field, check_field_all, validate, FieldError, VldServerError};
+use vld_leptos::{
+    check_all_fields, check_field, check_field_all, validate, FieldError, VldServerError,
+};
 
 // ===================== VldServerError ========================================
 
 #[test]
 fn vld_server_error_validation() {
     let err = VldServerError::validation(vec![
-        FieldError { field: "name".into(), message: "too short".into() },
-        FieldError { field: "email".into(), message: "invalid email".into() },
+        FieldError {
+            field: "name".into(),
+            message: "too short".into(),
+        },
+        FieldError {
+            field: "email".into(),
+            message: "invalid email".into(),
+        },
     ]);
     assert_eq!(err.fields.len(), 2);
     assert_eq!(err.field_error("name"), Some("too short"));
@@ -20,8 +28,14 @@ fn vld_server_error_validation() {
 #[test]
 fn vld_server_error_field_errors_all() {
     let err = VldServerError::validation(vec![
-        FieldError { field: "name".into(), message: "too short".into() },
-        FieldError { field: "name".into(), message: "must start with uppercase".into() },
+        FieldError {
+            field: "name".into(),
+            message: "too short".into(),
+        },
+        FieldError {
+            field: "name".into(),
+            message: "must start with uppercase".into(),
+        },
     ]);
     let msgs = err.field_errors("name");
     assert_eq!(msgs.len(), 2);
@@ -32,8 +46,14 @@ fn vld_server_error_field_errors_all() {
 #[test]
 fn vld_server_error_error_fields() {
     let err = VldServerError::validation(vec![
-        FieldError { field: "name".into(), message: "x".into() },
-        FieldError { field: "email".into(), message: "y".into() },
+        FieldError {
+            field: "name".into(),
+            message: "x".into(),
+        },
+        FieldError {
+            field: "email".into(),
+            message: "y".into(),
+        },
     ]);
     let fields = err.error_fields();
     assert!(fields.contains(&"name"));
@@ -42,9 +62,10 @@ fn vld_server_error_error_fields() {
 
 #[test]
 fn vld_server_error_display_is_json() {
-    let err = VldServerError::validation(vec![
-        FieldError { field: "name".into(), message: "too short".into() },
-    ]);
+    let err = VldServerError::validation(vec![FieldError {
+        field: "name".into(),
+        message: "too short".into(),
+    }]);
     let display = err.to_string();
     let parsed: VldServerError = serde_json::from_str(&display).unwrap();
     assert_eq!(parsed, err);
@@ -52,9 +73,10 @@ fn vld_server_error_display_is_json() {
 
 #[test]
 fn vld_server_error_from_json() {
-    let err = VldServerError::validation(vec![
-        FieldError { field: "age".into(), message: "too small".into() },
-    ]);
+    let err = VldServerError::validation(vec![FieldError {
+        field: "age".into(),
+        message: "too small".into(),
+    }]);
     let json = serde_json::to_string(&err).unwrap();
     let parsed = VldServerError::from_json(&json).unwrap();
     assert_eq!(parsed, err);
@@ -104,14 +126,20 @@ struct UserArgs {
 
 #[test]
 fn validate_valid() {
-    let args = UserArgs { name: "Alice".into(), email: "alice@example.com".into() };
+    let args = UserArgs {
+        name: "Alice".into(),
+        email: "alice@example.com".into(),
+    };
     let result = validate::<UserSchema, _>(&args);
     assert!(result.is_ok());
 }
 
 #[test]
 fn validate_invalid_name() {
-    let args = UserArgs { name: "A".into(), email: "alice@example.com".into() };
+    let args = UserArgs {
+        name: "A".into(),
+        email: "alice@example.com".into(),
+    };
     let err = validate::<UserSchema, _>(&args).unwrap_err();
     assert!(err.has_field_error(".name"));
     assert!(!err.has_field_error(".email"));
@@ -119,14 +147,20 @@ fn validate_invalid_name() {
 
 #[test]
 fn validate_invalid_email() {
-    let args = UserArgs { name: "Alice".into(), email: "bad".into() };
+    let args = UserArgs {
+        name: "Alice".into(),
+        email: "bad".into(),
+    };
     let err = validate::<UserSchema, _>(&args).unwrap_err();
     assert!(err.has_field_error(".email"));
 }
 
 #[test]
 fn validate_multiple_errors() {
-    let args = UserArgs { name: "A".into(), email: "bad".into() };
+    let args = UserArgs {
+        name: "A".into(),
+        email: "bad".into(),
+    };
     let err = validate::<UserSchema, _>(&args).unwrap_err();
     assert!(err.has_field_error(".name"));
     assert!(err.has_field_error(".email"));
@@ -181,14 +215,20 @@ fn check_field_all_multiple() {
 
 #[test]
 fn check_all_fields_valid() {
-    let data = UserArgs { name: "Alice".into(), email: "a@b.com".into() };
+    let data = UserArgs {
+        name: "Alice".into(),
+        email: "a@b.com".into(),
+    };
     let errors = check_all_fields::<UserSchema, _>(&data);
     assert!(errors.is_empty());
 }
 
 #[test]
 fn check_all_fields_invalid() {
-    let data = UserArgs { name: "A".into(), email: "bad".into() };
+    let data = UserArgs {
+        name: "A".into(),
+        email: "bad".into(),
+    };
     let errors = check_all_fields::<UserSchema, _>(&data);
     assert!(errors.len() >= 2);
     assert!(errors.iter().any(|e| e.field.contains("name")));

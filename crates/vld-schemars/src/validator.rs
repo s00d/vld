@@ -124,7 +124,10 @@ pub(crate) fn validate_value_against_schema(
                 IssueCode::Custom {
                     code: "oneOf".into(),
                 },
-                format!("Value must match exactly one of the schemas (matched {})", matches),
+                format!(
+                    "Value must match exactly one of the schemas (matched {})",
+                    matches
+                ),
                 Some(value),
             ));
         }
@@ -161,9 +164,7 @@ pub(crate) fn validate_value_against_schema(
         if validate_value_against_schema(not_schema, value, path).is_ok() {
             errors.issues.push(make_issue(
                 path,
-                IssueCode::Custom {
-                    code: "not".into(),
-                },
+                IssueCode::Custom { code: "not".into() },
                 "Value must NOT match the schema",
                 Some(value),
             ));
@@ -235,14 +236,12 @@ fn validate_string(
         let valid = match format {
             "email" => s.contains('@') && s.contains('.'),
             "uri" | "url" => s.starts_with("http://") || s.starts_with("https://"),
-            "uuid" => {
-                s.len() == 36
-                    && s.chars()
-                        .all(|c| c.is_ascii_hexdigit() || c == '-')
-            }
+            "uuid" => s.len() == 36 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-'),
             "ipv4" => s.parse::<std::net::Ipv4Addr>().is_ok(),
             "ipv6" => s.parse::<std::net::Ipv6Addr>().is_ok(),
-            "date" => s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-'),
+            "date" => {
+                s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-')
+            }
             "date-time" => s.contains('T') || s.contains('t'),
             _ => true, // unknown formats pass
         };
@@ -435,9 +434,7 @@ fn validate_object(
             if let Some(prop_value) = obj.get(prop_name) {
                 let mut prop_path = path.to_vec();
                 prop_path.push(PathSegment::Field(prop_name.clone()));
-                if let Err(e) =
-                    validate_value_against_schema(prop_schema, prop_value, &prop_path)
-                {
+                if let Err(e) = validate_value_against_schema(prop_schema, prop_value, &prop_path) {
                     *errors = std::mem::take(errors).merge(e);
                 }
             }
@@ -490,10 +487,7 @@ fn type_matches(value: &Value, types: &[&str]) -> bool {
 }
 
 fn is_whole(value: &Value) -> bool {
-    value
-        .as_f64()
-        .map(|n| n.fract() == 0.0)
-        .unwrap_or(false)
+    value.as_f64().map(|n| n.fract() == 0.0).unwrap_or(false)
 }
 
 fn json_type_name(value: &Value) -> &'static str {

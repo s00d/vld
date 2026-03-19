@@ -85,7 +85,8 @@ fn main() {
         Err(e) => println!("errors: {e}"),
     }
 
-    match CreateUser::parse(r#"{"name": "A", "email": "bad", "address": {"city": "", "zip": "1"}}"#) {
+    match CreateUser::parse(r#"{"name": "A", "email": "bad", "address": {"city": "", "zip": "1"}}"#)
+    {
         Ok(_) => println!("valid"),
         Err(e) => println!("errors:\n{e}"),
     }

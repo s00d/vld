@@ -116,8 +116,7 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldJson<
                 ),
             })?;
 
-        let parsed =
-            T::vld_parse_value(&json_value).map_err(|error| VldNtexError { error })?;
+        let parsed = T::vld_parse_value(&json_value).map_err(|error| VldNtexError { error })?;
 
         Ok(VldJson(parsed))
     }
@@ -229,15 +228,14 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldForm<
         req: &HttpRequest,
         payload: &mut ntex::http::Payload,
     ) -> Result<Self, Self::Error> {
-        let bytes =
-            <ntex::util::Bytes as FromRequest<Err>>::from_request(req, payload)
-                .await
-                .map_err(|e| VldNtexError {
-                    error: vld::error::VldError::single(
-                        vld::error::IssueCode::ParseError,
-                        format!("Failed to read form body: {}", e),
-                    ),
-                })?;
+        let bytes = <ntex::util::Bytes as FromRequest<Err>>::from_request(req, payload)
+            .await
+            .map_err(|e| VldNtexError {
+                error: vld::error::VldError::single(
+                    vld::error::IssueCode::ParseError,
+                    format!("Failed to read form body: {}", e),
+                ),
+            })?;
 
         let body_bytes: &[u8] = &bytes;
         let body_str = std::str::from_utf8(body_bytes).map_err(|_| VldNtexError {

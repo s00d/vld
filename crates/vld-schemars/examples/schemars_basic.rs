@@ -31,7 +31,10 @@ fn main() {
     println!("--- impl_json_schema! (vld → schemars) ---");
     let mut gen = schemars::SchemaGenerator::default();
     let schema = <UserSchema as schemars::JsonSchema>::json_schema(&mut gen);
-    println!("schema_name: {}", <UserSchema as schemars::JsonSchema>::schema_name());
+    println!(
+        "schema_name: {}",
+        <UserSchema as schemars::JsonSchema>::schema_name()
+    );
     println!(
         "Generated:\n{}\n",
         serde_json::to_string_pretty(schema.as_value()).unwrap()

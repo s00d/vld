@@ -136,8 +136,16 @@ fn validate_row_works() {
 #[test]
 fn validate_rows_all_valid() {
     let rows = vec![
-        NewUser { name: "A".into(), email: "a@b.com".into(), age: 10 },
-        NewUser { name: "B".into(), email: "b@c.com".into(), age: 20 },
+        NewUser {
+            name: "A".into(),
+            email: "a@b.com".into(),
+            age: 10,
+        },
+        NewUser {
+            name: "B".into(),
+            email: "b@c.com".into(),
+            age: 20,
+        },
     ];
     assert!(validate_rows::<UserSchema, _>(&rows).is_ok());
 }
@@ -145,8 +153,16 @@ fn validate_rows_all_valid() {
 #[test]
 fn validate_rows_one_invalid() {
     let rows = vec![
-        NewUser { name: "A".into(), email: "a@b.com".into(), age: 10 },
-        NewUser { name: "".into(), email: "bad".into(), age: -1 },
+        NewUser {
+            name: "A".into(),
+            email: "a@b.com".into(),
+            age: 10,
+        },
+        NewUser {
+            name: "".into(),
+            email: "bad".into(),
+            age: -1,
+        },
     ];
     let err = validate_rows::<UserSchema, _>(&rows).unwrap_err();
     assert_eq!(err.0, 1); // index of bad row

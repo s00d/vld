@@ -182,10 +182,7 @@ mod validator;
 /// let invalid = serde_json::json!({"age": -5});
 /// assert!(vld_schemars::validate_with_schema(&schema, &invalid).is_err());
 /// ```
-pub fn validate_with_schema(
-    schema: &Value,
-    value: &Value,
-) -> Result<(), vld::error::VldError> {
+pub fn validate_with_schema(schema: &Value, value: &Value) -> Result<(), vld::error::VldError> {
     validator::validate_value_against_schema(schema, value, &[])
 }
 
@@ -392,7 +389,10 @@ pub fn list_properties_schemars(schema: &schemars::Schema) -> Vec<PropertyInfo> 
 /// assert_eq!(vld_schemars::schema_type(&schema), Some("string".to_string()));
 /// ```
 pub fn schema_type(schema: &Value) -> Option<String> {
-    schema.get("type").and_then(|t| t.as_str()).map(String::from)
+    schema
+        .get("type")
+        .and_then(|t| t.as_str())
+        .map(String::from)
 }
 
 /// Check if a field is required in a JSON Schema.
@@ -517,7 +517,9 @@ pub fn overlay_constraints(base: &Value, overlay: &Value) -> Value {
                     }
                 }
                 _ => {
-                    result_obj.entry(key.clone()).or_insert_with(|| value.clone());
+                    result_obj
+                        .entry(key.clone())
+                        .or_insert_with(|| value.clone());
                 }
             }
         }
@@ -606,9 +608,9 @@ pub mod prelude {
     pub use crate::impl_vld_parse;
     pub use crate::{
         generate_from_schemars, generate_schemars, get_property, is_required, list_properties,
-        list_properties_schemars, merge_schemas, overlay_constraints, schema_type, schemas_equal,
-        schemars_to_json, validate_with_schema, validate_with_schemars, vld_schema_to_schemars,
-        vld_to_schemars, PropertyInfo, SchemarsValidate, VldSchemarsError,
+        list_properties_schemars, merge_schemas, overlay_constraints, schema_type,
+        schemars_to_json, schemas_equal, validate_with_schema, validate_with_schemars,
+        vld_schema_to_schemars, vld_to_schemars, PropertyInfo, SchemarsValidate, VldSchemarsError,
     };
     pub use vld::prelude::*;
 }

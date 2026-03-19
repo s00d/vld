@@ -108,8 +108,8 @@ where
 {
     /// Validate `value` against schema `S` and wrap it on success.
     pub fn new(value: T) -> Result<Self, VldSqlxError> {
-        let json = serde_json::to_value(&value)
-            .map_err(|e| VldSqlxError::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_value(&value).map_err(|e| VldSqlxError::Serialization(e.to_string()))?;
         S::vld_parse_value(&json).map_err(VldSqlxError::Validation)?;
         Ok(Self {
             inner: value,

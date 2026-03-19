@@ -216,7 +216,10 @@ fn derive_rename_all_camel_case_schema() {
     assert_eq!(schema.get("type").unwrap(), "object");
 
     let props = schema.get("properties").unwrap().as_object().unwrap();
-    assert!(props.contains_key("firstName"), "firstName property missing");
+    assert!(
+        props.contains_key("firstName"),
+        "firstName property missing"
+    );
     assert!(
         props.contains_key("emailAddress"),
         "emailAddress property missing"
@@ -264,11 +267,7 @@ fn roundtrip_full_struct() {
     let schemars_schema = vld_to_schemars(&js);
     assert_eq!(schemars_schema.get("type").unwrap(), "object");
 
-    let req = schemars_schema
-        .get("required")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let req = schemars_schema.get("required").unwrap().as_array().unwrap();
     assert!(req.contains(&json!("name")));
     assert!(req.contains(&json!("email")));
 }

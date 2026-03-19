@@ -1,4 +1,5 @@
 use serde_json::json;
+use vld::prelude::*;
 use vld_surrealdb::*;
 
 // ========================= Schemas ===========================================
@@ -150,9 +151,7 @@ fn validate_records_all_valid() {
         NameOnly {
             name: "Alice".into(),
         },
-        NameOnly {
-            name: "Bob".into(),
-        },
+        NameOnly { name: "Bob".into() },
     ];
     assert!(validate_records::<NameSchema, _>(&rows).is_ok());
 }

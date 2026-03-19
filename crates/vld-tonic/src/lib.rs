@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)]
 //! # vld-tonic — tonic gRPC integration for the `vld` validation library
 //!
 //! Validate protobuf messages and gRPC metadata using `vld` schemas.
@@ -38,7 +39,6 @@
 //! }
 //! ```
 
-use serde_json;
 use tonic::{Code, Request, Status};
 use vld::error::VldError;
 use vld::schema::VldParse;

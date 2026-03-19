@@ -1,4 +1,5 @@
 use ntex::web::{self, test, App, HttpResponse};
+use vld::prelude::*;
 use vld_ntex::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 
 // ===========================================================================
@@ -89,8 +90,7 @@ async fn search_handler(params: VldQuery<SearchParams>) -> HttpResponse {
 
 #[ntex::test]
 async fn query_valid_all_params() {
-    let app =
-        test::init_service(App::new().route("/search", web::get().to(search_handler))).await;
+    let app = test::init_service(App::new().route("/search", web::get().to(search_handler))).await;
     let req = test::TestRequest::get()
         .uri("/search?q=rust&page=2&limit=25")
         .to_request();
@@ -102,8 +102,7 @@ async fn query_valid_all_params() {
 
 #[ntex::test]
 async fn query_valid_optional_missing() {
-    let app =
-        test::init_service(App::new().route("/search", web::get().to(search_handler))).await;
+    let app = test::init_service(App::new().route("/search", web::get().to(search_handler))).await;
     let req = test::TestRequest::get().uri("/search?q=hello").to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 200);
@@ -113,8 +112,7 @@ async fn query_valid_optional_missing() {
 
 #[ntex::test]
 async fn query_missing_required_param() {
-    let app =
-        test::init_service(App::new().route("/search", web::get().to(search_handler))).await;
+    let app = test::init_service(App::new().route("/search", web::get().to(search_handler))).await;
     let req = test::TestRequest::get().uri("/search?page=1").to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 422);
@@ -137,8 +135,7 @@ async fn query_boolean_coercion() {
         ))
     }
 
-    let app =
-        test::init_service(App::new().route("/filter", web::get().to(filter_handler))).await;
+    let app = test::init_service(App::new().route("/filter", web::get().to(filter_handler))).await;
     let req = test::TestRequest::get()
         .uri("/filter?active=true&count=42")
         .to_request();

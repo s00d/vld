@@ -277,7 +277,8 @@ fn overlay_constraints_adds_new_property() {
 
 #[test]
 fn overlay_preserves_base_values() {
-    let base = json!({"type": "object", "properties": {"name": {"type": "string", "minLength": 5}}});
+    let base =
+        json!({"type": "object", "properties": {"name": {"type": "string", "minLength": 5}}});
     let overlay = json!({"properties": {"name": {"minLength": 2, "maxLength": 100}}});
     let result = overlay_constraints(&base, &overlay);
     let name_prop = get_property(&result, "name").unwrap();
@@ -434,8 +435,12 @@ fn validate_with_schema_nested_object() {
             }
         }
     });
-    assert!(vld_schemars::validate_with_schema(&schema, &json!({"address": {"city": "NYC"}})).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!({"address": {"city": ""}})).is_err());
+    assert!(
+        vld_schemars::validate_with_schema(&schema, &json!({"address": {"city": "NYC"}})).is_ok()
+    );
+    assert!(
+        vld_schemars::validate_with_schema(&schema, &json!({"address": {"city": ""}})).is_err()
+    );
     assert!(vld_schemars::validate_with_schema(&schema, &json!({"address": {}})).is_err());
 }
 

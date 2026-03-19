@@ -273,12 +273,11 @@ macro_rules! schema {
                 /// nested types as OpenAPI components.
                 #[doc(hidden)]
                 pub fn __vld_nested_schemas()
-                    -> ::std::vec::Vec<(&'static str, fn() -> $crate::serde_json::Value)>
+                    -> ::std::vec::Vec<$crate::json_schema::NestedSchemaEntry>
                 {
                     use $crate::json_schema::CollectNestedSchemas as _;
-                    let mut __vld_out: ::std::vec::Vec<
-                        (&'static str, fn() -> $crate::serde_json::Value),
-                    > = ::std::vec::Vec::new();
+                    let mut __vld_out: ::std::vec::Vec<$crate::json_schema::NestedSchemaEntry> =
+                        ::std::vec::Vec::new();
 
                     $(
                         {
