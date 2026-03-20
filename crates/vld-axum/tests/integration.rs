@@ -3,7 +3,6 @@ use axum::routing::{get, post};
 use axum::Router;
 use http::{Request, StatusCode};
 use tower::ServiceExt;
-use vld::prelude::*;
 use vld_axum::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 
 // ===========================================================================
