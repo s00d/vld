@@ -8,6 +8,7 @@
 use axum::response::Json;
 use axum::{routing, Router};
 use serde::Serialize;
+#[allow(unused_imports)]
 use vld_axum::prelude::VldSchema;
 use vld_axum::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 

@@ -1,4 +1,5 @@
 use actix_web::{test, web, App, HttpResponse};
+#[allow(unused_imports)]
 use vld_actix::prelude::VldSchema;
 use vld_actix::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 

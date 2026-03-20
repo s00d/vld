@@ -1,4 +1,5 @@
 use serde_json::json;
+#[allow(unused_imports)]
 use vld_surrealdb::prelude::VldSchema;
 use vld_surrealdb::*;
 

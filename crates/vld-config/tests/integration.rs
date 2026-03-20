@@ -1,4 +1,5 @@
 use std::io::Write;
+#[allow(unused_imports)]
 use vld_config::prelude::VldSchema;
 // -- Shared schema --
 

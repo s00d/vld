@@ -1,4 +1,5 @@
 use ntex::web::{self, test, App, HttpResponse};
+#[allow(unused_imports)]
 use vld_ntex::prelude::VldSchema;
 use vld_ntex::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 
