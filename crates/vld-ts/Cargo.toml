@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Generate TypeScript Zod schemas from vld JSON Schemas"
+description = "Generate TypeScript Zod schemas from vld schemas and types"
 documentation = "https://docs.rs/vld-ts"
 readme = "README.md"
 keywords = ["validation", "typescript", "zod", "codegen", "json-schema"]
@@ -15,6 +15,7 @@ exclude = [".idea/", "tests/", "examples/"]
 
 [dependencies]
 serde_json = { workspace = true }
+vld = { workspace = true, features = ["openapi"] }
 
 [[example]]
 name = "generate_zod"

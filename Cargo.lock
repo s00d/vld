@@ -5415,6 +5415,7 @@ name = "vld-ts"
 version = "0.2.0"
 dependencies = [
  "serde_json",
+ "vld",
 ]
 
 [[package]]

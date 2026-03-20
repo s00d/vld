@@ -1,130 +1,84 @@
-//! Example: generate TypeScript Zod schemas from JSON Schema definitions.
+//! Example: generate TypeScript Zod/Valibot schemas directly from vld types/schemas.
 //!
 //! Run:
 //! ```sh
 //! cargo run -p vld-ts --example generate_zod
 //! ```
 
-use vld_ts::{generate_zod_file, json_schema_to_zod};
+use vld::schema::VldSchema;
+use vld_ts::{
+    impl_to_openapi, impl_to_valibot, impl_to_zod, openapi_refs, to_openapi, to_valibot, to_zod,
+    ToOpenApi, ToRefs, ToValibot, ToZod,
+};
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct Address {
+        pub city: String => vld::string().min(1),
+        pub zip: String => vld::string().min(5).max(10),
+    }
+}
+
+impl_to_zod!(User);
+impl_to_zod!(Address);
+impl_to_valibot!(User);
+impl_to_valibot!(Address);
+impl_to_openapi!(User);
+impl_to_openapi!(Address);
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct User {
+        pub name: String => vld::string().min(2).max(50).describe("User's full name"),
+        pub email: String => vld::string().email(),
+        pub age: Option<i64> => vld::number().int().min(0).max(150).optional(),
+        pub tags: Vec<String> => vld::array(vld::string().min(1)).max_len(10),
+        pub address: Address => vld::nested!(Address),
+    }
+}
 
 fn main() {
-    // --- Single schema ---
-    println!("=== Single schema ===\n");
+    println!("=== Single vld schema -> zod ===\n");
+    let single = to_zod(&vld::string().min(2).email());
+    println!("const EmailSchema = {};\n", single);
 
-    let user_schema = serde_json::json!({
-        "type": "object",
-        "required": ["name", "email"],
-        "properties": {
-            "name": {
-                "type": "string",
-                "minLength": 2,
-                "maxLength": 50,
-                "description": "User's full name"
-            },
-            "email": {
-                "type": "string",
-                "format": "email"
-            },
-            "age": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 150
-            },
-            "tags": {
-                "type": "array",
-                "items": { "type": "string", "minLength": 1 },
-                "maxItems": 10
-            }
-        }
-    });
+    println!("=== User::to_zod() (single schema expression) ===\n");
+    let user_zod = User::to_zod();
+    println!("const UserSchema = {};", user_zod);
 
-    let zod = json_schema_to_zod(&user_schema);
-    println!("const UserSchema = {};\n", zod);
+    println!("\n=== Address::to_zod() (single schema expression) ===\n");
+    let address_zod = Address::to_zod();
+    println!("const AddressSchema = {};", address_zod);
 
-    // --- Multiple schemas in a file ---
-    println!("=== Generated file ===\n");
+    println!("\n=== User::to_valibot() (single schema expression) ===\n");
+    let user_valibot = User::to_valibot();
+    println!("const UserSchema = {};", user_valibot);
 
-    let schemas = vec![
-        (
-            "User",
-            serde_json::json!({
-                "type": "object",
-                "required": ["name", "email"],
-                "properties": {
-                    "name": {"type": "string", "minLength": 2},
-                    "email": {"type": "string", "format": "email"}
-                }
-            }),
-        ),
-        (
-            "Product",
-            serde_json::json!({
-                "type": "object",
-                "required": ["title", "price"],
-                "properties": {
-                    "title": {"type": "string", "minLength": 1},
-                    "price": {"type": "number", "minimum": 0},
-                    "category": {
-                        "type": "string",
-                        "enum": ["electronics", "books", "clothing"]
-                    }
-                }
-            }),
-        ),
-        (
-            "ApiResponse",
-            serde_json::json!({
-                "type": "object",
-                "required": ["status", "data"],
-                "properties": {
-                    "status": {"type": "string", "enum": ["ok", "error"]},
-                    "data": {"type": "object"},
-                    "message": {"type": "string"}
-                }
-            }),
-        ),
-    ];
+    println!("\n=== Address::to_valibot() (single schema expression) ===\n");
+    let address_valibot = Address::to_valibot();
+    println!("const AddressSchema = {};", address_valibot);
 
-    let file_content = generate_zod_file(&schemas);
-    println!("{}", file_content);
+    println!("\n=== Single vld schema -> valibot ===\n");
+    let single_valibot = to_valibot(&vld::string().min(2).email());
+    println!("const EmailSchema = {};\n", single_valibot);
 
-    // --- Nullable / union types ---
-    println!("=== Nullable & union ===\n");
+    println!("\n=== User::to_openapi() (schema object) ===\n");
+    let user_schema = User::to_openapi();
+    println!("{}", user_schema);
 
-    let nullable = serde_json::json!({
-        "oneOf": [
-            {"type": "string"},
-            {"type": "null"}
-        ]
-    });
-    println!("nullable string: {}", json_schema_to_zod(&nullable));
+    println!("\n=== Address::to_openapi() (schema object) ===\n");
+    let address_schema = Address::to_openapi();
+    println!("{}", address_schema);
 
-    let union = serde_json::json!({
-        "oneOf": [
-            {"type": "string"},
-            {"type": "number"},
-            {"type": "boolean"}
-        ]
-    });
-    println!("union:           {}", json_schema_to_zod(&union));
+    println!("\n=== to_openapi(schema) ===\n");
+    let email_schema = to_openapi(&vld::string().email());
+    println!("{}", email_schema);
 
-    // --- Nested objects ---
-    println!("\n=== Nested objects ===\n");
+    println!("\n=== refs from User::to_openapi() ===\n");
+    let refs = openapi_refs(&user_schema);
+    println!("{:?}", refs);
 
-    let nested = serde_json::json!({
-        "type": "object",
-        "required": ["address"],
-        "properties": {
-            "address": {
-                "type": "object",
-                "required": ["street", "city"],
-                "properties": {
-                    "street": {"type": "string"},
-                    "city": {"type": "string"},
-                    "zip": {"type": "string", "pattern": "^\\d{5}$"}
-                }
-            }
-        }
-    });
-    println!("{}", json_schema_to_zod(&nested));
+    println!("\n=== User::to_refs() ===\n");
+    let refs2 = User::to_refs();
+    println!("{:?}", refs2);
 }
