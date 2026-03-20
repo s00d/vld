@@ -7,7 +7,6 @@
 
 use actix_web::{web, App, HttpResponse, HttpServer};
 use serde::Serialize;
-use vld::prelude::*;
 use vld_actix::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 
 // ===========================================================================

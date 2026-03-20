@@ -1,5 +1,4 @@
 use actix_web::{test, web, App, HttpResponse};
-use vld::prelude::*;
 use vld_actix::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 
 // ===========================================================================
