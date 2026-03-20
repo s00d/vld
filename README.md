@@ -1099,6 +1099,14 @@ cargo run --example playground
 cargo bench
 ```
 
+## Full CI Locally
+
+Run the same high-level checks as CI with one command:
+
+```bash
+bash scripts/ci-all.sh
+```
+
 ## Workspace Crates
 
 The `vld` project is organized as a Cargo workspace with several crates:
@@ -1129,6 +1137,8 @@ The `vld` project is organized as a Cargo workspace with several crates:
 | [`vld-dioxus`](crates/vld-dioxus/) | [![crates.io](https://img.shields.io/crates/v/vld-dioxus?style=flat-square)](https://crates.io/crates/vld-dioxus) | [Dioxus](https://dioxuslabs.com/) — shared validation for server functions and WASM clients |
 | [`vld-ntex`](crates/vld-ntex/) | [![crates.io](https://img.shields.io/crates/v/vld-ntex?style=flat-square)](https://crates.io/crates/vld-ntex) | [ntex](https://ntex.rs/) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
 | [`vld-surrealdb`](crates/vld-surrealdb/) | [![crates.io](https://img.shields.io/crates/v/vld-surrealdb?style=flat-square)](https://crates.io/crates/vld-surrealdb) | [SurrealDB](https://surrealdb.com/) — validate JSON documents before create/insert/update and after select |
+| [`vld-redis`](crates/vld-redis/) | [![crates.io](https://img.shields.io/crates/v/vld-redis?style=flat-square)](https://crates.io/crates/vld-redis) | [Redis](https://redis.io/) — validate payloads before set/publish and after get/subscribe |
+| [`vld-lapin`](crates/vld-lapin/) | [![crates.io](https://img.shields.io/crates/v/vld-lapin?style=flat-square)](https://crates.io/crates/vld-lapin) | [lapin](https://docs.rs/lapin) / RabbitMQ — validate AMQP message payloads before publish and after consume |
 | [`vld-schemars`](crates/vld-schemars/) | [![crates.io](https://img.shields.io/crates/v/vld-schemars?style=flat-square)](https://crates.io/crates/vld-schemars) | [schemars](https://docs.rs/schemars) — bidirectional bridge between vld and schemars JSON Schema |
 | [`vld-http-common`](crates/vld-http-common/) | [![crates.io](https://img.shields.io/crates/v/vld-http-common?style=flat-square)](https://crates.io/crates/vld-http-common) | Shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates) |
 

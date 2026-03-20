@@ -354,8 +354,10 @@ pub fn format_value_short(value: &serde_json::Value) -> String {
         serde_json::Value::Bool(b) => b.to_string(),
         serde_json::Value::Number(n) => n.to_string(),
         serde_json::Value::String(s) => {
-            if s.len() > 50 {
-                format!("\"{}...\"", &s[..47])
+            let char_count = s.chars().count();
+            if char_count > 50 {
+                let prefix: String = s.chars().take(47).collect();
+                format!("\"{}...\"", prefix)
             } else {
                 format!("\"{}\"", s)
             }

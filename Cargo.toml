@@ -26,6 +26,8 @@ members = [
     "crates/vld-aide",
     "crates/vld-surrealdb",
     "crates/vld-schemars",
+    "crates/vld-redis",
+    "crates/vld-lapin",
     "examples/playground",
 ]
 resolver = "2"

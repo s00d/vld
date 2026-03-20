@@ -1,0 +1,27 @@
+[package]
+name = "vld-redis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Redis integration for the vld validation library — validate payloads before set/publish and after get/subscribe"
+documentation = "https://docs.rs/vld-redis"
+readme = "README.md"
+keywords = ["validation", "redis", "pubsub", "json", "vld"]
+categories = ["database", "web-programming"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true, features = ["serialize"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+redis = { version = "0.32" }
+
+[dev-dependencies]
+vld = { workspace = true, features = ["serialize"] }
+
+[[example]]
+name = "redis_basic"
+path = "examples/redis_basic.rs"

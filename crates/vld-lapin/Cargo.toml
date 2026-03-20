@@ -1,0 +1,28 @@
+[package]
+name = "vld-lapin"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Lapin (RabbitMQ) integration for the vld validation library — validate message payloads before publish and after consume"
+documentation = "https://docs.rs/vld-lapin"
+readme = "README.md"
+keywords = ["validation", "lapin", "rabbitmq", "amqp", "vld"]
+categories = ["web-programming"]
+exclude = [".idea/", "tests/", "examples/"]
+
+[dependencies]
+vld = { workspace = true, features = ["serialize"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+lapin = { version = "2" }
+
+[dev-dependencies]
+vld = { workspace = true, features = ["serialize"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[[example]]
+name = "lapin_basic"
+path = "examples/lapin_basic.rs"
