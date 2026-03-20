@@ -92,6 +92,16 @@ regex-lite = { version = "0.1", optional = true }
 chrono = { version = "0.4", optional = true, default-features = false, features = ["std", "clock"] }
 vld-derive = { workspace = true, optional = true }
 infer = "0.19.0"
+rust_decimal = "=1.40.0"
+semver = "=1.0.27"
+url = "=2.5.8"
+uuid = { version = "=1.20.0", features = ["std", "v1", "v4", "v7"] }
+sha2 = "0.10.9"
+ipnet = "=2.12.0"
+phonenumber = "=0.3.7"
+image = "=0.25.6"
+md-5 = "=0.10.6"
+kamadak-exif = "=0.6.1"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

@@ -141,12 +141,48 @@ pub fn bytes() -> primitives::ZBytes {
     primitives::ZBytes::new()
 }
 
+/// Create a decimal validation schema (`rust_decimal::Decimal`).
+pub fn decimal() -> primitives::ZDecimal {
+    primitives::ZDecimal::new()
+}
+
+/// Create an IP network/CIDR schema (`ipnet::IpNet`).
+pub fn ip_network() -> primitives::ZIpNetwork {
+    primitives::ZIpNetwork::new()
+}
+
+/// Create a socket address schema (`std::net::SocketAddr`).
+pub fn socket_addr() -> primitives::ZSocketAddr {
+    primitives::ZSocketAddr::new()
+}
+
+/// Create a raw JSON value schema with shape constraints.
+pub fn json_value() -> primitives::ZJsonValue {
+    primitives::ZJsonValue::new()
+}
+
 /// Create a file validation schema.
 ///
 /// Requires the `std` feature.
 #[cfg(feature = "std")]
 pub fn file() -> primitives::ZFile {
     primitives::ZFile::new()
+}
+
+/// Create a duration validation schema (`std::time::Duration`).
+///
+/// Requires the `std` feature.
+#[cfg(feature = "std")]
+pub fn duration() -> primitives::ZDuration {
+    primitives::ZDuration::new()
+}
+
+/// Create a path validation schema (`std::path::PathBuf`).
+///
+/// Requires the `std` feature.
+#[cfg(feature = "std")]
+pub fn path() -> primitives::ZPath {
+    primitives::ZPath::new()
 }
 
 /// Create an array validation schema.
@@ -350,9 +386,10 @@ pub mod prelude {
     pub use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
     pub use crate::object::ZObject;
     #[cfg(feature = "std")]
-    pub use crate::primitives::{FileStorage, ValidatedFile, ZFile};
+    pub use crate::primitives::{FileStorage, ValidatedFile, ZDuration, ZFile, ZPath};
     pub use crate::primitives::{
-        IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZLiteral, ZNumber, ZString,
+        IntoLiteral, ZAny, ZBoolean, ZBytes, ZDecimal, ZEnum, ZInt, ZIpNetwork, ZJsonValue,
+        ZLiteral, ZNumber, ZSocketAddr, ZString,
     };
     #[cfg(feature = "chrono")]
     pub use crate::primitives::{ZDate, ZDateTime};

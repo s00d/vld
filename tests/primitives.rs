@@ -158,6 +158,10 @@ fn string_extra_validators() {
         .phone()
         .parse_value(&json!("+14155552671"))
         .is_ok());
+    assert!(vld::string()
+        .phone_e164_strict()
+        .parse_value(&json!("+14155552671"))
+        .is_ok());
     assert!(vld::string().semver().parse_value(&json!("1.2.3")).is_ok());
     assert!(vld::string()
         .jwt()
@@ -176,6 +180,52 @@ fn string_extra_validators() {
     assert!(vld::string()
         .uppercase()
         .parse_value(&json!("HELLO"))
+        .is_ok());
+    assert!(vld::string()
+        .url_strict()
+        .parse_value(&json!("https://example.com"))
+        .is_ok());
+    assert!(vld::string()
+        .uri()
+        .parse_value(&json!("https://example.com/path"))
+        .is_ok());
+    assert!(vld::string()
+        .uuid_v4()
+        .parse_value(&json!("550e8400-e29b-41d4-a716-446655440000"))
+        .is_ok());
+    assert!(vld::string()
+        .slug()
+        .parse_value(&json!("hello-world-123"))
+        .is_ok());
+    assert!(vld::string().color().parse_value(&json!("#AABBCC")).is_ok());
+    assert!(vld::string()
+        .color()
+        .parse_value(&json!("rgb(255, 0, 12)"))
+        .is_ok());
+    assert!(vld::string()
+        .color()
+        .parse_value(&json!("hsl(120, 50%, 40%)"))
+        .is_ok());
+    assert!(vld::string()
+        .currency_code()
+        .parse_value(&json!("USD"))
+        .is_ok());
+    assert!(vld::string()
+        .country_code()
+        .parse_value(&json!("US"))
+        .is_ok());
+    assert!(vld::string().locale().parse_value(&json!("en-US")).is_ok());
+    assert!(vld::string()
+        .cron()
+        .parse_value(&json!("*/5 * * * *"))
+        .is_ok());
+    assert!(vld::string()
+        .semver_full()
+        .parse_value(&json!("1.2.3-alpha.1+build.5"))
+        .is_ok());
+    assert!(vld::string()
+        .uuid_v7()
+        .parse_value(&json!("01890f57-5a7b-7f8b-bfd3-63f8e7c6f4b8"))
         .is_ok());
 }
 
@@ -297,6 +347,57 @@ fn bytes_base64_mode() {
     assert!(b.parse_value(&json!("@@@")).is_err());
 }
 
+#[test]
+fn bytes_hex_and_base64url_modes() {
+    let b_hex = vld::bytes().hex();
+    assert_eq!(
+        b_hex.parse_value(&json!("0a0b0c")).unwrap(),
+        vec![10, 11, 12]
+    );
+
+    let b_url = vld::bytes().base64url();
+    assert_eq!(b_url.parse_value(&json!("AQID")).unwrap(), vec![1, 2, 3]);
+}
+
+#[test]
+fn decimal_basic() {
+    let d = vld::decimal().min("1.10").max("2.20");
+    let out = d.parse_value(&json!("1.50")).unwrap();
+    assert_eq!(out.to_string(), "1.50");
+    assert!(d.parse_value(&json!("0.99")).is_err());
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn duration_and_path_basic() {
+    let d = vld::duration().min_secs(1).max_secs(10);
+    assert_eq!(d.parse_value(&json!("PT5S")).unwrap().as_secs(), 5);
+    assert_eq!(d.parse_value(&json!(3)).unwrap().as_secs(), 3);
+    assert!(d.parse_value(&json!("20s")).is_err());
+
+    let p = vld::path().relative();
+    assert!(p.parse_value(&json!("src/lib.rs")).is_ok());
+    assert!(p.parse_value(&json!("/tmp")).is_err());
+
+    let p2 = vld::path().within(std::env::temp_dir());
+    assert!(p2.parse_value(&json!("../outside")).is_err());
+}
+
+#[test]
+fn ip_network_socket_addr_json_value() {
+    let net = vld::ip_network().ipv4_only();
+    assert!(net.parse_value(&json!("10.0.0.0/24")).is_ok());
+    assert!(net.parse_value(&json!("2001:db8::/32")).is_err());
+
+    let sock = vld::socket_addr().min_port(1024).max_port(65535);
+    assert!(sock.parse_value(&json!("127.0.0.1:8080")).is_ok());
+    assert!(sock.parse_value(&json!("127.0.0.1:80")).is_err());
+
+    let shaped = vld::json_value().object().require_key("id").max_depth(3);
+    assert!(shaped.parse_value(&json!({"id": 1, "x": {"a": 1}})).is_ok());
+    assert!(shaped.parse_value(&json!({"x": 1})).is_err());
+}
+
 #[cfg(feature = "std")]
 #[test]
 fn file_schema_validates_size_type_and_extension() {
@@ -384,6 +485,35 @@ fn file_schema_path_only_allows_open_and_lazy_read() {
     let mut s = String::new();
     f.read_to_string(&mut s).unwrap();
     assert_eq!(s, "hello path-only");
+
+    let _ = fs::remove_file(path);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn file_schema_hash_and_deny_rules() {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("vld-file-hash-{}.txt", unique));
+    fs::write(&path, b"abc").unwrap();
+
+    let schema = vld::file()
+        .md5("900150983cd24fb0d6963f7d28e17f72")
+        .sha256("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        .deny_extension("png");
+    assert!(schema
+        .parse_value(&json!(path.to_string_lossy().to_string()))
+        .is_ok());
+
+    let denied = vld::file().deny_extension("txt");
+    assert!(denied
+        .parse_value(&json!(path.to_string_lossy().to_string()))
+        .is_err());
 
     let _ = fs::remove_file(path);
 }

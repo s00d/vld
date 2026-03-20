@@ -384,11 +384,17 @@ fn convert_string(schema: &Value) -> String {
             "email" => s.push_str(".email()"),
             "uri" | "url" => s.push_str(".url()"),
             "uuid" => s.push_str(".uuid()"),
+            "uuid-v1" => s.push_str(".uuid()"),
+            "uuid-v4" => s.push_str(".uuid()"),
+            "uuid-v7" => s.push_str(".uuid()"),
             "ipv4" => s.push_str(".ip({ version: \"v4\" })"),
             "ipv6" => s.push_str(".ip({ version: \"v6\" })"),
             "date" => s.push_str(".date()"),
             "date-time" => s.push_str(".datetime()"),
             "time" => s.push_str(".time()"),
+            "country-code" => s.push_str(".length(2)"),
+            "currency-code" => s.push_str(".length(3)"),
+            "phone-e164" => s.push_str(".regex(/^\\+[1-9]\\d{1,14}$/)"),
             _ => { /* skip unknown formats */ }
         }
     }
@@ -623,11 +629,17 @@ fn convert_string_valibot(schema: &Value) -> String {
             "email" => actions.push("v.email()".to_string()),
             "uri" | "url" => actions.push("v.url()".to_string()),
             "uuid" => actions.push("v.uuid()".to_string()),
+            "uuid-v1" => actions.push("v.uuid()".to_string()),
+            "uuid-v4" => actions.push("v.uuid()".to_string()),
+            "uuid-v7" => actions.push("v.uuid()".to_string()),
             "ipv4" => actions.push("v.ipv4()".to_string()),
             "ipv6" => actions.push("v.ipv6()".to_string()),
             "date" => actions.push("v.isoDate()".to_string()),
             "date-time" => actions.push("v.isoDateTime()".to_string()),
             "time" => actions.push("v.isoTime()".to_string()),
+            "country-code" => actions.push("v.length(2)".to_string()),
+            "currency-code" => actions.push("v.length(3)".to_string()),
+            "phone-e164" => actions.push("v.regex(/^\\+[1-9]\\d{1,14}$/)".to_string()),
             _ => {}
         }
     }

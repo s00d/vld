@@ -54,6 +54,14 @@ fn is_valid_uuid(s: &str) -> bool {
     true
 }
 
+fn is_valid_uuid_version(s: &str, version: usize) -> bool {
+    let u = match uuid::Uuid::parse_str(s) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    u.get_version_num() == version
+}
+
 fn is_valid_url(s: &str) -> bool {
     // Must start with http:// or https:// and have something after
     let rest = if let Some(r) = s.strip_prefix("https://") {
@@ -68,6 +76,45 @@ fn is_valid_url(s: &str) -> bool {
     }
     // No whitespace allowed
     !rest.contains(char::is_whitespace)
+}
+
+fn is_valid_url_strict(s: &str) -> bool {
+    let parsed = match url::Url::parse(s) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return false;
+    }
+    let host = match parsed.host_str() {
+        Some(h) => h,
+        None => return false,
+    };
+    if host.eq_ignore_ascii_case("localhost") {
+        return false;
+    }
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        match ip {
+            std::net::IpAddr::V4(v4) => {
+                if v4.is_private() || v4.is_loopback() || v4.is_link_local() {
+                    return false;
+                }
+            }
+            std::net::IpAddr::V6(v6) => {
+                let seg0 = v6.segments()[0];
+                let is_link_local = (seg0 & 0xffc0) == 0xfe80; // fe80::/10
+                let is_unique_local = (seg0 & 0xfe00) == 0xfc00; // fc00::/7
+                if v6.is_loopback() || is_link_local || is_unique_local {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+fn is_valid_uri(s: &str) -> bool {
+    url::Url::parse(s).is_ok()
 }
 
 fn is_valid_ipv4(s: &str) -> bool {
@@ -214,6 +261,92 @@ fn is_valid_phone(s: &str) -> bool {
     (8..=15).contains(&digits.len())
 }
 
+fn is_valid_phone_e164_strict(s: &str) -> bool {
+    let num = match phonenumber::parse(None, s) {
+        Ok(n) => n,
+        Err(_) => return false,
+    };
+    phonenumber::is_valid(&num)
+}
+
+fn is_valid_slug(s: &str) -> bool {
+    if s.is_empty() || s.starts_with('-') || s.ends_with('-') {
+        return false;
+    }
+    s.bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+fn is_valid_color(s: &str) -> bool {
+    if let Some(hex) = s.strip_prefix('#') {
+        return (hex.len() == 6 || hex.len() == 8) && hex.bytes().all(|b| b.is_ascii_hexdigit());
+    }
+    let lower = s.to_ascii_lowercase();
+    if lower.starts_with("rgb(") && lower.ends_with(')') {
+        let inner = &lower[4..lower.len() - 1];
+        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+        if parts.len() != 3 {
+            return false;
+        }
+        return parts.iter().all(|p| p.parse::<u8>().is_ok());
+    }
+    if lower.starts_with("hsl(") && lower.ends_with(')') {
+        let inner = &lower[4..lower.len() - 1];
+        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+        if parts.len() != 3 {
+            return false;
+        }
+        let h_ok = parts[0].parse::<u16>().map(|h| h <= 360).unwrap_or(false);
+        let s_ok = parts[1]
+            .strip_suffix('%')
+            .and_then(|v| v.parse::<u8>().ok())
+            .map(|v| v <= 100)
+            .unwrap_or(false);
+        let l_ok = parts[2]
+            .strip_suffix('%')
+            .and_then(|v| v.parse::<u8>().ok())
+            .map(|v| v <= 100)
+            .unwrap_or(false);
+        return h_ok && s_ok && l_ok;
+    }
+    false
+}
+
+fn is_valid_currency_code(s: &str) -> bool {
+    s.len() == 3 && s.bytes().all(|b| b.is_ascii_uppercase())
+}
+
+fn is_valid_country_code(s: &str) -> bool {
+    s.len() == 2 && s.bytes().all(|b| b.is_ascii_uppercase())
+}
+
+fn is_valid_locale(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.len() == 2 {
+        return bytes[0].is_ascii_lowercase() && bytes[1].is_ascii_lowercase();
+    }
+    if bytes.len() == 5 && bytes[2] == b'-' {
+        return bytes[0].is_ascii_lowercase()
+            && bytes[1].is_ascii_lowercase()
+            && bytes[3].is_ascii_uppercase()
+            && bytes[4].is_ascii_uppercase();
+    }
+    false
+}
+
+fn is_valid_cron(s: &str) -> bool {
+    let fields: Vec<&str> = s.split_whitespace().collect();
+    if fields.len() != 5 && fields.len() != 6 {
+        return false;
+    }
+    fields.iter().all(|f| {
+        !f.is_empty()
+            && f.bytes().all(|b| {
+                b.is_ascii_digit() || b == b'*' || b == b'/' || b == b',' || b == b'-' || b == b'?'
+            })
+    })
+}
+
 fn is_valid_semver(s: &str) -> bool {
     let s = s.trim();
     if s.is_empty() {
@@ -228,6 +361,10 @@ fn is_valid_semver(s: &str) -> bool {
     parts
         .iter()
         .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn is_valid_semver_full(s: &str) -> bool {
+    semver::Version::parse(s).is_ok()
 }
 
 fn is_valid_base64_url(s: &str) -> bool {
@@ -459,8 +596,19 @@ enum StringCheck {
     Len(usize, String),
     Email(String),
     Url(String),
+    UrlStrict(String),
+    Uri(String),
     Uuid(String),
+    UuidV1(String),
+    UuidV4(String),
+    UuidV7(String),
     Ip(String),
+    Slug(String),
+    Color(String),
+    Currency(String),
+    CountryCode(String),
+    Locale(String),
+    Cron(String),
     #[cfg(feature = "regex")]
     Regex(regex_lite::Regex, String),
     StartsWith(String, String),
@@ -474,7 +622,9 @@ enum StringCheck {
     Hex(String),
     CreditCard(String),
     Phone(String),
+    PhoneE164(String),
     Semver(String),
+    SemverFull(String),
     Jwt(String),
     Ascii(String),
     Alpha(String),
@@ -501,8 +651,19 @@ impl StringCheck {
             StringCheck::Len(..) => "invalid_length",
             StringCheck::Email(..) => "invalid_email",
             StringCheck::Url(..) => "invalid_url",
+            StringCheck::UrlStrict(..) => "invalid_url_strict",
+            StringCheck::Uri(..) => "invalid_uri",
             StringCheck::Uuid(..) => "invalid_uuid",
+            StringCheck::UuidV1(..) => "invalid_uuid_v1",
+            StringCheck::UuidV4(..) => "invalid_uuid_v4",
+            StringCheck::UuidV7(..) => "invalid_uuid_v7",
             StringCheck::Ip(..) => "invalid_ip",
+            StringCheck::Slug(..) => "invalid_slug",
+            StringCheck::Color(..) => "invalid_color",
+            StringCheck::Currency(..) => "invalid_currency",
+            StringCheck::CountryCode(..) => "invalid_country_code",
+            StringCheck::Locale(..) => "invalid_locale",
+            StringCheck::Cron(..) => "invalid_cron",
             #[cfg(feature = "regex")]
             StringCheck::Regex(..) => "invalid_regex",
             StringCheck::StartsWith(..) => "invalid_starts_with",
@@ -516,7 +677,9 @@ impl StringCheck {
             StringCheck::Hex(..) => "invalid_hex",
             StringCheck::CreditCard(..) => "invalid_credit_card",
             StringCheck::Phone(..) => "invalid_phone",
+            StringCheck::PhoneE164(..) => "invalid_phone_e164",
             StringCheck::Semver(..) => "invalid_semver",
+            StringCheck::SemverFull(..) => "invalid_semver_full",
             StringCheck::Jwt(..) => "invalid_jwt",
             StringCheck::Ascii(..) => "invalid_ascii",
             StringCheck::Alpha(..) => "invalid_alpha",
@@ -543,8 +706,19 @@ impl StringCheck {
             | StringCheck::Len(_, ref mut m)
             | StringCheck::Email(ref mut m)
             | StringCheck::Url(ref mut m)
+            | StringCheck::UrlStrict(ref mut m)
+            | StringCheck::Uri(ref mut m)
             | StringCheck::Uuid(ref mut m)
+            | StringCheck::UuidV1(ref mut m)
+            | StringCheck::UuidV4(ref mut m)
+            | StringCheck::UuidV7(ref mut m)
             | StringCheck::Ip(ref mut m)
+            | StringCheck::Slug(ref mut m)
+            | StringCheck::Color(ref mut m)
+            | StringCheck::Currency(ref mut m)
+            | StringCheck::CountryCode(ref mut m)
+            | StringCheck::Locale(ref mut m)
+            | StringCheck::Cron(ref mut m)
             | StringCheck::NonEmpty(ref mut m)
             | StringCheck::Ipv4(ref mut m)
             | StringCheck::Ipv6(ref mut m)
@@ -553,7 +727,9 @@ impl StringCheck {
             | StringCheck::Hex(ref mut m)
             | StringCheck::CreditCard(ref mut m)
             | StringCheck::Phone(ref mut m)
+            | StringCheck::PhoneE164(ref mut m)
             | StringCheck::Semver(ref mut m)
+            | StringCheck::SemverFull(ref mut m)
             | StringCheck::Jwt(ref mut m)
             | StringCheck::Ascii(ref mut m)
             | StringCheck::Alpha(ref mut m)
@@ -717,6 +893,28 @@ impl ZString {
         self
     }
 
+    /// Must be a strict URL (http/https + valid host).
+    pub fn url_strict(self) -> Self {
+        self.url_strict_msg("Invalid strict URL")
+    }
+
+    /// Must be a strict URL, with custom message.
+    pub fn url_strict_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::UrlStrict(msg.into()));
+        self
+    }
+
+    /// Must be a valid URI.
+    pub fn uri(self) -> Self {
+        self.uri_msg("Invalid URI")
+    }
+
+    /// Must be a valid URI, with custom message.
+    pub fn uri_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Uri(msg.into()));
+        self
+    }
+
     /// Must be a valid UUID.
     pub fn uuid(self) -> Self {
         self.uuid_msg("Invalid UUID")
@@ -725,6 +923,36 @@ impl ZString {
     /// Must be a valid UUID, with custom message.
     pub fn uuid_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::Uuid(msg.into()));
+        self
+    }
+
+    /// Must be a valid UUID v1.
+    pub fn uuid_v1(self) -> Self {
+        self.uuid_v1_msg("Invalid UUID v1")
+    }
+
+    pub fn uuid_v1_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::UuidV1(msg.into()));
+        self
+    }
+
+    /// Must be a valid UUID v4.
+    pub fn uuid_v4(self) -> Self {
+        self.uuid_v4_msg("Invalid UUID v4")
+    }
+
+    pub fn uuid_v4_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::UuidV4(msg.into()));
+        self
+    }
+
+    /// Must be a valid UUID v7.
+    pub fn uuid_v7(self) -> Self {
+        self.uuid_v7_msg("Invalid UUID v7")
+    }
+
+    pub fn uuid_v7_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::UuidV7(msg.into()));
         self
     }
 
@@ -910,6 +1138,16 @@ impl ZString {
         self
     }
 
+    /// Must be a valid strict E.164 phone number.
+    pub fn phone_e164_strict(self) -> Self {
+        self.phone_e164_strict_msg("Invalid E.164 phone number")
+    }
+
+    pub fn phone_e164_strict_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::PhoneE164(msg.into()));
+        self
+    }
+
     /// Must be a valid semantic version (`MAJOR.MINOR.PATCH`, optional `v` prefix).
     pub fn semver(self) -> Self {
         self.semver_msg("Invalid semver")
@@ -918,6 +1156,16 @@ impl ZString {
     /// Must be a valid semantic version, with custom message.
     pub fn semver_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::Semver(msg.into()));
+        self
+    }
+
+    /// Must be a full semantic version parsed by the `semver` crate.
+    pub fn semver_full(self) -> Self {
+        self.semver_full_msg("Invalid semantic version")
+    }
+
+    pub fn semver_full_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::SemverFull(msg.into()));
         self
     }
 
@@ -1086,6 +1334,66 @@ impl ZString {
         self
     }
 
+    /// Must be a URL-friendly slug (`[a-z0-9-]`).
+    pub fn slug(self) -> Self {
+        self.slug_msg("Invalid slug")
+    }
+
+    pub fn slug_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Slug(msg.into()));
+        self
+    }
+
+    /// Must be a hex color (`#RRGGBB` or `#RRGGBBAA`).
+    pub fn color(self) -> Self {
+        self.color_msg("Invalid color")
+    }
+
+    pub fn color_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Color(msg.into()));
+        self
+    }
+
+    /// Must be a currency code (ISO-4217-like uppercase 3 letters).
+    pub fn currency_code(self) -> Self {
+        self.currency_code_msg("Invalid currency code")
+    }
+
+    pub fn currency_code_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Currency(msg.into()));
+        self
+    }
+
+    /// Must be a country code (ISO-3166 alpha-2).
+    pub fn country_code(self) -> Self {
+        self.country_code_msg("Invalid country code")
+    }
+
+    pub fn country_code_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::CountryCode(msg.into()));
+        self
+    }
+
+    /// Must be a locale (`ll` or `ll-RR`, example: `en`, `en-US`).
+    pub fn locale(self) -> Self {
+        self.locale_msg("Invalid locale")
+    }
+
+    pub fn locale_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Locale(msg.into()));
+        self
+    }
+
+    /// Must be a cron expression (5 or 6 fields).
+    pub fn cron(self) -> Self {
+        self.cron_msg("Invalid cron expression")
+    }
+
+    pub fn cron_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Cron(msg.into()));
+        self
+    }
+
     /// Generate a JSON Schema representation of this string schema.
     ///
     /// Requires the `openapi` feature.
@@ -1110,11 +1418,44 @@ impl ZString {
                 StringCheck::Url(_) => {
                     schema["format"] = serde_json::json!("uri");
                 }
+                StringCheck::UrlStrict(_) => {
+                    schema["format"] = serde_json::json!("url-strict");
+                }
+                StringCheck::Uri(_) => {
+                    schema["format"] = serde_json::json!("uri");
+                }
                 StringCheck::Uuid(_) => {
                     schema["format"] = serde_json::json!("uuid");
                 }
+                StringCheck::UuidV1(_) => {
+                    schema["format"] = serde_json::json!("uuid-v1");
+                }
+                StringCheck::UuidV4(_) => {
+                    schema["format"] = serde_json::json!("uuid-v4");
+                }
+                StringCheck::UuidV7(_) => {
+                    schema["format"] = serde_json::json!("uuid-v7");
+                }
                 StringCheck::Ip(_) => {
                     schema["format"] = serde_json::json!("ip");
+                }
+                StringCheck::Slug(_) => {
+                    schema["format"] = serde_json::json!("slug");
+                }
+                StringCheck::Color(_) => {
+                    schema["format"] = serde_json::json!("color");
+                }
+                StringCheck::Currency(_) => {
+                    schema["format"] = serde_json::json!("currency-code");
+                }
+                StringCheck::CountryCode(_) => {
+                    schema["format"] = serde_json::json!("country-code");
+                }
+                StringCheck::Locale(_) => {
+                    schema["format"] = serde_json::json!("locale");
+                }
+                StringCheck::Cron(_) => {
+                    schema["format"] = serde_json::json!("cron");
                 }
                 StringCheck::Ipv4(_) => {
                     schema["format"] = serde_json::json!("ipv4");
@@ -1137,8 +1478,14 @@ impl ZString {
                 StringCheck::Phone(_) => {
                     schema["format"] = serde_json::json!("phone");
                 }
+                StringCheck::PhoneE164(_) => {
+                    schema["format"] = serde_json::json!("phone-e164");
+                }
                 StringCheck::Semver(_) => {
                     schema["format"] = serde_json::json!("semver");
+                }
+                StringCheck::SemverFull(_) => {
+                    schema["format"] = serde_json::json!("semver-full");
                 }
                 StringCheck::Jwt(_) => {
                     schema["format"] = serde_json::json!("jwt");
@@ -1302,6 +1649,28 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                StringCheck::UrlStrict(msg) => {
+                    if !is_valid_url_strict(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::UrlStrict,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Uri(msg) => {
+                    if !is_valid_uri(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Uri,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
                 StringCheck::Uuid(msg) => {
                     if !is_valid_uuid(&s) {
                         errors.push_with_value(
@@ -1313,11 +1682,110 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                StringCheck::UuidV1(msg) => {
+                    if !is_valid_uuid_version(&s, 1) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::UuidV1,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::UuidV4(msg) => {
+                    if !is_valid_uuid_version(&s, 4) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::UuidV4,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::UuidV7(msg) => {
+                    if !is_valid_uuid_version(&s, 7) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::UuidV7,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
                 StringCheck::Ip(msg) => {
                     if !is_valid_ip(&s) {
                         errors.push_with_value(
                             IssueCode::InvalidString {
                                 validation: StringValidation::Ip,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Slug(msg) => {
+                    if !is_valid_slug(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Slug,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Color(msg) => {
+                    if !is_valid_color(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Color,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Currency(msg) => {
+                    if !is_valid_currency_code(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Currency,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::CountryCode(msg) => {
+                    if !is_valid_country_code(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::CountryCode,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Locale(msg) => {
+                    if !is_valid_locale(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Locale,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Cron(msg) => {
+                    if !is_valid_cron(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Cron,
                             },
                             msg.clone(),
                             &str_val,
@@ -1458,11 +1926,33 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                StringCheck::PhoneE164(msg) => {
+                    if !is_valid_phone_e164_strict(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::PhoneE164,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
                 StringCheck::Semver(msg) => {
                     if !is_valid_semver(&s) {
                         errors.push_with_value(
                             IssueCode::InvalidString {
                                 validation: StringValidation::Semver,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::SemverFull(msg) => {
+                    if !is_valid_semver_full(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::SemverFull,
                             },
                             msg.clone(),
                             &str_val,

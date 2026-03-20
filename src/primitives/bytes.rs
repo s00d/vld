@@ -58,12 +58,48 @@ fn decode_base64(s: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
+fn decode_base64_url(s: &str) -> Option<Vec<u8>> {
+    let mut std = s.replace('-', "+").replace('_', "/");
+    let rem = std.len() % 4;
+    if rem != 0 {
+        std.push_str(&"=".repeat(4 - rem));
+    }
+    decode_base64(&std)
+}
+
+fn decode_hex(s: &str) -> Option<Vec<u8>> {
+    let raw = s.strip_prefix("0x").unwrap_or(s);
+    if raw.is_empty() || raw.len() % 2 != 0 || !raw.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(raw.len() / 2);
+    let bytes = raw.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let hi = bytes[i] as char;
+        let lo = bytes[i + 1] as char;
+        let h = hi.to_digit(16)? as u8;
+        let l = lo.to_digit(16)? as u8;
+        out.push((h << 4) | l);
+        i += 2;
+    }
+    Some(out)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BytesStringMode {
+    Off,
+    Base64,
+    Base64Url,
+    Hex,
+}
+
 #[derive(Clone)]
 pub struct ZBytes {
     min_len: Option<usize>,
     max_len: Option<usize>,
     exact_len: Option<usize>,
-    base64_mode: bool,
+    string_mode: BytesStringMode,
     custom_type_error: Option<String>,
 }
 
@@ -73,7 +109,7 @@ impl ZBytes {
             min_len: None,
             max_len: None,
             exact_len: None,
-            base64_mode: false,
+            string_mode: BytesStringMode::Off,
             custom_type_error: None,
         }
     }
@@ -103,16 +139,31 @@ impl ZBytes {
     }
 
     pub fn base64(mut self) -> Self {
-        self.base64_mode = true;
+        self.string_mode = BytesStringMode::Base64;
+        self
+    }
+
+    pub fn base64url(mut self) -> Self {
+        self.string_mode = BytesStringMode::Base64Url;
+        self
+    }
+
+    pub fn hex(mut self) -> Self {
+        self.string_mode = BytesStringMode::Hex;
         self
     }
 
     #[cfg(feature = "openapi")]
     pub fn to_json_schema(&self) -> serde_json::Value {
-        if self.base64_mode {
+        if self.string_mode != BytesStringMode::Off {
             let mut schema = serde_json::json!({
                 "type": "string",
-                "format": "byte"
+                "format": match self.string_mode {
+                    BytesStringMode::Base64 => "byte",
+                    BytesStringMode::Base64Url => "byte-base64url",
+                    BytesStringMode::Hex => "byte-hex",
+                    BytesStringMode::Off => "byte",
+                }
             });
             if let Some(min) = self.min_len {
                 schema["minLength"] = serde_json::json!(min);
@@ -160,8 +211,8 @@ impl VldSchema for ZBytes {
 
     fn parse_value(&self, value: &Value) -> Result<Vec<u8>, VldError> {
         let type_err = || {
-            let expected = if self.base64_mode {
-                "bytes array or base64 string"
+            let expected = if self.string_mode != BytesStringMode::Off {
+                "bytes array or encoded string"
             } else {
                 "bytes array"
             };
@@ -197,15 +248,38 @@ impl VldSchema for ZBytes {
                 }
                 out
             }
-            Value::String(s) if self.base64_mode => decode_base64(s).ok_or_else(|| {
-                VldError::single_with_value(
-                    IssueCode::Custom {
-                        code: "invalid_base64".to_string(),
-                    },
-                    "Invalid Base64 byte string",
-                    value,
-                )
-            })?,
+            Value::String(s) if self.string_mode != BytesStringMode::Off => {
+                match self.string_mode {
+                    BytesStringMode::Base64 => decode_base64(s).ok_or_else(|| {
+                        VldError::single_with_value(
+                            IssueCode::Custom {
+                                code: "invalid_base64".to_string(),
+                            },
+                            "Invalid Base64 byte string",
+                            value,
+                        )
+                    })?,
+                    BytesStringMode::Base64Url => decode_base64_url(s).ok_or_else(|| {
+                        VldError::single_with_value(
+                            IssueCode::Custom {
+                                code: "invalid_base64url".to_string(),
+                            },
+                            "Invalid Base64URL byte string",
+                            value,
+                        )
+                    })?,
+                    BytesStringMode::Hex => decode_hex(s).ok_or_else(|| {
+                        VldError::single_with_value(
+                            IssueCode::Custom {
+                                code: "invalid_hex".to_string(),
+                            },
+                            "Invalid hex byte string",
+                            value,
+                        )
+                    })?,
+                    BytesStringMode::Off => return Err(type_err()),
+                }
+            }
             _ => return Err(type_err()),
         };
 

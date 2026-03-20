@@ -236,13 +236,22 @@ fn validate_string(
         let valid = match format {
             "email" => s.contains('@') && s.contains('.'),
             "uri" | "url" => s.starts_with("http://") || s.starts_with("https://"),
+            "url-strict" => s.starts_with("http://") || s.starts_with("https://"),
             "uuid" => s.len() == 36 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-'),
+            "uuid-v1" | "uuid-v4" | "uuid-v7" => {
+                s.len() == 36 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+            }
+            "phone-e164" => s.starts_with('+'),
+            "semver-full" => s.contains('.'),
             "ipv4" => s.parse::<std::net::Ipv4Addr>().is_ok(),
             "ipv6" => s.parse::<std::net::Ipv6Addr>().is_ok(),
             "date" => {
                 s.len() == 10 && s.chars().nth(4) == Some('-') && s.chars().nth(7) == Some('-')
             }
             "date-time" => s.contains('T') || s.contains('t'),
+            "country-code" => s.len() == 2,
+            "currency-code" => s.len() == 3,
+            "locale" => s.len() == 2 || s.len() == 5,
             _ => true, // unknown formats pass
         };
         if !valid {
@@ -511,13 +520,22 @@ fn format_to_string_validation(format: &str) -> vld::error::StringValidation {
     match format {
         "email" => vld::error::StringValidation::Email,
         "uri" | "url" => vld::error::StringValidation::Url,
+        "url-strict" => vld::error::StringValidation::UrlStrict,
         "uuid" => vld::error::StringValidation::Uuid,
+        "uuid-v1" => vld::error::StringValidation::UuidV1,
+        "uuid-v4" => vld::error::StringValidation::UuidV4,
+        "uuid-v7" => vld::error::StringValidation::UuidV7,
+        "phone-e164" => vld::error::StringValidation::PhoneE164,
+        "semver-full" => vld::error::StringValidation::SemverFull,
         "ipv4" => vld::error::StringValidation::Ipv4,
         "ipv6" => vld::error::StringValidation::Ipv6,
         "date" => vld::error::StringValidation::IsoDate,
         "date-time" => vld::error::StringValidation::IsoDatetime,
         "time" => vld::error::StringValidation::IsoTime,
         "hostname" => vld::error::StringValidation::Hostname,
+        "country-code" => vld::error::StringValidation::CountryCode,
+        "currency-code" => vld::error::StringValidation::Currency,
+        "locale" => vld::error::StringValidation::Locale,
         _ => vld::error::StringValidation::Regex,
     }
 }

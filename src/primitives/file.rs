@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{value_type_name, IssueCode, VldError};
 use crate::schema::VldSchema;
+use md5::{Digest as _, Md5};
+use sha2::Sha256;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedFile {
@@ -81,7 +83,18 @@ pub struct ZFile {
     min_size: Option<u64>,
     max_size: Option<u64>,
     allowed_media_types: Vec<String>,
+    denied_media_types: Vec<String>,
     allowed_extensions: Vec<String>,
+    denied_extensions: Vec<String>,
+    allowed_magic_types: Vec<String>,
+    denied_magic_types: Vec<String>,
+    sha256_hex: Option<String>,
+    md5_hex: Option<String>,
+    min_width: Option<u32>,
+    max_width: Option<u32>,
+    min_height: Option<u32>,
+    max_height: Option<u32>,
+    require_exif: bool,
     storage: FileStorage,
     custom_type_error: Option<String>,
 }
@@ -92,7 +105,18 @@ impl ZFile {
             min_size: None,
             max_size: None,
             allowed_media_types: Vec::new(),
+            denied_media_types: Vec::new(),
             allowed_extensions: Vec::new(),
+            denied_extensions: Vec::new(),
+            allowed_magic_types: Vec::new(),
+            denied_magic_types: Vec::new(),
+            sha256_hex: None,
+            md5_hex: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            require_exif: false,
             storage: FileStorage::InMemory,
             custom_type_error: None,
         }
@@ -129,6 +153,11 @@ impl ZFile {
         self
     }
 
+    pub fn deny_media_type(mut self, mt: impl Into<String>) -> Self {
+        self.denied_media_types.push(mt.into().to_ascii_lowercase());
+        self
+    }
+
     pub fn extension(mut self, ext: impl Into<String>) -> Self {
         let normalized = ext.into().trim_start_matches('.').to_ascii_lowercase();
         self.allowed_extensions.push(normalized);
@@ -140,6 +169,59 @@ impl ZFile {
             exts.iter()
                 .map(|s| s.trim_start_matches('.').to_ascii_lowercase()),
         );
+        self
+    }
+
+    pub fn deny_extension(mut self, ext: impl Into<String>) -> Self {
+        self.denied_extensions
+            .push(ext.into().trim_start_matches('.').to_ascii_lowercase());
+        self
+    }
+
+    pub fn allow_magic_type(mut self, kind: impl Into<String>) -> Self {
+        self.allowed_magic_types
+            .push(kind.into().to_ascii_lowercase());
+        self
+    }
+
+    pub fn deny_magic_type(mut self, kind: impl Into<String>) -> Self {
+        self.denied_magic_types
+            .push(kind.into().to_ascii_lowercase());
+        self
+    }
+
+    pub fn sha256(mut self, hex: impl Into<String>) -> Self {
+        self.sha256_hex = Some(hex.into().to_ascii_lowercase());
+        self
+    }
+
+    pub fn md5(mut self, hex: impl Into<String>) -> Self {
+        self.md5_hex = Some(hex.into().to_ascii_lowercase());
+        self
+    }
+
+    pub fn min_width(mut self, w: u32) -> Self {
+        self.min_width = Some(w);
+        self
+    }
+
+    pub fn max_width(mut self, w: u32) -> Self {
+        self.max_width = Some(w);
+        self
+    }
+
+    pub fn min_height(mut self, h: u32) -> Self {
+        self.min_height = Some(h);
+        self
+    }
+
+    pub fn max_height(mut self, h: u32) -> Self {
+        self.max_height = Some(h);
+        self
+    }
+
+    pub fn require_exif(mut self) -> Self {
+        self.require_exif = true;
         self
     }
 
@@ -307,9 +389,31 @@ impl VldSchema for ZFile {
                 ));
             }
         }
+        if !self.denied_extensions.is_empty() {
+            let ext = extension.as_deref().unwrap_or_default();
+            if self.denied_extensions.iter().any(|deny| deny == ext) {
+                return Err(VldError::single_with_value(
+                    IssueCode::Custom {
+                        code: "denied_file_extension".to_string(),
+                    },
+                    format!("File extension `{}` is denied", ext),
+                    value,
+                ));
+            }
+        }
 
-        let needs_bytes =
-            self.storage == FileStorage::InMemory || !self.allowed_media_types.is_empty();
+        let needs_bytes = self.storage == FileStorage::InMemory
+            || !self.allowed_media_types.is_empty()
+            || !self.denied_media_types.is_empty()
+            || !self.allowed_magic_types.is_empty()
+            || !self.denied_magic_types.is_empty()
+            || self.sha256_hex.is_some()
+            || self.md5_hex.is_some()
+            || self.min_width.is_some()
+            || self.max_width.is_some()
+            || self.min_height.is_some()
+            || self.max_height.is_some()
+            || self.require_exif;
         let loaded_bytes = if needs_bytes {
             Some(fs::read(&path).map_err(|e| {
                 VldError::single_with_value(
@@ -326,6 +430,10 @@ impl VldSchema for ZFile {
             .as_deref()
             .and_then(infer::get)
             .map(|k| k.mime_type().to_ascii_lowercase());
+        let magic_type = loaded_bytes
+            .as_deref()
+            .and_then(infer::get)
+            .map(|k| k.extension().to_ascii_lowercase());
         if !self.allowed_media_types.is_empty() {
             let mt = media_type.as_deref().ok_or_else(|| {
                 VldError::single_with_value(
@@ -352,6 +460,179 @@ impl VldSchema for ZFile {
                     ),
                     value,
                 ));
+            }
+        }
+        if !self.denied_media_types.is_empty() {
+            if let Some(mt) = media_type.as_deref() {
+                if self
+                    .denied_media_types
+                    .iter()
+                    .any(|deny| media_matches(mt, deny))
+                {
+                    return Err(VldError::single_with_value(
+                        IssueCode::Custom {
+                            code: "denied_media_type".to_string(),
+                        },
+                        format!("File media type `{}` is denied", mt),
+                        value,
+                    ));
+                }
+            }
+        }
+        if !self.allowed_magic_types.is_empty() {
+            let kind = magic_type.as_deref().ok_or_else(|| {
+                VldError::single_with_value(
+                    IssueCode::Custom {
+                        code: "unknown_magic_type".to_string(),
+                    },
+                    "Unable to detect file magic type",
+                    value,
+                )
+            })?;
+            if !self.allowed_magic_types.iter().any(|a| a == kind) {
+                return Err(VldError::single_with_value(
+                    IssueCode::Custom {
+                        code: "invalid_magic_type".to_string(),
+                    },
+                    format!(
+                        "File magic type `{}` is not allowed (expected one of: {})",
+                        kind,
+                        self.allowed_magic_types.join(", ")
+                    ),
+                    value,
+                ));
+            }
+        }
+        if !self.denied_magic_types.is_empty() {
+            if let Some(kind) = magic_type.as_deref() {
+                if self.denied_magic_types.iter().any(|d| d == kind) {
+                    return Err(VldError::single_with_value(
+                        IssueCode::Custom {
+                            code: "denied_magic_type".to_string(),
+                        },
+                        format!("File magic type `{}` is denied", kind),
+                        value,
+                    ));
+                }
+            }
+        }
+
+        if self.sha256_hex.is_some()
+            || self.md5_hex.is_some()
+            || self.min_width.is_some()
+            || self.max_width.is_some()
+            || self.min_height.is_some()
+            || self.max_height.is_some()
+            || self.require_exif
+        {
+            let bytes = if let Some(b) = loaded_bytes.as_ref() {
+                b
+            } else {
+                return Err(VldError::single_with_value(
+                    IssueCode::IoError,
+                    "Failed to load file bytes",
+                    value,
+                ));
+            };
+            if let Some(expected) = &self.sha256_hex {
+                let got = format!("{:x}", Sha256::digest(bytes));
+                if &got != expected {
+                    return Err(VldError::single_with_value(
+                        IssueCode::Custom {
+                            code: "sha256_mismatch".to_string(),
+                        },
+                        "SHA-256 checksum mismatch",
+                        value,
+                    ));
+                }
+            }
+            if let Some(expected) = &self.md5_hex {
+                let got = format!("{:x}", Md5::digest(bytes));
+                if &got != expected {
+                    return Err(VldError::single_with_value(
+                        IssueCode::Custom {
+                            code: "md5_mismatch".to_string(),
+                        },
+                        "MD5 checksum mismatch",
+                        value,
+                    ));
+                }
+            }
+
+            if self.min_width.is_some()
+                || self.max_width.is_some()
+                || self.min_height.is_some()
+                || self.max_height.is_some()
+            {
+                let img = image::load_from_memory(bytes).map_err(|_| {
+                    VldError::single_with_value(
+                        IssueCode::Custom {
+                            code: "invalid_image".to_string(),
+                        },
+                        "Unable to decode image for dimension checks",
+                        value,
+                    )
+                })?;
+                let w = img.width();
+                let h = img.height();
+                if let Some(min_w) = self.min_width {
+                    if w < min_w {
+                        return Err(VldError::single_with_value(
+                            IssueCode::Custom {
+                                code: "image_width_too_small".to_string(),
+                            },
+                            format!("Image width must be >= {}", min_w),
+                            value,
+                        ));
+                    }
+                }
+                if let Some(max_w) = self.max_width {
+                    if w > max_w {
+                        return Err(VldError::single_with_value(
+                            IssueCode::Custom {
+                                code: "image_width_too_big".to_string(),
+                            },
+                            format!("Image width must be <= {}", max_w),
+                            value,
+                        ));
+                    }
+                }
+                if let Some(min_h) = self.min_height {
+                    if h < min_h {
+                        return Err(VldError::single_with_value(
+                            IssueCode::Custom {
+                                code: "image_height_too_small".to_string(),
+                            },
+                            format!("Image height must be >= {}", min_h),
+                            value,
+                        ));
+                    }
+                }
+                if let Some(max_h) = self.max_height {
+                    if h > max_h {
+                        return Err(VldError::single_with_value(
+                            IssueCode::Custom {
+                                code: "image_height_too_big".to_string(),
+                            },
+                            format!("Image height must be <= {}", max_h),
+                            value,
+                        ));
+                    }
+                }
+            }
+
+            if self.require_exif {
+                let mut cur = std::io::Cursor::new(bytes);
+                let exif_reader = exif::Reader::new();
+                exif_reader.read_from_container(&mut cur).map_err(|_| {
+                    VldError::single_with_value(
+                        IssueCode::Custom {
+                            code: "missing_exif".to_string(),
+                        },
+                        "Image must contain EXIF metadata",
+                        value,
+                    )
+                })?;
             }
         }
 

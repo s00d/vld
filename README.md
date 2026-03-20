@@ -24,6 +24,7 @@ rules once and get both runtime checks and strongly-typed Rust structs.
   built-in `parse()` methods. Or use `schema_validated!` to get lenient parsing too.
 - **Error accumulation** — all validation errors are collected, not just the first one.
 - **Rich primitives** — string, number, integer, boolean, literal, enum, any, custom.
+- **Extra primitives** — `decimal`, `duration`, `path`, `bytes`, `file`.
 - **File validation (std)** — validate file path input by size, extension, and detected media type.
 - **String formats** — email, URL, UUID, IPv4, IPv6, Base64, ISO date/time/datetime, hostname, CUID2, ULID, Nano ID, emoji.
   All validated without regex by default. Every check has a `_msg` variant for custom messages.
@@ -149,6 +150,19 @@ vld::string()
     .ulid()                 // ULID format (26 chars, Crockford Base32)
     .nanoid()               // Nano ID format (alphanumeric + _-)
     .emoji()                // must contain emoji
+    .url_strict()           // strict http/https URL with host
+    .uri()                  // URI via parser
+    .uuid_v1()              // UUID version 1
+    .uuid_v4()              // UUID version 4
+    .uuid_v7()              // UUID version 7
+    .phone_e164_strict()    // strict E.164 phone
+    .semver_full()          // strict semver parser
+    .slug()                 // [a-z0-9-], no edge dashes
+    .color()                // #RRGGBB/#RRGGBBAA/rgb(...)/hsl(...)
+    .currency_code()        // ISO-4217-like (e.g. USD)
+    .country_code()         // ISO-3166 alpha-2 (e.g. US)
+    .locale()               // ll or ll-RR (e.g. en-US)
+    .cron()                 // cron expression (5/6 fields)
     .starts_with("prefix")  // must start with
     .ends_with("suffix")    // must end with
     .contains("sub")        // must contain
@@ -177,6 +191,31 @@ vld::number()
     .coerce()       // coerce strings/booleans to number
 ```
 
+### Decimal
+
+```rust
+let price = vld::decimal()
+    .min("0.00")
+    .max("999999.99")
+    .non_negative();
+```
+
+### Duration (std feature)
+
+```rust
+let timeout = vld::duration()
+    .min_secs(1)
+    .max_secs(30);
+// accepts: 10, "10s", "250ms", "PT10S"
+```
+
+### Path (std feature)
+
+```rust
+let cfg = vld::path().exists().file().absolute();
+let dir = vld::path().exists().dir();
+```
+
 ### Integer
 
 ```rust
@@ -196,7 +235,29 @@ vld::bytes()
     .max_len(1024)
     .len(32)
     .non_empty()
-    .base64() // additionally accepts Base64 string input
+    .base64()    // parse Base64 string
+    .base64url() // parse Base64URL string
+    .hex()       // parse hex string
+```
+
+### Decimal
+
+```rust
+let price = vld::decimal().min("0.00").max("99999.99").non_negative();
+```
+
+### Duration (std feature)
+
+```rust
+let timeout = vld::duration().min_secs(1).max_secs(30);
+// accepts: 10, "10s", "250ms", "PT10S"
+```
+
+### Path (std feature)
+
+```rust
+let cfg = vld::path().exists().file().absolute();
+let safe_rel = vld::path().relative().within("/app/config");
 ```
 
 ### Boolean
@@ -262,6 +323,25 @@ let f = vld::file()
     .parse_value(&serde_json::json!("/tmp/report.pdf"))?;
 let data = f.read_bytes()?; // lazy read from disk
 let handle = f.open()?;     // std::fs::File
+
+// Advanced checks: checksums / image constraints / magic-type rules
+let f = vld::file()
+    .sha256("...expected sha256 hex...")
+    .md5("...expected md5 hex...")
+    .allow_magic_type("png")
+    .deny_magic_type("exe")
+    .min_width(128)
+    .min_height(128)
+    .require_exif()
+    .parse_value(&serde_json::json!("/tmp/photo.png"))?;
+```
+
+### IP Network / Socket Addr / JSON Value
+
+```rust
+let net = vld::ip_network().ipv4_only();      // "10.0.0.0/24"
+let addr = vld::socket_addr().min_port(1024); // "127.0.0.1:8080"
+let any = vld::json_value().object().require_key("id").max_depth(4);
 ```
 
 ## Modifiers
