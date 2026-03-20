@@ -54,6 +54,7 @@ fn is_valid_uuid(s: &str) -> bool {
     true
 }
 
+#[cfg(feature = "string-advanced")]
 fn is_valid_uuid_version(s: &str, version: usize) -> bool {
     let u = match uuid::Uuid::parse_str(s) {
         Ok(v) => v,
@@ -78,6 +79,7 @@ fn is_valid_url(s: &str) -> bool {
     !rest.contains(char::is_whitespace)
 }
 
+#[cfg(feature = "string-advanced")]
 fn is_valid_url_strict(s: &str) -> bool {
     let parsed = match url::Url::parse(s) {
         Ok(v) => v,
@@ -113,6 +115,7 @@ fn is_valid_url_strict(s: &str) -> bool {
     true
 }
 
+#[cfg(feature = "string-advanced")]
 fn is_valid_uri(s: &str) -> bool {
     url::Url::parse(s).is_ok()
 }
@@ -261,6 +264,7 @@ fn is_valid_phone(s: &str) -> bool {
     (8..=15).contains(&digits.len())
 }
 
+#[cfg(feature = "string-advanced")]
 fn is_valid_phone_e164_strict(s: &str) -> bool {
     let num = match phonenumber::parse(None, s) {
         Ok(n) => n,
@@ -363,6 +367,7 @@ fn is_valid_semver(s: &str) -> bool {
         .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
 }
 
+#[cfg(feature = "string-advanced")]
 fn is_valid_semver_full(s: &str) -> bool {
     semver::Version::parse(s).is_ok()
 }
@@ -596,11 +601,16 @@ enum StringCheck {
     Len(usize, String),
     Email(String),
     Url(String),
+    #[cfg(feature = "string-advanced")]
     UrlStrict(String),
+    #[cfg(feature = "string-advanced")]
     Uri(String),
     Uuid(String),
+    #[cfg(feature = "string-advanced")]
     UuidV1(String),
+    #[cfg(feature = "string-advanced")]
     UuidV4(String),
+    #[cfg(feature = "string-advanced")]
     UuidV7(String),
     Ip(String),
     Slug(String),
@@ -622,8 +632,10 @@ enum StringCheck {
     Hex(String),
     CreditCard(String),
     Phone(String),
+    #[cfg(feature = "string-advanced")]
     PhoneE164(String),
     Semver(String),
+    #[cfg(feature = "string-advanced")]
     SemverFull(String),
     Jwt(String),
     Ascii(String),
@@ -651,11 +663,16 @@ impl StringCheck {
             StringCheck::Len(..) => "invalid_length",
             StringCheck::Email(..) => "invalid_email",
             StringCheck::Url(..) => "invalid_url",
+            #[cfg(feature = "string-advanced")]
             StringCheck::UrlStrict(..) => "invalid_url_strict",
+            #[cfg(feature = "string-advanced")]
             StringCheck::Uri(..) => "invalid_uri",
             StringCheck::Uuid(..) => "invalid_uuid",
+            #[cfg(feature = "string-advanced")]
             StringCheck::UuidV1(..) => "invalid_uuid_v1",
+            #[cfg(feature = "string-advanced")]
             StringCheck::UuidV4(..) => "invalid_uuid_v4",
+            #[cfg(feature = "string-advanced")]
             StringCheck::UuidV7(..) => "invalid_uuid_v7",
             StringCheck::Ip(..) => "invalid_ip",
             StringCheck::Slug(..) => "invalid_slug",
@@ -677,8 +694,10 @@ impl StringCheck {
             StringCheck::Hex(..) => "invalid_hex",
             StringCheck::CreditCard(..) => "invalid_credit_card",
             StringCheck::Phone(..) => "invalid_phone",
+            #[cfg(feature = "string-advanced")]
             StringCheck::PhoneE164(..) => "invalid_phone_e164",
             StringCheck::Semver(..) => "invalid_semver",
+            #[cfg(feature = "string-advanced")]
             StringCheck::SemverFull(..) => "invalid_semver_full",
             StringCheck::Jwt(..) => "invalid_jwt",
             StringCheck::Ascii(..) => "invalid_ascii",
@@ -701,17 +720,20 @@ impl StringCheck {
     /// Replace the error message stored in this check.
     fn set_message(&mut self, msg: String) {
         match self {
+            #[cfg(feature = "string-advanced")]
+            StringCheck::UrlStrict(ref mut m)
+            | StringCheck::Uri(ref mut m)
+            | StringCheck::UuidV1(ref mut m)
+            | StringCheck::UuidV4(ref mut m)
+            | StringCheck::UuidV7(ref mut m)
+            | StringCheck::PhoneE164(ref mut m)
+            | StringCheck::SemverFull(ref mut m) => *m = msg,
             StringCheck::Min(_, ref mut m)
             | StringCheck::Max(_, ref mut m)
             | StringCheck::Len(_, ref mut m)
             | StringCheck::Email(ref mut m)
             | StringCheck::Url(ref mut m)
-            | StringCheck::UrlStrict(ref mut m)
-            | StringCheck::Uri(ref mut m)
             | StringCheck::Uuid(ref mut m)
-            | StringCheck::UuidV1(ref mut m)
-            | StringCheck::UuidV4(ref mut m)
-            | StringCheck::UuidV7(ref mut m)
             | StringCheck::Ip(ref mut m)
             | StringCheck::Slug(ref mut m)
             | StringCheck::Color(ref mut m)
@@ -727,9 +749,7 @@ impl StringCheck {
             | StringCheck::Hex(ref mut m)
             | StringCheck::CreditCard(ref mut m)
             | StringCheck::Phone(ref mut m)
-            | StringCheck::PhoneE164(ref mut m)
             | StringCheck::Semver(ref mut m)
-            | StringCheck::SemverFull(ref mut m)
             | StringCheck::Jwt(ref mut m)
             | StringCheck::Ascii(ref mut m)
             | StringCheck::Alpha(ref mut m)
@@ -894,22 +914,26 @@ impl ZString {
     }
 
     /// Must be a strict URL (http/https + valid host).
+    #[cfg(feature = "string-advanced")]
     pub fn url_strict(self) -> Self {
         self.url_strict_msg("Invalid strict URL")
     }
 
     /// Must be a strict URL, with custom message.
+    #[cfg(feature = "string-advanced")]
     pub fn url_strict_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::UrlStrict(msg.into()));
         self
     }
 
     /// Must be a valid URI.
+    #[cfg(feature = "string-advanced")]
     pub fn uri(self) -> Self {
         self.uri_msg("Invalid URI")
     }
 
     /// Must be a valid URI, with custom message.
+    #[cfg(feature = "string-advanced")]
     pub fn uri_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::Uri(msg.into()));
         self
@@ -927,30 +951,36 @@ impl ZString {
     }
 
     /// Must be a valid UUID v1.
+    #[cfg(feature = "string-advanced")]
     pub fn uuid_v1(self) -> Self {
         self.uuid_v1_msg("Invalid UUID v1")
     }
 
+    #[cfg(feature = "string-advanced")]
     pub fn uuid_v1_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::UuidV1(msg.into()));
         self
     }
 
     /// Must be a valid UUID v4.
+    #[cfg(feature = "string-advanced")]
     pub fn uuid_v4(self) -> Self {
         self.uuid_v4_msg("Invalid UUID v4")
     }
 
+    #[cfg(feature = "string-advanced")]
     pub fn uuid_v4_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::UuidV4(msg.into()));
         self
     }
 
     /// Must be a valid UUID v7.
+    #[cfg(feature = "string-advanced")]
     pub fn uuid_v7(self) -> Self {
         self.uuid_v7_msg("Invalid UUID v7")
     }
 
+    #[cfg(feature = "string-advanced")]
     pub fn uuid_v7_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::UuidV7(msg.into()));
         self
@@ -1139,10 +1169,12 @@ impl ZString {
     }
 
     /// Must be a valid strict E.164 phone number.
+    #[cfg(feature = "string-advanced")]
     pub fn phone_e164_strict(self) -> Self {
         self.phone_e164_strict_msg("Invalid E.164 phone number")
     }
 
+    #[cfg(feature = "string-advanced")]
     pub fn phone_e164_strict_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::PhoneE164(msg.into()));
         self
@@ -1160,10 +1192,12 @@ impl ZString {
     }
 
     /// Must be a full semantic version parsed by the `semver` crate.
+    #[cfg(feature = "string-advanced")]
     pub fn semver_full(self) -> Self {
         self.semver_full_msg("Invalid semantic version")
     }
 
+    #[cfg(feature = "string-advanced")]
     pub fn semver_full_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::SemverFull(msg.into()));
         self
@@ -1418,21 +1452,26 @@ impl ZString {
                 StringCheck::Url(_) => {
                     schema["format"] = serde_json::json!("uri");
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::UrlStrict(_) => {
                     schema["format"] = serde_json::json!("url-strict");
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::Uri(_) => {
                     schema["format"] = serde_json::json!("uri");
                 }
                 StringCheck::Uuid(_) => {
                     schema["format"] = serde_json::json!("uuid");
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::UuidV1(_) => {
                     schema["format"] = serde_json::json!("uuid-v1");
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::UuidV4(_) => {
                     schema["format"] = serde_json::json!("uuid-v4");
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::UuidV7(_) => {
                     schema["format"] = serde_json::json!("uuid-v7");
                 }
@@ -1478,12 +1517,14 @@ impl ZString {
                 StringCheck::Phone(_) => {
                     schema["format"] = serde_json::json!("phone");
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::PhoneE164(_) => {
                     schema["format"] = serde_json::json!("phone-e164");
                 }
                 StringCheck::Semver(_) => {
                     schema["format"] = serde_json::json!("semver");
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::SemverFull(_) => {
                     schema["format"] = serde_json::json!("semver-full");
                 }
@@ -1649,6 +1690,7 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::UrlStrict(msg) => {
                     if !is_valid_url_strict(&s) {
                         errors.push_with_value(
@@ -1660,6 +1702,7 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::Uri(msg) => {
                     if !is_valid_uri(&s) {
                         errors.push_with_value(
@@ -1682,6 +1725,7 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::UuidV1(msg) => {
                     if !is_valid_uuid_version(&s, 1) {
                         errors.push_with_value(
@@ -1693,6 +1737,7 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::UuidV4(msg) => {
                     if !is_valid_uuid_version(&s, 4) {
                         errors.push_with_value(
@@ -1704,6 +1749,7 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::UuidV7(msg) => {
                     if !is_valid_uuid_version(&s, 7) {
                         errors.push_with_value(
@@ -1926,6 +1972,7 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::PhoneE164(msg) => {
                     if !is_valid_phone_e164_strict(&s) {
                         errors.push_with_value(
@@ -1948,6 +1995,7 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                #[cfg(feature = "string-advanced")]
                 StringCheck::SemverFull(msg) => {
                     if !is_valid_semver_full(&s) {
                         errors.push_with_value(

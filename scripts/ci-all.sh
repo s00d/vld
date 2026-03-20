@@ -7,14 +7,13 @@ set -euo pipefail
 # - workspace-wide build/test/clippy/fmt automatically includes new crates
 # - explicit feature-matrix checks remain only for core `vld`
 
-echo "==> Build workspace (all features)"
-cargo build --workspace --all-features
+VLD_EXTENDED_FEATURES="chrono,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced"
+
+echo "==> Build workspace (default features)"
+cargo build --workspace
 
 echo "==> Test workspace (default features)"
 cargo test --workspace
-
-echo "==> Test workspace (all features)"
-cargo test --workspace --all-features
 
 echo "==> Test vld feature matrix"
 cargo test -p vld --no-default-features
@@ -22,9 +21,13 @@ cargo test -p vld --no-default-features --features serialize
 cargo test -p vld --no-default-features --features openapi
 cargo test -p vld --no-default-features --features diff
 cargo test -p vld --no-default-features --features "serialize,openapi,diff"
+cargo test -p vld --features "${VLD_EXTENDED_FEATURES}"
 
-echo "==> Clippy"
-cargo clippy --workspace --all-features -- -D warnings
+echo "==> Clippy (workspace, default features)"
+cargo clippy --workspace -- -D warnings
+
+echo "==> Clippy (vld extended features)"
+cargo clippy -p vld --all-targets --features "${VLD_EXTENDED_FEATURES}" -- -D warnings
 
 echo "==> Format check"
 cargo fmt --all --check

@@ -142,11 +142,13 @@ pub fn bytes() -> primitives::ZBytes {
 }
 
 /// Create a decimal validation schema (`rust_decimal::Decimal`).
+#[cfg(feature = "decimal")]
 pub fn decimal() -> primitives::ZDecimal {
     primitives::ZDecimal::new()
 }
 
 /// Create an IP network/CIDR schema (`ipnet::IpNet`).
+#[cfg(feature = "net")]
 pub fn ip_network() -> primitives::ZIpNetwork {
     primitives::ZIpNetwork::new()
 }
@@ -163,8 +165,8 @@ pub fn json_value() -> primitives::ZJsonValue {
 
 /// Create a file validation schema.
 ///
-/// Requires the `std` feature.
-#[cfg(feature = "std")]
+/// Requires the `file` feature.
+#[cfg(feature = "file")]
 pub fn file() -> primitives::ZFile {
     primitives::ZFile::new()
 }
@@ -385,13 +387,19 @@ pub mod prelude {
     pub use crate::json_schema::JsonSchema;
     pub use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
     pub use crate::object::ZObject;
-    #[cfg(feature = "std")]
-    pub use crate::primitives::{FileStorage, ValidatedFile, ZDuration, ZFile, ZPath};
+    #[cfg(feature = "decimal")]
+    pub use crate::primitives::ZDecimal;
+    #[cfg(feature = "net")]
+    pub use crate::primitives::ZIpNetwork;
+    #[cfg(feature = "file")]
+    pub use crate::primitives::{FileStorage, ValidatedFile, ZFile};
     pub use crate::primitives::{
-        IntoLiteral, ZAny, ZBoolean, ZBytes, ZDecimal, ZEnum, ZInt, ZIpNetwork, ZJsonValue,
-        ZLiteral, ZNumber, ZSocketAddr, ZString,
+        IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZJsonValue, ZLiteral, ZNumber,
+        ZSocketAddr, ZString,
     };
     #[cfg(feature = "chrono")]
     pub use crate::primitives::{ZDate, ZDateTime};
+    #[cfg(feature = "std")]
+    pub use crate::primitives::{ZDuration, ZPath};
     pub use crate::schema::{VldParse, VldSchema};
 }

@@ -158,10 +158,6 @@ fn string_extra_validators() {
         .phone()
         .parse_value(&json!("+14155552671"))
         .is_ok());
-    assert!(vld::string()
-        .phone_e164_strict()
-        .parse_value(&json!("+14155552671"))
-        .is_ok());
     assert!(vld::string().semver().parse_value(&json!("1.2.3")).is_ok());
     assert!(vld::string()
         .jwt()
@@ -180,18 +176,6 @@ fn string_extra_validators() {
     assert!(vld::string()
         .uppercase()
         .parse_value(&json!("HELLO"))
-        .is_ok());
-    assert!(vld::string()
-        .url_strict()
-        .parse_value(&json!("https://example.com"))
-        .is_ok());
-    assert!(vld::string()
-        .uri()
-        .parse_value(&json!("https://example.com/path"))
-        .is_ok());
-    assert!(vld::string()
-        .uuid_v4()
-        .parse_value(&json!("550e8400-e29b-41d4-a716-446655440000"))
         .is_ok());
     assert!(vld::string()
         .slug()
@@ -219,14 +203,33 @@ fn string_extra_validators() {
         .cron()
         .parse_value(&json!("*/5 * * * *"))
         .is_ok());
-    assert!(vld::string()
-        .semver_full()
-        .parse_value(&json!("1.2.3-alpha.1+build.5"))
-        .is_ok());
-    assert!(vld::string()
-        .uuid_v7()
-        .parse_value(&json!("01890f57-5a7b-7f8b-bfd3-63f8e7c6f4b8"))
-        .is_ok());
+    #[cfg(feature = "string-advanced")]
+    {
+        assert!(vld::string()
+            .phone_e164_strict()
+            .parse_value(&json!("+14155552671"))
+            .is_ok());
+        assert!(vld::string()
+            .url_strict()
+            .parse_value(&json!("https://example.com"))
+            .is_ok());
+        assert!(vld::string()
+            .uri()
+            .parse_value(&json!("https://example.com/path"))
+            .is_ok());
+        assert!(vld::string()
+            .uuid_v4()
+            .parse_value(&json!("550e8400-e29b-41d4-a716-446655440000"))
+            .is_ok());
+        assert!(vld::string()
+            .semver_full()
+            .parse_value(&json!("1.2.3-alpha.1+build.5"))
+            .is_ok());
+        assert!(vld::string()
+            .uuid_v7()
+            .parse_value(&json!("01890f57-5a7b-7f8b-bfd3-63f8e7c6f4b8"))
+            .is_ok());
+    }
 }
 
 // === Number ===
@@ -359,6 +362,7 @@ fn bytes_hex_and_base64url_modes() {
     assert_eq!(b_url.parse_value(&json!("AQID")).unwrap(), vec![1, 2, 3]);
 }
 
+#[cfg(feature = "decimal")]
 #[test]
 fn decimal_basic() {
     let d = vld::decimal().min("1.10").max("2.20");
@@ -383,6 +387,7 @@ fn duration_and_path_basic() {
     assert!(p2.parse_value(&json!("../outside")).is_err());
 }
 
+#[cfg(feature = "net")]
 #[test]
 fn ip_network_socket_addr_json_value() {
     let net = vld::ip_network().ipv4_only();
@@ -398,7 +403,7 @@ fn ip_network_socket_addr_json_value() {
     assert!(shaped.parse_value(&json!({"x": 1})).is_err());
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "file")]
 #[test]
 fn file_schema_validates_size_type_and_extension() {
     use std::fs;
@@ -432,7 +437,7 @@ fn file_schema_validates_size_type_and_extension() {
     let _ = fs::remove_file(path);
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "file")]
 #[test]
 fn file_schema_rejects_wrong_constraints() {
     use std::fs;
@@ -458,7 +463,7 @@ fn file_schema_rejects_wrong_constraints() {
     let _ = fs::remove_file(path);
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "file")]
 #[test]
 fn file_schema_path_only_allows_open_and_lazy_read() {
     use std::fs;
@@ -489,7 +494,7 @@ fn file_schema_path_only_allows_open_and_lazy_read() {
     let _ = fs::remove_file(path);
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "file")]
 #[test]
 fn file_schema_hash_and_deny_rules() {
     use std::fs;

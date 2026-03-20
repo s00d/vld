@@ -24,8 +24,8 @@ rules once and get both runtime checks and strongly-typed Rust structs.
   built-in `parse()` methods. Or use `schema_validated!` to get lenient parsing too.
 - **Error accumulation** — all validation errors are collected, not just the first one.
 - **Rich primitives** — string, number, integer, boolean, literal, enum, any, custom.
-- **Extra primitives** — `decimal`, `duration`, `path`, `bytes`, `file`.
-- **File validation (std)** — validate file path input by size, extension, and detected media type.
+- **Extra primitives** — `decimal` (feature `decimal`), `duration`, `path`, `bytes`, `file` (feature `file`).
+- **Extended file validation** — `file-advanced` enables hash checks, image metadata, EXIF, and advanced media-type checks.
 - **String formats** — email, URL, UUID, IPv4, IPv6, Base64, ISO date/time/datetime, hostname, CUID2, ULID, Nano ID, emoji.
   All validated without regex by default. Every check has a `_msg` variant for custom messages.
 - **Composable** — optional, nullable, nullish, default, catch, refine, super_refine, transform, pipe, preprocess, describe, `.or()`, `.and()`.
@@ -43,7 +43,7 @@ rules once and get both runtime checks and strongly-typed Rust structs.
 - **Derive macro** — `#[derive(Validate)]` with `#[vld(...)]` attributes (optional `derive` feature).
 - **Benchmarks** — criterion-based benchmarks included.
 - **CI** — GitHub Actions workflow for testing, clippy, and formatting.
-- **Minimal dependencies** — only `serde` and `serde_json`. Regex and derive macro are optional features.
+- **Minimal dependencies by default** — heavy integrations are behind opt-in features.
 
 ## Quick Start
 
@@ -56,17 +56,22 @@ vld = "0.1"
 
 ### Optional Features
 
-All features are **disabled** by default:
+Default build enables only `std`. Optional features:
 
-| Feature       | Description                                                                                                                                                         |
-|---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `serialize`   | Adds `#[derive(Serialize)]` on error/result types, enables `VldSchema::validate()`/`is_valid()`, `ParseResult::save_to_file()`/`to_json_string()`/`to_json_value()` |
-| `deserialize` | Adds `#[derive(Deserialize)]` on error/result types                                                                                                                 |
-| `openapi`     | Enables `JsonSchema` trait, `to_json_schema()`, `json_schema()`, `to_openapi_document()`, `field_schema()`                                                          |
-| `diff`        | Schema diffing — compare two JSON Schemas to detect breaking vs non-breaking changes                                                                                |
-| `regex`       | Custom regex patterns via `.regex()` (uses `regex-lite`)                                                                                                            |
-| `derive`      | `#[derive(Validate)]` procedural macro                                                                                                                              |
-| `chrono`      | `ZDate` / `ZDateTime` types with `chrono` parsing                                                                                                                   |
+| Feature           | Description                                                                                                                                                         |
+|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `serialize`       | Adds `#[derive(Serialize)]` on error/result types, enables `VldSchema::validate()`/`is_valid()`, `ParseResult::save_to_file()`/`to_json_string()`/`to_json_value()` |
+| `deserialize`     | Adds `#[derive(Deserialize)]` on error/result types                                                                                                                 |
+| `openapi`         | Enables `JsonSchema` trait, `to_json_schema()`, `json_schema()`, `to_openapi_document()`, `field_schema()`                                                        |
+| `diff`            | Schema diffing — compare two JSON Schemas to detect breaking vs non-breaking changes                                                                                |
+| `regex`           | Custom regex patterns via `.regex()` (uses `regex-lite`)                                                                                                            |
+| `derive`          | `#[derive(Validate)]` procedural macro                                                                                                                              |
+| `chrono`          | `ZDate` / `ZDateTime` types with `chrono` parsing                                                                                                                   |
+| `decimal`         | Enables decimal schema (`vld::decimal()`) backed by `rust_decimal`                                                                                                  |
+| `net`             | Enables network schema (`vld::ip_network()`) backed by `ipnet`                                                                                                      |
+| `file`            | Enables file schema (`vld::file()`) and basic file checks (size/extensions/media type)                                                                             |
+| `file-advanced`   | Advanced file checks: hash (`sha2`, `md-5`), image dimensions (`image`), EXIF (`kamadak-exif`)                                                                    |
+| `string-advanced` | Advanced string checks: strict URL/URI, UUID versions, strict E.164, full semver (`url`, `uuid`, `phonenumber`, `semver`)                                         |
 
 Enable features as needed:
 

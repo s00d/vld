@@ -288,7 +288,7 @@ fn vld_int_unchecked() {
 #[test]
 fn vld_int_serialize() {
     let v = VldInt::<AgeFieldSchema>::new(42).unwrap();
-    let json = serde_json::to_value(&v).unwrap();
+    let json = serde_json::to_value(v).unwrap();
     assert_eq!(json, serde_json::json!(42));
 }
 
@@ -319,9 +319,10 @@ fn vld_float_invalid() {
 
 #[test]
 fn vld_float_serialize() {
-    let v = VldFloat::<PriceFieldSchema>::new(3.14).unwrap();
-    let json = serde_json::to_value(&v).unwrap();
-    assert!((json.as_f64().unwrap() - 3.14).abs() < f64::EPSILON);
+    let expected: f64 = "3.14".parse().unwrap();
+    let v = VldFloat::<PriceFieldSchema>::new(expected).unwrap();
+    let json = serde_json::to_value(v).unwrap();
+    assert!((json.as_f64().unwrap() - expected).abs() < f64::EPSILON);
 }
 
 // ========================= Tests: VldBool ====================================
@@ -329,14 +330,14 @@ fn vld_float_serialize() {
 #[test]
 fn vld_bool_valid() {
     let active = VldBool::<ActiveFieldSchema>::new(true).unwrap();
-    assert_eq!(*active, true);
-    assert_eq!(active.get(), true);
+    assert!(*active);
+    assert!(active.get());
 }
 
 #[test]
 fn vld_bool_serialize() {
     let v = VldBool::<ActiveFieldSchema>::new(false).unwrap();
-    let json = serde_json::to_value(&v).unwrap();
+    let json = serde_json::to_value(v).unwrap();
     assert_eq!(json, serde_json::json!(false));
 }
 
@@ -495,7 +496,7 @@ async fn vld_int_encode_decode() {
     let age = VldInt::<AgeFieldSchema>::new(30).unwrap();
 
     sqlx::query("INSERT INTO users (name, email, age) VALUES ('A', 'a@b.com', ?)")
-        .bind(&age)
+        .bind(age)
         .execute(&pool)
         .await
         .unwrap();

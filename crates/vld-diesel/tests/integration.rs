@@ -368,7 +368,7 @@ fn vld_int_unchecked() {
 #[test]
 fn vld_int_serialize() {
     let v = VldInt::<AgeFieldSchema>::new(42).unwrap();
-    let json = serde_json::to_value(&v).unwrap();
+    let json = serde_json::to_value(v).unwrap();
     assert_eq!(json, serde_json::json!(42));
 }
 

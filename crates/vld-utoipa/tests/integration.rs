@@ -228,6 +228,7 @@ fn impl_to_schema_custom_name_schema_works() {
 // ---- derive(Validate) + impl_to_schema! ----
 
 #[derive(Debug, vld::Validate)]
+#[allow(dead_code)]
 struct DeriveUser {
     #[vld(vld::string().min(2).max(50))]
     name: String,
@@ -258,6 +259,7 @@ fn derive_impl_to_schema_name() {
 
 #[derive(Debug, serde::Deserialize, vld::Validate)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct DeriveRenamedRequest {
     #[vld(vld::string().min(1).max(255))]
     first_name: String,
@@ -315,12 +317,12 @@ fn derive_rename_all_camel_case_validation() {
     assert_eq!(req.first_name, "John");
     assert_eq!(req.email_address, "john@example.com");
     assert_eq!(req.street_number, 42);
-    assert_eq!(req.is_active, true);
+    assert!(req.is_active);
 }
 
 #[test]
 fn derive_rename_all_required_uses_camel_case() {
-    let json = serde_json::to_value(&DeriveRenamedRequest::schema()).unwrap();
+    let json = serde_json::to_value(DeriveRenamedRequest::schema()).unwrap();
     let req = json["required"].as_array().unwrap();
     assert!(req.contains(&json!("firstName")));
     assert!(req.contains(&json!("emailAddress")));

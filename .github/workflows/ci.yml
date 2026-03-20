@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  VLD_EXTENDED_FEATURES: chrono,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced
 
 jobs:
   test:
@@ -21,15 +22,15 @@ jobs:
           components: rustfmt, clippy
 
       # ---- Build ----
-      - name: Build workspace (all features)
-        run: cargo build --workspace --all-features
+      - name: Build workspace (default features)
+        run: cargo build --workspace
 
       # ---- Tests: workspace ----
       - name: Test (default features)
         run: cargo test --workspace
 
-      - name: Test (all features)
-        run: cargo test --workspace --all-features
+      - name: Test vld (extended feature set)
+        run: cargo test -p vld --features "${VLD_EXTENDED_FEATURES}"
 
       # ---- Tests: vld core with feature combinations ----
       - name: Test vld (no default features)
@@ -88,8 +89,11 @@ jobs:
         run: cargo test -p vld-clap
 
       # ---- Clippy ----
-      - name: Clippy (workspace, all features)
-        run: cargo clippy --workspace --all-features -- -D warnings
+      - name: Clippy (workspace, default features)
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Clippy vld (extended feature set)
+        run: cargo clippy -p vld --all-targets --features "${VLD_EXTENDED_FEATURES}" -- -D warnings
 
       # ---- Format ----
       - name: Format check

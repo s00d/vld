@@ -165,6 +165,7 @@ fn impl_json_schema_custom_name_schema_works() {
 // ---- derive(Validate) + impl_json_schema! ----
 
 #[derive(Debug, vld::Validate)]
+#[allow(dead_code)]
 struct DeriveUser {
     #[vld(vld::string().min(2).max(50))]
     name: String,
@@ -196,6 +197,7 @@ fn derive_impl_json_schema_name() {
 
 #[derive(Debug, serde::Deserialize, vld::Validate)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct DeriveRenamedRequest {
     #[vld(vld::string().min(1).max(255))]
     first_name: String,

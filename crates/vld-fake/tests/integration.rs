@@ -239,7 +239,7 @@ fn integer_exclusive() {
     for _ in 0..100 {
         let val = fake_value(&schema);
         let n = val.as_i64().unwrap();
-        assert!(n >= 1 && n <= 4, "out of exclusive range: {n}");
+        assert!((1..=4).contains(&n), "out of exclusive range: {n}");
     }
 }
 
@@ -259,7 +259,7 @@ fn number_float() {
     for _ in 0..50 {
         let val = fake_value(&schema);
         let n = val.as_f64().expect("should be number");
-        assert!(n >= 1.0 && n <= 10.0, "out of range: {n}");
+        assert!((1.0..=10.0).contains(&n), "out of range: {n}");
     }
 }
 

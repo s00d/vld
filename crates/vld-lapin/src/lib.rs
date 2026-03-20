@@ -38,7 +38,7 @@ impl LapinChannel {
 
     fn encode_payload<V>(value: &V) -> Result<Vec<u8>, VldLapinError>
     where
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let json =
             serde_json::to_value(value).map_err(|e| VldLapinError::Serialization(e.to_string()))?;
@@ -87,7 +87,7 @@ impl LapinChannel {
         value: &V,
     ) -> Result<lapin::publisher_confirm::Confirmation, VldLapinError>
     where
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let payload = Self::encode_payload(value)?;
 

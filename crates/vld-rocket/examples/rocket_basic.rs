@@ -99,7 +99,7 @@ fn health() -> rocket::serde::json::Json<HealthResponse> {
 // ===========================================================================
 
 #[rocket::main]
-async fn main() -> Result<(), rocket::Error> {
+async fn main() -> Result<(), Box<rocket::Error>> {
     println!("=== vld-rocket example ===");
     println!();
     println!("Routes:");
@@ -137,6 +137,7 @@ async fn main() -> Result<(), rocket::Error> {
             rocket::catchers![vld_rocket::vld_422_catcher, vld_rocket::vld_400_catcher],
         )
         .launch()
-        .await?;
+        .await
+        .map_err(Box::new)?;
     Ok(())
 }

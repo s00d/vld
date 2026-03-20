@@ -73,12 +73,14 @@ impl JsonSchema for crate::primitives::ZBytes {
     }
 }
 
+#[cfg(feature = "decimal")]
 impl JsonSchema for crate::primitives::ZDecimal {
     fn json_schema(&self) -> Value {
         self.to_json_schema()
     }
 }
 
+#[cfg(feature = "net")]
 impl JsonSchema for crate::primitives::ZIpNetwork {
     fn json_schema(&self) -> Value {
         self.to_json_schema()
@@ -97,7 +99,7 @@ impl JsonSchema for crate::primitives::ZJsonValue {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "file")]
 impl JsonSchema for crate::primitives::ZFile {
     fn json_schema(&self) -> Value {
         self.to_json_schema()
@@ -339,13 +341,15 @@ impl CollectNestedSchemas for crate::primitives::ZNumber {}
 impl CollectNestedSchemas for crate::primitives::ZInt {}
 impl CollectNestedSchemas for crate::primitives::ZBoolean {}
 impl CollectNestedSchemas for crate::primitives::ZBytes {}
+#[cfg(feature = "decimal")]
 impl CollectNestedSchemas for crate::primitives::ZDecimal {}
+#[cfg(feature = "net")]
 impl CollectNestedSchemas for crate::primitives::ZIpNetwork {}
 impl CollectNestedSchemas for crate::primitives::ZSocketAddr {}
 impl CollectNestedSchemas for crate::primitives::ZJsonValue {}
 impl CollectNestedSchemas for crate::primitives::ZEnum {}
 impl CollectNestedSchemas for crate::primitives::ZAny {}
-#[cfg(feature = "std")]
+#[cfg(feature = "file")]
 impl CollectNestedSchemas for crate::primitives::ZFile {}
 #[cfg(feature = "std")]
 impl CollectNestedSchemas for crate::primitives::ZDuration {}

@@ -309,7 +309,7 @@ fn vld_int_invalid() {
 #[test]
 fn vld_int_serializes() {
     let age = VldInt::<AgeField>::new(30).unwrap();
-    let json = serde_json::to_value(&age).unwrap();
+    let json = serde_json::to_value(age).unwrap();
     assert_eq!(json, 30);
 }
 
@@ -343,7 +343,7 @@ fn vld_float_invalid() {
 #[test]
 fn vld_float_serializes() {
     let price = VldFloat::<PriceField>::new(19.99).unwrap();
-    let json = serde_json::to_value(&price).unwrap();
+    let json = serde_json::to_value(price).unwrap();
     assert_eq!(json, 19.99);
 }
 
@@ -359,13 +359,13 @@ fn vld_float_deserializes() {
 #[test]
 fn vld_bool_valid() {
     let active = VldBool::<ActiveField>::new(true).unwrap();
-    assert_eq!(*active, true);
+    assert!(*active);
 }
 
 #[test]
 fn vld_bool_serializes() {
     let active = VldBool::<ActiveField>::new(false).unwrap();
-    let json = serde_json::to_value(&active).unwrap();
+    let json = serde_json::to_value(active).unwrap();
     assert_eq!(json, false);
 }
 
@@ -373,7 +373,7 @@ fn vld_bool_serializes() {
 fn vld_bool_deserializes() {
     let json = json!(true);
     let active: VldBool<ActiveField> = serde_json::from_value(json).unwrap();
-    assert_eq!(*active, true);
+    assert!(*active);
 }
 
 // ========================= Error types =======================================
