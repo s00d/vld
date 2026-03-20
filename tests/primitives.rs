@@ -374,6 +374,9 @@ fn decimal_basic() {
 #[cfg(feature = "std")]
 #[test]
 fn duration_and_path_basic() {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     let d = vld::duration().min_secs(1).max_secs(10);
     assert_eq!(d.parse_value(&json!("PT5S")).unwrap().as_secs(), 5);
     assert_eq!(d.parse_value(&json!(3)).unwrap().as_secs(), 3);
@@ -383,8 +386,23 @@ fn duration_and_path_basic() {
     assert!(p.parse_value(&json!("src/lib.rs")).is_ok());
     assert!(p.parse_value(&json!("/tmp")).is_err());
 
-    let p2 = vld::path().within(std::env::temp_dir());
-    assert!(p2.parse_value(&json!("../outside")).is_err());
+    // Use explicit absolute paths to avoid CI-dependent relative path behavior.
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let base_dir = std::env::temp_dir().join(format!("vld-path-base-{unique}"));
+    let outside_dir = std::env::temp_dir().join(format!("vld-path-outside-{unique}"));
+    fs::create_dir_all(&base_dir).unwrap();
+    fs::create_dir_all(&outside_dir).unwrap();
+
+    let p2 = vld::path().within(base_dir.clone());
+    assert!(p2
+        .parse_value(&json!(outside_dir.to_string_lossy().to_string()))
+        .is_err());
+
+    let _ = fs::remove_dir_all(base_dir);
+    let _ = fs::remove_dir_all(outside_dir);
 }
 
 #[cfg(feature = "net")]
