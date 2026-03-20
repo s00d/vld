@@ -1,5 +1,5 @@
 use serde_json::json;
-use vld::prelude::*;
+use vld_surrealdb::prelude::VldSchema;
 use vld_surrealdb::*;
 
 // ========================= Schemas ===========================================

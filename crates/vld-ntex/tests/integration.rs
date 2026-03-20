@@ -1,5 +1,5 @@
 use ntex::web::{self, test, App, HttpResponse};
-use vld::prelude::*;
+use vld_ntex::prelude::VldSchema;
 use vld_ntex::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 
 // ===========================================================================
