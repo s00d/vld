@@ -5,132 +5,145 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-03-19
+
+## [0.3.0] - 2026-03-20
+
+
 
 ### Added
 
-- **New integration crates**:
-  - `vld-tonic` — tonic gRPC validation integration.
-  - `vld-leptos` — Leptos shared server/WASM validation integration.
-  - `vld-sqlx` — SQLx validation integration.
-  - `vld-dioxus` — Dioxus shared server/WASM validation integration.
-  - `vld-ntex` — ntex web framework integration.
-  - `vld-surrealdb` — SurrealDB JSON document validation integration.
-  - `vld-aide` — aide/schemars integration for OpenAPI generation.
-  - `vld-schemars` — bidirectional bridge between `vld` and `schemars`.
-- **`vld-schemars` reverse direction** — support conversion from `schemars` schemas to `vld` validation.
-- **Nested schema auto-registration**:
-  - in `vld` for OpenAPI generation;
-  - in `vld-utoipa` for OpenAPI components;
-  - in `vld-aide` and `vld-schemars` for schemars definitions.
-- **`$ref` generation support** in schema output paths.
+
+- Add native vld transport integrations
+
+- Add bytes schema and stricter datetime validation
+
+- Add timezone-aware datetime and file schema validation
+
+- Extend file storage access and refresh formatting
+
+- Add advanced typed schemas and cross-crate format support
+
 
 ### Changed
 
-- **`vld-schemars` API refactor** — replaced standalone functions with macro/trait-based API.
-- Workspace docs and registration updated for all newly added crates.
+
+- Simplify Zod/Valibot generation API
+
+- Remove unused full-file generation internals
+
+- Gate heavy validators behind opt-in features
+
 
 ### Fixed
 
-- Formatting, clippy warnings, and missing imports across the workspace.
-- Collection-related dead-code warning handling improvements.
+
+- Run per-crate preflight safely
+
+- Satisfy strict clippy assertions
+
+- Replace approximate float constant in test
+
+- Keep float coercion expectation exact
+
+- Remove unused prelude imports
+
+- Remove unused prelude imports
+
+- Remove unused VldSchema import in tests
+
+- Align prelude trait imports for optional combinators
+
+- Stabilize clippy around optional combinator trait imports
+
+
+### chore
+
+
+- Automate changelog generation with git-cliff
+
+
+## [0.2.0] - 2026-03-19
+
+
+
+### Added
+
+
+- Add tonic gRPC integration for vld validation
+
+- Add Leptos integration for shared server/WASM validation
+
+- Add SQLx integration for vld validation
+
+- Add Dioxus integration for shared server/WASM validation
+
+- Add ntex web framework integration
+
+- Add aide/schemars integration for OpenAPI generation
+
+- Add SurrealDB integration for JSON document validation
+
+- Add bidirectional bridge between vld and schemars
+
+- Add reverse direction — schemars → vld validation
+
+- Add nested schema auto-registration for OpenAPI
+
+- Auto-register nested schemas in utoipa components
+
+- Auto-register nested schemas in schemars definitions
+
+
+### Changed
+
+
+- Replace standalone functions with macro+trait API
+
+- Add nested schema auto-registration section to README
+
+- Add dead code allowance for unused schema methods
+
+
+### Fixed
+
+
+- Formatting, clippy warnings, and missing imports across workspace
+
+
+### chore
+
+
+- Register vld-tonic and vld-leptos in workspace, update root README
+
+- Register vld-sqlx in workspace, update root README
+
+- Register vld-dioxus in workspace, update root README
+
+- Register vld-ntex in workspace, update root README
+
+- Register vld-aide in workspace, update root README
+
+- Register vld-surrealdb in workspace, update root README
+
+- Register vld-schemars in workspace, update root README
+
 
 ## [0.1.3] - 2026-03-19
 
-### Added
 
-- **`vld-derive` + `vld-utoipa` integration** — `#[derive(Validate)]` now generates `json_schema()` and `to_openapi_document()` methods when the `openapi` feature is enabled. This allows `impl_to_schema!` from `vld-utoipa` to work with derive-based structs, including full `#[serde(rename_all = "camelCase")]` support. ([#1](https://github.com/s00d/vld/issues/1))
-
-### Fixed
-
-- Removed `.idea/` directory from git tracking.
-
-## [0.1.1] - 2026-02-11
 
 ### Added
 
-- **`vld-fake`** — new crate: generate fake / test data from `vld` JSON Schemas.
-  - Typed API: `impl_fake!(User)` → `User::fake()`, `User::fake_many(n)`, `User::fake_seeded(seed)`, `User::try_fake()`.
-  - Low-level API: `fake_value()`, `fake_json()`, `fake_many()`, `fake_parsed::<T>()`, `fake_value_seeded()`.
-  - 20+ string formats: email, uuid, url, ipv4, ipv6, hostname, date, time, date-time, base64, cuid2, ulid, nanoid, emoji, phone, credit-card, mac-address, hex-color, semver, slug.
-  - Smart field-name heuristics (~60 patterns): `name` → realistic full name, `email` → first.last@domain, `phone` → +1 (555) 123-4567, `city` → real city name, `id` → UUID, etc.
-  - Object templates for empty `{"type":"object"}` schemas: address, geo, person, profile, company, product, money, image, config, metadata, dimensions.
-  - Number heuristics: latitude/longitude, price, rating, temperature, percentage, weight, speed, distance.
-  - Built-in dictionaries: first/last names, cities, countries, states, streets, companies, departments, job titles, adjectives, product nouns, categories, tags, industries, email domains, TLDs, colors, currencies, locales, timezones, emojis, lorem words.
-  - Reproducible generation via seeded RNG (`StdRng`).
-  - `uniqueItems` support for arrays.
-  - Luhn-valid credit card numbers, valid ISBN-13.
-  - `FakeGen<R: Rng>` for custom RNG.
-- **`vld-salvo`** — new crate: [Salvo](https://salvo.rs/) web framework integration.
-  - Extractor types: `VldJson<T>`, `VldQuery<T>`, `VldPath<T>`, `VldForm<T>`, `VldHeaders<T>`, `VldCookie<T>`.
-  - Implements Salvo's `Extractible` trait — used directly as `#[handler]` parameter types.
-  - `VldSalvoError` with `salvo::Writer` impl for 422 JSON error responses.
-  - `Deref`/`DerefMut` on all wrappers for direct field access.
-- **`vld-tauri`** — new crate: [Tauri](https://tauri.app/) IPC validation.
-  - `validate::<T>(payload)` for explicit validation of IPC command arguments.
-  - `VldPayload<T>` / `VldEvent<T>` — auto-validating `Deserialize` wrappers.
-  - Specialized functions: `validate_event`, `validate_state`, `validate_plugin_config`, `validate_channel_message`.
-  - `VldTauriError` — serializable error type for frontend.
-  - Zero dependency on `tauri` crate.
-- **`vld-http-common`** — shared HTTP helpers extracted from web integration crates.
-  - `coerce_value()`, `parse_query_string()`, `cookies_to_json()`, `url_decode()`.
-  - `vld::schema!` defined error response types: `ErrorBody`, `ErrorWithMessage`, `ValidationErrorBody`, `ValidationIssue`, `ValidationIssueWithCode`.
-  - Error formatting helpers: `format_vld_error()`, `format_json_parse_error()`, `format_utf8_error()`, `format_payload_too_large()`, `format_generic_error()`.
-- **`vld-warp`**: path parameter validation — `vld_param()`, `vld_path()`, `validate_path_params()`.
-- **`string().coerce()`**: coerce numbers/booleans to string.
-- **`ZDate` / `ZDateTime`** types with `chrono` parsing (optional `chrono` feature).
-- **`ZMessage<T>`** combinator for custom error messages.
-- **`ZObject::field_optional()`** / **`ZObject::when()`** for conditional validation.
-- **`MessageResolver`** trait for i18n of error messages.
-- **`SchemaDiff` / `diff_schemas`** for comparing JSON Schemas (optional `diff` feature).
-- **`impl_default!`** macro for `Default` implementations on `schema!` structs.
-- **`#[serde(rename)]` / `rename_all`** support in derive macro.
-- **Property-based tests** with `proptest`.
-- **`--no-default-features` CI tests**.
-- Root README describing all workspace crates.
-- Badges on all README files.
 
-### Changed
+- Add health check endpoint and response schemas
 
-- All web integration crates (`vld-axum`, `vld-actix`, `vld-poem`, `vld-rocket`, `vld-warp`, `vld-tower`) now use `vld-http-common` for shared helpers instead of duplicating code.
-- All inline `serde_json::json!` error responses replaced with `vld` schema-based types from `vld-http-common`.
-- All example responses in web crates use `vld::schema!` structs instead of raw `serde_json::json!`.
-- `vld-clap`: redesigned to use `#[derive(Validate)]` directly on `clap::Parser` structs.
-- All sub-crates moved into `crates/` subdirectory.
-- Tests moved to `tests/` folders in all crates.
-- CI: removed Rust 1.70 matrix entry (Cargo.lock v4 incompatibility).
+- Generate json_schema() for derive(Validate), enabling utoipa integration
 
-### Fixed
 
-- `VldInput` for `Path` gated behind `std` feature.
-- `parse_result_save_to_file` test gated behind `serialize + std`.
-- `unused import` warnings with `--no-default-features`.
-- crates.io publishing: batched publishing guide for rate limits.
+### chore
 
-## [0.1.0] - 2026-02-11
 
-### Added
+- Bump workspace version to 0.1.2
 
-- Core validation trait `VldSchema` with `parse()`, `parse_value()`, `validate()`, `is_valid()`.
-- **Primitives**: `string()`, `number()`, `boolean()`, `literal()`, `enumeration()`, `any()`.
-- **String formats**: email, URL, UUID, IPv4, IPv6, Base64, ISO date/time/datetime, hostname, CUID2, ULID, Nano ID, emoji. All without regex by default.
-- **Number checks**: min, max, gt, lt, positive, negative, non_negative, non_positive, finite, multiple_of, safe, int.
-- **Collections**: `array()`, `record()`, `map()`, `set()`, tuple schemas (up to 6 elements).
-- **Modifiers**: `optional()`, `nullable()`, `nullish()`, `with_default()`, `catch()`.
-- **Combinators**: `refine()`, `super_refine()`, `transform()`, `pipe()`, `preprocess()`, `describe()`, `.or()`, `.and()`.
-- **Unions**: `union()`, `union3()`, `union!` macro (2–6 schemas), `discriminated_union()`, `intersection()`.
-- **Recursive schemas**: `lazy()` for self-referencing data structures.
-- **Dynamic objects**: `ZObject` with `strict()`, `strip()`, `passthrough()`, `pick()`, `omit()`, `extend()`, `merge()`, `partial()`, `required()`, `catchall()`, `keyof()`.
-- **Custom schemas**: `vld::custom(|v| ...)` for arbitrary validation logic.
-- **Multiple input sources**: parse from `&str`, `String`, `&[u8]`, `Path`, `PathBuf`, `serde_json::Value`.
-- **Macros**: `schema!`, `impl_validate_fields!`, `schema_validated!`, `impl_rules!`.
-- **Derive macro**: `#[derive(Validate)]` with `#[vld(...)]` attributes (optional `derive` feature).
-- **Lenient parsing**: `parse_lenient()` returns `ParseResult<T>` with per-field diagnostics.
-- **Error formatting**: `prettify_error()`, `flatten_error()`, `treeify_error()`.
-- **Custom error messages**: `_msg` variants, `type_error()`, `int_error()`, `with_messages()`.
-- **Coercion**: `coerce()` on `ZNumber` and `ZBoolean`.
-- **JSON Schema / OpenAPI 3.1**: `JsonSchema` trait, `json_schema()`, `to_openapi_document()`, `to_openapi_document_multi()` (optional `openapi` feature).
-- **Feature flags**: `serialize`, `deserialize`, `openapi`, `regex`, `derive` — all disabled by default.
-- **Workspace**: playground example as a separate crate with all features enabled.
-- **Benchmarks**: criterion-based validation benchmarks.
-- **CI**: GitHub Actions workflow for testing, clippy, and formatting.
+- Remove .idea/ from git tracking
+
