@@ -8,7 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  VLD_EXTENDED_FEATURES: chrono,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced
 
 jobs:
   test:
@@ -21,84 +20,5 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      # ---- Build ----
-      - name: Build workspace (default features)
-        run: cargo build --workspace
-
-      # ---- Tests: workspace ----
-      - name: Test (default features)
-        run: cargo test --workspace
-
-      - name: Test vld (extended feature set)
-        run: cargo test -p vld --features "${VLD_EXTENDED_FEATURES}"
-
-      # ---- Tests: vld core with feature combinations ----
-      - name: Test vld (no default features)
-        run: cargo test -p vld --no-default-features
-
-      - name: Test vld (serialize only)
-        run: cargo test -p vld --no-default-features --features serialize
-
-      - name: Test vld (openapi only)
-        run: cargo test -p vld --no-default-features --features openapi
-
-      - name: Test vld (diff only)
-        run: cargo test -p vld --no-default-features --features diff
-
-      - name: Test vld (serialize + openapi + diff)
-        run: cargo test -p vld --no-default-features --features "serialize,openapi,diff"
-
-      # ---- Tests: individual crates ----
-      - name: Test vld-derive
-        run: cargo test -p vld-derive
-
-      - name: Test vld-axum
-        run: cargo test -p vld-axum
-
-      - name: Test vld-actix
-        run: cargo test -p vld-actix
-
-      - name: Test vld-ts
-        run: cargo test -p vld-ts
-
-      - name: Test vld-diesel
-        run: cargo test -p vld-diesel
-
-      - name: Test vld-utoipa
-        run: cargo test -p vld-utoipa
-
-      - name: Test vld-config (all features)
-        run: cargo test -p vld-config --all-features
-
-      - name: Test vld-tower
-        run: cargo test -p vld-tower
-
-      - name: Test vld-rocket
-        run: cargo test -p vld-rocket
-
-      - name: Test vld-poem
-        run: cargo test -p vld-poem
-
-      - name: Test vld-warp
-        run: cargo test -p vld-warp
-
-      - name: Test vld-sea
-        run: cargo test -p vld-sea
-
-      - name: Test vld-clap
-        run: cargo test -p vld-clap
-
-      # ---- Clippy ----
-      - name: Clippy (workspace, default features)
-        run: cargo clippy --workspace -- -D warnings
-
-      - name: Clippy vld (extended feature set)
-        run: cargo clippy -p vld --all-targets --features "${VLD_EXTENDED_FEATURES}" -- -D warnings
-
-      # ---- Format ----
-      - name: Format check
-        run: cargo fmt --all --check
-
-      # ---- Playground example ----
-      - name: Run playground example
-        run: cargo run -p playground
+      - name: Run unified CI script
+        run: bash ./scripts/ci-all.sh
