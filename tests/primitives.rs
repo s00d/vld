@@ -176,15 +176,15 @@ fn int_validation() {
 #[test]
 fn boolean_basic() {
     let b = vld::boolean();
-    assert_eq!(b.parse_value(&json!(true)).unwrap(), true);
+    assert!(b.parse_value(&json!(true)).unwrap());
     assert!(b.parse_value(&json!("true")).is_err());
 }
 
 #[test]
 fn boolean_coerce() {
     let b = vld::boolean().coerce();
-    assert_eq!(b.parse_value(&json!("true")).unwrap(), true);
-    assert_eq!(b.parse_value(&json!(0)).unwrap(), false);
+    assert!(b.parse_value(&json!("true")).unwrap());
+    assert!(!b.parse_value(&json!(0)).unwrap());
 }
 
 // === Literal ===
@@ -206,7 +206,7 @@ fn literal_int() {
 #[test]
 fn literal_bool() {
     let l = vld::literal(true);
-    assert_eq!(l.parse_value(&json!(true)).unwrap(), true);
+    assert!(l.parse_value(&json!(true)).unwrap());
     assert!(l.parse_value(&json!(false)).is_err());
 }
 

@@ -1,5 +1,6 @@
 use serde_json::json;
 use vld::prelude::*;
+use std::f64::consts::PI;
 
 #[test]
 fn array_basic() {
@@ -34,8 +35,8 @@ fn tuple2() {
 #[test]
 fn tuple3() {
     let schema = (vld::string(), vld::number(), vld::boolean());
-    let result = schema.parse_value(&json!(["hi", 3.14, true])).unwrap();
-    assert_eq!(result, ("hi".to_string(), 3.14, true));
+    let result = schema.parse_value(&json!(["hi", PI, true])).unwrap();
+    assert_eq!(result, ("hi".to_string(), PI, true));
 }
 
 #[test]
