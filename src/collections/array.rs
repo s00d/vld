@@ -18,6 +18,10 @@ pub struct ZArray<T: VldSchema> {
     min_len: Option<usize>,
     max_len: Option<usize>,
     exact_len: Option<usize>,
+    contains: Option<serde_json::Value>,
+    min_contains: Option<usize>,
+    max_contains: Option<usize>,
+    unique: bool,
 }
 
 impl<T: VldSchema> ZArray<T> {
@@ -27,6 +31,10 @@ impl<T: VldSchema> ZArray<T> {
             min_len: None,
             max_len: None,
             exact_len: None,
+            contains: None,
+            min_contains: None,
+            max_contains: None,
+            unique: false,
         }
     }
 
@@ -51,6 +59,30 @@ impl<T: VldSchema> ZArray<T> {
     /// Alias for `min_len(1)` — array must not be empty.
     pub fn non_empty(self) -> Self {
         self.min_len(1)
+    }
+
+    /// Require the array to contain this JSON value.
+    pub fn contains(mut self, value: impl Into<serde_json::Value>) -> Self {
+        self.contains = Some(value.into());
+        self
+    }
+
+    /// Require at least this many matches of the `contains(...)` value.
+    pub fn min_contains(mut self, n: usize) -> Self {
+        self.min_contains = Some(n);
+        self
+    }
+
+    /// Require at most this many matches of the `contains(...)` value.
+    pub fn max_contains(mut self, n: usize) -> Self {
+        self.max_contains = Some(n);
+        self
+    }
+
+    /// Require all array items to be unique (by raw JSON equality).
+    pub fn unique(mut self) -> Self {
+        self.unique = true;
+        self
     }
 
     #[allow(dead_code)]
@@ -79,6 +111,18 @@ impl<T: VldSchema> ZArray<T> {
         if let Some(exact) = self.exact_len {
             schema["minItems"] = serde_json::json!(exact);
             schema["maxItems"] = serde_json::json!(exact);
+        }
+        if let Some(ref contains) = self.contains {
+            schema["contains"] = contains.clone();
+        }
+        if let Some(min_contains) = self.min_contains {
+            schema["minContains"] = serde_json::json!(min_contains);
+        }
+        if let Some(max_contains) = self.max_contains {
+            schema["maxContains"] = serde_json::json!(max_contains);
+        }
+        if self.unique {
+            schema["uniqueItems"] = serde_json::json!(true);
         }
         schema
     }
@@ -133,6 +177,62 @@ impl<T: VldSchema> VldSchema for ZArray<T> {
                     },
                     format!("Array must have exactly {} elements", exact),
                 );
+            }
+        }
+
+        if self.unique {
+            for i in 0..arr.len() {
+                for j in (i + 1)..arr.len() {
+                    if arr[i] == arr[j] {
+                        errors.push(
+                            IssueCode::Custom {
+                                code: "not_unique".to_string(),
+                            },
+                            "Array items must be unique",
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+
+        if let Some(ref contains) = self.contains {
+            let count = arr.iter().filter(|v| *v == contains).count();
+            if count == 0 {
+                errors.push(
+                    IssueCode::Custom {
+                        code: "missing_contains".to_string(),
+                    },
+                    "Array must contain required value",
+                );
+            }
+            if let Some(min_contains) = self.min_contains {
+                if count < min_contains {
+                    errors.push(
+                        IssueCode::TooSmall {
+                            minimum: min_contains as f64,
+                            inclusive: true,
+                        },
+                        format!(
+                            "Array must contain required value at least {} time(s)",
+                            min_contains
+                        ),
+                    );
+                }
+            }
+            if let Some(max_contains) = self.max_contains {
+                if count > max_contains {
+                    errors.push(
+                        IssueCode::TooBig {
+                            maximum: max_contains as f64,
+                            inclusive: true,
+                        },
+                        format!(
+                            "Array must contain required value at most {} time(s)",
+                            max_contains
+                        ),
+                    );
+                }
             }
         }
 

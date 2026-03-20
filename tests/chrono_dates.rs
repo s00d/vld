@@ -65,6 +65,15 @@ fn date_min_max_combined() {
     assert!(schema.parse(r#""2025-01-01""#).is_err());
 }
 
+#[test]
+fn date_past_future() {
+    let past = vld::date().past();
+    assert!(past.parse(r#""1900-01-01""#).is_ok());
+
+    let future = vld::date().future();
+    assert!(future.parse(r#""2999-01-01""#).is_ok());
+}
+
 // ---------------------------------------------------------------------------
 // ZDateTime
 // ---------------------------------------------------------------------------
@@ -110,6 +119,31 @@ fn datetime_type_error() {
     let schema = vld::datetime().type_error("Datetime required!");
     let err = schema.parse("null").unwrap_err();
     assert_eq!(err.issues[0].message, "Datetime required!");
+}
+
+#[test]
+fn datetime_min_max_constraints() {
+    let schema = vld::datetime()
+        .min("2024-01-01T00:00:00Z")
+        .max("2024-12-31T23:59:59Z");
+    assert!(schema.parse(r#""2024-06-15T12:00:00Z""#).is_ok());
+    assert!(schema.parse(r#""2023-12-31T23:59:59Z""#).is_err());
+    assert!(schema.parse(r#""2025-01-01T00:00:00Z""#).is_err());
+}
+
+#[test]
+fn datetime_past_future() {
+    let past = vld::datetime().past();
+    assert!(past.parse(r#""2000-01-01T00:00:00Z""#).is_ok());
+    let future = vld::datetime().future();
+    assert!(future.parse(r#""2999-01-01T00:00:00Z""#).is_ok());
+}
+
+#[test]
+fn datetime_with_timezone_only_rejects_naive() {
+    let strict = vld::datetime().with_timezone_only();
+    assert!(strict.parse(r#""2024-06-15T12:30:00Z""#).is_ok());
+    assert!(strict.parse(r#""2024-06-15T12:30:00""#).is_err());
 }
 
 // ---------------------------------------------------------------------------

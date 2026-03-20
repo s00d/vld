@@ -22,6 +22,18 @@ fn array_element_validation() {
 }
 
 #[test]
+fn array_contains_unique_and_counts() {
+    let a = vld::array(vld::number().int())
+        .contains(json!(2))
+        .min_contains(2)
+        .max_contains(3)
+        .unique();
+    assert!(a.parse_value(&json!([1, 2, 2])).is_err()); // unique fails
+    assert!(a.parse_value(&json!([1, 2])).is_err()); // min_contains fails
+    assert!(a.parse_value(&json!([1, 2, 2, 2, 2])).is_err()); // max_contains + unique fail
+}
+
+#[test]
 fn tuple2() {
     let schema = (vld::string(), vld::number().int());
     assert_eq!(

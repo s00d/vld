@@ -20,6 +20,8 @@ use crate::schema::VldSchema;
 pub struct ZDate {
     min: Option<(chrono::NaiveDate, String)>,
     max: Option<(chrono::NaiveDate, String)>,
+    past: Option<String>,
+    future: Option<String>,
     custom_type_error: Option<String>,
 }
 
@@ -28,6 +30,8 @@ impl ZDate {
         Self {
             min: None,
             max: None,
+            past: None,
+            future: None,
             custom_type_error: None,
         }
     }
@@ -63,6 +67,28 @@ impl ZDate {
     pub fn max_date(mut self, date: chrono::NaiveDate) -> Self {
         let msg = format!("Date must be on or before {}", date);
         self.max = Some((date, msg));
+        self
+    }
+
+    /// Date must be in the past (before today).
+    pub fn past(self) -> Self {
+        self.past_msg("Date must be in the past")
+    }
+
+    /// Date must be in the past (before today), with custom message.
+    pub fn past_msg(mut self, msg: impl Into<String>) -> Self {
+        self.past = Some(msg.into());
+        self
+    }
+
+    /// Date must be in the future (after today).
+    pub fn future(self) -> Self {
+        self.future_msg("Date must be in the future")
+    }
+
+    /// Date must be in the future (after today), with custom message.
+    pub fn future_msg(mut self, msg: impl Into<String>) -> Self {
+        self.future = Some(msg.into());
         self
     }
 
@@ -136,6 +162,29 @@ impl VldSchema for ZDate {
                 );
             }
         }
+        let today = chrono::Utc::now().date_naive();
+        if let Some(msg) = &self.past {
+            if date >= today {
+                errors.push_with_value(
+                    IssueCode::Custom {
+                        code: "not_past_date".to_string(),
+                    },
+                    msg.clone(),
+                    value,
+                );
+            }
+        }
+        if let Some(msg) = &self.future {
+            if date <= today {
+                errors.push_with_value(
+                    IssueCode::Custom {
+                        code: "not_future_date".to_string(),
+                    },
+                    msg.clone(),
+                    value,
+                );
+            }
+        }
 
         if errors.is_empty() {
             Ok(date)
@@ -164,12 +213,22 @@ impl VldSchema for ZDate {
 /// ```
 #[derive(Clone)]
 pub struct ZDateTime {
+    min: Option<(chrono::DateTime<chrono::Utc>, String)>,
+    max: Option<(chrono::DateTime<chrono::Utc>, String)>,
+    past: Option<String>,
+    future: Option<String>,
+    allow_naive: bool,
     custom_type_error: Option<String>,
 }
 
 impl ZDateTime {
     pub fn new() -> Self {
         Self {
+            min: None,
+            max: None,
+            past: None,
+            future: None,
+            allow_naive: true,
             custom_type_error: None,
         }
     }
@@ -178,6 +237,71 @@ impl ZDateTime {
     pub fn type_error(mut self, msg: impl Into<String>) -> Self {
         self.custom_type_error = Some(msg.into());
         self
+    }
+
+    /// Minimum datetime (inclusive). Accepts RFC3339.
+    pub fn min(self, dt: &str) -> Self {
+        let parsed = chrono::DateTime::parse_from_rfc3339(dt)
+            .unwrap_or_else(|_| panic!("Invalid datetime literal: {}", dt))
+            .with_timezone(&chrono::Utc);
+        self.min_datetime(parsed)
+    }
+
+    /// Minimum datetime (inclusive) from a UTC datetime.
+    pub fn min_datetime(mut self, dt: chrono::DateTime<chrono::Utc>) -> Self {
+        let msg = format!("Datetime must be on or after {}", dt.to_rfc3339());
+        self.min = Some((dt, msg));
+        self
+    }
+
+    /// Maximum datetime (inclusive). Accepts RFC3339.
+    pub fn max(self, dt: &str) -> Self {
+        let parsed = chrono::DateTime::parse_from_rfc3339(dt)
+            .unwrap_or_else(|_| panic!("Invalid datetime literal: {}", dt))
+            .with_timezone(&chrono::Utc);
+        self.max_datetime(parsed)
+    }
+
+    /// Maximum datetime (inclusive) from a UTC datetime.
+    pub fn max_datetime(mut self, dt: chrono::DateTime<chrono::Utc>) -> Self {
+        let msg = format!("Datetime must be on or before {}", dt.to_rfc3339());
+        self.max = Some((dt, msg));
+        self
+    }
+
+    /// Datetime must be in the past.
+    pub fn past(self) -> Self {
+        self.past_msg("Datetime must be in the past")
+    }
+
+    /// Datetime must be in the past, with custom message.
+    pub fn past_msg(mut self, msg: impl Into<String>) -> Self {
+        self.past = Some(msg.into());
+        self
+    }
+
+    /// Datetime must be in the future.
+    pub fn future(self) -> Self {
+        self.future_msg("Datetime must be in the future")
+    }
+
+    /// Datetime must be in the future, with custom message.
+    pub fn future_msg(mut self, msg: impl Into<String>) -> Self {
+        self.future = Some(msg.into());
+        self
+    }
+
+    /// Allow or disallow naive datetime input without timezone.
+    ///
+    /// Default is `true` for backward compatibility.
+    pub fn naive_allowed(mut self, allowed: bool) -> Self {
+        self.allow_naive = allowed;
+        self
+    }
+
+    /// Strict mode: require timezone in datetime input (RFC3339).
+    pub fn with_timezone_only(self) -> Self {
+        self.naive_allowed(false)
     }
 
     /// Generate a JSON Schema representation.
@@ -216,25 +340,86 @@ impl VldSchema for ZDateTime {
 
         use chrono::TimeZone;
 
-        // Try RFC 3339 / ISO 8601 with timezone
-        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
-            return Ok(dt.with_timezone(&chrono::Utc));
-        }
-
-        // Try common ISO format without timezone (assume UTC)
-        if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
-            return Ok(chrono::Utc.from_utc_datetime(&ndt));
-        }
-        if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f") {
-            return Ok(chrono::Utc.from_utc_datetime(&ndt));
-        }
-
-        Err(VldError::single_with_value(
+        let dt = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+            dt.with_timezone(&chrono::Utc)
+        } else if self.allow_naive {
+            if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
+                chrono::Utc.from_utc_datetime(&ndt)
+            } else if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f")
+            {
+                chrono::Utc.from_utc_datetime(&ndt)
+            } else {
+                return Err(VldError::single_with_value(
+                    IssueCode::Custom {
+                        code: "invalid_datetime".to_string(),
+                    },
+                    format!("Invalid datetime format: \"{}\"", s),
+                    value,
+                ));
+            }
+        } else {
+            return Err(VldError::single_with_value(
             IssueCode::Custom {
                 code: "invalid_datetime".to_string(),
             },
             format!("Invalid datetime format: \"{}\"", s),
             value,
-        ))
+        ));
+        };
+
+        let mut errors = VldError::new();
+        if let Some((min_dt, msg)) = &self.min {
+            if dt < *min_dt {
+                errors.push_with_value(
+                    IssueCode::TooSmall {
+                        minimum: 0.0,
+                        inclusive: true,
+                    },
+                    msg.clone(),
+                    value,
+                );
+            }
+        }
+        if let Some((max_dt, msg)) = &self.max {
+            if dt > *max_dt {
+                errors.push_with_value(
+                    IssueCode::TooBig {
+                        maximum: 0.0,
+                        inclusive: true,
+                    },
+                    msg.clone(),
+                    value,
+                );
+            }
+        }
+        let now = chrono::Utc::now();
+        if let Some(msg) = &self.past {
+            if dt >= now {
+                errors.push_with_value(
+                    IssueCode::Custom {
+                        code: "not_past_datetime".to_string(),
+                    },
+                    msg.clone(),
+                    value,
+                );
+            }
+        }
+        if let Some(msg) = &self.future {
+            if dt <= now {
+                errors.push_with_value(
+                    IssueCode::Custom {
+                        code: "not_future_datetime".to_string(),
+                    },
+                    msg.clone(),
+                    value,
+                );
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(dt)
+        } else {
+            Err(errors)
+        }
     }
 }

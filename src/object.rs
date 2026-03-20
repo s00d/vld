@@ -116,6 +116,8 @@ pub struct ZObject {
     unknown_mode: UnknownFieldMode,
     catchall_schema: Option<Box<dyn DynSchema>>,
     conditional_rules: Vec<ConditionalRule>,
+    min_keys: Option<usize>,
+    max_keys: Option<usize>,
 }
 
 impl ZObject {
@@ -125,6 +127,8 @@ impl ZObject {
             unknown_mode: UnknownFieldMode::Strip,
             catchall_schema: None,
             conditional_rules: vec![],
+            min_keys: None,
+            max_keys: None,
         }
     }
 
@@ -310,6 +314,18 @@ impl ZObject {
         self
     }
 
+    /// Require at least this many keys in the input object.
+    pub fn min_keys(mut self, n: usize) -> Self {
+        self.min_keys = Some(n);
+        self
+    }
+
+    /// Require at most this many keys in the input object.
+    pub fn max_keys(mut self, n: usize) -> Self {
+        self.max_keys = Some(n);
+        self
+    }
+
     /// Make all fields optional recursively.
     ///
     /// Currently equivalent to [`partial()`](Self::partial) — nested objects
@@ -346,6 +362,12 @@ impl ZObject {
         if let Some(ref catchall) = self.catchall_schema {
             schema["additionalProperties"] = catchall.dyn_json_schema();
         }
+        if let Some(min) = self.min_keys {
+            schema["minProperties"] = serde_json::json!(min);
+        }
+        if let Some(max) = self.max_keys {
+            schema["maxProperties"] = serde_json::json!(max);
+        }
         schema
     }
 }
@@ -372,6 +394,29 @@ impl VldSchema for ZObject {
 
         let mut result = Map::new();
         let mut errors = VldError::new();
+
+        if let Some(min) = self.min_keys {
+            if obj.len() < min {
+                errors.push(
+                    IssueCode::TooSmall {
+                        minimum: min as f64,
+                        inclusive: true,
+                    },
+                    format!("Object must contain at least {} keys", min),
+                );
+            }
+        }
+        if let Some(max) = self.max_keys {
+            if obj.len() > max {
+                errors.push(
+                    IssueCode::TooBig {
+                        maximum: max as f64,
+                        inclusive: true,
+                    },
+                    format!("Object must contain at most {} keys", max),
+                );
+            }
+        }
 
         // Validate defined fields
         for field in &self.fields {

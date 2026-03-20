@@ -138,6 +138,35 @@ fn string_url() {
     assert!(s.parse_value(&json!("ftp://example.com")).is_err());
 }
 
+#[test]
+fn string_extra_validators() {
+    assert!(vld::string().ip().parse_value(&json!("127.0.0.1")).is_ok());
+    assert!(vld::string().cidr().parse_value(&json!("10.0.0.0/24")).is_ok());
+    assert!(vld::string()
+        .mac()
+        .parse_value(&json!("aa:bb:cc:dd:ee:ff"))
+        .is_ok());
+    assert!(vld::string().hex().parse_value(&json!("deadBEEF")).is_ok());
+    assert!(vld::string()
+        .credit_card()
+        .parse_value(&json!("4111111111111111"))
+        .is_ok());
+    assert!(vld::string().phone().parse_value(&json!("+14155552671")).is_ok());
+    assert!(vld::string().semver().parse_value(&json!("1.2.3")).is_ok());
+    assert!(vld::string()
+        .jwt()
+        .parse_value(&json!("aaaa.bbbb.cccc"))
+        .is_ok());
+    assert!(vld::string().ascii().parse_value(&json!("hello")).is_ok());
+    assert!(vld::string().alpha().parse_value(&json!("Hello")).is_ok());
+    assert!(vld::string()
+        .alphanumeric()
+        .parse_value(&json!("abc123"))
+        .is_ok());
+    assert!(vld::string().lowercase().parse_value(&json!("hello")).is_ok());
+    assert!(vld::string().uppercase().parse_value(&json!("HELLO")).is_ok());
+}
+
 // === Number ===
 
 #[test]
@@ -169,6 +198,14 @@ fn int_validation() {
     assert_eq!(n.parse_value(&json!(42)).unwrap(), 42);
     assert!(n.parse_value(&json!(42.5)).is_err());
     assert!(n.parse_value(&json!(-1)).is_err());
+}
+
+#[test]
+fn int_non_positive() {
+    let n = vld::number().int().non_positive();
+    assert!(n.parse_value(&json!(0)).is_ok());
+    assert!(n.parse_value(&json!(-3)).is_ok());
+    assert!(n.parse_value(&json!(1)).is_err());
 }
 
 // === Boolean ===
@@ -228,6 +265,24 @@ fn any_basic() {
     assert_eq!(a.parse_value(&json!("hello")).unwrap(), json!("hello"));
     assert_eq!(a.parse_value(&json!(42)).unwrap(), json!(42));
     assert_eq!(a.parse_value(&json!(null)).unwrap(), json!(null));
+}
+
+// === Bytes ===
+
+#[test]
+fn bytes_array_mode() {
+    let b = vld::bytes().min_len(2).max_len(4);
+    assert_eq!(b.parse_value(&json!([1, 2, 3])).unwrap(), vec![1, 2, 3]);
+    assert!(b.parse_value(&json!([1])).is_err());
+    assert!(b.parse_value(&json!([1, 2, 3, 4, 5])).is_err());
+    assert!(b.parse_value(&json!([256])).is_err());
+}
+
+#[test]
+fn bytes_base64_mode() {
+    let b = vld::bytes().base64().non_empty();
+    assert_eq!(b.parse_value(&json!("AQID")).unwrap(), vec![1, 2, 3]);
+    assert!(b.parse_value(&json!("@@@")).is_err());
 }
 
 // === Input ===

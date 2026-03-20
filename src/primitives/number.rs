@@ -576,6 +576,12 @@ impl ZInt {
         self
     }
 
+    /// Must be non-positive (<= 0).
+    pub fn non_positive(mut self) -> Self {
+        self.inner = self.inner.non_positive();
+        self
+    }
+
     /// Must be within JavaScript's safe integer range.
     pub fn safe(mut self) -> Self {
         self.inner = self.inner.safe();

@@ -139,6 +139,110 @@ fn is_valid_ipv6(s: &str) -> bool {
     true
 }
 
+fn is_valid_ip(s: &str) -> bool {
+    is_valid_ipv4(s) || is_valid_ipv6(s)
+}
+
+fn is_valid_cidr(s: &str) -> bool {
+    let (ip, prefix) = match s.split_once('/') {
+        Some(v) => v,
+        None => return false,
+    };
+    let prefix = match prefix.parse::<u8>() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    if is_valid_ipv4(ip) {
+        prefix <= 32
+    } else if is_valid_ipv6(ip) {
+        prefix <= 128
+    } else {
+        false
+    }
+}
+
+fn is_valid_mac(s: &str) -> bool {
+    let parts: Vec<&str> = s.split(':').collect();
+    if parts.len() != 6 {
+        return false;
+    }
+    parts
+        .iter()
+        .all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+fn is_valid_hex(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn is_valid_credit_card(s: &str) -> bool {
+    let digits: Vec<u32> = s
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .filter_map(|c| c.to_digit(10))
+        .collect();
+    if digits.len() < 12 || digits.len() > 19 {
+        return false;
+    }
+    let mut sum = 0;
+    let mut double = false;
+    for d in digits.iter().rev() {
+        let mut v = *d;
+        if double {
+            v *= 2;
+            if v > 9 {
+                v -= 9;
+            }
+        }
+        sum += v;
+        double = !double;
+    }
+    sum % 10 == 0
+}
+
+fn is_valid_phone(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    let mut chars = s.chars();
+    let first = chars.next().unwrap_or_default();
+    if first != '+' {
+        return false;
+    }
+    let digits: String = chars.filter(|c| c.is_ascii_digit()).collect();
+    // E.164: max 15 digits, min practical 8.
+    (8..=15).contains(&digits.len())
+}
+
+fn is_valid_semver(s: &str) -> bool {
+    let s = s.trim();
+    if s.is_empty() {
+        return false;
+    }
+    let s = s.strip_prefix('v').unwrap_or(s);
+    let main = s.split(['-', '+']).next().unwrap_or("");
+    let parts: Vec<&str> = main.split('.').collect();
+    if parts.len() != 3 {
+        return false;
+    }
+    parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn is_valid_base64_url(s: &str) -> bool {
+    !s.is_empty()
+        && s
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+fn is_valid_jwt(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('.').collect();
+    if parts.len() != 3 {
+        return false;
+    }
+    parts.iter().all(|p| is_valid_base64_url(p))
+}
+
 fn is_valid_base64(s: &str) -> bool {
     if s.is_empty() || s.len() % 4 != 0 {
         return false;
@@ -355,6 +459,7 @@ enum StringCheck {
     Email(String),
     Url(String),
     Uuid(String),
+    Ip(String),
     #[cfg(feature = "regex")]
     Regex(regex_lite::Regex, String),
     StartsWith(String, String),
@@ -363,6 +468,18 @@ enum StringCheck {
     NonEmpty(String),
     Ipv4(String),
     Ipv6(String),
+    Cidr(String),
+    Mac(String),
+    Hex(String),
+    CreditCard(String),
+    Phone(String),
+    Semver(String),
+    Jwt(String),
+    Ascii(String),
+    Alpha(String),
+    Alphanumeric(String),
+    Lowercase(String),
+    Uppercase(String),
     Base64(String),
     IsoDate(String),
     IsoDatetime(String),
@@ -384,6 +501,7 @@ impl StringCheck {
             StringCheck::Email(..) => "invalid_email",
             StringCheck::Url(..) => "invalid_url",
             StringCheck::Uuid(..) => "invalid_uuid",
+            StringCheck::Ip(..) => "invalid_ip",
             #[cfg(feature = "regex")]
             StringCheck::Regex(..) => "invalid_regex",
             StringCheck::StartsWith(..) => "invalid_starts_with",
@@ -392,6 +510,18 @@ impl StringCheck {
             StringCheck::NonEmpty(..) => "non_empty",
             StringCheck::Ipv4(..) => "invalid_ipv4",
             StringCheck::Ipv6(..) => "invalid_ipv6",
+            StringCheck::Cidr(..) => "invalid_cidr",
+            StringCheck::Mac(..) => "invalid_mac",
+            StringCheck::Hex(..) => "invalid_hex",
+            StringCheck::CreditCard(..) => "invalid_credit_card",
+            StringCheck::Phone(..) => "invalid_phone",
+            StringCheck::Semver(..) => "invalid_semver",
+            StringCheck::Jwt(..) => "invalid_jwt",
+            StringCheck::Ascii(..) => "invalid_ascii",
+            StringCheck::Alpha(..) => "invalid_alpha",
+            StringCheck::Alphanumeric(..) => "invalid_alphanumeric",
+            StringCheck::Lowercase(..) => "invalid_lowercase",
+            StringCheck::Uppercase(..) => "invalid_uppercase",
             StringCheck::Base64(..) => "invalid_base64",
             StringCheck::IsoDate(..) => "invalid_iso_date",
             StringCheck::IsoDatetime(..) => "invalid_iso_datetime",
@@ -413,9 +543,22 @@ impl StringCheck {
             | StringCheck::Email(ref mut m)
             | StringCheck::Url(ref mut m)
             | StringCheck::Uuid(ref mut m)
+            | StringCheck::Ip(ref mut m)
             | StringCheck::NonEmpty(ref mut m)
             | StringCheck::Ipv4(ref mut m)
             | StringCheck::Ipv6(ref mut m)
+            | StringCheck::Cidr(ref mut m)
+            | StringCheck::Mac(ref mut m)
+            | StringCheck::Hex(ref mut m)
+            | StringCheck::CreditCard(ref mut m)
+            | StringCheck::Phone(ref mut m)
+            | StringCheck::Semver(ref mut m)
+            | StringCheck::Jwt(ref mut m)
+            | StringCheck::Ascii(ref mut m)
+            | StringCheck::Alpha(ref mut m)
+            | StringCheck::Alphanumeric(ref mut m)
+            | StringCheck::Lowercase(ref mut m)
+            | StringCheck::Uppercase(ref mut m)
             | StringCheck::Base64(ref mut m)
             | StringCheck::IsoDate(ref mut m)
             | StringCheck::IsoDatetime(ref mut m)
@@ -487,11 +630,14 @@ impl ZString {
     /// and should return `Some(new_message)` to replace, or `None` to keep the original.
     ///
     /// Available keys: `"too_small"`, `"too_big"`, `"invalid_length"`, `"invalid_email"`,
-    /// `"invalid_url"`, `"invalid_uuid"`, `"invalid_regex"`, `"invalid_starts_with"`,
-    /// `"invalid_ends_with"`, `"invalid_contains"`, `"non_empty"`, `"invalid_ipv4"`,
-    /// `"invalid_ipv6"`, `"invalid_base64"`, `"invalid_iso_date"`, `"invalid_iso_datetime"`,
-    /// `"invalid_iso_time"`, `"invalid_hostname"`, `"invalid_cuid2"`, `"invalid_ulid"`,
-    /// `"invalid_nanoid"`, `"invalid_emoji"`.
+    /// `"invalid_url"`, `"invalid_uuid"`, `"invalid_ip"`, `"invalid_regex"`,
+    /// `"invalid_starts_with"`, `"invalid_ends_with"`, `"invalid_contains"`, `"non_empty"`,
+    /// `"invalid_ipv4"`, `"invalid_ipv6"`, `"invalid_cidr"`, `"invalid_mac"`, `"invalid_hex"`,
+    /// `"invalid_credit_card"`, `"invalid_phone"`, `"invalid_semver"`, `"invalid_jwt"`,
+    /// `"invalid_ascii"`, `"invalid_alpha"`, `"invalid_alphanumeric"`, `"invalid_lowercase"`,
+    /// `"invalid_uppercase"`, `"invalid_base64"`, `"invalid_iso_date"`,
+    /// `"invalid_iso_datetime"`, `"invalid_iso_time"`, `"invalid_hostname"`,
+    /// `"invalid_cuid2"`, `"invalid_ulid"`, `"invalid_nanoid"`, `"invalid_emoji"`.
     ///
     /// # Example
     /// ```
@@ -578,6 +724,17 @@ impl ZString {
     /// Must be a valid UUID, with custom message.
     pub fn uuid_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::Uuid(msg.into()));
+        self
+    }
+
+    /// Must be a valid IP address (IPv4 or IPv6).
+    pub fn ip(self) -> Self {
+        self.ip_msg("Invalid IP address")
+    }
+
+    /// Must be a valid IP address (IPv4 or IPv6), with custom message.
+    pub fn ip_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Ip(msg.into()));
         self
     }
 
@@ -694,6 +851,138 @@ impl ZString {
     /// Must be a valid IPv6 address, with custom message.
     pub fn ipv6_msg(mut self, msg: impl Into<String>) -> Self {
         self.checks.push(StringCheck::Ipv6(msg.into()));
+        self
+    }
+
+    /// Must be a valid CIDR block (IPv4/IPv6 with prefix).
+    pub fn cidr(self) -> Self {
+        self.cidr_msg("Invalid CIDR")
+    }
+
+    /// Must be a valid CIDR block, with custom message.
+    pub fn cidr_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Cidr(msg.into()));
+        self
+    }
+
+    /// Must be a valid MAC address (`xx:xx:xx:xx:xx:xx`).
+    pub fn mac(self) -> Self {
+        self.mac_msg("Invalid MAC address")
+    }
+
+    /// Must be a valid MAC address, with custom message.
+    pub fn mac_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Mac(msg.into()));
+        self
+    }
+
+    /// Must contain only hexadecimal characters.
+    pub fn hex(self) -> Self {
+        self.hex_msg("Invalid hexadecimal string")
+    }
+
+    /// Must contain only hexadecimal characters, with custom message.
+    pub fn hex_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Hex(msg.into()));
+        self
+    }
+
+    /// Must be a valid credit card number (Luhn check).
+    pub fn credit_card(self) -> Self {
+        self.credit_card_msg("Invalid credit card number")
+    }
+
+    /// Must be a valid credit card number, with custom message.
+    pub fn credit_card_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::CreditCard(msg.into()));
+        self
+    }
+
+    /// Must be a valid international phone number (E.164-like, starts with `+`).
+    pub fn phone(self) -> Self {
+        self.phone_msg("Invalid phone number")
+    }
+
+    /// Must be a valid international phone number, with custom message.
+    pub fn phone_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Phone(msg.into()));
+        self
+    }
+
+    /// Must be a valid semantic version (`MAJOR.MINOR.PATCH`, optional `v` prefix).
+    pub fn semver(self) -> Self {
+        self.semver_msg("Invalid semver")
+    }
+
+    /// Must be a valid semantic version, with custom message.
+    pub fn semver_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Semver(msg.into()));
+        self
+    }
+
+    /// Must be a JWT-like token (`header.payload.signature`, base64url parts).
+    pub fn jwt(self) -> Self {
+        self.jwt_msg("Invalid JWT")
+    }
+
+    /// Must be a JWT-like token, with custom message.
+    pub fn jwt_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Jwt(msg.into()));
+        self
+    }
+
+    /// Must contain only ASCII characters.
+    pub fn ascii(self) -> Self {
+        self.ascii_msg("String must contain only ASCII characters")
+    }
+
+    /// Must contain only ASCII characters, with custom message.
+    pub fn ascii_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Ascii(msg.into()));
+        self
+    }
+
+    /// Must contain only alphabetic ASCII characters.
+    pub fn alpha(self) -> Self {
+        self.alpha_msg("String must contain only alphabetic characters")
+    }
+
+    /// Must contain only alphabetic ASCII characters, with custom message.
+    pub fn alpha_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Alpha(msg.into()));
+        self
+    }
+
+    /// Must contain only ASCII alphanumeric characters.
+    pub fn alphanumeric(self) -> Self {
+        self.alphanumeric_msg("String must contain only alphanumeric characters")
+    }
+
+    /// Must contain only ASCII alphanumeric characters, with custom message.
+    pub fn alphanumeric_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Alphanumeric(msg.into()));
+        self
+    }
+
+    /// Must already be lowercase.
+    pub fn lowercase(self) -> Self {
+        self.lowercase_msg("String must be lowercase")
+    }
+
+    /// Must already be lowercase, with custom message.
+    pub fn lowercase_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Lowercase(msg.into()));
+        self
+    }
+
+    /// Must already be uppercase.
+    pub fn uppercase(self) -> Self {
+        self.uppercase_msg("String must be uppercase")
+    }
+
+    /// Must already be uppercase, with custom message.
+    pub fn uppercase_msg(mut self, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck::Uppercase(msg.into()));
         self
     }
 
@@ -823,11 +1112,50 @@ impl ZString {
                 StringCheck::Uuid(_) => {
                     schema["format"] = serde_json::json!("uuid");
                 }
+                StringCheck::Ip(_) => {
+                    schema["format"] = serde_json::json!("ip");
+                }
                 StringCheck::Ipv4(_) => {
                     schema["format"] = serde_json::json!("ipv4");
                 }
                 StringCheck::Ipv6(_) => {
                     schema["format"] = serde_json::json!("ipv6");
+                }
+                StringCheck::Cidr(_) => {
+                    schema["format"] = serde_json::json!("cidr");
+                }
+                StringCheck::Mac(_) => {
+                    schema["format"] = serde_json::json!("mac");
+                }
+                StringCheck::Hex(_) => {
+                    schema["format"] = serde_json::json!("hex");
+                }
+                StringCheck::CreditCard(_) => {
+                    schema["format"] = serde_json::json!("credit-card");
+                }
+                StringCheck::Phone(_) => {
+                    schema["format"] = serde_json::json!("phone");
+                }
+                StringCheck::Semver(_) => {
+                    schema["format"] = serde_json::json!("semver");
+                }
+                StringCheck::Jwt(_) => {
+                    schema["format"] = serde_json::json!("jwt");
+                }
+                StringCheck::Ascii(_) => {
+                    schema["format"] = serde_json::json!("ascii");
+                }
+                StringCheck::Alpha(_) => {
+                    schema["format"] = serde_json::json!("alpha");
+                }
+                StringCheck::Alphanumeric(_) => {
+                    schema["format"] = serde_json::json!("alphanumeric");
+                }
+                StringCheck::Lowercase(_) => {
+                    schema["format"] = serde_json::json!("lowercase");
+                }
+                StringCheck::Uppercase(_) => {
+                    schema["format"] = serde_json::json!("uppercase");
                 }
                 StringCheck::IsoDate(_) => {
                     schema["format"] = serde_json::json!("date");
@@ -984,6 +1312,17 @@ impl VldSchema for ZString {
                         );
                     }
                 }
+                StringCheck::Ip(msg) => {
+                    if !is_valid_ip(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Ip,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
                 #[cfg(feature = "regex")]
                 StringCheck::Regex(re, msg) => {
                     if !re.is_match(&s) {
@@ -1057,6 +1396,138 @@ impl VldSchema for ZString {
                         errors.push_with_value(
                             IssueCode::InvalidString {
                                 validation: StringValidation::Ipv6,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Cidr(msg) => {
+                    if !is_valid_cidr(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Cidr,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Mac(msg) => {
+                    if !is_valid_mac(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Mac,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Hex(msg) => {
+                    if !is_valid_hex(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Hex,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::CreditCard(msg) => {
+                    if !is_valid_credit_card(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::CreditCard,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Phone(msg) => {
+                    if !is_valid_phone(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Phone,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Semver(msg) => {
+                    if !is_valid_semver(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Semver,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Jwt(msg) => {
+                    if !is_valid_jwt(&s) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Jwt,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Ascii(msg) => {
+                    if !s.is_ascii() {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Ascii,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Alpha(msg) => {
+                    if !s.chars().all(|c| c.is_ascii_alphabetic()) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Alpha,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Alphanumeric(msg) => {
+                    if !s.chars().all(|c| c.is_ascii_alphanumeric()) {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Alphanumeric,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Lowercase(msg) => {
+                    if s != s.to_lowercase() {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Lowercase,
+                            },
+                            msg.clone(),
+                            &str_val,
+                        );
+                    }
+                }
+                StringCheck::Uppercase(msg) => {
+                    if s != s.to_uppercase() {
+                        errors.push_with_value(
+                            IssueCode::InvalidString {
+                                validation: StringValidation::Uppercase,
                             },
                             msg.clone(),
                             &str_val,

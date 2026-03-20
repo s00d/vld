@@ -184,6 +184,18 @@ vld::number().int()
     .max(100)
     .gte(18)
     .positive()
+    .non_positive()
+```
+
+### Bytes
+
+```rust
+vld::bytes()
+    .min_len(1)
+    .max_len(1024)
+    .len(32)
+    .non_empty()
+    .base64() // additionally accepts Base64 string input
 ```
 
 ### Boolean
@@ -211,6 +223,16 @@ vld::enumeration(&["admin", "user", "moderator"])
 
 ```rust
 vld::any()  // accepts any JSON value
+```
+
+### Date / Datetime (chrono feature)
+
+```rust
+vld::datetime()
+    .past()
+    .future()
+    .naive_allowed(false) // disallow naive datetime without timezone
+    .with_timezone_only(); // alias for naive_allowed(false)
 ```
 
 ## Modifiers
@@ -855,7 +877,7 @@ let doc = to_openapi_document_multi(&[
 ### `JsonSchema` trait
 
 The trait is implemented for all core types: `ZString`, `ZNumber`, `ZInt`,
-`ZBoolean`, `ZEnum`, `ZAny`, `ZArray`, `ZRecord`, `ZSet`, `ZObject`,
+`ZBoolean`, `ZBytes`, `ZEnum`, `ZAny`, `ZArray`, `ZRecord`, `ZSet`, `ZObject`,
 `ZOptional`, `ZNullable`, `ZNullish`, `ZDefault`, `ZCatch`, `ZRefine`,
 `ZTransform`, `ZDescribe`, `ZUnion2`, `ZUnion3`, `ZIntersection`,
 `NestedSchema`.

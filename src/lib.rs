@@ -133,6 +133,14 @@ pub fn boolean() -> primitives::ZBoolean {
     primitives::ZBoolean::new()
 }
 
+/// Create a bytes validation schema (`Vec<u8>`).
+///
+/// By default expects a JSON array of byte integers `0..=255`.
+/// Use `.base64()` to additionally accept Base64 string input.
+pub fn bytes() -> primitives::ZBytes {
+    primitives::ZBytes::new()
+}
+
 /// Create an array validation schema.
 pub fn array<T: schema::VldSchema>(element: T) -> collections::ZArray<T> {
     collections::ZArray::new(element)
@@ -334,7 +342,7 @@ pub mod prelude {
     pub use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
     pub use crate::object::ZObject;
     pub use crate::primitives::{
-        IntoLiteral, ZAny, ZBoolean, ZEnum, ZInt, ZLiteral, ZNumber, ZString,
+        IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZLiteral, ZNumber, ZString,
     };
     #[cfg(feature = "chrono")]
     pub use crate::primitives::{ZDate, ZDateTime};

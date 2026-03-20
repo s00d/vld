@@ -67,6 +67,12 @@ impl JsonSchema for crate::primitives::ZBoolean {
     }
 }
 
+impl JsonSchema for crate::primitives::ZBytes {
+    fn json_schema(&self) -> Value {
+        self.to_json_schema()
+    }
+}
+
 impl JsonSchema for crate::primitives::ZEnum {
     fn json_schema(&self) -> Value {
         self.to_json_schema()
@@ -287,6 +293,7 @@ impl CollectNestedSchemas for crate::primitives::ZString {}
 impl CollectNestedSchemas for crate::primitives::ZNumber {}
 impl CollectNestedSchemas for crate::primitives::ZInt {}
 impl CollectNestedSchemas for crate::primitives::ZBoolean {}
+impl CollectNestedSchemas for crate::primitives::ZBytes {}
 impl CollectNestedSchemas for crate::primitives::ZEnum {}
 impl CollectNestedSchemas for crate::primitives::ZAny {}
 
