@@ -17,7 +17,7 @@ Generate TypeScript [Zod](https://zod.dev/) and [Valibot](https://valibot.dev/) 
 
 ```toml
 [dependencies]
-vld-ts = "0.1"
+vld-ts = "0.3"
 ```
 
 ## Quick start

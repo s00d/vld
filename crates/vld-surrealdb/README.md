@@ -31,8 +31,8 @@ making `vld` validation a perfect fit.
 
 ```toml
 [dependencies]
-vld = "0.1"
-vld-surrealdb = "0.1"
+vld = "0.3"
+vld-surrealdb = "0.3"
 surrealdb = "2"   # or "3" — vld-surrealdb works with any version
 ```
 

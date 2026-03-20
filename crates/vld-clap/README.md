@@ -19,8 +19,8 @@ Clap handles argument parsing (types, defaults, required/optional), but doesn't 
 
 ```toml
 [dependencies]
-vld-clap = "0.1"
-vld = { version = "0.1", features = ["derive"] }
+vld-clap = "0.3"
+vld = { version = "0.3", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 ```

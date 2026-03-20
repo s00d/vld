@@ -23,8 +23,8 @@ output to `schemars::Schema`, making your validated types usable with `aide::axu
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["openapi"] }
-vld-aide = "0.1"
+vld = { version = "0.3", features = ["openapi"] }
+vld-aide = "0.3"
 aide = { version = "0.15", features = ["axum"] }
 ```
 

@@ -17,8 +17,8 @@ implementation — no need to duplicate schema definitions.
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["openapi"] }
-vld-utoipa = "0.1"
+vld = { version = "0.3", features = ["openapi"] }
+vld-utoipa = "0.3"
 utoipa = "5"
 ```
 
@@ -53,8 +53,8 @@ This lets you use standard Rust struct syntax with serde attributes like
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["derive", "openapi"] }
-vld-utoipa = "0.1"
+vld = { version = "0.3", features = ["derive", "openapi"] }
+vld-utoipa = "0.3"
 utoipa = "5"
 ```
 

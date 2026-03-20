@@ -15,10 +15,10 @@ Validate configuration files (TOML, YAML, JSON, ENV) at load time using
 
 ```toml
 [dependencies]
-vld = "0.1"
-vld-config = "0.1"                    # config-rs backend (default)
-# vld-config = { version = "0.1", features = ["figment"] }  # figment backend
-# vld-config = { version = "0.1", features = ["config-rs", "figment"] }  # both
+vld = "0.3"
+vld-config = "0.3"                    # config-rs backend (default)
+# vld-config = { version = "0.3", features = ["figment"] }  # figment backend
+# vld-config = { version = "0.3", features = ["config-rs", "figment"] }  # both
 ```
 
 ## Features

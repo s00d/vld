@@ -17,7 +17,7 @@ This crate is not meant to be used directly. Enable the `derive` feature on the 
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["derive"] }
+vld = { version = "0.3", features = ["derive"] }
 ```
 
 ## Quick start
@@ -66,8 +66,8 @@ fully compatible with `impl_to_schema!` from `vld-utoipa`:
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["derive", "openapi"] }
-vld-utoipa = "0.1"
+vld = { version = "0.3", features = ["derive", "openapi"] }
+vld-utoipa = "0.3"
 utoipa = "5"
 ```
 

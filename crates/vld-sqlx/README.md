@@ -20,8 +20,8 @@ Validate data **before** inserting into the database. Provides:
 
 ```toml
 [dependencies]
-vld-sqlx = "0.1"
-vld = { version = "0.1", features = ["serialize"] }
+vld-sqlx = "0.3"
+vld = { version = "0.3", features = ["serialize"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 ```
 

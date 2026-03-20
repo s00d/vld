@@ -94,8 +94,8 @@ The crate ships with built-in dictionaries (~2000 entries total):
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["openapi"] }
-vld-fake = "0.1"
+vld = { version = "0.3", features = ["openapi"] }
+vld-fake = "0.3"
 ```
 
 ## Quick Start

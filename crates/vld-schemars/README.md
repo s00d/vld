@@ -30,8 +30,8 @@ Plus introspection, comparison, and schema merge utilities.
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["openapi"] }
-vld-schemars = "0.1"
+vld = { version = "0.3", features = ["openapi"] }
+vld-schemars = "0.3"
 ```
 
 ## Quick Start

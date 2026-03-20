@@ -51,7 +51,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-vld = "0.1"
+vld = "0.3"
 ```
 
 ### Optional Features
@@ -77,7 +77,7 @@ Enable features as needed:
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["serialize", "openapi"] }
+vld = { version = "0.3", features = ["serialize", "openapi"] }
 ```
 
 ### Basic Usage
@@ -167,7 +167,7 @@ vld::string()
     .currency_code()        // ISO-4217-like (e.g. USD)
     .country_code()         // ISO-3166 alpha-2 (e.g. US)
     .locale()               // ll or ll-RR (e.g. en-US)
-    .cron()                 // cron expression (5/6 fields)
+    .cron()                 // cron expression (5/6 fields, basic cron syntax)
     .starts_with("prefix")  // must start with
     .ends_with("suffix")    // must end with
     .contains("sub")        // must contain
@@ -1149,7 +1149,7 @@ Enable the `derive` feature for `#[derive(Validate)]`:
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["derive"] }
+vld = { version = "0.3", features = ["derive"] }
 ```
 
 ```rust
@@ -1176,8 +1176,8 @@ full support for `#[serde(rename_all = "...")]`. Enable both `derive` and `opena
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["derive", "openapi"] }
-vld-utoipa = "0.1"
+vld = { version = "0.3", features = ["derive", "openapi"] }
+vld-utoipa = "0.3"
 utoipa = "5"
 ```
 
@@ -1216,7 +1216,7 @@ If you need custom regex patterns via `.regex()`, enable the `regex` feature:
 
 ```toml
 [dependencies]
-vld = { version = "0.1", features = ["regex"] }
+vld = { version = "0.3", features = ["regex"] }
 ```
 
 ```rust
@@ -1245,751 +1245,38 @@ bash scripts/ci-all.sh
 
 ## Workspace Crates
 
-The `vld` project is organized as a Cargo workspace with several crates:
-
-| Crate | Version | Description |
-|-------|---------|-------------|
-| [`vld`](.) | [![crates.io](https://img.shields.io/crates/v/vld?style=flat-square)](https://crates.io/crates/vld) | Core validation library — schemas, parsers, macros, error handling, i18n |
-| [`vld-derive`](crates/vld-derive/) | [![crates.io](https://img.shields.io/crates/v/vld-derive?style=flat-square)](https://crates.io/crates/vld-derive) | Procedural macro `#[derive(Validate)]` for automatic struct validation |
-| [`vld-axum`](crates/vld-axum/) | [![crates.io](https://img.shields.io/crates/v/vld-axum?style=flat-square)](https://crates.io/crates/vld-axum) | [Axum](https://github.com/tokio-rs/axum) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
-| [`vld-actix`](crates/vld-actix/) | [![crates.io](https://img.shields.io/crates/v/vld-actix?style=flat-square)](https://crates.io/crates/vld-actix) | [Actix-web](https://actix.rs/) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
-| [`vld-rocket`](crates/vld-rocket/) | [![crates.io](https://img.shields.io/crates/v/vld-rocket?style=flat-square)](https://crates.io/crates/vld-rocket) | [Rocket](https://rocket.rs/) — extractors `VldJson`, `VldQuery`, `VldForm` + JSON error catchers |
-| [`vld-poem`](crates/vld-poem/) | [![crates.io](https://img.shields.io/crates/v/vld-poem?style=flat-square)](https://crates.io/crates/vld-poem) | [Poem](https://docs.rs/poem) — extractors `VldJson`, `VldQuery`, `VldForm`, `VldPath`, `VldHeaders`, `VldCookie` |
-| [`vld-warp`](crates/vld-warp/) | [![crates.io](https://img.shields.io/crates/v/vld-warp?style=flat-square)](https://crates.io/crates/vld-warp) | [Warp](https://docs.rs/warp) — filters `vld_json`, `vld_query`, `vld_param`, `vld_path` + `handle_rejection` |
-| [`vld-salvo`](crates/vld-salvo/) | [![crates.io](https://img.shields.io/crates/v/vld-salvo?style=flat-square)](https://crates.io/crates/vld-salvo) | [Salvo](https://salvo.rs/) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
-| [`vld-tower`](crates/vld-tower/) | [![crates.io](https://img.shields.io/crates/v/vld-tower?style=flat-square)](https://crates.io/crates/vld-tower) | Universal [Tower](https://docs.rs/tower) middleware — validate JSON bodies in any Tower-compatible framework |
-| [`vld-diesel`](crates/vld-diesel/) | [![crates.io](https://img.shields.io/crates/v/vld-diesel?style=flat-square)](https://crates.io/crates/vld-diesel) | [Diesel](https://diesel.rs/) ORM — `Validated<S, T>` wrapper, `VldText`, `VldInt` column types |
-| [`vld-sea`](crates/vld-sea/) | [![crates.io](https://img.shields.io/crates/v/vld-sea?style=flat-square)](https://crates.io/crates/vld-sea) | [SeaORM](https://www.sea-ql.org/SeaORM/) — validate `ActiveModel` before insert/update |
-| [`vld-utoipa`](crates/vld-utoipa/) | [![crates.io](https://img.shields.io/crates/v/vld-utoipa?style=flat-square)](https://crates.io/crates/vld-utoipa) | [utoipa](https://docs.rs/utoipa) — auto-generate `ToSchema` from `vld` definitions |
-| [`vld-aide`](crates/vld-aide/) | [![crates.io](https://img.shields.io/crates/v/vld-aide?style=flat-square)](https://crates.io/crates/vld-aide) | [aide](https://docs.rs/aide) / [schemars](https://docs.rs/schemars) — auto-generate `JsonSchema` from `vld` definitions |
-| [`vld-config`](crates/vld-config/) | [![crates.io](https://img.shields.io/crates/v/vld-config?style=flat-square)](https://crates.io/crates/vld-config) | Config validation — TOML/YAML/JSON/ENV via [config-rs](https://docs.rs/config) or [figment](https://docs.rs/figment) |
-| [`vld-clap`](crates/vld-clap/) | [![crates.io](https://img.shields.io/crates/v/vld-clap?style=flat-square)](https://crates.io/crates/vld-clap) | [Clap](https://docs.rs/clap) — validate CLI arguments via `#[derive(Validate)]` |
-| [`vld-tauri`](crates/vld-tauri/) | [![crates.io](https://img.shields.io/crates/v/vld-tauri?style=flat-square)](https://crates.io/crates/vld-tauri) | [Tauri](https://tauri.app/) — validate IPC commands, events, state, channels, plugin config |
-| [`vld-ts`](crates/vld-ts/) | [![crates.io](https://img.shields.io/crates/v/vld-ts?style=flat-square)](https://crates.io/crates/vld-ts) | TypeScript codegen — generates [Zod](https://zod.dev/) schemas from `vld` JSON Schema output |
-| [`vld-fake`](crates/vld-fake/) | [![crates.io](https://img.shields.io/crates/v/vld-fake?style=flat-square)](https://crates.io/crates/vld-fake) | Fake data generation — `User::fake()`, `fake_many()`, `fake_seeded()` with realistic dictionaries |
-| [`vld-sqlx`](crates/vld-sqlx/) | [![crates.io](https://img.shields.io/crates/v/vld-sqlx?style=flat-square)](https://crates.io/crates/vld-sqlx) | [SQLx](https://docs.rs/sqlx) — validate before insert/update, typed column wrappers |
-| [`vld-tonic`](crates/vld-tonic/) | [![crates.io](https://img.shields.io/crates/v/vld-tonic?style=flat-square)](https://crates.io/crates/vld-tonic) | [tonic](https://docs.rs/tonic) gRPC — validate protobuf messages and metadata |
-| [`vld-leptos`](crates/vld-leptos/) | [![crates.io](https://img.shields.io/crates/v/vld-leptos?style=flat-square)](https://crates.io/crates/vld-leptos) | [Leptos](https://leptos.dev/) — shared validation for server functions and WASM clients |
-| [`vld-dioxus`](crates/vld-dioxus/) | [![crates.io](https://img.shields.io/crates/v/vld-dioxus?style=flat-square)](https://crates.io/crates/vld-dioxus) | [Dioxus](https://dioxuslabs.com/) — shared validation for server functions and WASM clients |
-| [`vld-ntex`](crates/vld-ntex/) | [![crates.io](https://img.shields.io/crates/v/vld-ntex?style=flat-square)](https://crates.io/crates/vld-ntex) | [ntex](https://ntex.rs/) — extractors `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie` |
-| [`vld-surrealdb`](crates/vld-surrealdb/) | [![crates.io](https://img.shields.io/crates/v/vld-surrealdb?style=flat-square)](https://crates.io/crates/vld-surrealdb) | [SurrealDB](https://surrealdb.com/) — validate JSON documents before create/insert/update and after select |
-| [`vld-redis`](crates/vld-redis/) | [![crates.io](https://img.shields.io/crates/v/vld-redis?style=flat-square)](https://crates.io/crates/vld-redis) | [Redis](https://redis.io/) — validate payloads before set/publish and after get/subscribe |
-| [`vld-lapin`](crates/vld-lapin/) | [![crates.io](https://img.shields.io/crates/v/vld-lapin?style=flat-square)](https://crates.io/crates/vld-lapin) | [lapin](https://docs.rs/lapin) / RabbitMQ — validate AMQP message payloads before publish and after consume |
-| [`vld-schemars`](crates/vld-schemars/) | [![crates.io](https://img.shields.io/crates/v/vld-schemars?style=flat-square)](https://crates.io/crates/vld-schemars) | [schemars](https://docs.rs/schemars) — bidirectional bridge between vld and schemars JSON Schema |
-| [`vld-http-common`](crates/vld-http-common/) | [![crates.io](https://img.shields.io/crates/v/vld-http-common?style=flat-square)](https://crates.io/crates/vld-http-common) | Shared HTTP helpers — query parsing, value coercion, error formatting (used by web crates) |
-
-### vld-derive
-
-Enable with `features = ["derive"]`. Provides `#[derive(Validate)]` with `#[vld(...)]` attributes
-on struct fields. Supports `#[serde(rename)]` and `#[serde(rename_all)]` for JSON key mapping.
-When `openapi` feature is also enabled, generates `json_schema()` and `to_openapi_document()` methods,
-making it fully compatible with `vld-utoipa`'s `impl_to_schema!`.
-
-```rust
-use vld::Validate;
-
-#[derive(Debug, Default, serde::Serialize, Validate)]
-struct User {
-    #[vld(vld::string().min(2).max(50))]
-    name: String,
-    #[vld(vld::string().email())]
-    email: String,
-}
-```
-
-### vld-axum
-
-Validation extractors for Axum web framework. Automatically validates request data
-and returns `422 Unprocessable Entity` with structured JSON errors on failure.
-
-```toml
-[dependencies]
-vld-axum = "0.1"
-```
-
-```rust
-use vld_axum::prelude::*;
-
-async fn handler(VldJson(body): VldJson<MySchema>) -> impl IntoResponse {
-    // body is already validated
-}
-```
-
-### vld-actix
-
-Validation extractors for Actix-web framework. Same API surface as `vld-axum`.
-
-```toml
-[dependencies]
-vld-actix = "0.1"
-```
-
-```rust
-use vld_actix::prelude::*;
-
-async fn handler(VldJson(body): VldJson<MySchema>) -> impl Responder {
-    // body is already validated
-}
-```
-
-### vld-ntex
-
-Validation extractors for [ntex](https://ntex.rs/) web framework (by the author of Actix). Same API surface as `vld-actix`.
-
-```toml
-[dependencies]
-vld-ntex = "0.1"
-ntex = "3"
-```
-
-```rust
-use ntex::web::HttpResponse;
-use vld_ntex::prelude::*;
-
-async fn handler(body: VldJson<MySchema>) -> HttpResponse {
-    HttpResponse::Ok().body(format!("name={}", body.name))
-}
-```
-
-### vld-diesel
-
-Integration with Diesel ORM. Validate data before insert/update, validate rows after load,
-and use validated column types (`VldText<S>`, `VldInt<S>`) that enforce constraints at the type level.
-
-```toml
-[dependencies]
-vld-diesel = { version = "0.1", features = ["sqlite"] }
-```
-
-```rust
-use vld_diesel::prelude::*;
-
-let validated = validate_insert::<MySchema, _>(&new_row)?;
-diesel::insert_into(table).values(&validated.inner).execute(&mut conn)?;
-```
-
-### vld-tower
-
-Universal [Tower](https://docs.rs/tower) middleware for JSON body validation.
-Works with any Tower-compatible framework (Axum, Hyper, Tonic, Warp).
-
-```toml
-[dependencies]
-vld-tower = "0.1"
-```
-
-```rust
-use vld_tower::{ValidateJsonLayer, validated};
-use tower::ServiceBuilder;
-
-vld::schema! {
-    #[derive(Debug, Clone)]
-    pub struct CreateUser {
-        pub name: String  => vld::string().min(2),
-        pub email: String => vld::string().email(),
-    }
-}
-
-// One layer covers all routes
-let svc = ServiceBuilder::new()
-    .layer(ValidateJsonLayer::<CreateUser>::new())
-    .service_fn(handler);
-
-// In handler — zero-cost extraction from extensions
-let user: CreateUser = validated(&req);
-```
-
-### vld-config
-
-Validate configuration files at load time. Supports [config-rs](https://docs.rs/config)
-(TOML, YAML, JSON, ENV) and [figment](https://docs.rs/figment).
-
-```toml
-[dependencies]
-vld = "0.1"
-vld-config = "0.1"  # config-rs by default
-# vld-config = { version = "0.1", features = ["figment"] }
-```
-
-```rust
-use vld_config::prelude::*;
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct Settings {
-        pub host: String => vld::string().min(1),
-        pub port: i64    => vld::number().int().min(1).max(65535),
-    }
-}
-
-let config = config::Config::builder()
-    .add_source(config::File::with_name("config"))
-    .add_source(config::Environment::with_prefix("APP"))
-    .build().unwrap();
-
-let settings: Settings = from_config(&config).unwrap();
-```
-
-### vld-utoipa
-
-Bridge between `vld` and [utoipa](https://docs.rs/utoipa). Define validation once, get
-`ToSchema` for free — no need to duplicate schema definitions.
-Works with both `vld::schema!` and `#[derive(Validate)]`.
-
-```toml
-[dependencies]
-vld = { version = "0.1", features = ["openapi"] }
-vld-utoipa = "0.1"
-utoipa = "5"
-```
-
-```rust
-use vld::prelude::*;
-use vld_utoipa::impl_to_schema;
-
-// Option A: schema! macro
-vld::schema! {
-    #[derive(Debug)]
-    pub struct CreateUser {
-        pub name: String => vld::string().min(2).max(100),
-        pub email: String => vld::string().email(),
-    }
-}
-impl_to_schema!(CreateUser);
-
-// Option B: derive macro (requires features = ["derive", "openapi"])
-#[derive(Debug, serde::Deserialize, vld::Validate)]
-#[serde(rename_all = "camelCase")]
-struct ApiRequest {
-    #[vld(vld::string().min(1))]
-    first_name: String,
-    #[vld(vld::string().email())]
-    email_address: String,
-}
-impl_to_schema!(ApiRequest);
-// OpenAPI schema uses camelCase: "firstName", "emailAddress"
-```
-
-**Nested schemas** are automatically registered in utoipa's `components/schemas`:
-
-```rust
-vld::schema! {
-    pub struct Address {
-        pub city: String => vld::string().min(1),
-        pub zip: String  => vld::string().min(5).max(10),
-    }
-}
-impl_to_schema!(Address);
-
-vld::schema! {
-    pub struct Order {
-        pub name: String    => vld::string().min(1),
-        pub address: Address => vld::nested!(Address),
-    }
-}
-impl_to_schema!(Order);
-// Order.address → { "$ref": "#/components/schemas/Address" }
-// Address schema is auto-registered — no manual listing needed
-```
-
-### vld-aide
-
-Bridge between `vld` and [aide](https://docs.rs/aide) / [schemars](https://docs.rs/schemars). Define validation once, get
-`JsonSchema` for free — no need to duplicate with `#[derive(JsonSchema)]`.
-Works with both `vld::schema!` and `#[derive(Validate)]`.
-
-```toml
-[dependencies]
-vld = { version = "0.1", features = ["openapi"] }
-vld-aide = "0.1"
-aide = { version = "0.15", features = ["axum"] }
-```
-
-```rust
-use vld::prelude::*;
-use vld_aide::impl_json_schema;
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct CreateUser {
-        pub name: String => vld::string().min(2).max(100),
-        pub email: String => vld::string().email(),
-    }
-}
-impl_json_schema!(CreateUser);
-// Now usable with aide::axum::Json<CreateUser> for OpenAPI 3.1 docs.
-```
-
-### vld-schemars
-
-General-purpose bidirectional bridge between `vld` and [schemars](https://docs.rs/schemars).
-Unlike `vld-aide` (which targets aide specifically), `vld-schemars` works with **any** schemars-based
-library (paperclip, okapi, dropshot, etc.). Provides conversion in both directions, introspection,
-comparison, and schema merge utilities.
-
-```toml
-[dependencies]
-vld = { version = "0.1", features = ["openapi"] }
-vld-schemars = "0.1"
-```
-
-```rust
-use vld::prelude::*;
-use vld_schemars::impl_json_schema;
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct User {
-        pub name: String  => vld::string().min(2).max(50),
-        pub email: String => vld::string().email(),
-    }
-}
-impl_json_schema!(User);
-
-// schemars → vld
-let schema = vld_schemars::generate_from_schemars::<String>();
-
-// Introspection
-let props = vld_schemars::list_properties(&User::json_schema());
-assert!(vld_schemars::is_required(&User::json_schema(), "name"));
-```
-
-### vld-rocket
-
-[Rocket](https://rocket.rs/) integration with validation extractors and JSON error catchers.
-
-```toml
-[dependencies]
-vld-rocket = "0.1"
-rocket = { version = "0.5", features = ["json"] }
-```
-
-```rust
-use vld_rocket::prelude::*;
-
-vld::schema! {
-    #[derive(Debug, Clone)]
-    pub struct CreateUser {
-        pub name: String  => vld::string().min(2),
-        pub email: String => vld::string().email(),
-    }
-}
-
-#[rocket::post("/users", data = "<user>")]
-fn create_user(user: VldJson<CreateUser>) -> rocket::serde::json::Json<serde_json::Value> {
-    rocket::serde::json::Json(serde_json::json!({"name": user.name}))
-}
-```
-
-### vld-poem
-
-[Poem](https://docs.rs/poem) integration — extractors `VldJson`, `VldQuery`, `VldForm`.
-
-```toml
-[dependencies]
-vld-poem = "0.1"
-poem = "3"
-```
-
-```rust
-use poem::handler;
-use vld_poem::prelude::*;
-
-vld::schema! {
-    #[derive(Debug, Clone)]
-    pub struct CreateUser {
-        pub name: String  => vld::string().min(2),
-        pub email: String => vld::string().email(),
-    }
-}
-
-#[handler]
-async fn create_user(user: VldJson<CreateUser>) -> poem::web::Json<serde_json::Value> {
-    poem::web::Json(serde_json::json!({"name": user.name}))
-}
-```
-
-### vld-warp
-
-[Warp](https://docs.rs/warp) integration — filters `vld_json`, `vld_query` + `handle_rejection`.
-
-```toml
-[dependencies]
-vld-warp = "0.1"
-warp = "0.3"
-```
-
-```rust
-use vld_warp::prelude::*;
-use warp::Filter;
-
-vld::schema! {
-    #[derive(Debug, Clone)]
-    pub struct CreateUser {
-        pub name: String  => vld::string().min(2),
-        pub email: String => vld::string().email(),
-    }
-}
-
-let route = warp::post()
-    .and(warp::path("users"))
-    .and(vld_json::<CreateUser>())
-    .map(|u: CreateUser| warp::reply::json(&serde_json::json!({"name": u.name})))
-    .recover(handle_rejection);
-```
-
-### vld-sea
-
-[SeaORM](https://www.sea-ql.org/SeaORM/) integration — validate `ActiveModel` before insert/update.
-
-```toml
-[dependencies]
-vld-sea = "0.1"
-sea-orm = "1"
-```
-
-```rust
-use sea_orm::Set;
-use vld_sea::prelude::*;
-
-vld::schema! {
-    #[derive(Debug, Clone)]
-    pub struct UserInput {
-        pub name: String  => vld::string().min(1).max(100),
-        pub email: String => vld::string().email(),
-    }
-}
-
-let am = user::ActiveModel {
-    name: Set("Alice".to_owned()),
-    email: Set("alice@example.com".to_owned()),
-    ..Default::default()
-};
-
-// Validate before insert
-vld_sea::validate_active::<UserInput, _>(&am)?;
-
-// Or hook into before_save automatically:
-// vld_sea::impl_vld_before_save!(ActiveModel, UserInput);
-```
-
-### vld-clap
-
-[Clap](https://docs.rs/clap) integration — validate CLI arguments via `#[derive(Validate)]` directly on the struct.
-
-```toml
-[dependencies]
-vld-clap = "0.1"
-vld = { version = "0.1", features = ["derive"] }
-clap = { version = "4", features = ["derive"] }
-serde = { version = "1", features = ["derive"] }
-```
-
-```rust
-use clap::Parser;
-use vld::Validate;
-use vld_clap::prelude::*;
-
-#[derive(Parser, Debug, serde::Serialize, Validate)]
-struct Cli {
-    #[arg(long)]
-    #[vld(vld::string().email())]
-    email: String,
-    #[arg(long, default_value_t = 8080)]
-    #[vld(vld::number().int().min(1).max(65535))]
-    port: i64,
-}
-
-fn main() {
-    let cli = Cli::parse();
-    validate_or_exit(&cli);
-    println!("email={}, port={}", cli.email, cli.port);
-}
-```
-
-### vld-salvo
-
-[Salvo](https://salvo.rs/) integration — extractors implement `Extractible` and work as
-`#[handler]` function parameters, just like Salvo's built-in `JsonBody` or `PathParam`.
-
-```toml
-[dependencies]
-vld-salvo = "0.1"
-salvo = "0.89"
-```
-
-```rust
-use salvo::prelude::*;
-use vld_salvo::prelude::*;
-
-vld::schema! {
-    #[derive(Debug, Clone, serde::Serialize)]
-    pub struct CreateUser {
-        pub name: String  => vld::string().min(2),
-        pub email: String => vld::string().email(),
-    }
-}
-
-#[handler]
-async fn create(body: VldJson<CreateUser>, res: &mut Response) {
-    res.render(Json(serde_json::json!({"name": body.name})));
-}
-```
-
-### vld-tauri
-
-[Tauri](https://tauri.app/) IPC validation — commands, events, state, channels, plugin config.
-**Zero dependency on `tauri`** — only `vld` + `serde` + `serde_json`.
-
-```toml
-[dependencies]
-vld-tauri = "0.1"
-tauri = "2"
-```
-
-```rust
-use vld_tauri::prelude::*;
-
-vld::schema! {
-    #[derive(Debug, Clone, serde::Serialize)]
-    pub struct CreateUser {
-        pub name: String  => vld::string().min(2),
-        pub email: String => vld::string().email(),
-    }
-}
-
-// Pattern 1 — explicit
-#[tauri::command]
-fn create_user(payload: serde_json::Value) -> Result<String, VldTauriError> {
-    let user = validate::<CreateUser>(payload)?;
-    Ok(format!("Created {}", user.name))
-}
-
-// Pattern 2 — auto-validated
-#[tauri::command]
-fn create_user2(payload: VldPayload<CreateUser>) -> Result<String, VldTauriError> {
-    Ok(format!("Created {}", payload.name))
-}
-```
-
-### vld-fake
-
-Generate **fake / test data** that satisfies `vld` validation schemas. Define rules once —
-get instant, constraint-aware random data for tests, seed scripts, and demos.
-
-```toml
-[dependencies]
-vld = { version = "0.1", features = ["openapi"] }
-vld-fake = "0.1"
-```
-
-```rust
-use vld::prelude::*;
-use vld_fake::prelude::*;
-
-vld::schema! {
-    #[derive(Debug, Clone, serde::Serialize)]
-    pub struct User {
-        pub name:  String => vld::string().min(2).max(50),
-        pub email: String => vld::string().email(),
-        pub age:   i64    => vld::number().int().min(18).max(99),
-    }
-}
-
-vld_fake::impl_fake!(User);
-
-// Typed access — user.name, user.email, user.age
-let user = User::fake();
-println!("{} <{}> age={}", user.name, user.email, user.age);
-
-// Multiple + reproducible
-let users = User::fake_many(10);
-let same  = User::fake_seeded(42);
-```
-
-### vld-sqlx
-
-[SQLx](https://docs.rs/sqlx) integration — validate before insert/update, typed column wrappers with `Type`/`Encode`/`Decode`.
-Supports SQLite, PostgreSQL, MySQL. Generic trait impls work with any backend.
-
-```toml
-[dependencies]
-vld-sqlx = "0.1"
-vld = { version = "0.1", features = ["serialize"] }
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
-```
-
-```rust
-use vld_sqlx::prelude::*;
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct UserSchema {
-        pub name: String  => vld::string().min(1).max(100),
-        pub email: String => vld::string().email(),
-    }
-}
-
-#[derive(serde::Serialize)]
-struct NewUser { name: String, email: String }
-
-let user = NewUser { name: "Alice".into(), email: "alice@example.com".into() };
-validate_insert::<UserSchema, _>(&user)?;
-
-// VldText — validated column type, bindable in sqlx queries
-let email = vld_sqlx::VldText::<EmailField>::new("alice@test.com")?;
-sqlx::query("INSERT INTO users (email) VALUES (?)")
-    .bind(&email)
-    .execute(&pool).await?;
-```
-
-### vld-surrealdb
-
-[SurrealDB](https://surrealdb.com/) integration — validate JSON documents before `create`/`insert`/`update`
-and after `select`. Zero dependency on the `surrealdb` crate — works with any SDK version.
-
-```toml
-[dependencies]
-vld-surrealdb = "0.1"
-surrealdb = "2"  # or "3"
-```
-
-```rust
-use vld_surrealdb::prelude::*;
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct PersonSchema {
-        pub name: String  => vld::string().min(1).max(100),
-        pub email: String => vld::string().email(),
-        pub age: i64      => vld::number().int().min(0).max(150),
-    }
-}
-
-#[derive(serde::Serialize)]
-struct Person { name: String, email: String, age: i64 }
-
-let person = Person { name: "Alice".into(), email: "alice@example.com".into(), age: 30 };
-validate_content::<PersonSchema, _>(&person)?;
-// db.create("person").content(person).await?;
-```
-
-### vld-tonic
-
-[tonic](https://docs.rs/tonic) gRPC integration — validate protobuf messages and metadata.
-
-```toml
-[dependencies]
-vld-tonic = "0.1"
-```
-
-```rust
-use serde::Serialize;
-use tonic::{Request, Response, Status};
-
-#[derive(Clone, Serialize)]
-pub struct CreateUserRequest {
-    pub name: String,
-    pub email: String,
-}
-
-vld_tonic::impl_validate!(CreateUserRequest {
-    name  => vld::string().min(2).max(100),
-    email => vld::string().email(),
-});
-
-async fn create_user(request: Request<CreateUserRequest>) -> Result<Response<()>, Status> {
-    let msg = vld_tonic::validate(request)?;
-    Ok(Response::new(()))
-}
-```
-
-### vld-leptos
-
-[Leptos](https://leptos.dev/) integration — **define validation rules once, use on server and client (WASM)**.
-Zero dependency on `leptos` — works with any Leptos version.
-
-```toml
-[dependencies]
-vld-leptos = "0.1"
-```
-
-```rust
-// Shared schemas (server + WASM)
-fn name_schema() -> vld::primitives::ZString { vld::string().min(2).max(50) }
-fn email_schema() -> vld::primitives::ZString { vld::string().email() }
-
-// Server function — validate_args! macro
-#[server]
-async fn create_user(name: String, email: String) -> Result<(), ServerFnError> {
-    vld_leptos::validate_args! {
-        name  => name_schema(),
-        email => email_schema(),
-    }.map_err(|e| ServerFnError::new(e.to_string()))?;
-    Ok(())
-}
-
-// Client component — reactive check_field
-let name_err = Memo::new(move |_| {
-    vld_leptos::check_field(&name.get(), &name_schema())
-});
-```
-
-### vld-dioxus
-
-[Dioxus](https://dioxuslabs.com/) integration — **define validation rules once, use on server and client (WASM)**.
-Zero dependency on `dioxus` — works with any Dioxus version.
-
-```toml
-[dependencies]
-vld-dioxus = "0.1"
-```
-
-```rust
-// Shared schemas (server + WASM)
-fn name_schema() -> vld::primitives::ZString { vld::string().min(2).max(50) }
-fn email_schema() -> vld::primitives::ZString { vld::string().email() }
-
-// Server function — validate_args! macro
-#[server]
-async fn create_user(name: String, email: String) -> Result<(), ServerFnError> {
-    vld_dioxus::validate_args! {
-        name  => name_schema(),
-        email => email_schema(),
-    }.map_err(|e| ServerFnError::new(e.to_string()))?;
-    Ok(())
-}
-
-// Client component — reactive check_field
-let name_err = use_memo(move || {
-    vld_dioxus::check_field(&name(), &name_schema())
-});
-```
-
-### vld-ts
-
-Generate TypeScript [Zod](https://zod.dev/) schemas from JSON Schema output produced by `vld`.
-Useful for sharing validation contracts between Rust backend and TypeScript frontend.
-
-```toml
-[dependencies]
-vld-ts = "0.1"
-```
-
-```rust
-use vld_ts::generate_zod;
-
-let json_schema = serde_json::json!({
-    "type": "object",
-    "required": ["name", "email"],
-    "properties": {
-        "name": { "type": "string", "minLength": 2 },
-        "email": { "type": "string", "format": "email" }
-    }
-});
-let ts_code = generate_zod("User", &json_schema);
-// Output: export const UserSchema = z.object({ name: z.string().min(2), email: z.string().email() });
-```
+Use full links below (GitHub, crates.io, docs.rs). This avoids relative-link issues after publication.
+
+| Crate | GitHub | crates.io | docs.rs |
+|-------|--------|-----------|---------|
+| `vld` | [GitHub](https://github.com/s00d/vld/tree/main) | [crates.io](https://crates.io/crates/vld) | [docs.rs](https://docs.rs/vld) |
+| `vld-derive` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-derive) | [crates.io](https://crates.io/crates/vld-derive) | [docs.rs](https://docs.rs/vld-derive) |
+| `vld-axum` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-axum) | [crates.io](https://crates.io/crates/vld-axum) | [docs.rs](https://docs.rs/vld-axum) |
+| `vld-actix` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-actix) | [crates.io](https://crates.io/crates/vld-actix) | [docs.rs](https://docs.rs/vld-actix) |
+| `vld-rocket` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-rocket) | [crates.io](https://crates.io/crates/vld-rocket) | [docs.rs](https://docs.rs/vld-rocket) |
+| `vld-poem` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-poem) | [crates.io](https://crates.io/crates/vld-poem) | [docs.rs](https://docs.rs/vld-poem) |
+| `vld-warp` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-warp) | [crates.io](https://crates.io/crates/vld-warp) | [docs.rs](https://docs.rs/vld-warp) |
+| `vld-salvo` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-salvo) | [crates.io](https://crates.io/crates/vld-salvo) | [docs.rs](https://docs.rs/vld-salvo) |
+| `vld-tower` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-tower) | [crates.io](https://crates.io/crates/vld-tower) | [docs.rs](https://docs.rs/vld-tower) |
+| `vld-diesel` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-diesel) | [crates.io](https://crates.io/crates/vld-diesel) | [docs.rs](https://docs.rs/vld-diesel) |
+| `vld-sea` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-sea) | [crates.io](https://crates.io/crates/vld-sea) | [docs.rs](https://docs.rs/vld-sea) |
+| `vld-utoipa` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-utoipa) | [crates.io](https://crates.io/crates/vld-utoipa) | [docs.rs](https://docs.rs/vld-utoipa) |
+| `vld-aide` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-aide) | [crates.io](https://crates.io/crates/vld-aide) | [docs.rs](https://docs.rs/vld-aide) |
+| `vld-config` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-config) | [crates.io](https://crates.io/crates/vld-config) | [docs.rs](https://docs.rs/vld-config) |
+| `vld-clap` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-clap) | [crates.io](https://crates.io/crates/vld-clap) | [docs.rs](https://docs.rs/vld-clap) |
+| `vld-tauri` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-tauri) | [crates.io](https://crates.io/crates/vld-tauri) | [docs.rs](https://docs.rs/vld-tauri) |
+| `vld-ts` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-ts) | [crates.io](https://crates.io/crates/vld-ts) | [docs.rs](https://docs.rs/vld-ts) |
+| `vld-fake` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-fake) | [crates.io](https://crates.io/crates/vld-fake) | [docs.rs](https://docs.rs/vld-fake) |
+| `vld-sqlx` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-sqlx) | [crates.io](https://crates.io/crates/vld-sqlx) | [docs.rs](https://docs.rs/vld-sqlx) |
+| `vld-tonic` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-tonic) | [crates.io](https://crates.io/crates/vld-tonic) | [docs.rs](https://docs.rs/vld-tonic) |
+| `vld-leptos` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-leptos) | [crates.io](https://crates.io/crates/vld-leptos) | [docs.rs](https://docs.rs/vld-leptos) |
+| `vld-dioxus` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-dioxus) | [crates.io](https://crates.io/crates/vld-dioxus) | [docs.rs](https://docs.rs/vld-dioxus) |
+| `vld-ntex` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-ntex) | [crates.io](https://crates.io/crates/vld-ntex) | [docs.rs](https://docs.rs/vld-ntex) |
+| `vld-surrealdb` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-surrealdb) | [crates.io](https://crates.io/crates/vld-surrealdb) | [docs.rs](https://docs.rs/vld-surrealdb) |
+| `vld-redis` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-redis) | [crates.io](https://crates.io/crates/vld-redis) | [docs.rs](https://docs.rs/vld-redis) |
+| `vld-lapin` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-lapin) | [crates.io](https://crates.io/crates/vld-lapin) | [docs.rs](https://docs.rs/vld-lapin) |
+| `vld-schemars` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-schemars) | [crates.io](https://crates.io/crates/vld-schemars) | [docs.rs](https://docs.rs/vld-schemars) |
+| `vld-http-common` | [GitHub](https://github.com/s00d/vld/tree/main/crates/vld-http-common) | [crates.io](https://crates.io/crates/vld-http-common) | [docs.rs](https://docs.rs/vld-http-common) |
 
 ## License
 

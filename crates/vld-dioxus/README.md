@@ -10,8 +10,8 @@ No direct dependency on `dioxus` — works with any Dioxus version (0.5, 0.6, 0.
 
 ```toml
 [dependencies]
-vld = "0.1"
-vld-dioxus = "0.1"
+vld = "0.3"
+vld-dioxus = "0.3"
 dioxus = "0.7"  # or your version
 ```
 

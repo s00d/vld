@@ -28,8 +28,8 @@ On validation failure all extractors return **422 Unprocessable Entity** with a 
 
 ```toml
 [dependencies]
-vld = "0.1"
-vld-ntex = "0.1"
+vld = "0.3"
+vld-ntex = "0.3"
 ntex = "3"
 ```
 

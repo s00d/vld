@@ -15,8 +15,8 @@ Tower-compatible framework: Axum, Hyper, Tonic, Warp, etc.
 
 ```toml
 [dependencies]
-vld = "0.1"
-vld-tower = "0.1"
+vld = "0.3"
+vld-tower = "0.3"
 ```
 
 ## How it Works

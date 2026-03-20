@@ -28,8 +28,8 @@ On validation failure all extractors return **422 Unprocessable Entity** with a 
 
 ```toml
 [dependencies]
-vld = "0.1"
-vld-axum = "0.1"
+vld = "0.3"
+vld-axum = "0.3"
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 ```

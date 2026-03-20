@@ -34,8 +34,8 @@ failures render as `422 Unprocessable Entity` with a JSON error body.
 
 ```toml
 [dependencies]
-vld-salvo = "0.1"
-vld = "0.1"
+vld-salvo = "0.3"
+vld = "0.3"
 salvo = "0.89"
 serde_json = "1"
 ```

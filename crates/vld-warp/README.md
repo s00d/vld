@@ -29,8 +29,8 @@ Validation failures are returned as `422 Unprocessable Entity` with a JSON error
 
 ```toml
 [dependencies]
-vld-warp = "0.1"
-vld = "0.1"
+vld-warp = "0.3"
+vld = "0.3"
 warp = "0.3"
 serde_json = "1"
 ```

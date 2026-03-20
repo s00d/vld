@@ -28,8 +28,8 @@ Add `tauri` separately in your app.
 
 ```toml
 [dependencies]
-vld-tauri = "0.1"
-vld = "0.1"
+vld-tauri = "0.3"
+vld = "0.3"
 tauri = "2"
 serde_json = "1"
 ```

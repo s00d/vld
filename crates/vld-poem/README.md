@@ -23,8 +23,8 @@ All extractors return `422 Unprocessable Entity` with a JSON error body on valid
 
 ```toml
 [dependencies]
-vld-poem = "0.1"
-vld = "0.1"
+vld-poem = "0.3"
+vld = "0.3"
 poem = "3"
 serde_json = "1"
 ```

@@ -25,8 +25,8 @@ Validate `ActiveModel` fields **before** `insert()` / `update()` hits the databa
 
 ```toml
 [dependencies]
-vld-sea = "0.1"
-vld = "0.1"
+vld-sea = "0.3"
+vld = "0.3"
 sea-orm = "1"
 ```
 
