@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-19
+
+### Added
+
+- **New integration crates**:
+  - `vld-tonic` — tonic gRPC validation integration.
+  - `vld-leptos` — Leptos shared server/WASM validation integration.
+  - `vld-sqlx` — SQLx validation integration.
+  - `vld-dioxus` — Dioxus shared server/WASM validation integration.
+  - `vld-ntex` — ntex web framework integration.
+  - `vld-surrealdb` — SurrealDB JSON document validation integration.
+  - `vld-aide` — aide/schemars integration for OpenAPI generation.
+  - `vld-schemars` — bidirectional bridge between `vld` and `schemars`.
+- **`vld-schemars` reverse direction** — support conversion from `schemars` schemas to `vld` validation.
+- **Nested schema auto-registration**:
+  - in `vld` for OpenAPI generation;
+  - in `vld-utoipa` for OpenAPI components;
+  - in `vld-aide` and `vld-schemars` for schemars definitions.
+- **`$ref` generation support** in schema output paths.
+
+### Changed
+
+- **`vld-schemars` API refactor** — replaced standalone functions with macro/trait-based API.
+- Workspace docs and registration updated for all newly added crates.
+
+### Fixed
+
+- Formatting, clippy warnings, and missing imports across the workspace.
+- Collection-related dead-code warning handling improvements.
+
 ## [0.1.3] - 2026-03-19
 
 ### Added

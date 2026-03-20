@@ -1,5 +1,7 @@
 # cargo-release configuration
-# Install: cargo install cargo-release
+# Install:
+#   cargo install cargo-release
+#   cargo install git-cliff
 #
 # crates.io has a rate limit of 5 NEW crates at a time.
 # For the first publish, use the batched approach below.
@@ -53,6 +55,10 @@ tag-message = "Release {{crate_name}} v{{version}}"
 
 # Commit message
 pre-release-commit-message = "chore: release v{{version}}"
+
+# Auto-generate CHANGELOG.md from git history before release commit.
+# Uses `cliff.toml` from repository root.
+pre-release-hook = ["git", "cliff", "--config", "cliff.toml", "--tag", "v{{version}}", "--output", "CHANGELOG.md"]
 
 # Pre-release checks
 verify = true
