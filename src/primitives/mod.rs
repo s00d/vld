@@ -17,7 +17,7 @@ pub use bytes::ZBytes;
 pub use date::{ZDate, ZDateTime};
 pub use enumeration::ZEnum;
 #[cfg(feature = "std")]
-pub use file::{ValidatedFile, ZFile};
+pub use file::{FileStorage, ValidatedFile, ZFile};
 pub use literal::{IntoLiteral, ZLiteral};
 pub use number::{ZInt, ZNumber};
 pub use string::ZString;

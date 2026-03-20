@@ -349,11 +349,11 @@ pub mod prelude {
     pub use crate::json_schema::JsonSchema;
     pub use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
     pub use crate::object::ZObject;
+    #[cfg(feature = "std")]
+    pub use crate::primitives::{FileStorage, ValidatedFile, ZFile};
     pub use crate::primitives::{
         IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZLiteral, ZNumber, ZString,
     };
-    #[cfg(feature = "std")]
-    pub use crate::primitives::{ValidatedFile, ZFile};
     #[cfg(feature = "chrono")]
     pub use crate::primitives::{ZDate, ZDateTime};
     pub use crate::schema::{VldParse, VldSchema};

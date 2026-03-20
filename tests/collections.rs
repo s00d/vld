@@ -1,6 +1,6 @@
 use serde_json::json;
-use vld::prelude::*;
 use std::f64::consts::PI;
+use vld::prelude::*;
 
 #[test]
 fn array_basic() {

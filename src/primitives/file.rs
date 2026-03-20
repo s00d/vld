@@ -1,5 +1,6 @@
 use serde_json::Value;
 use std::fs;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use crate::error::{value_type_name, IssueCode, VldError};
@@ -11,7 +12,13 @@ pub struct ValidatedFile {
     size: u64,
     media_type: Option<String>,
     extension: Option<String>,
-    bytes: Vec<u8>,
+    bytes: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileStorage {
+    PathOnly,
+    InMemory,
 }
 
 impl ValidatedFile {
@@ -31,12 +38,41 @@ impl ValidatedFile {
         self.extension.as_deref()
     }
 
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
+    pub fn storage(&self) -> FileStorage {
+        if self.bytes.is_some() {
+            FileStorage::InMemory
+        } else {
+            FileStorage::PathOnly
+        }
     }
 
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub fn bytes(&self) -> Option<&[u8]> {
+        self.bytes.as_deref()
+    }
+
+    pub fn into_bytes(self) -> Option<Vec<u8>> {
         self.bytes
+    }
+
+    pub fn read_bytes(&self) -> Result<Vec<u8>, VldError> {
+        if let Some(bytes) = &self.bytes {
+            return Ok(bytes.clone());
+        }
+        fs::read(&self.path).map_err(|e| {
+            VldError::single(
+                IssueCode::IoError,
+                format!("Failed to read file {}: {}", self.path.display(), e),
+            )
+        })
+    }
+
+    pub fn open(&self) -> Result<File, VldError> {
+        File::open(&self.path).map_err(|e| {
+            VldError::single(
+                IssueCode::IoError,
+                format!("Failed to open file {}: {}", self.path.display(), e),
+            )
+        })
     }
 }
 
@@ -46,6 +82,7 @@ pub struct ZFile {
     max_size: Option<u64>,
     allowed_media_types: Vec<String>,
     allowed_extensions: Vec<String>,
+    storage: FileStorage,
     custom_type_error: Option<String>,
 }
 
@@ -56,6 +93,7 @@ impl ZFile {
             max_size: None,
             allowed_media_types: Vec::new(),
             allowed_extensions: Vec::new(),
+            storage: FileStorage::InMemory,
             custom_type_error: None,
         }
     }
@@ -102,6 +140,20 @@ impl ZFile {
             exts.iter()
                 .map(|s| s.trim_start_matches('.').to_ascii_lowercase()),
         );
+        self
+    }
+
+    /// Store only file path and metadata in output.
+    ///
+    /// Use [`ValidatedFile::read_bytes`] / [`ValidatedFile::open`] to get content later.
+    pub fn store_path_only(mut self) -> Self {
+        self.storage = FileStorage::PathOnly;
+        self
+    }
+
+    /// Store full file bytes in output (default mode).
+    pub fn store_in_memory(mut self) -> Self {
+        self.storage = FileStorage::InMemory;
         self
     }
 
@@ -256,15 +308,24 @@ impl VldSchema for ZFile {
             }
         }
 
-        let bytes = fs::read(&path).map_err(|e| {
-            VldError::single_with_value(
-                IssueCode::IoError,
-                format!("Failed to read file: {}", e),
-                value,
-            )
-        })?;
+        let needs_bytes =
+            self.storage == FileStorage::InMemory || !self.allowed_media_types.is_empty();
+        let loaded_bytes = if needs_bytes {
+            Some(fs::read(&path).map_err(|e| {
+                VldError::single_with_value(
+                    IssueCode::IoError,
+                    format!("Failed to read file: {}", e),
+                    value,
+                )
+            })?)
+        } else {
+            None
+        };
 
-        let media_type = infer::get(&bytes).map(|k| k.mime_type().to_ascii_lowercase());
+        let media_type = loaded_bytes
+            .as_deref()
+            .and_then(infer::get)
+            .map(|k| k.mime_type().to_ascii_lowercase());
         if !self.allowed_media_types.is_empty() {
             let mt = media_type.as_deref().ok_or_else(|| {
                 VldError::single_with_value(
@@ -299,7 +360,11 @@ impl VldSchema for ZFile {
             size,
             media_type,
             extension,
-            bytes,
+            bytes: if self.storage == FileStorage::InMemory {
+                loaded_bytes
+            } else {
+                None
+            },
         })
     }
 }

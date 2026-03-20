@@ -60,10 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   [OK] Published to queue vld.events");
 
     let delivered = channel
-        .basic_get(
-            "vld.events",
-            lapin::options::BasicGetOptions::default(),
-        )
+        .basic_get("vld.events", lapin::options::BasicGetOptions::default())
         .await?;
     if let Some(delivery) = delivered {
         let parsed: EventSchema = channel

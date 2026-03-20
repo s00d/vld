@@ -325,6 +325,8 @@ fn file_schema_validates_size_type_and_extension() {
     assert_eq!(parsed.size(), 8);
     assert_eq!(parsed.extension(), Some("png"));
     assert_eq!(parsed.media_type(), Some("image/png"));
+    assert_eq!(parsed.storage(), vld::prelude::FileStorage::InMemory);
+    assert_eq!(parsed.bytes(), Some(content.as_slice()));
 
     let _ = fs::remove_file(path);
 }
@@ -351,6 +353,37 @@ fn file_schema_rejects_wrong_constraints() {
     assert!(bad_ext
         .parse_value(&json!(path.to_string_lossy().to_string()))
         .is_err());
+
+    let _ = fs::remove_file(path);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn file_schema_path_only_allows_open_and_lazy_read() {
+    use std::fs;
+    use std::io::Read;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("vld-file-path-only-{}.txt", unique));
+    fs::write(&path, b"hello path-only").unwrap();
+
+    let parsed = vld::file()
+        .store_path_only()
+        .parse_value(&json!(path.to_string_lossy().to_string()))
+        .unwrap();
+
+    assert_eq!(parsed.storage(), vld::prelude::FileStorage::PathOnly);
+    assert!(parsed.bytes().is_none());
+    assert_eq!(parsed.read_bytes().unwrap(), b"hello path-only");
+
+    let mut f = parsed.open().unwrap();
+    let mut s = String::new();
+    f.read_to_string(&mut s).unwrap();
+    assert_eq!(s, "hello path-only");
 
     let _ = fs::remove_file(path);
 }

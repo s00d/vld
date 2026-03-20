@@ -40,8 +40,8 @@ impl LapinChannel {
     where
         V: serde::Serialize + vld::schema::VldParse + ?Sized,
     {
-        let json = serde_json::to_value(value)
-            .map_err(|e| VldLapinError::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_value(value).map_err(|e| VldLapinError::Serialization(e.to_string()))?;
         <V as vld::schema::VldParse>::vld_parse_value(&json).map_err(VldLapinError::Validation)?;
         serde_json::to_vec(&json).map_err(|e| VldLapinError::Serialization(e.to_string()))
     }
@@ -99,14 +99,20 @@ impl LapinChannel {
         confirm.await.map_err(VldLapinError::Lapin)
     }
 
-    pub fn decode_delivery<T>(&self, delivery: &lapin::message::Delivery) -> Result<T, VldLapinError>
+    pub fn decode_delivery<T>(
+        &self,
+        delivery: &lapin::message::Delivery,
+    ) -> Result<T, VldLapinError>
     where
         T: vld::schema::VldParse,
     {
         self.decode_bytes(&delivery.data)
     }
 
-    pub fn decode_get<T>(&self, message: &lapin::message::BasicGetMessage) -> Result<T, VldLapinError>
+    pub fn decode_get<T>(
+        &self,
+        message: &lapin::message::BasicGetMessage,
+    ) -> Result<T, VldLapinError>
     where
         T: vld::schema::VldParse,
     {
@@ -148,7 +154,10 @@ impl LapinChannel {
         T: vld::schema::VldParse,
     {
         let parsed = self.decode_delivery(delivery)?;
-        delivery.reject(options).await.map_err(VldLapinError::Lapin)?;
+        delivery
+            .reject(options)
+            .await
+            .map_err(VldLapinError::Lapin)?;
         Ok(parsed)
     }
 

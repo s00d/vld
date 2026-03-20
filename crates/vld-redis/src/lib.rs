@@ -112,8 +112,7 @@ where
         T: vld::schema::VldParse,
     {
         let raw: Option<Vec<u8>> = redis::cmd("GET").arg(key).query(&mut self.inner)?;
-        raw.map(|bytes| Self::decode_json_bytes(&bytes))
-        .transpose()
+        raw.map(|bytes| Self::decode_json_bytes(&bytes)).transpose()
     }
 
     pub fn mset<'a, K, V, I>(&mut self, items: I) -> Result<(), VldRedisError>
@@ -172,8 +171,7 @@ where
             .arg(key)
             .arg(field)
             .query(&mut self.inner)?;
-        raw.map(|bytes| Self::decode_json_bytes(&bytes))
-        .transpose()
+        raw.map(|bytes| Self::decode_json_bytes(&bytes)).transpose()
     }
 
     pub fn lpush<K, V>(&mut self, key: K, value: &V) -> Result<usize, VldRedisError>
@@ -182,7 +180,10 @@ where
         V: serde::Serialize + vld::schema::VldParse,
     {
         let payload = Self::encode_json_string(value)?;
-        let len: usize = redis::cmd("LPUSH").arg(key).arg(payload).query(&mut self.inner)?;
+        let len: usize = redis::cmd("LPUSH")
+            .arg(key)
+            .arg(payload)
+            .query(&mut self.inner)?;
         Ok(len)
     }
 
@@ -192,7 +193,10 @@ where
         V: serde::Serialize + vld::schema::VldParse,
     {
         let payload = Self::encode_json_string(value)?;
-        let len: usize = redis::cmd("RPUSH").arg(key).arg(payload).query(&mut self.inner)?;
+        let len: usize = redis::cmd("RPUSH")
+            .arg(key)
+            .arg(payload)
+            .query(&mut self.inner)?;
         Ok(len)
     }
 
@@ -220,7 +224,10 @@ where
         V: serde::Serialize + vld::schema::VldParse,
     {
         let payload = Self::encode_json_string(value)?;
-        let added: usize = redis::cmd("SADD").arg(key).arg(payload).query(&mut self.inner)?;
+        let added: usize = redis::cmd("SADD")
+            .arg(key)
+            .arg(payload)
+            .query(&mut self.inner)?;
         Ok(added)
     }
 
@@ -249,7 +256,12 @@ where
         Ok(added)
     }
 
-    pub fn zrange<K, T>(&mut self, key: K, start: isize, stop: isize) -> Result<Vec<T>, VldRedisError>
+    pub fn zrange<K, T>(
+        &mut self,
+        key: K,
+        start: isize,
+        stop: isize,
+    ) -> Result<Vec<T>, VldRedisError>
     where
         K: redis::ToRedisArgs,
         T: vld::schema::VldParse,

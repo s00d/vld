@@ -245,6 +245,7 @@ vld::datetime().naive_timezone_offset(3 * 3600);
 ### File (std feature)
 
 ```rust
+// In-memory mode (default): path + metadata + bytes
 let f = vld::file()
     .non_empty()
     .max_size(5 * 1024 * 1024)
@@ -253,6 +254,14 @@ let f = vld::file()
     .parse_value(&serde_json::json!("/tmp/avatar.png"))?;
 
 println!("{} {}", f.path().display(), f.size());
+let bytes = f.bytes().unwrap();
+
+// Path-only mode: store only path/metadata, open/read lazily later
+let f = vld::file()
+    .store_path_only()
+    .parse_value(&serde_json::json!("/tmp/report.pdf"))?;
+let data = f.read_bytes()?; // lazy read from disk
+let handle = f.open()?;     // std::fs::File
 ```
 
 ## Modifiers
