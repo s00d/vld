@@ -1,4 +1,5 @@
 use vld_http_common::*;
+use std::f64::consts::PI;
 
 #[test]
 fn coerce_empty() {
@@ -25,7 +26,7 @@ fn coerce_int() {
 
 #[test]
 fn coerce_float() {
-    assert_eq!(coerce_value("3.14"), serde_json::json!(3.14));
+    assert_eq!(coerce_value("3.14"), serde_json::json!(PI));
 }
 
 #[test]
