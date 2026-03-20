@@ -56,9 +56,13 @@ tag-message = "Release {{crate_name}} v{{version}}"
 # Commit message
 pre-release-commit-message = "chore: release v{{version}}"
 
-# Auto-generate CHANGELOG.md from git history before release commit.
-# Uses `cliff.toml` from repository root.
-pre-release-hook = ["git", "cliff", "--config", "cliff.toml", "--tag", "v{{version}}", "--output", "CHANGELOG.md"]
+# Run per-crate preflight (CI-like checks for the crate being released)
+# and regenerate CHANGELOG.md before the release commit.
+pre-release-hook = [
+  "bash",
+  "-lc",
+  "\"${WORKSPACE_ROOT}/scripts/release-preflight.sh\" \"{{crate_name}}\" \"{{version}}\""
+]
 
 # Pre-release checks
 verify = true

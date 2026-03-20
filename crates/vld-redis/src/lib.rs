@@ -60,7 +60,7 @@ where
 {
     fn encode_json_value<V>(value: &V) -> Result<serde_json::Value, VldRedisError>
     where
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let json =
             serde_json::to_value(value).map_err(|e| VldRedisError::Serialization(e.to_string()))?;
@@ -70,7 +70,7 @@ where
 
     fn encode_json_string<V>(value: &V) -> Result<String, VldRedisError>
     where
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let json = Self::encode_json_value(value)?;
         serde_json::to_string(&json).map_err(|e| VldRedisError::Serialization(e.to_string()))
@@ -78,7 +78,7 @@ where
 
     fn encode_json_bytes<V>(value: &V) -> Result<Vec<u8>, VldRedisError>
     where
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let json = Self::encode_json_value(value)?;
         serde_json::to_vec(&json).map_err(|e| VldRedisError::Serialization(e.to_string()))
@@ -96,7 +96,7 @@ where
     pub fn set<K, V>(&mut self, key: K, value: &V) -> Result<(), VldRedisError>
     where
         K: redis::ToRedisArgs,
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let s = Self::encode_json_string(value)?;
         redis::cmd("SET")
@@ -120,7 +120,7 @@ where
     where
         I: IntoIterator<Item = (K, &'a V)>,
         K: redis::ToRedisArgs,
-        V: serde::Serialize + vld::schema::VldParse + ?Sized + 'a,
+        V: serde::Serialize + vld::schema::VldParse + 'a,
     {
         let mut cmd = redis::cmd("MSET");
         for (key, value) in items {
@@ -151,7 +151,7 @@ where
     where
         K: redis::ToRedisArgs,
         F: redis::ToRedisArgs,
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let s = Self::encode_json_string(value)?;
         redis::cmd("HSET")
@@ -179,7 +179,7 @@ where
     pub fn lpush<K, V>(&mut self, key: K, value: &V) -> Result<usize, VldRedisError>
     where
         K: redis::ToRedisArgs,
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let payload = Self::encode_json_string(value)?;
         let len: usize = redis::cmd("LPUSH").arg(key).arg(payload).query(&mut self.inner)?;
@@ -189,7 +189,7 @@ where
     pub fn rpush<K, V>(&mut self, key: K, value: &V) -> Result<usize, VldRedisError>
     where
         K: redis::ToRedisArgs,
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let payload = Self::encode_json_string(value)?;
         let len: usize = redis::cmd("RPUSH").arg(key).arg(payload).query(&mut self.inner)?;
@@ -217,7 +217,7 @@ where
     pub fn sadd<K, V>(&mut self, key: K, value: &V) -> Result<usize, VldRedisError>
     where
         K: redis::ToRedisArgs,
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let payload = Self::encode_json_string(value)?;
         let added: usize = redis::cmd("SADD").arg(key).arg(payload).query(&mut self.inner)?;
@@ -238,7 +238,7 @@ where
     pub fn zadd<K, V>(&mut self, key: K, score: f64, value: &V) -> Result<usize, VldRedisError>
     where
         K: redis::ToRedisArgs,
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let payload = Self::encode_json_string(value)?;
         let added: usize = redis::cmd("ZADD")
@@ -267,7 +267,7 @@ where
     pub fn publish<Cn, V>(&mut self, channel: Cn, value: &V) -> Result<i64, VldRedisError>
     where
         Cn: redis::ToRedisArgs,
-        V: serde::Serialize + vld::schema::VldParse + ?Sized,
+        V: serde::Serialize + vld::schema::VldParse,
     {
         let payload = Self::encode_json_bytes(value)?;
         let delivered: i64 = redis::cmd("PUBLISH")
