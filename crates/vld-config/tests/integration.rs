@@ -1,5 +1,4 @@
 use std::io::Write;
-use vld::prelude::VldSchema;
 // -- Shared schema --
 
 vld::schema! {
