@@ -218,6 +218,8 @@ pub struct ZDateTime {
     past: Option<String>,
     future: Option<String>,
     allow_naive: bool,
+    naive_offset: chrono::FixedOffset,
+    required_timezone_offset: Option<(chrono::FixedOffset, String)>,
     custom_type_error: Option<String>,
 }
 
@@ -229,6 +231,8 @@ impl ZDateTime {
             past: None,
             future: None,
             allow_naive: true,
+            naive_offset: chrono::FixedOffset::east_opt(0).expect("0 offset must be valid"),
+            required_timezone_offset: None,
             custom_type_error: None,
         }
     }
@@ -304,6 +308,50 @@ impl ZDateTime {
         self.naive_allowed(false)
     }
 
+    /// Interpret naive datetimes (`YYYY-MM-DDTHH:MM:SS`) in the provided timezone offset.
+    ///
+    /// The parsed output is still normalized to UTC.
+    pub fn naive_timezone_offset(mut self, offset_seconds: i32) -> Self {
+        let offset = chrono::FixedOffset::east_opt(offset_seconds).unwrap_or_else(|| {
+            panic!(
+                "Invalid timezone offset seconds: {} (expected range -86400..=86400)",
+                offset_seconds
+            )
+        });
+        self.naive_offset = offset;
+        self
+    }
+
+    /// Require explicit timezone offset in the input to match `offset_seconds`.
+    ///
+    /// Applied only to RFC3339 inputs that include timezone.
+    pub fn timezone_offset_only(self, offset_seconds: i32) -> Self {
+        chrono::FixedOffset::east_opt(offset_seconds).unwrap_or_else(|| {
+            panic!(
+                "Invalid timezone offset seconds: {} (expected range -86400..=86400)",
+                offset_seconds
+            )
+        });
+        let sign = if offset_seconds >= 0 { '+' } else { '-' };
+        let abs = offset_seconds.unsigned_abs();
+        let hh = abs / 3600;
+        let mm = (abs % 3600) / 60;
+        let msg = format!("Timezone offset must be {}{:02}:{:02}", sign, hh, mm);
+        self.timezone_offset_only_msg(offset_seconds, msg)
+    }
+
+    /// Same as [`timezone_offset_only`](Self::timezone_offset_only), with custom message.
+    pub fn timezone_offset_only_msg(mut self, offset_seconds: i32, msg: impl Into<String>) -> Self {
+        let offset = chrono::FixedOffset::east_opt(offset_seconds).unwrap_or_else(|| {
+            panic!(
+                "Invalid timezone offset seconds: {} (expected range -86400..=86400)",
+                offset_seconds
+            )
+        });
+        self.required_timezone_offset = Some((offset, msg.into()));
+        self
+    }
+
     /// Generate a JSON Schema representation.
     #[cfg(feature = "openapi")]
     pub fn to_json_schema(&self) -> serde_json::Value {
@@ -340,14 +388,33 @@ impl VldSchema for ZDateTime {
 
         use chrono::TimeZone;
 
-        let dt = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
-            dt.with_timezone(&chrono::Utc)
+        let dt = if let Ok(dt_fixed) = chrono::DateTime::parse_from_rfc3339(s) {
+            if let Some((required, msg)) = &self.required_timezone_offset {
+                if dt_fixed.offset().local_minus_utc() != required.local_minus_utc() {
+                    return Err(VldError::single_with_value(
+                        IssueCode::Custom {
+                            code: "invalid_timezone_offset".to_string(),
+                        },
+                        msg.clone(),
+                        value,
+                    ));
+                }
+            }
+            dt_fixed.with_timezone(&chrono::Utc)
         } else if self.allow_naive {
             if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
-                chrono::Utc.from_utc_datetime(&ndt)
+                self.naive_offset
+                    .from_local_datetime(&ndt)
+                    .single()
+                    .expect("FixedOffset must map local datetime unambiguously")
+                    .with_timezone(&chrono::Utc)
             } else if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f")
             {
-                chrono::Utc.from_utc_datetime(&ndt)
+                self.naive_offset
+                    .from_local_datetime(&ndt)
+                    .single()
+                    .expect("FixedOffset must map local datetime unambiguously")
+                    .with_timezone(&chrono::Utc)
             } else {
                 return Err(VldError::single_with_value(
                     IssueCode::Custom {
@@ -359,12 +426,12 @@ impl VldSchema for ZDateTime {
             }
         } else {
             return Err(VldError::single_with_value(
-            IssueCode::Custom {
-                code: "invalid_datetime".to_string(),
-            },
-            format!("Invalid datetime format: \"{}\"", s),
-            value,
-        ));
+                IssueCode::Custom {
+                    code: "invalid_datetime".to_string(),
+                },
+                format!("Invalid datetime format: \"{}\"", s),
+                value,
+            ));
         };
 
         let mut errors = VldError::new();

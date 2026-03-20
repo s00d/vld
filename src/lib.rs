@@ -141,6 +141,14 @@ pub fn bytes() -> primitives::ZBytes {
     primitives::ZBytes::new()
 }
 
+/// Create a file validation schema.
+///
+/// Requires the `std` feature.
+#[cfg(feature = "std")]
+pub fn file() -> primitives::ZFile {
+    primitives::ZFile::new()
+}
+
 /// Create an array validation schema.
 pub fn array<T: schema::VldSchema>(element: T) -> collections::ZArray<T> {
     collections::ZArray::new(element)
@@ -344,6 +352,8 @@ pub mod prelude {
     pub use crate::primitives::{
         IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZLiteral, ZNumber, ZString,
     };
+    #[cfg(feature = "std")]
+    pub use crate::primitives::{ValidatedFile, ZFile};
     #[cfg(feature = "chrono")]
     pub use crate::primitives::{ZDate, ZDateTime};
     pub use crate::schema::{VldParse, VldSchema};

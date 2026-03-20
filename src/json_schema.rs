@@ -73,6 +73,13 @@ impl JsonSchema for crate::primitives::ZBytes {
     }
 }
 
+#[cfg(feature = "std")]
+impl JsonSchema for crate::primitives::ZFile {
+    fn json_schema(&self) -> Value {
+        self.to_json_schema()
+    }
+}
+
 impl JsonSchema for crate::primitives::ZEnum {
     fn json_schema(&self) -> Value {
         self.to_json_schema()
@@ -296,6 +303,8 @@ impl CollectNestedSchemas for crate::primitives::ZBoolean {}
 impl CollectNestedSchemas for crate::primitives::ZBytes {}
 impl CollectNestedSchemas for crate::primitives::ZEnum {}
 impl CollectNestedSchemas for crate::primitives::ZAny {}
+#[cfg(feature = "std")]
+impl CollectNestedSchemas for crate::primitives::ZFile {}
 
 #[cfg(feature = "chrono")]
 impl CollectNestedSchemas for crate::primitives::ZDate {}

@@ -24,6 +24,7 @@ rules once and get both runtime checks and strongly-typed Rust structs.
   built-in `parse()` methods. Or use `schema_validated!` to get lenient parsing too.
 - **Error accumulation** — all validation errors are collected, not just the first one.
 - **Rich primitives** — string, number, integer, boolean, literal, enum, any, custom.
+- **File validation (std)** — validate file path input by size, extension, and detected media type.
 - **String formats** — email, URL, UUID, IPv4, IPv6, Base64, ISO date/time/datetime, hostname, CUID2, ULID, Nano ID, emoji.
   All validated without regex by default. Every check has a `_msg` variant for custom messages.
 - **Composable** — optional, nullable, nullish, default, catch, refine, super_refine, transform, pipe, preprocess, describe, `.or()`, `.and()`.
@@ -233,6 +234,25 @@ vld::datetime()
     .future()
     .naive_allowed(false) // disallow naive datetime without timezone
     .with_timezone_only(); // alias for naive_allowed(false)
+
+// Require explicit +03:00 timezone in RFC3339 input
+vld::datetime().timezone_offset_only(3 * 3600);
+
+// For naive input, interpret wall-clock time in +03:00 before normalizing to UTC
+vld::datetime().naive_timezone_offset(3 * 3600);
+```
+
+### File (std feature)
+
+```rust
+let f = vld::file()
+    .non_empty()
+    .max_size(5 * 1024 * 1024)
+    .extension("png")
+    .media_type("image/png")
+    .parse_value(&serde_json::json!("/tmp/avatar.png"))?;
+
+println!("{} {}", f.path().display(), f.size());
 ```
 
 ## Modifiers

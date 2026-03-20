@@ -141,7 +141,10 @@ fn string_url() {
 #[test]
 fn string_extra_validators() {
     assert!(vld::string().ip().parse_value(&json!("127.0.0.1")).is_ok());
-    assert!(vld::string().cidr().parse_value(&json!("10.0.0.0/24")).is_ok());
+    assert!(vld::string()
+        .cidr()
+        .parse_value(&json!("10.0.0.0/24"))
+        .is_ok());
     assert!(vld::string()
         .mac()
         .parse_value(&json!("aa:bb:cc:dd:ee:ff"))
@@ -151,7 +154,10 @@ fn string_extra_validators() {
         .credit_card()
         .parse_value(&json!("4111111111111111"))
         .is_ok());
-    assert!(vld::string().phone().parse_value(&json!("+14155552671")).is_ok());
+    assert!(vld::string()
+        .phone()
+        .parse_value(&json!("+14155552671"))
+        .is_ok());
     assert!(vld::string().semver().parse_value(&json!("1.2.3")).is_ok());
     assert!(vld::string()
         .jwt()
@@ -163,8 +169,14 @@ fn string_extra_validators() {
         .alphanumeric()
         .parse_value(&json!("abc123"))
         .is_ok());
-    assert!(vld::string().lowercase().parse_value(&json!("hello")).is_ok());
-    assert!(vld::string().uppercase().parse_value(&json!("HELLO")).is_ok());
+    assert!(vld::string()
+        .lowercase()
+        .parse_value(&json!("hello"))
+        .is_ok());
+    assert!(vld::string()
+        .uppercase()
+        .parse_value(&json!("HELLO"))
+        .is_ok());
 }
 
 // === Number ===
@@ -283,6 +295,64 @@ fn bytes_base64_mode() {
     let b = vld::bytes().base64().non_empty();
     assert_eq!(b.parse_value(&json!("AQID")).unwrap(), vec![1, 2, 3]);
     assert!(b.parse_value(&json!("@@@")).is_err());
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn file_schema_validates_size_type_and_extension() {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("vld-file-{}.png", unique));
+
+    // Minimal PNG signature bytes (enough for infer mime sniffing).
+    let content = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    fs::write(&path, content).unwrap();
+
+    let schema = vld::file()
+        .non_empty()
+        .max_size(1024)
+        .extension("png")
+        .media_type("image/png");
+
+    let parsed = schema
+        .parse_value(&json!(path.to_string_lossy().to_string()))
+        .unwrap();
+    assert_eq!(parsed.size(), 8);
+    assert_eq!(parsed.extension(), Some("png"));
+    assert_eq!(parsed.media_type(), Some("image/png"));
+
+    let _ = fs::remove_file(path);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn file_schema_rejects_wrong_constraints() {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("vld-file-{}.txt", unique));
+    fs::write(&path, b"hello").unwrap();
+
+    let too_small = vld::file().min_size(10);
+    assert!(too_small
+        .parse_value(&json!(path.to_string_lossy().to_string()))
+        .is_err());
+
+    let bad_ext = vld::file().extension("png");
+    assert!(bad_ext
+        .parse_value(&json!(path.to_string_lossy().to_string()))
+        .is_err());
+
+    let _ = fs::remove_file(path);
 }
 
 // === Input ===

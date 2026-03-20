@@ -146,6 +146,25 @@ fn datetime_with_timezone_only_rejects_naive() {
     assert!(strict.parse(r#""2024-06-15T12:30:00""#).is_err());
 }
 
+#[test]
+fn datetime_timezone_offset_only() {
+    let schema = vld::datetime().timezone_offset_only(3 * 3600);
+    assert!(schema.parse(r#""2024-06-15T12:30:00+03:00""#).is_ok());
+    assert!(schema.parse(r#""2024-06-15T12:30:00+02:00""#).is_err());
+}
+
+#[test]
+fn datetime_naive_timezone_offset_changes_interpretation() {
+    let utc_assumed = vld::datetime();
+    let msk_assumed = vld::datetime().naive_timezone_offset(3 * 3600);
+
+    let a = utc_assumed.parse(r#""2024-06-15T12:00:00""#).unwrap();
+    let b = msk_assumed.parse(r#""2024-06-15T12:00:00""#).unwrap();
+
+    assert_eq!(a.format("%H:%M").to_string(), "12:00");
+    assert_eq!(b.format("%H:%M").to_string(), "09:00");
+}
+
 // ---------------------------------------------------------------------------
 // In schema! macro
 // ---------------------------------------------------------------------------
