@@ -17,16 +17,34 @@ echo "==> Release preflight for ${CRATE_NAME} v${VERSION}"
 echo "==> Dry run: ${DRY_RUN_FLAG}"
 
 echo "==> Build (${CRATE_NAME}, all features)"
-cargo build -p "${CRATE_NAME}" --all-features
+if [[ "${CRATE_NAME}" == "vld-diesel" ]]; then
+  # diesel/mysql links to native OpenSSL; do backend checks explicitly to avoid
+  # host-specific linker failures during preflight.
+  cargo build -p "${CRATE_NAME}" --features sqlite
+  cargo check -p "${CRATE_NAME}" --no-default-features --features postgres
+  cargo check -p "${CRATE_NAME}" --no-default-features --features mysql
+else
+  cargo build -p "${CRATE_NAME}" --all-features
+fi
 
 echo "==> Test (${CRATE_NAME}, default features)"
 cargo test -p "${CRATE_NAME}"
 
 echo "==> Test (${CRATE_NAME}, all features)"
-cargo test -p "${CRATE_NAME}" --all-features
+if [[ "${CRATE_NAME}" == "vld-diesel" ]]; then
+  cargo test -p "${CRATE_NAME}" --features sqlite
+else
+  cargo test -p "${CRATE_NAME}" --all-features
+fi
 
 echo "==> Clippy (${CRATE_NAME}, all targets, all features)"
-cargo clippy -p "${CRATE_NAME}" --all-targets --all-features -- -D warnings
+if [[ "${CRATE_NAME}" == "vld-diesel" ]]; then
+  cargo clippy -p "${CRATE_NAME}" --all-targets --features sqlite -- -D warnings
+  cargo clippy -p "${CRATE_NAME}" --no-default-features --features postgres -- -D warnings
+  cargo clippy -p "${CRATE_NAME}" --no-default-features --features mysql -- -D warnings
+else
+  cargo clippy -p "${CRATE_NAME}" --all-targets --all-features -- -D warnings
+fi
 
 if [[ "${CRATE_NAME}" == "vld" ]]; then
   echo "==> vld feature matrix"
