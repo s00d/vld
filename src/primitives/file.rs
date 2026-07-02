@@ -8,6 +8,14 @@ use crate::schema::VldSchema;
 use md5::{Digest as _, Md5};
 use sha2::Sha256;
 
+fn digest_to_hex(output: impl AsRef<[u8]>) -> String {
+    output
+        .as_ref()
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedFile {
     path: PathBuf,
@@ -535,7 +543,7 @@ impl VldSchema for ZFile {
                 ));
             };
             if let Some(expected) = &self.sha256_hex {
-                let got = format!("{:x}", Sha256::digest(bytes));
+                let got = digest_to_hex(Sha256::digest(bytes));
                 if &got != expected {
                     return Err(VldError::single_with_value(
                         IssueCode::Custom {
@@ -547,7 +555,7 @@ impl VldSchema for ZFile {
                 }
             }
             if let Some(expected) = &self.md5_hex {
-                let got = format!("{:x}", Md5::digest(bytes));
+                let got = digest_to_hex(Md5::digest(bytes));
                 if &got != expected {
                     return Err(VldError::single_with_value(
                         IssueCode::Custom {
