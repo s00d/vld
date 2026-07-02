@@ -121,3 +121,10 @@ proptest = "1"
 [[bench]]
 name = "validation_bench"
 harness = false
+
+[package.metadata.release]
+pre-release-hook = [
+  "bash",
+  "-lc",
+  "\"${WORKSPACE_ROOT}/scripts/release-preflight.sh\" \"{{version}}\"",
+]

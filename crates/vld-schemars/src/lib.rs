@@ -27,6 +27,7 @@
 //!
 //! ```rust
 //! use vld_schemars::{impl_vld_parse, SchemarsValidate};
+//! use vld_schemars::schemars;
 //!
 //! #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 //! struct User { name: String, age: u32 }
@@ -129,9 +130,9 @@ pub fn vld_schema_to_schemars(vld_json: &Value) -> schemars::Schema {
 /// documentation, comparison, or feeding into other tools.
 ///
 /// ```rust
-/// use schemars::JsonSchema;
+/// use vld_schemars::schemars::JsonSchema;
 ///
-/// let schemars_schema = schemars::SchemaGenerator::default().into_root_schema_for::<String>();
+/// let schemars_schema = vld_schemars::schemars::SchemaGenerator::default().into_root_schema_for::<String>();
 /// let json = vld_schemars::schemars_to_json(&schemars_schema);
 /// assert!(json.is_object());
 /// ```
@@ -218,6 +219,7 @@ pub fn validate_with_schemars(
 ///
 /// ```rust
 /// use vld_schemars::{impl_vld_parse, SchemarsValidate};
+/// use vld_schemars::schemars;
 ///
 /// #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 /// struct User { name: String, age: u32 }
@@ -275,6 +277,7 @@ pub trait SchemarsValidate: schemars::JsonSchema + serde::Serialize + Sized {
 ///
 /// ```rust
 /// use vld_schemars::{impl_vld_parse, SchemarsValidate};
+/// use vld_schemars::schemars;
 ///
 /// #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 /// struct Item {

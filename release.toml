@@ -56,13 +56,8 @@ tag-message = "Release {{crate_name}} v{{version}}"
 # Commit message
 pre-release-commit-message = "chore: release v{{version}}"
 
-# Run per-crate preflight (CI-like checks for the crate being released)
-# and regenerate CHANGELOG.md before the release commit.
-pre-release-hook = [
-  "bash",
-  "-lc",
-  "\"${WORKSPACE_ROOT}/scripts/release-preflight.sh\" \"{{crate_name}}\" \"{{version}}\""
-]
+# Workspace-wide preflight runs once from the root `vld` package hook
+# (see [package.metadata.release] in Cargo.toml).
 
 # Pre-release checks
 verify = true
