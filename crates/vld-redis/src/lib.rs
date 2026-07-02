@@ -23,6 +23,16 @@
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 
+#[cfg(all(feature = "redis-0", feature = "redis-1"))]
+compile_error!("Enable exactly one Redis version feature: `redis-0` or `redis-1`.");
+#[cfg(not(any(feature = "redis-0", feature = "redis-1")))]
+compile_error!("Enable one Redis version feature: `redis-0` or `redis-1`.");
+
+#[cfg(feature = "redis-0")]
+use redis0 as redis;
+#[cfg(feature = "redis-1")]
+use redis1 as redis;
+
 pub use vld;
 
 /// Redis connection wrapper with validate+JSON behavior.

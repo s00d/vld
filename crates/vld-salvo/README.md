@@ -9,6 +9,11 @@
 
 [Salvo](https://salvo.rs) integration for the **vld** validation library.
 
+## Version features
+
+- `salvo-0_89` (default)
+- `salvo-0_93`
+
 ## Features
 
 All extractors implement Salvo's `Extractible` trait and can be used

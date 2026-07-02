@@ -2,6 +2,12 @@
 
 SQLx integration for the [vld](https://crates.io/crates/vld) validation library.
 
+## Version features
+
+- `sqlx-0_8` (default)
+- `sqlx-0_9`
+- backend flags are unchanged: `sqlite`, `postgres`, `mysql`
+
 Validate data **before** inserting into the database. Provides:
 
 | Feature | Description |

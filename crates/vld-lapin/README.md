@@ -9,6 +9,12 @@
 
 Lapin (RabbitMQ) integration for [`vld`](https://crates.io/crates/vld).
 
+## Version features
+
+- `lapin-2` (default)
+- `lapin-3`
+- `lapin-4`
+
 ## Overview
 
 `vld-lapin` keeps one entrypoint:

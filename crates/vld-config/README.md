@@ -11,6 +11,12 @@ Validate configuration files (TOML, YAML, JSON, ENV) at load time using
 [vld](https://crates.io/crates/vld) schemas. Supports both
 [config-rs](https://docs.rs/config) and [figment](https://docs.rs/figment).
 
+## Version features
+
+- `config-0_14` (default for `config-rs`)
+- `config-0_15`
+- backend selector stays the same: `config-rs` / `figment`
+
 ## Installation
 
 ```toml

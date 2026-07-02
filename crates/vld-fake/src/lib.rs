@@ -55,8 +55,45 @@ mod dict;
 
 use dict::*;
 use rand::Rng;
+use rand::RngExt;
 use serde_json::{json, Map, Value};
 use vld::prelude::VldParse;
+
+trait RngCompat {
+    fn gen_range<T, R>(&mut self, range: R) -> T
+    where
+        T: rand::distr::uniform::SampleUniform,
+        R: rand::distr::uniform::SampleRange<T>;
+    fn gen_bool(&mut self, p: f64) -> bool;
+    fn r#gen<T>(&mut self) -> T
+    where
+        rand::distr::StandardUniform: rand::distr::Distribution<T>;
+}
+
+impl<R: rand::Rng + ?Sized> RngCompat for R {
+    fn gen_range<T, RB>(&mut self, range: RB) -> T
+    where
+        T: rand::distr::uniform::SampleUniform,
+        RB: rand::distr::uniform::SampleRange<T>,
+    {
+        self.random_range(range)
+    }
+
+    fn gen_bool(&mut self, p: f64) -> bool {
+        self.random_bool(p)
+    }
+
+    fn r#gen<T>(&mut self) -> T
+    where
+        rand::distr::StandardUniform: rand::distr::Distribution<T>,
+    {
+        self.random()
+    }
+}
+
+fn thread_rng_compat() -> rand::rngs::ThreadRng {
+    rand::rng()
+}
 
 // ───────────────────────── public convenience API ──────────────────────────
 
@@ -122,7 +159,7 @@ impl FakeGen<rand::rngs::ThreadRng> {
     /// Create a generator using [`rand::thread_rng()`].
     pub fn new() -> Self {
         Self {
-            rng: rand::thread_rng(),
+            rng: thread_rng_compat(),
             depth: 0,
             counter: 0,
         }

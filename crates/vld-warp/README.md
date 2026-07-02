@@ -9,6 +9,11 @@
 
 [Warp](https://docs.rs/warp) integration for the **vld** validation library.
 
+## Version features
+
+- `warp-0_3` (default)
+- `warp-0_4`
+
 ## Features
 
 | Filter / Function | Source | Description |

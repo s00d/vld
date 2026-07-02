@@ -9,6 +9,11 @@
 
 Redis integration for [`vld`](https://crates.io/crates/vld).
 
+## Version features
+
+- `redis-0_32` (default)
+- `redis-1`
+
 ## Overview
 
 `vld-redis` keeps one entrypoint:

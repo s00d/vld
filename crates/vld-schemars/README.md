@@ -6,6 +6,11 @@
 
 Bidirectional bridge between [vld](https://crates.io/crates/vld) and [schemars](https://crates.io/crates/schemars).
 
+## Version features
+
+- `schemars-0_9` (default)
+- `schemars-1`
+
 ## Overview
 
 Many Rust libraries already use `schemars` for JSON Schema generation — aide, paperclip, okapi,

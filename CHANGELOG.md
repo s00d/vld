@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `vld-utoipa`: deprecated legacy macros (`impl_to_schema_query!`, `impl_into_params!`, suffix forms) with migration docs
 - Framework READMEs: OpenAPI sections for query/path params with unified API
 - Workspace `vld-utoipa` dependency uses `{ workspace = true }`
+- Integration crates now support cleaner dependency compatibility strategy:
+  - dual major branches where APIs diverge (`sqlx`, `redis`, `schemars/aide`, `lapin`)
+  - simplified direct ranges where one branch is enough (`warp`, `salvo`, `tonic`, `config`, `rand`)
+  - explicit CI checks for default and alternative major branches
 
 ### Deprecated
 

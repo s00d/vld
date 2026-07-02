@@ -18,8 +18,23 @@ cargo build --workspace --all-targets
 echo "==> Test workspace (default features, all targets)"
 cargo test --workspace --all-targets
 
-echo "==> Test workspace (all features, all targets)"
-cargo test --workspace --all-features --all-targets
+echo "==> Test integration crates: legacy/new major branches"
+cargo check -p vld-sqlx --no-default-features --features "sqlx-0_8,sqlite"
+cargo check -p vld-sqlx --no-default-features --features "sqlx-0_9,sqlite"
+cargo check -p vld-config --no-default-features --features "config-rs"
+cargo check -p vld-fake
+cargo check -p vld-salvo
+cargo check -p vld-redis --no-default-features --features "redis-0"
+cargo check -p vld-redis --no-default-features --features "redis-1"
+cargo check -p vld-tonic
+cargo check -p vld-warp
+cargo check -p vld-lapin --no-default-features --features "lapin-2"
+cargo check -p vld-lapin --no-default-features --features "lapin-3"
+cargo check -p vld-lapin --no-default-features --features "lapin-4"
+cargo check -p vld-schemars --no-default-features --features "schemars-0"
+cargo check -p vld-schemars --no-default-features --features "schemars-1"
+cargo check -p vld-aide --no-default-features --features "schemars-0"
+cargo check -p vld-aide --no-default-features --features "schemars-1"
 
 echo "==> Test vld feature matrix"
 cargo test -p vld --no-default-features
@@ -37,9 +52,6 @@ cargo test -p vld --features "${TIME_FEATURES}"
 
 echo "==> Clippy (workspace, default features, all targets)"
 cargo clippy --workspace --all-targets -- -D warnings
-
-echo "==> Clippy (workspace, all features, all targets)"
-cargo clippy --workspace --all-features --all-targets -- -D warnings
 
 echo "==> Clippy (vld extended features)"
 cargo clippy -p vld --all-targets --features "${VLD_EXTENDED_FEATURES}" -- -D warnings

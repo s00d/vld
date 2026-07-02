@@ -38,7 +38,6 @@
 //! ```
 
 use std::sync::OnceLock;
-
 use salvo::extract::metadata::{Metadata, Source, SourceFrom, SourceParser};
 use salvo::extract::Extractible;
 use salvo::http::StatusCode;

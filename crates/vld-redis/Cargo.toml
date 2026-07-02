@@ -13,11 +13,17 @@ keywords = ["validation", "redis", "pubsub", "json", "vld"]
 categories = ["database", "web-programming"]
 exclude = [".idea/", "tests/", "examples/"]
 
+[features]
+default = ["redis-0"]
+redis-0 = ["dep:redis0"]
+redis-1 = ["dep:redis1"]
+
 [dependencies]
 vld = { workspace = true, features = ["serialize"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-redis = { version = "0.32" }
+redis0 = { package = "redis", version = ">=0.32, <1", optional = true }
+redis1 = { package = "redis", version = ">=1, <2", optional = true }
 
 [dev-dependencies]
 vld = { workspace = true, features = ["serialize"] }

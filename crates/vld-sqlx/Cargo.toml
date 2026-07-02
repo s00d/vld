@@ -14,19 +14,23 @@ categories = ["database", "web-programming"]
 exclude = [".idea/", "tests/", "examples/"]
 
 [features]
-default = ["sqlite"]
-postgres = ["sqlx/postgres"]
-mysql = ["sqlx/mysql"]
-sqlite = ["sqlx/sqlite"]
+default = ["sqlx-0_8", "sqlite"]
+sqlx-0_8 = ["dep:sqlx08"]
+sqlx-0_9 = ["dep:sqlx09"]
+postgres = ["sqlx08?/postgres", "sqlx09?/postgres"]
+mysql = ["sqlx08?/mysql", "sqlx09?/mysql"]
+sqlite = ["sqlx08?/sqlite", "sqlx09?/sqlite"]
 
 [dependencies]
 vld = { workspace = true, features = ["serialize"] }
-sqlx = { version = "0.8", default-features = false }
+sqlx08 = { package = "sqlx", version = "0.8", default-features = false, optional = true }
+sqlx09 = { package = "sqlx", version = "0.9", default-features = false, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+sqlx08 = { package = "sqlx", version = "0.8", features = ["sqlite", "runtime-tokio"] }
+sqlx09 = { package = "sqlx", version = "0.9", features = ["sqlite", "runtime-tokio"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [[example]]

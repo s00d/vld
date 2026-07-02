@@ -20,6 +20,29 @@
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 
+#[cfg(any(
+    all(feature = "lapin-2", feature = "lapin-3"),
+    all(feature = "lapin-2", feature = "lapin-4"),
+    all(feature = "lapin-3", feature = "lapin-4")
+))]
+compile_error!("Enable exactly one lapin version feature: `lapin-2`, `lapin-3`, or `lapin-4`.");
+#[cfg(not(any(feature = "lapin-2", feature = "lapin-3", feature = "lapin-4")))]
+compile_error!("Enable one lapin version feature: `lapin-2`, `lapin-3`, or `lapin-4`.");
+
+#[cfg(feature = "lapin-2")]
+use lapin2 as lapin;
+#[cfg(feature = "lapin-3")]
+use lapin3 as lapin;
+#[cfg(feature = "lapin-4")]
+use lapin4 as lapin;
+
+#[cfg(feature = "lapin-2")]
+type LapinConfirmation = lapin::publisher_confirm::Confirmation;
+#[cfg(feature = "lapin-3")]
+type LapinConfirmation = lapin::publisher_confirm::Confirmation;
+#[cfg(feature = "lapin-4")]
+type LapinConfirmation = lapin::Confirmation;
+
 pub use vld;
 
 /// Lapin channel wrapper with validate+JSON behavior.
@@ -62,7 +85,7 @@ impl LapinChannel {
         arguments: lapin::types::FieldTable,
     ) -> Result<lapin::Queue, VldLapinError> {
         self.inner
-            .queue_declare(queue, options, arguments)
+            .queue_declare(queue.into(), options, arguments)
             .await
             .map_err(VldLapinError::Lapin)
     }
@@ -73,7 +96,7 @@ impl LapinChannel {
         options: lapin::options::BasicGetOptions,
     ) -> Result<Option<lapin::message::BasicGetMessage>, VldLapinError> {
         self.inner
-            .basic_get(queue, options)
+            .basic_get(queue.into(), options)
             .await
             .map_err(VldLapinError::Lapin)
     }
@@ -85,7 +108,7 @@ impl LapinChannel {
         options: lapin::options::BasicPublishOptions,
         properties: lapin::BasicProperties,
         value: &V,
-    ) -> Result<lapin::publisher_confirm::Confirmation, VldLapinError>
+    ) -> Result<LapinConfirmation, VldLapinError>
     where
         V: serde::Serialize + vld::schema::VldParse,
     {
@@ -93,7 +116,13 @@ impl LapinChannel {
 
         let confirm = self
             .inner
-            .basic_publish(exchange, routing_key, options, &payload, properties)
+            .basic_publish(
+                exchange.into(),
+                routing_key.into(),
+                options,
+                &payload,
+                properties,
+            )
             .await
             .map_err(VldLapinError::Lapin)?;
         confirm.await.map_err(VldLapinError::Lapin)

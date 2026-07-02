@@ -27,7 +27,22 @@
 use std::fmt;
 use std::ops::Deref;
 
+#[cfg(all(feature = "sqlx-0_8", feature = "sqlx-0_9"))]
+compile_error!("Enable exactly one SQLx version feature: `sqlx-0_8` or `sqlx-0_9`.");
+#[cfg(not(any(feature = "sqlx-0_8", feature = "sqlx-0_9")))]
+compile_error!("Enable one SQLx version feature: `sqlx-0_8` or `sqlx-0_9`.");
+
+#[cfg(feature = "sqlx-0_8")]
+use sqlx08 as sqlx;
+#[cfg(feature = "sqlx-0_9")]
+use sqlx09 as sqlx;
+
 pub use vld;
+
+#[cfg(feature = "sqlx-0_8")]
+type SqlxArgBuf<'q, DB> = <DB as sqlx::Database>::ArgumentBuffer<'q>;
+#[cfg(feature = "sqlx-0_9")]
+type SqlxArgBuf<'q, DB> = <DB as sqlx::Database>::ArgumentBuffer;
 
 // ========================= Error type ========================================
 
@@ -394,7 +409,7 @@ where
 {
     fn encode_by_ref(
         &self,
-        buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'q>,
+        buf: &mut SqlxArgBuf<'q, DB>,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         self.value.encode_by_ref(buf)
     }
@@ -552,7 +567,7 @@ where
 {
     fn encode_by_ref(
         &self,
-        buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'q>,
+        buf: &mut SqlxArgBuf<'q, DB>,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         self.value.encode_by_ref(buf)
     }
@@ -689,7 +704,7 @@ where
 {
     fn encode_by_ref(
         &self,
-        buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'q>,
+        buf: &mut SqlxArgBuf<'q, DB>,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         self.value.encode_by_ref(buf)
     }
@@ -824,7 +839,7 @@ where
 {
     fn encode_by_ref(
         &self,
-        buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'q>,
+        buf: &mut SqlxArgBuf<'q, DB>,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         self.value.encode_by_ref(buf)
     }

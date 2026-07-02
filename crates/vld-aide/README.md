@@ -9,6 +9,11 @@
 
 [aide](https://docs.rs/aide) / [schemars](https://docs.rs/schemars) integration for the [vld](https://crates.io/crates/vld) validation library.
 
+## Version features
+
+- `schemars-0_9` (default)
+- `schemars-1`
+
 ## Overview
 
 Bridge between `vld` validation schemas and `aide` OpenAPI documentation generator.

@@ -43,7 +43,15 @@
 use serde_json::Value;
 use std::fmt;
 
-pub use schemars;
+#[cfg(all(feature = "schemars-0", feature = "schemars-1"))]
+compile_error!("Enable exactly one schemars version feature: `schemars-0` or `schemars-1`.");
+#[cfg(not(any(feature = "schemars-0", feature = "schemars-1")))]
+compile_error!("Enable one schemars version feature: `schemars-0` or `schemars-1`.");
+
+#[cfg(feature = "schemars-0")]
+pub use schemars0 as schemars;
+#[cfg(feature = "schemars-1")]
+pub use schemars1 as schemars;
 pub use vld;
 
 // ========================= Error type ========================================

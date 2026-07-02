@@ -9,6 +9,12 @@
 
 Validate protobuf messages and gRPC metadata using `vld` schemas.
 
+## Version features
+
+- `tonic-0_12` (default)
+- `tonic-0_13`
+- `tonic-0_14`
+
 ## Installation
 
 ```toml

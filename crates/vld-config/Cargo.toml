@@ -22,12 +22,12 @@ figment = ["dep:figment"]
 vld = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
-config = { version = "0.14", optional = true, default-features = false, features = ["toml", "json"] }
+config = { version = ">=0.14, <0.16", optional = true, default-features = false, features = ["toml", "json"] }
 figment = { version = "0.10", optional = true, features = ["toml", "json", "env"] }
 
 [dev-dependencies]
 vld = { workspace = true }
-config = { version = "0.14", features = ["toml", "json", "yaml"] }
+config = { version = ">=0.14, <0.16", features = ["toml", "json", "yaml"] }
 figment = { version = "0.10", features = ["toml", "json", "env"] }
 tempfile = "3"
 

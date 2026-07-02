@@ -16,7 +16,7 @@ exclude = [".idea/", "tests/", "examples/"]
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
-salvo = { version = "0.89", default-features = false, features = ["test", "server", "http1", "cookie"] }
+salvo = { version = ">=0.89, <0.94", default-features = false, features = ["test", "server", "http1", "cookie"] }
 serde_json = { workspace = true }
 serde = { workspace = true }
 
