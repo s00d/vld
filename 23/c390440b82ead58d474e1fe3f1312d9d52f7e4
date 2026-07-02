@@ -1,0 +1,233 @@
+crates/vld-utoipa/README.md
+  s_d9039ecc7fcceb::t_aa710ed430c302 13-14,123-124,140
+  s_d9039ecc7fcceb::t_2148d1c8ab8965 85
+  s_d9039ecc7fcceb::t_e37fcdc2ef5249 209-227
+  s_d9039ecc7fcceb::t_ddc906785ca344 25-31,37,48,51,56,58,61,66,83-84,133-139
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 20-21,94-95
+  s_d9039ecc7fcceb::t_910f62b5079fe0 49-50,52-55,57,59-60,62-65,67-80,125,127-131
+  s_d9039ecc7fcceb::t_befd69a8632914 126,132
+crates/vld-schemars/README.md
+  s_d9039ecc7fcceb::t_cc1d0305e4f6a0 29-33
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 38-39
+crates/vld-poem/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 26-27
+  s_d9039ecc7fcceb::t_3090eed7d321c2 86-90
+crates/vld-utoipa/tests/integration.rs
+  s_d9039ecc7fcceb::t_2cf83e3cfccfbd 586,591
+  s_d9039ecc7fcceb::t_9866021e2359c9 622
+  s_d9039ecc7fcceb::t_4711d298747850 624
+  s_d9039ecc7fcceb::t_369ad9977e8487 562,567
+  s_d9039ecc7fcceb::t_996fa1b533619d 2,4
+  s_d9039ecc7fcceb::t_57886344582c02 600-605,607-608
+  s_d9039ecc7fcceb::t_c9677c14e96476 629-631,670,677,686-687
+  s_d9039ecc7fcceb::t_decd438aeb1e59 573-576
+  s_d9039ecc7fcceb::t_656b1e852e7ba6 572
+  s_d9039ecc7fcceb::t_fd0bcad6295eb9 606
+  s_d9039ecc7fcceb::t_00db39487401d5 569
+  s_d9039ecc7fcceb::t_46b1eb543346ee 6
+  s_d9039ecc7fcceb::t_86658454d93b44 584-585,587-590,592-598
+  s_d9039ecc7fcceb::t_2b00f5768a83ce 513,520
+  s_d9039ecc7fcceb::t_f2ae512bb1daab 549
+  s_d9039ecc7fcceb::t_c032b4beb1c883 528-529
+  s_d9039ecc7fcceb::t_2996587562daff 583,599,609-612,615
+  s_d9039ecc7fcceb::t_89721901c3676a 632-669,671-676,678-685
+  s_d9039ecc7fcceb::t_45ecf244d9169b 508-512,514-519,521-527,530-540,542-548,550-561,563-566,568,570-571,577-582,613-614,616-621,623,625-628
+  s_d9039ecc7fcceb::t_d9b13a65f4b2f5 541
+src/json_schema.rs
+  s_d9039ecc7fcceb::t_c15a247829ddde 148
+  s_d9039ecc7fcceb::t_8b029998ff088f 42-53
+  s_d9039ecc7fcceb::t_7eb2b36f38bfdb 151,158,371,373
+crates/vld-warp/README.md
+  s_d9039ecc7fcceb::t_ade9e171c96f85 211-228
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 32-33
+tests/jiff_dates.rs
+  s_d9039ecc7fcceb::t_75ad81e84524ce 1-251
+crates/vld-clap/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 22-23
+crates/vld-axum/examples/axum_openapi.rs
+  s_d9039ecc7fcceb::t_284fa1eb4cc178 1-7,10-38,40-50,52-66,69-72
+  s_d9039ecc7fcceb::t_4e359b64ce068e 8
+  s_d9039ecc7fcceb::t_28eed7c2972f2d 67-68
+  s_d9039ecc7fcceb::t_decd438aeb1e59 9
+  s_d9039ecc7fcceb::t_b3dc9b9fd28e58 39,51
+crates/vld-diesel/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 27-28
+crates/vld-utoipa/examples/utoipa_basic.rs
+  s_d9039ecc7fcceb::t_ab2c78021d79a3 39,45
+  s_d9039ecc7fcceb::t_d30583c30d8767 40,51
+  s_d9039ecc7fcceb::t_bfab815f4bb087 37-38,41-44,46-50,52-57
+  s_d9039ecc7fcceb::t_402fa6b4a7a8a6 85
+crates/vld-ntex/README.md
+  s_d9039ecc7fcceb::t_a6e0824f7d1ea4 224-229
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 31-32
+src/primitives/date/time.rs
+  s_d9039ecc7fcceb::t_109bcf67a9545a 9-14,16,18,20-60,69-88,90-94,96-99,101-106,108-111,113-118,120-123,125-129,131-134,136-140,142-246,256,260-285,287-291,293-296,298-303,305-308,310-315,317-320,322-326,328-331,333-337,341-345,347-350,354-358,362-371,373-377,379-505
+  s_d9039ecc7fcceb::t_dd4774bf391ab0 1-8,15,17,19,61-68,89,95,100,107,112,119,124,130,135,141,247-255,257-259,286,292,297,304,309,316,321,327,332,338-340,346,351-353,359-361,372,378
+crates/vld-axum/README.md
+  s_d9039ecc7fcceb::t_57ab1a92cd90b7 244-250,253-303
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 31-32,251-252
+crates/vld-dioxus/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 13-14
+crates/vld-salvo/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 37-38
+  s_d9039ecc7fcceb::t_967000a5a1ad2e 149-154
+crates/vld-config/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 18-21
+crates/vld-leptos/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 13-14
+crates/vld-sea/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 28-29
+crates/vld-sqlx/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 23-24
+tests/no_default_features.rs
+  s_d9039ecc7fcceb::t_5f3b02f6f0f6eb 7
+Cargo.toml
+  s_d9039ecc7fcceb::t_2b94685dd9c76f 101
+  s_d9039ecc7fcceb::t_03b608f23883d5 102
+  s_d9039ecc7fcceb::t_ac766750c576ec 45-48
+  s_d9039ecc7fcceb::t_7e574607b00f5c 36
+  s_d9039ecc7fcceb::t_289038c14ca9a0 88
+  s_d9039ecc7fcceb::t_3d1a3d4f0d1a59 89
+src/primitives/date/jiff.rs
+  s_d9039ecc7fcceb::t_30759e9f15705f 3-6,8-21,23-34,41-47,56-75,77-81,83-86,88-93,95-98,100-105,107-110,112-116,118-121,123-127,129-235,248-273,275-279,281,283-284,287-291,293,295-296,299-303,305-308,310-314,316-319,321-325,329-333,335-338,342-351,355-369,371-381,383-418,420-528
+  s_d9039ecc7fcceb::t_f2c06e21b00189 382
+  s_d9039ecc7fcceb::t_8e1bf851051f4f 87
+  s_d9039ecc7fcceb::t_bdb7e8e34fe841 419
+  s_d9039ecc7fcceb::t_9a113f1cfcfae0 48-55
+  s_d9039ecc7fcceb::t_bcfd8b6a84a4b3 370
+  s_d9039ecc7fcceb::t_2460a993aedb1a 99
+  s_d9039ecc7fcceb::t_ac5ea500aee255 236-247
+  s_d9039ecc7fcceb::t_47f508ed57b1d0 274,280,285,292,297,304,309,315,320,326-328,334,339-341
+  s_d9039ecc7fcceb::t_32e2f28417904d 1-2,7,22,35-40
+  s_d9039ecc7fcceb::t_4d9fb80ba044bb 128
+  s_d9039ecc7fcceb::t_61c3e16fa4d890 76
+  s_d9039ecc7fcceb::t_8c6342a2d39d6b 82
+  s_d9039ecc7fcceb::t_7481c873237c78 106,111,117,122
+  s_d9039ecc7fcceb::t_84e178d386eeed 282,286,294,298
+  s_d9039ecc7fcceb::t_0b532973698ea6 352-354
+  s_d9039ecc7fcceb::t_dee171f6a2bb13 94
+CHANGELOG.md
+  s_d9039ecc7fcceb::t_cdc0470fd04b20 9-30
+README.md
+  s_d9039ecc7fcceb::t_3701dad7705025 300-304,321-340
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 54,82,1195,1222-1223,1287
+  s_d9039ecc7fcceb::t_2d192f2fddca16 69
+  s_d9039ecc7fcceb::t_39e982d38428f5 70-71
+  s_d9039ecc7fcceb::t_abd9a3ad4ade36 297-299,305
+  s_d9039ecc7fcceb::t_3f2d1419b3cd48 343-353
+  s_d9039ecc7fcceb::t_1cff2e13e8dfdd 341,1253-1277
+  s_d9039ecc7fcceb::t_72a4992a2ef6a6 342
+crates/vld-tauri/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 31-32
+crates/vld-ts/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 20
+crates/vld-actix/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 31-32
+  s_d9039ecc7fcceb::t_2b947f1b24e446 246-266
+crates/vld-utoipa/src/lib.rs
+  s_d9039ecc7fcceb::t_8780400d01900d 343-344,436-437
+  s_d9039ecc7fcceb::t_a0e872bdc7377d 334-342,357-358
+  s_d9039ecc7fcceb::t_d0e31880676799 325
+  s_d9039ecc7fcceb::t_8c15a1d123c995 360-364,370,379,387,398-404,406-418,433-435
+  s_d9039ecc7fcceb::t_2688b200b7885b 663
+  s_d9039ecc7fcceb::t_7dfb8a15e0e194 345,356
+  s_d9039ecc7fcceb::t_cb77016575af5a 656
+  s_d9039ecc7fcceb::t_a4eb790c87baad 259-264,268-273,278-284,286-324,326-333
+  s_d9039ecc7fcceb::t_1ba62b3d2c2592 386,419-425,430-432,438-442,444,462-480,513,518,520-521
+  s_d9039ecc7fcceb::t_f04de2f4316c00 511,514,516-517
+  s_d9039ecc7fcceb::t_00e68494788d7d 346-355,359,365-369,371-378,380-385,388-397,405,426-429
+  s_d9039ecc7fcceb::t_a873bb5179da96 51,55
+  s_d9039ecc7fcceb::t_6f5154e0789b11 496,498
+  s_d9039ecc7fcceb::t_8bc2f826707ec7 659-662
+  s_d9039ecc7fcceb::t_96d8762746b4a3 494-495,497,499-510,522-535,537-546,548-549,551-569,571-611,613-637
+  s_d9039ecc7fcceb::t_7012bcf1454340 657
+  s_d9039ecc7fcceb::t_decd438aeb1e59 265-267,274-277,515,550,570,612
+crates/vld-tonic/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 16-17
+src/macros.rs
+  s_d9039ecc7fcceb::t_f70ec2308d409e 352
+  s_d9039ecc7fcceb::t_75be0affd6e82e 355,367,370,373,376,379-380
+  s_d9039ecc7fcceb::t_300e1e6edce972 604,614
+  s_d9039ecc7fcceb::t_fa446d97b8f8a2 361-366,368-369,371-372,374-375,377-378
+  s_d9039ecc7fcceb::t_3b22a903bd546c 353-354,356-357
+  s_d9039ecc7fcceb::t_94f783a6c2d463 359-360
+  s_d9039ecc7fcceb::t_7b2413438349c1 19-24,26-35,37-46,48-52
+  s_d9039ecc7fcceb::t_84ef76723a6146 154,163-164
+  s_d9039ecc7fcceb::t_9f50fa893c72c3 162
+  s_d9039ecc7fcceb::t_37c4398c864735 15-18,25,36,47,53-56
+  s_d9039ecc7fcceb::t_69a4af3666c2ad 81-96
+src/lib.rs
+  s_d9039ecc7fcceb::t_f5019a422a98a3 408
+  s_d9039ecc7fcceb::t_076755a36d8706 270,272-274,276,283-287
+  s_d9039ecc7fcceb::t_bbc90628f1460f 275,277-278,288,290-291
+tests/schema_macro.rs
+  s_d9039ecc7fcceb::t_d0d57d52d4cfce 88-90,96-99
+  s_d9039ecc7fcceb::t_f26d3cc3555c9b 91-94
+  s_d9039ecc7fcceb::t_3cfb34d3fdf86c 95
+  s_d9039ecc7fcceb::t_7711aedb81bd59 100-111
+crates/vld-tower/README.md
+  s_d9039ecc7fcceb::t_0b47e19b116c80 104-109
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 18-19
+crates/vld-surrealdb/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 34-35
+src/primitives/mod.rs
+  s_d9039ecc7fcceb::t_7ffaecf98d1dfb 26
+  s_d9039ecc7fcceb::t_5365d467a98e54 4
+crates/vld-derive/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 20,69-70
+  s_d9039ecc7fcceb::t_694357defa9669 96-123
+crates/vld-axum/Cargo.toml
+  s_d9039ecc7fcceb::t_d410af80490e84 31
+  s_d9039ecc7fcceb::t_28e35b79b07e4d 30,32,37-40
+crates/vld-aide/README.md
+  s_d9039ecc7fcceb::t_130369ba21bb02 134,137-140
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 26-27
+  s_d9039ecc7fcceb::t_cbdd1cc6b6d3e9 141
+scripts/ci-all.sh
+  s_d9039ecc7fcceb::t_28a75298272d44 32-34
+  s_d9039ecc7fcceb::t_a91e96a26f2c31 47-49
+  s_d9039ecc7fcceb::t_1f10e7ae8b6c82 12
+  s_d9039ecc7fcceb::t_cce5047e4b10ae 13
+  s_d9039ecc7fcceb::t_192eed82e22eb6 35-37
+  s_d9039ecc7fcceb::t_2c48e34dedc2b9 50-52
+tests/time_dates.rs
+  s_d9039ecc7fcceb::t_36e72eec5da4e5 1
+  s_d9039ecc7fcceb::t_f8afb08f2fe648 2-247
+src/primitives/date/mod.rs
+  s_d9039ecc7fcceb::t_2754aba76fca19 1-2
+  s_d9039ecc7fcceb::t_65abd8bd91fd07 8,15
+  s_d9039ecc7fcceb::t_36e72eec5da4e5 7,14
+  s_d9039ecc7fcceb::t_8d57ffd8146b8c 3-6,9-13
+crates/vld-derive/src/lib.rs
+  s_d9039ecc7fcceb::t_852a27f6a2839e 55-61
+  s_d9039ecc7fcceb::t_55a265a5e86e98 48
+  s_d9039ecc7fcceb::t_de37b0a4caee8b 353-358
+  s_d9039ecc7fcceb::t_0b8855bae8cc29 394-417
+crates/vld-fake/README.md
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 97-98
+crates/vld-http-common/README.md
+  s_d9039ecc7fcceb::t_9f0000e4dfe9f1 30-36
+crates/vld-rocket/README.md
+  s_d9039ecc7fcceb::t_0fc03289851a17 101-106
+  s_d9039ecc7fcceb::t_3cb8a2abafb080 26-27
+.github/workflows/ci.yml
+  s_d9039ecc7fcceb::t_8b5e0d8756cfb5 17
+Cargo.lock
+  s_d9039ecc7fcceb::t_1e4a22dceadaf6 1550-1581,2964-2988,4424-4438,6796,6803,6814,6822,6835,6845,6856,6859,6864,6874,6886,6895,6905,6914,6924,6933,6944,6953,6964,6976,6986,6997,7009,7020,7031,7042,7051,7060,7071,7091,7099,7109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "23c390440b82ead58d474e1fe3f1312d9d52f7e4",
+  "prompts": {},
+  "sessions": {
+    "s_d9039ecc7fcceb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "21638c1a-71ff-41cb-b8b1-c0021f98df52",
+        "model": "default"
+      },
+      "human_author": "Pavel Kuzmin <Virus191288@gmail.com>"
+    }
+  }
+}
