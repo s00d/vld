@@ -1,0 +1,35 @@
+Cargo.toml
+  s_d9039ecc7fcceb::t_eed62441ac7650 129
+release.toml
+  s_d9039ecc7fcceb::t_cc837f88210f9f 59
+scripts/release-preflight.sh
+  s_d9039ecc7fcceb::t_ff238445029a5d 7
+scripts/release-hook.sh
+  s_d9039ecc7fcceb::t_e2c384756778ed 1-15
+src/error.rs
+  s_d9039ecc7fcceb::t_a1c4be3143ddf3 535-539
+tests/parse_lenient.rs
+  s_d9039ecc7fcceb::t_ae5c4d87c5db9b 233,239,242
+  s_d9039ecc7fcceb::t_8f1cd672c36bc0 297,304
+  s_d9039ecc7fcceb::t_654a3396b1b713 236-238
+  s_d9039ecc7fcceb::t_90901baeb1df6b 310,323
+  s_d9039ecc7fcceb::t_cb085409d4f05e 145-165
+scripts/release-changelog.sh
+  s_d9039ecc7fcceb::t_ae356f78c0dd6f 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "1667ae4820e7e09585b637edac92461aa52feee2",
+  "prompts": {},
+  "sessions": {
+    "s_d9039ecc7fcceb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "21638c1a-71ff-41cb-b8b1-c0021f98df52",
+        "model": "default"
+      },
+      "human_author": "Pavel Kuzmin <Virus191288@gmail.com>"
+    }
+  }
+}
