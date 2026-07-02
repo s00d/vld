@@ -34,8 +34,8 @@ failures render as `422 Unprocessable Entity` with a JSON error body.
 
 ```toml
 [dependencies]
-vld-salvo = "0.3"
-vld = "0.3"
+vld-salvo = "0.4"
+vld = "0.4"
 salvo = "0.89"
 serde_json = "1"
 ```
@@ -145,6 +145,12 @@ curl "http://localhost:5800/search?q=hello&page=1&limit=10"
 # Health check
 curl http://localhost:5800/health
 ```
+
+## OpenAPI (vld-utoipa)
+
+Use [vld-utoipa](../vld-utoipa/README.md): `#[into_params(parameter_in = Query)]` +
+`impl_to_schema!(SearchParams)` for `params(SearchParams)` in utoipa. Salvo handlers use
+`body: VldJson<T>`, `q: VldQuery<T>`, `p: VldPath<T>` for validation.
 
 ## License
 

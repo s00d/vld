@@ -15,8 +15,8 @@ Tower-compatible framework: Axum, Hyper, Tonic, Warp, etc.
 
 ```toml
 [dependencies]
-vld = "0.3"
-vld-tower = "0.3"
+vld = "0.4"
+vld-tower = "0.4"
 ```
 
 ## How it Works
@@ -100,6 +100,12 @@ let app = Router::new()
 ```bash
 cargo run -p vld-tower --example tower_basic
 ```
+
+## OpenAPI (vld-utoipa)
+
+Tower middleware validates **JSON bodies** only. For OpenAPI request bodies, use
+`impl_to_schema!(T)` from [vld-utoipa](../vld-utoipa/README.md). Query/path parameters require
+framework extractors (e.g. `vld-axum::VldQuery`) plus `#[into_params]` on a separate struct.
 
 ## License
 

@@ -33,7 +33,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.70"
 license = "MIT"
@@ -42,9 +42,10 @@ homepage = "https://github.com/s00d/vld"
 
 [workspace.dependencies]
 # Internal crates
-vld = { path = ".", version = "0.3.0" }
-vld-derive = { path = "crates/vld-derive", version = "0.3.0" }
-vld-http-common = { path = "crates/vld-http-common", version = "0.3.0" }
+vld = { path = ".", version = "0.4.0" }
+vld-derive = { path = "crates/vld-derive", version = "0.4.0" }
+vld-http-common = { path = "crates/vld-http-common", version = "0.4.0" }
+vld-utoipa = { path = "crates/vld-utoipa", version = "0.4.0" }
 
 # Shared external
 serde = { version = "1", features = ["derive"] }
@@ -84,6 +85,8 @@ deserialize = []
 openapi = []
 diff = []
 chrono = ["dep:chrono"]
+jiff = ["dep:jiff"]
+time = ["dep:time"]
 decimal = ["dep:rust_decimal"]
 net = ["dep:ipnet"]
 file = ["std", "dep:infer"]
@@ -95,6 +98,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 regex-lite = { version = "0.1", optional = true }
 chrono = { version = "0.4", optional = true, default-features = false, features = ["std", "clock"] }
+jiff = { version = "0.2", optional = true, default-features = false, features = ["std"] }
+time = { version = "0.3", optional = true, default-features = false, features = ["std", "parsing", "formatting", "macros"] }
 vld-derive = { workspace = true, optional = true }
 infer = { version = "0.19.0", optional = true }
 rust_decimal = { version = "=1.40.0", optional = true }

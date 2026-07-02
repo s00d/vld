@@ -28,8 +28,8 @@ On validation failure all extractors return **422 Unprocessable Entity** with a 
 
 ```toml
 [dependencies]
-vld = "0.3"
-vld-axum = "0.3"
+vld = "0.4"
+vld-axum = "0.4"
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 ```
@@ -239,6 +239,66 @@ curl -s -X POST "http://localhost:3000/orders?dry_run=true&currency=USD" \
     { "path": "name", "message": "String must contain at least 2 character(s)", "code": "too_small" }
   ]
 }
+```
+
+## OpenAPI (vld-utoipa)
+
+`VldJson` / `VldQuery` / `VldPath` validate at runtime. To emit the same vld rules in OpenAPI
+(`minLength`, `minimum`, …) without duplicating `#[param(…)]`, use
+[vld-utoipa](../vld-utoipa/README.md):
+
+```toml
+vld = { version = "0.4", features = ["openapi"] }
+vld-utoipa = "0.4"
+utoipa = "5"
+```
+
+```rust
+use vld::prelude::*;
+use vld_axum::{VldJson, VldQuery, VldPath};
+use vld_utoipa::impl_to_schema;
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct CreateUser {
+        pub name: String => vld::string().min(2),
+    }
+}
+impl_to_schema!(CreateUser);
+
+vld::schema! {
+    #[derive(Debug)]
+    #[into_params(parameter_in = Query)]
+    pub struct SearchParams {
+        pub q: String => vld::string().min(1).max(200),
+    }
+}
+impl_to_schema!(SearchParams);
+
+vld::schema! {
+    #[derive(Debug)]
+    #[into_params(parameter_in = Path)]
+    pub struct UserPath {
+        pub id: i64 => vld::number().int().positive(),
+    }
+}
+impl_to_schema!(UserPath);
+
+#[utoipa::path(
+    post,
+    path = "/users/{id}/search",
+    params(UserPath, SearchParams),
+    request_body = CreateUser,
+)]
+async fn handler(
+    VldPath(path): VldPath<UserPath>,
+    VldQuery(query): VldQuery<SearchParams>,
+    VldJson(body): VldJson<CreateUser>,
+) { /* ... */ }
+```
+
+```bash
+cargo run -p vld-axum --example axum_openapi
 ```
 
 ## License

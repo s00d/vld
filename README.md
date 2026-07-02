@@ -51,7 +51,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-vld = "0.3"
+vld = "0.4"
 ```
 
 ### Optional Features
@@ -66,7 +66,9 @@ Default build enables only `std`. Optional features:
 | `diff`            | Schema diffing — compare two JSON Schemas to detect breaking vs non-breaking changes                                                                                |
 | `regex`           | Custom regex patterns via `.regex()` (uses `regex-lite`)                                                                                                            |
 | `derive`          | `#[derive(Validate)]` procedural macro                                                                                                                              |
-| `chrono`          | `ZDate` / `ZDateTime` types with `chrono` parsing                                                                                                                   |
+| `chrono`          | `ZDate` / `ZDateTime` with `chrono` parsing (`NaiveDate`, `DateTime<Utc>`)                                                                                        |
+| `jiff`            | Same `ZDate` / `ZDateTime` API with [jiff](https://docs.rs/jiff) parsing (`civil::Date`, `Timestamp`). Alternative to `chrono`.                                   |
+| `time`            | Same API with [time](https://docs.rs/time) parsing (`time::Date`, `time::OffsetDateTime` UTC). Alternative to `chrono` / `jiff`.                                  |
 | `decimal`         | Enables decimal schema (`vld::decimal()`) backed by `rust_decimal`                                                                                                  |
 | `net`             | Enables network schema (`vld::ip_network()`) backed by `ipnet`                                                                                                      |
 | `file`            | Enables file schema (`vld::file()`) and basic file checks (size/extensions/media type)                                                                             |
@@ -77,7 +79,7 @@ Enable features as needed:
 
 ```toml
 [dependencies]
-vld = { version = "0.3", features = ["serialize", "openapi"] }
+vld = { version = "0.4", features = ["serialize", "openapi"] }
 ```
 
 ### Basic Usage
@@ -292,7 +294,15 @@ vld::enumeration(&["admin", "user", "moderator"])
 vld::any()  // accepts any JSON value
 ```
 
-### Date / Datetime (chrono feature)
+### Date / Datetime (`chrono`, `jiff`, or `time` feature)
+
+Enable **one** backend in production: `chrono`, `jiff`, or `time`. The builder API is the same (`vld::date()`, `vld::datetime()`). If multiple flags are on (e.g. `--all-features`), priority is **`chrono` > `jiff` > `time`**.
+
+| Feature | `vld::date()` output | `vld::datetime()` output |
+|---------|----------------------|-------------------------|
+| `chrono` | `chrono::NaiveDate` | `chrono::DateTime<chrono::Utc>` |
+| `jiff` | `jiff::civil::Date` | `jiff::Timestamp` |
+| `time` | `time::Date` | `time::OffsetDateTime` (UTC) |
 
 ```rust
 vld::datetime()
@@ -306,6 +316,39 @@ vld::datetime().timezone_offset_only(3 * 3600);
 
 // For naive input, interpret wall-clock time in +03:00 before normalizing to UTC
 vld::datetime().naive_timezone_offset(3 * 3600);
+```
+
+**chrono** (`features = ["chrono", ...]`):
+
+```rust
+vld::schema! {
+    pub struct Event {
+        pub date: chrono::NaiveDate => vld::date().min("2020-01-01"),
+        pub at: chrono::DateTime<chrono::Utc> => vld::datetime(),
+    }
+}
+```
+
+**jiff** (`features = ["jiff", ...]`):
+
+```rust
+vld::schema! {
+    pub struct Event {
+        pub date: jiff::civil::Date => vld::date().min("2020-01-01"),
+        pub at: jiff::Timestamp => vld::datetime().past(),
+    }
+}
+```
+
+**time** (`features = ["time", ...]`):
+
+```rust
+vld::schema! {
+    pub struct Event {
+        pub date: time::Date => vld::date().min("2020-01-01"),
+        pub at: time::OffsetDateTime => vld::datetime().past(),
+    }
+}
 ```
 
 ### File (std feature)
@@ -1149,7 +1192,7 @@ Enable the `derive` feature for `#[derive(Validate)]`:
 
 ```toml
 [dependencies]
-vld = { version = "0.3", features = ["derive"] }
+vld = { version = "0.4", features = ["derive"] }
 ```
 
 ```rust
@@ -1176,8 +1219,8 @@ full support for `#[serde(rename_all = "...")]`. Enable both `derive` and `opena
 
 ```toml
 [dependencies]
-vld = { version = "0.3", features = ["derive", "openapi"] }
-vld-utoipa = "0.3"
+vld = { version = "0.4", features = ["derive", "openapi"] }
+vld-utoipa = "0.4"
 utoipa = "5"
 ```
 
@@ -1207,6 +1250,31 @@ impl_to_schema!(UpdateLocationRequest);
 // Validation also expects camelCase JSON input.
 ```
 
+Query and path parameters use the same `impl_to_schema!` bridge. Mark the struct with
+utoipa's `#[into_params(parameter_in = Query)]` or `Path` (requires `utoipa` in dependencies):
+
+```rust
+use vld::Validate;
+use vld_utoipa::impl_to_schema;
+
+#[derive(Debug, serde::Deserialize, Validate)]
+#[into_params(parameter_in = Query)]
+struct SearchQuery {
+    #[vld(vld::string().min(1).max(200))]
+    q: String,
+}
+
+impl_to_schema!(SearchQuery);
+// Use in #[utoipa::path(get, path = "/search", params(SearchQuery))]
+```
+
+With `vld::schema!`, the `#[into_params]` attribute is stripped from the emitted struct
+(so `utoipa` is not required at compile time). With `#[derive(Validate)]`, the attribute
+stays on the struct like a normal utoipa derive helper.
+
+See [vld-utoipa README](crates/vld-utoipa/README.md) for migration from older macros
+(`impl_to_schema_query!`, `impl_into_params!(T, Query)`, etc.).
+
 ## Optional Regex Support
 
 > Requires the `regex` feature.
@@ -1216,7 +1284,7 @@ If you need custom regex patterns via `.regex()`, enable the `regex` feature:
 
 ```toml
 [dependencies]
-vld = { version = "0.3", features = ["regex"] }
+vld = { version = "0.4", features = ["regex"] }
 ```
 
 ```rust

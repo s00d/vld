@@ -10,25 +10,31 @@
 Bridge between [vld](https://crates.io/crates/vld) validation library and
 [utoipa](https://crates.io/crates/utoipa) OpenAPI documentation.
 
-Define validation rules once with `vld` and automatically get `utoipa::ToSchema`
-implementation — no need to duplicate schema definitions.
+Define validation rules once with `vld` and call **`impl_to_schema!` once** — the same workflow
+for JSON bodies and for query/path parameters, with no duplicate schema definitions.
 
 ## Installation
 
 ```toml
 [dependencies]
-vld = { version = "0.3", features = ["openapi"] }
-vld-utoipa = "0.3"
+vld = { version = "0.4", features = ["openapi"] }
+vld-utoipa = "0.4"
 utoipa = "5"
 ```
 
-## Quick Start
+## One macro, same as derive
+
+| Struct role | Attribute on struct | Bridge |
+|-------------|---------------------|--------|
+| JSON body / response | _(none)_ | `impl_to_schema!(CreateUser)` |
+| Query `?q=…` | `#[into_params(parameter_in = Query)]` | `impl_to_schema!(SearchQuery)` |
+| Path `/users/{id}` | `#[into_params(parameter_in = Path)]` | `impl_to_schema!(UserPath)` |
 
 ```rust
 use vld::prelude::*;
 use vld_utoipa::impl_to_schema;
 
-// 1. Define validated struct as usual
+// Body
 vld::schema! {
     #[derive(Debug)]
     pub struct CreateUser {
@@ -37,13 +43,45 @@ vld::schema! {
         pub age: Option<i64> => vld::number().int().gte(0).optional(),
     }
 }
-
-// 2. One line to bridge to utoipa
 impl_to_schema!(CreateUser);
 
-// Now CreateUser implements utoipa::ToSchema and can be used in
-// #[utoipa::path(post, path = "/users", request_body = CreateUser)]
+// Query — same attribute utoipa users already know
+vld::schema! {
+    #[derive(Debug)]
+    #[into_params(parameter_in = Query)]
+    pub struct SearchQuery {
+        pub q: String => vld::string().min(1).max(200),
+    }
+}
+impl_to_schema!(SearchQuery);
+
+// Path
+vld::schema! {
+    #[derive(Debug)]
+    #[into_params(parameter_in = Path)]
+    pub struct UserPath {
+        pub id: i64 => vld::number().int().positive(),
+    }
+}
+impl_to_schema!(UserPath);
 ```
+
+```rust
+#[utoipa::path(
+    post,
+    path = "/users/{id}/search",
+    params(UserPath, SearchQuery),
+    request_body = CreateUser,
+)]
+async fn handler(
+    VldPath(path): VldPath<UserPath>,
+    VldQuery(query): VldQuery<SearchQuery>,
+    VldJson(body): VldJson<CreateUser>,
+) { /* ... */ }
+```
+
+`minLength`, `minimum`, and other vld rules appear in OpenAPI automatically — no
+`#[param(min_length = …)]` duplication.
 
 ## Using with `#[derive(Validate)]`
 
@@ -53,8 +91,8 @@ This lets you use standard Rust struct syntax with serde attributes like
 
 ```toml
 [dependencies]
-vld = { version = "0.3", features = ["derive", "openapi"] }
-vld-utoipa = "0.3"
+vld = { version = "0.4", features = ["derive", "openapi"] }
+vld-utoipa = "0.4"
 utoipa = "5"
 ```
 
@@ -81,6 +119,24 @@ impl_to_schema!(UpdateLocationRequest);
 // OpenAPI schema properties use camelCase:
 // "streetAddress", "streetNumber", "streetNumberAddition", "isActive"
 ```
+
+Query/path with derive — add `#[into_params(parameter_in = Query)]` on the struct:
+
+```rust
+#[derive(Debug, serde::Deserialize, Validate)]
+#[into_params(parameter_in = Query)]
+struct SearchQuery {
+    #[vld(vld::string().min(1).max(200))]
+    q: String,
+}
+
+impl_to_schema!(SearchQuery);
+```
+
+## Separate structs per HTTP role
+
+OpenAPI treats body fields and query parameters as different contracts. Use one vld struct per
+role (as above). Shared field rules can live in a nested `vld::schema!` type composed into both.
 
 ## Nested Schemas (auto-registration)
 
@@ -149,6 +205,25 @@ let utoipa_schema = json_schema_to_schema(&json_schema);
 - Number: `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`
 - `$ref` references
 - `description`, `default`, `example`, `title`
+
+## Migration from older APIs
+
+The unified API is **`#[into_params(parameter_in = …)]` on the struct** + **`impl_to_schema!(T)`**.
+Older patterns still compile but emit deprecation warnings.
+
+| Old (deprecated) | New (recommended) |
+|------------------|-------------------|
+| `impl_into_params!(T)` | `#[into_params(parameter_in = Query)]` + `impl_to_schema!(T)` |
+| `impl_into_params!(T, Query)` | `#[into_params(parameter_in = Query)]` + `impl_to_schema!(T)` |
+| `impl_into_params!(T, Path)` | `#[into_params(parameter_in = Path)]` + `impl_to_schema!(T)` |
+| `impl_to_schema_query!(T)` | `#[into_params(parameter_in = Query)]` + `impl_to_schema!(T)` |
+| `impl_to_schema_path!(T)` | `#[into_params(parameter_in = Path)]` + `impl_to_schema!(T)` |
+| `impl_to_schema!(T, query)` | `#[into_params(parameter_in = Query)]` + `impl_to_schema!(T)` |
+| `impl_to_schema!(T, path)` | `#[into_params(parameter_in = Path)]` + `impl_to_schema!(T)` |
+| `impl_to_schema!(T, "Name")` | unchanged — custom OpenAPI component name |
+
+Resolution order for parameter location: utoipa provider → legacy macro override →
+`#[into_params(parameter_in = …)]` on the struct.
 
 ## Running the Example
 

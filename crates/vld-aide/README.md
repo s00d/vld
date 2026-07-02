@@ -23,8 +23,8 @@ output to `schemars::Schema`, making your validated types usable with `aide::axu
 
 ```toml
 [dependencies]
-vld = { version = "0.3", features = ["openapi"] }
-vld-aide = "0.3"
+vld = { version = "0.4", features = ["openapi"] }
+vld-aide = "0.4"
 aide = { version = "0.15", features = ["axum"] }
 ```
 
@@ -131,7 +131,13 @@ let schemars_schema = vld_to_schemars(&vld_schema);
 | Target library | [utoipa](https://docs.rs/utoipa) | [aide](https://docs.rs/aide) / [schemars](https://docs.rs/schemars) |
 | Schema trait | `utoipa::ToSchema` | `schemars::JsonSchema` |
 | Macro | `impl_to_schema!` | `impl_json_schema!` |
+| Query / path params | `#[into_params(parameter_in = Query\|Path)]` + per-field OpenAPI `Parameter` via `IntoParams` | object `JsonSchema` on struct (use with `aide::axum::Query<T>` / `Path<T>`) |
 | OpenAPI version | 3.0 / 3.1 | 3.1 |
+
+For **query and path parameters with vld validation constraints in OpenAPI** (e.g. `minLength` on
+`?q=`), use [vld-utoipa](../vld-utoipa/README.md) with `#[into_params]` and runtime
+`VldQuery` / `VldPath` from your framework crate. `vld-aide` documents request/response body
+schemas; parameter structs appear as JSON object schemas in components.
 
 ## Running the example
 

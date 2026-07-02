@@ -9,6 +9,8 @@ set -euo pipefail
 # - explicit feature-matrix checks remain only for core `vld`
 
 VLD_EXTENDED_FEATURES="chrono,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced"
+JIFF_FEATURES="jiff,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced"
+TIME_FEATURES="time,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced"
 
 echo "==> Build workspace (default features, all targets)"
 cargo build --workspace --all-targets
@@ -27,6 +29,12 @@ cargo test -p vld --no-default-features --features diff
 cargo test -p vld --no-default-features --features "serialize,openapi,diff"
 cargo test -p vld --features "${VLD_EXTENDED_FEATURES}"
 
+echo "==> Test vld jiff feature matrix"
+cargo test -p vld --features "${JIFF_FEATURES}"
+
+echo "==> Test vld time feature matrix"
+cargo test -p vld --features "${TIME_FEATURES}"
+
 echo "==> Clippy (workspace, default features, all targets)"
 cargo clippy --workspace --all-targets -- -D warnings
 
@@ -35,6 +43,12 @@ cargo clippy --workspace --all-features --all-targets -- -D warnings
 
 echo "==> Clippy (vld extended features)"
 cargo clippy -p vld --all-targets --features "${VLD_EXTENDED_FEATURES}" -- -D warnings
+
+echo "==> Clippy (vld jiff features)"
+cargo clippy -p vld --all-targets --features "${JIFF_FEATURES}" -- -D warnings
+
+echo "==> Clippy (vld time features)"
+cargo clippy -p vld --all-targets --features "${TIME_FEATURES}" -- -D warnings
 
 echo "==> Format check"
 cargo fmt --all --check

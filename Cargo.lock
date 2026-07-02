@@ -1548,6 +1548,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7a1e2f27636f116493b8b860f5546edb47c8d8f8ea73e1d2a20be88e28d1fea"
 
 [[package]]
+name = "defmt"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6e524506490a1953d237cb87b1cfc1e46f88c18f10a22dfe0f507dc6bfc7f7f"
+dependencies = [
+ "bitflags 1.3.2",
+ "defmt-macros",
+]
+
+[[package]]
+name = "defmt-macros"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0a27770e9c8f719a79d8b638281f4d828f77d8fd61e0bd94451b9b85e576a0b"
+dependencies = [
+ "defmt-parser",
+ "proc-macro-error2",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
+name = "defmt-parser"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
+dependencies = [
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2928,6 +2960,31 @@ name = "itoa"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
+
+[[package]]
+name = "jiff"
+version = "0.2.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccfe6121cbe750cf81efa362d85c0bde7ea298ec43092d3a193baca59cdbd634"
+dependencies = [
+ "defmt",
+ "jiff-static",
+ "log",
+ "portable-atomic",
+ "portable-atomic-util",
+ "serde_core",
+]
+
+[[package]]
+name = "jiff-static"
+version = "0.2.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e165e897f662d428f3cd3828a919dbe067c2d42bb1031eede74ef9d27ecdedd2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
 
 [[package]]
 name = "jobserver"
@@ -4362,6 +4419,21 @@ dependencies = [
  "cpufeatures",
  "opaque-debug",
  "universal-hash",
+]
+
+[[package]]
+name = "portable-atomic"
+version = "1.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
+
+[[package]]
+name = "portable-atomic-util"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2a106d1259c23fac8e543272398ae0e3c0b8d33c88ed73d0cc71b0f1d902618"
+dependencies = [
+ "portable-atomic",
 ]
 
 [[package]]
@@ -6721,13 +6793,14 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vld"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "criterion",
  "image",
  "infer",
  "ipnet",
+ "jiff",
  "kamadak-exif",
  "md-5",
  "phonenumber",
@@ -6738,6 +6811,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "time",
  "url",
  "uuid",
  "vld-derive",
@@ -6745,7 +6819,7 @@ dependencies = [
 
 [[package]]
 name = "vld-actix"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -6758,7 +6832,7 @@ dependencies = [
 
 [[package]]
 name = "vld-aide"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "schemars",
  "serde",
@@ -6768,7 +6842,7 @@ dependencies = [
 
 [[package]]
 name = "vld-axum"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "bytes 1.11.1",
@@ -6779,13 +6853,15 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower",
+ "utoipa",
  "vld",
  "vld-http-common",
+ "vld-utoipa",
 ]
 
 [[package]]
 name = "vld-clap"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "serde",
@@ -6795,7 +6871,7 @@ dependencies = [
 
 [[package]]
 name = "vld-config"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "config",
  "figment",
@@ -6807,7 +6883,7 @@ dependencies = [
 
 [[package]]
 name = "vld-derive"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6816,7 +6892,7 @@ dependencies = [
 
 [[package]]
 name = "vld-diesel"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "diesel",
  "serde",
@@ -6826,7 +6902,7 @@ dependencies = [
 
 [[package]]
 name = "vld-dioxus"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6835,7 +6911,7 @@ dependencies = [
 
 [[package]]
 name = "vld-fake"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "rand 0.8.5",
  "serde",
@@ -6845,7 +6921,7 @@ dependencies = [
 
 [[package]]
 name = "vld-http-common"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6854,7 +6930,7 @@ dependencies = [
 
 [[package]]
 name = "vld-lapin"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "lapin",
  "serde",
@@ -6865,7 +6941,7 @@ dependencies = [
 
 [[package]]
 name = "vld-leptos"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6874,7 +6950,7 @@ dependencies = [
 
 [[package]]
 name = "vld-ntex"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ntex",
  "serde",
@@ -6885,7 +6961,7 @@ dependencies = [
 
 [[package]]
 name = "vld-poem"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "poem",
  "serde",
@@ -6897,7 +6973,7 @@ dependencies = [
 
 [[package]]
 name = "vld-redis"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "redis",
  "serde",
@@ -6907,7 +6983,7 @@ dependencies = [
 
 [[package]]
 name = "vld-rocket"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "rocket",
  "serde",
@@ -6918,7 +6994,7 @@ dependencies = [
 
 [[package]]
 name = "vld-salvo"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "salvo",
  "serde",
@@ -6930,7 +7006,7 @@ dependencies = [
 
 [[package]]
 name = "vld-schemars"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "regex-lite",
  "schemars",
@@ -6941,7 +7017,7 @@ dependencies = [
 
 [[package]]
 name = "vld-sea"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "sea-orm",
  "serde",
@@ -6952,7 +7028,7 @@ dependencies = [
 
 [[package]]
 name = "vld-sqlx"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6963,7 +7039,7 @@ dependencies = [
 
 [[package]]
 name = "vld-surrealdb"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6972,7 +7048,7 @@ dependencies = [
 
 [[package]]
 name = "vld-tauri"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6981,7 +7057,7 @@ dependencies = [
 
 [[package]]
 name = "vld-tonic"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6992,7 +7068,7 @@ dependencies = [
 
 [[package]]
 name = "vld-tower"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bytes 1.11.1",
  "http 1.4.0",
@@ -7012,7 +7088,7 @@ dependencies = [
 
 [[package]]
 name = "vld-ts"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde_json",
  "vld",
@@ -7020,7 +7096,7 @@ dependencies = [
 
 [[package]]
 name = "vld-utoipa"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -7030,7 +7106,7 @@ dependencies = [
 
 [[package]]
 name = "vld-warp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bytes 1.11.1",
  "serde",

@@ -29,8 +29,8 @@ Validation failures are returned as `422 Unprocessable Entity` with a JSON error
 
 ```toml
 [dependencies]
-vld-warp = "0.3"
-vld = "0.3"
+vld-warp = "0.4"
+vld = "0.4"
 warp = "0.3"
 serde_json = "1"
 ```
@@ -206,6 +206,24 @@ curl "http://localhost:3030/search?q=hello&page=1&limit=10"
 
 # Health check
 curl http://localhost:3030/health
+```
+
+## OpenAPI (vld-utoipa)
+
+**Runtime** validation uses filters (`vld_json`, `vld_query`, `vld_param`, `vld_path`) — not
+`VldQuery` struct extractors.
+
+**OpenAPI** still uses vld structs + [vld-utoipa](../vld-utoipa/README.md):
+
+```rust
+vld::schema! {
+    #[derive(Debug)]
+    #[into_params(parameter_in = Query)]
+    pub struct SearchParams { pub q: String => vld::string().min(1) }
+}
+impl_to_schema!(SearchParams);
+// Route: .and(vld_query::<SearchParams>())
+// OpenAPI: params(SearchParams) in #[utoipa::path]
 ```
 
 ## License

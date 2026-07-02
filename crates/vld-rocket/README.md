@@ -23,8 +23,8 @@ All extractors return `422 Unprocessable Entity` with a JSON error body on valid
 
 ```toml
 [dependencies]
-vld-rocket = "0.3"
-vld = "0.3"
+vld-rocket = "0.4"
+vld = "0.4"
 rocket = { version = "0.5", features = ["json"] }
 serde_json = "1"
 ```
@@ -97,6 +97,12 @@ curl -X POST http://localhost:8000/users \
 # Search (query params)
 curl "http://localhost:8000/search?q=hello&page=1&limit=10"
 ```
+
+## OpenAPI (vld-utoipa)
+
+Use [vld-utoipa](../vld-utoipa/README.md) with `#[into_params(parameter_in = Query)]` or `Path` and
+`impl_to_schema!` for OpenAPI parameter constraints. Runtime: `VldJson<T>`, `VldQuery<T>`,
+`VldPath<T>` in handler signatures.
 
 ## License
 

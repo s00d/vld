@@ -12,6 +12,48 @@ macro_rules! __vld_resolve_key {
     };
 }
 
+/// Filter `#[into_params(...)]` off struct attributes, then emit attrs + items together.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __vld_struct_attrs {
+    ( attrs: $(#[ $($attr:tt)* ])*
+      body: { $($body:tt)* }
+    ) => {
+        $crate::__vld_struct_attrs!(@filter [] $(#[ $($attr)* ])*
+            body: { $($body)* }
+        );
+    };
+    (
+        @filter [$($acc:tt)*]
+        #[ into_params ( $($p:tt)* ) ]
+        $(#[ $($rest:tt)* ])*
+        body: { $($body:tt)* }
+    ) => {
+        $crate::__vld_struct_attrs!(@filter [$($acc)*]
+            $(#[ $($rest)* ])*
+            body: { $($body)* }
+        );
+    };
+    (
+        @filter [$($acc:tt)*]
+        #[ $($attr:tt)* ]
+        $(#[ $($rest:tt)* ])*
+        body: { $($body:tt)* }
+    ) => {
+        $crate::__vld_struct_attrs!(@filter [$($acc)* #[ $($attr)* ]]
+            $(#[ $($rest)* ])*
+            body: { $($body)* }
+        );
+    };
+    (
+        @filter [$($acc:tt)*]
+        body: { $($body:tt)* }
+    ) => {
+        $($acc)*
+        $($body)*
+    };
+}
+
 /// Define a validated struct with field-level schemas.
 ///
 /// This macro generates:
@@ -35,6 +77,22 @@ macro_rules! __vld_resolve_key {
 ///
 /// Each field has the format: `name: Type [as "json_key"] => schema`.
 /// The optional `as "json_key"` overrides the JSON property name used for parsing.
+///
+/// # OpenAPI parameters
+///
+/// For query/path/header/cookie parameters, add utoipa's attribute on the struct
+/// (same as with `#[derive(Validate)]`), then call [`vld_utoipa::impl_to_schema`] once:
+///
+/// ```ignore
+/// vld::schema! {
+///     #[derive(Debug)]
+///     #[into_params(parameter_in = Query)]
+///     pub struct SearchQuery {
+///         pub q: String => vld::string().min(1),
+///     }
+/// }
+/// impl_to_schema!(SearchQuery);
+/// ```
 ///
 /// # Example
 ///
@@ -93,7 +151,7 @@ macro_rules! __vld_resolve_key {
 #[macro_export]
 macro_rules! schema {
     (
-        $(#[$meta:meta])*
+        $(#[ $($struct_attr:tt)* ])*
         $vis:vis struct $name:ident {
             $(
                 $(#[$field_meta:meta])*
@@ -101,7 +159,9 @@ macro_rules! schema {
             ),* $(,)?
         }
     ) => {
-        $(#[$meta])*
+        $crate::__vld_struct_attrs! {
+            attrs: $(#[ $($struct_attr)* ])*
+            body: {
         $vis struct $name {
             $(
                 $(#[$field_meta])*
@@ -289,7 +349,35 @@ macro_rules! schema {
                     __vld_out
                 }
             }
+
+            impl $crate::json_schema::OpenApiParameterIn for $name {
+                fn parameter_in() -> Option<&'static str> {
+                    $crate::schema!(@param_in $(#[ $($struct_attr)* ])*)
+                }
+            }
         }
+            }
+        }
+    };
+
+    // Parse `#[into_params(parameter_in = ...)]` for [`OpenApiParameterIn`].
+    (@param_in) => {
+        None::<&'static str>
+    };
+    (@param_in #[ into_params ( parameter_in = Query ) ] $(#[ $($rest:tt)* ])*) => {
+        Some("query")
+    };
+    (@param_in #[ into_params ( parameter_in = Path ) ] $(#[ $($rest:tt)* ])*) => {
+        Some("path")
+    };
+    (@param_in #[ into_params ( parameter_in = Header ) ] $(#[ $($rest:tt)* ])*) => {
+        Some("header")
+    };
+    (@param_in #[ into_params ( parameter_in = Cookie ) ] $(#[ $($rest:tt)* ])*) => {
+        Some("cookie")
+    };
+    (@param_in #[ $($skip:tt)* ] $(#[ $($rest:tt)* ])*) => {
+        $crate::schema!(@param_in $(#[ $($rest)* ])*)
     };
 }
 
@@ -513,7 +601,7 @@ macro_rules! impl_validate_fields {
 #[macro_export]
 macro_rules! schema_validated {
     (
-        $(#[$meta:meta])*
+        $(#[ $($struct_attr:tt)* ])*
         $vis:vis struct $name:ident {
             $(
                 $(#[$field_meta:meta])*
@@ -523,7 +611,7 @@ macro_rules! schema_validated {
     ) => {
         // 1. Generate the struct + parse/parse_value (same as schema!)
         $crate::schema! {
-            $(#[$meta])*
+            $(#[ $($struct_attr)* ])*
             $vis struct $name {
                 $(
                     $(#[$field_meta])*

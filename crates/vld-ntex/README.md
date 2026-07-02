@@ -28,8 +28,8 @@ On validation failure all extractors return **422 Unprocessable Entity** with a 
 
 ```toml
 [dependencies]
-vld = "0.3"
-vld-ntex = "0.3"
+vld = "0.4"
+vld-ntex = "0.4"
 ntex = "3"
 ```
 
@@ -220,6 +220,12 @@ curl -s "http://localhost:8080/search?q=rust&page=1"
   ]
 }
 ```
+
+## OpenAPI (vld-utoipa)
+
+Same pattern as [vld-axum](../vld-axum/README.md#openapi-vld-utoipa): `#[into_params(parameter_in = Query|Path)]`
+on the struct, `impl_to_schema!`, then `params(T)` in `#[utoipa::path]`. Use `VldQuery` / `VldPath`
+extractors at runtime.
 
 ## License
 

@@ -34,6 +34,27 @@ vld::schema! {
 impl_to_schema!(CreateUser);
 impl_to_schema!(UserResponse);
 
+vld::schema! {
+    #[derive(Debug, serde::Serialize)]
+    #[into_params(parameter_in = Query)]
+    pub struct SearchQuery {
+        pub q: String => vld::string().min(1).max(200),
+    }
+}
+
+impl_to_schema!(SearchQuery);
+
+#[allow(dead_code)]
+#[utoipa::path(
+    get,
+    path = "/search",
+    params(SearchQuery),
+    responses(
+        (status = 200, description = "Search results"),
+    )
+)]
+fn search_users() {}
+
 #[allow(dead_code)]
 #[utoipa::path(
     post,
@@ -61,7 +82,7 @@ fn get_user() {}
 // Address is auto-registered via ToSchema::schemas() — no need to list it manually!
 #[derive(utoipa::OpenApi)]
 #[openapi(
-    paths(create_user, get_user),
+    paths(create_user, get_user, search_users),
     components(schemas(CreateUser, UserResponse))
 )]
 struct ApiDoc;

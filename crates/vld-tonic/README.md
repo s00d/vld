@@ -13,8 +13,8 @@ Validate protobuf messages and gRPC metadata using `vld` schemas.
 
 ```toml
 [dependencies]
-vld = "0.3"
-vld-tonic = "0.3"
+vld = "0.4"
+vld-tonic = "0.4"
 tonic = "0.12"
 serde = { version = "1", features = ["derive"] }
 ```

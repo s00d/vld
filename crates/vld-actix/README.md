@@ -28,8 +28,8 @@ On validation failure all extractors return **422 Unprocessable Entity** with a 
 
 ```toml
 [dependencies]
-vld = "0.3"
-vld-actix = "0.3"
+vld = "0.4"
+vld-actix = "0.4"
 actix-web = "4"
 ```
 
@@ -241,6 +241,27 @@ curl -s -X POST "http://localhost:8080/orders?dry_run=true&currency=USD" \
     { "path": "name", "message": "String must contain at least 2 character(s)", "code": "too_small" }
   ]
 }
+```
+
+## OpenAPI (vld-utoipa)
+
+Pair runtime extractors (`VldJson`, `VldQuery`, `VldPath`) with
+[vld-utoipa](../vld-utoipa/README.md): mark query/path structs with
+`#[into_params(parameter_in = Query)]` or `Path`, then `impl_to_schema!(T)` once.
+
+```rust
+use vld_utoipa::impl_to_schema;
+
+vld::schema! {
+    #[derive(Debug)]
+    #[into_params(parameter_in = Query)]
+    pub struct SearchParams {
+        pub q: String => vld::string().min(1),
+    }
+}
+impl_to_schema!(SearchParams);
+// #[utoipa::path(get, path = "/search", params(SearchParams))]
+// async fn search(params: VldQuery<SearchParams>) { ... }
 ```
 
 ## License

@@ -24,8 +24,8 @@ Validate data **before** inserting into the database. Provides:
 
 ```toml
 [dependencies]
-vld-diesel = "0.3"
-vld = { version = "0.3", features = ["serialize"] }
+vld-diesel = "0.4"
+vld = { version = "0.4", features = ["serialize"] }
 diesel = { version = "2", features = ["sqlite"] }
 ```
 

@@ -85,3 +85,27 @@ fn enum_in_schema_macro() {
     assert_eq!(c.mode, "dev");
     assert!(Config::parse(r#"{"mode": "invalid", "port": 8080}"#).is_err());
 }
+
+#[test]
+fn schema_strips_into_params_attribute() {
+    vld::schema! {
+        #[derive(Debug)]
+        #[into_params(parameter_in = Query)]
+        struct StripProbe {
+            x: i64 => vld::number().int(),
+        }
+    }
+    let _ = StripProbe { x: 1 };
+}
+
+#[test]
+fn schema_validated_strips_into_params_attribute() {
+    vld::schema_validated! {
+        #[derive(Debug, serde::Serialize)]
+        #[into_params(parameter_in = Query)]
+        struct ValidatedStripProbe {
+            x: i64 => vld::number().int(),
+        }
+    }
+    let _ = ValidatedStripProbe { x: 1 };
+}

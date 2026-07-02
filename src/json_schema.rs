@@ -39,6 +39,18 @@ pub trait CollectNestedSchemas {
     fn collect_nested_schemas(&self, _out: &mut Vec<NestedSchemaEntry>) {}
 }
 
+/// Hint for OpenAPI parameter location when a struct is used with `utoipa::IntoParams`.
+///
+/// Set via utoipa's `#[into_params(parameter_in = Query)]` attribute on a struct
+/// defined with [`schema!`](crate::schema) or `#[derive(Validate)]`.
+pub trait OpenApiParameterIn {
+    /// Returns `"query"`, `"path"`, `"header"`, or `"cookie"` when the struct is
+    /// annotated with `#[into_params(parameter_in = ...)]`, otherwise `None`.
+    fn parameter_in() -> Option<&'static str> {
+        None
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Primitives
 // ---------------------------------------------------------------------------
@@ -133,17 +145,17 @@ impl JsonSchema for crate::primitives::ZAny {
 }
 
 // ---------------------------------------------------------------------------
-// Date/DateTime (chrono feature)
+// Date/DateTime (chrono, jiff, or time feature; chrono > jiff > time when multiple enabled)
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "chrono")]
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 impl JsonSchema for crate::primitives::ZDate {
     fn json_schema(&self) -> Value {
         self.to_json_schema()
     }
 }
 
-#[cfg(feature = "chrono")]
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 impl JsonSchema for crate::primitives::ZDateTime {
     fn json_schema(&self) -> Value {
         self.to_json_schema()
@@ -356,9 +368,9 @@ impl CollectNestedSchemas for crate::primitives::ZDuration {}
 #[cfg(feature = "std")]
 impl CollectNestedSchemas for crate::primitives::ZPath {}
 
-#[cfg(feature = "chrono")]
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 impl CollectNestedSchemas for crate::primitives::ZDate {}
-#[cfg(feature = "chrono")]
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 impl CollectNestedSchemas for crate::primitives::ZDateTime {}
 
 // Collections — forward to element/value schema.

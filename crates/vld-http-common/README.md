@@ -27,6 +27,13 @@ the framework-specific crate (`vld-axum`, `vld-actix`, `vld-rocket`,
 | `url_decode` | Minimal percent-decode |
 | `extract_path_param_names` | Extract `{param}` names from route pattern |
 
+## OpenAPI error responses
+
+Framework crates return validation errors using helpers from this crate. The
+`ValidationErrorBody` shape (via `format_vld_error`) can be registered in OpenAPI as a `422`
+response with `impl_to_schema!(ValidationErrorBody)` from
+[vld-utoipa](../vld-utoipa/README.md) (enable `openapi` on `vld`).
+
 ## License
 
 MIT

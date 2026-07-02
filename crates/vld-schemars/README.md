@@ -26,12 +26,17 @@ Plus introspection, comparison, and schema merge utilities.
 `vld-aide` is specifically for the [aide](https://docs.rs/aide) OpenAPI framework.
 `vld-schemars` is a **general-purpose** bridge usable with any library in the schemars ecosystem.
 
+**Query / path OpenAPI parameters:** schemars exposes struct schemas as JSON objects, not
+per-field HTTP parameters. For utoipa-style `params(SearchQuery)` with vld constraints on each
+field, use [vld-utoipa](../vld-utoipa/README.md) (`#[into_params(parameter_in = Query)]` +
+`impl_to_schema!`).
+
 ## Installation
 
 ```toml
 [dependencies]
-vld = { version = "0.3", features = ["openapi"] }
-vld-schemars = "0.3"
+vld = { version = "0.4", features = ["openapi"] }
+vld-schemars = "0.4"
 ```
 
 ## Quick Start

@@ -1,8 +1,9 @@
 use serde_json::json;
+use utoipa::openapi::path::ParameterIn;
 use utoipa::openapi::RefOr;
-use utoipa::{PartialSchema, ToSchema};
+use utoipa::{IntoParams, PartialSchema, ToSchema};
 use vld::prelude::*;
-use vld_utoipa::{impl_to_schema, json_schema_to_schema};
+use vld_utoipa::{impl_to_schema, json_schema_to_params, json_schema_to_schema};
 
 // ---- json_schema_to_schema tests ----
 
@@ -503,4 +504,184 @@ fn flat_schema_has_empty_nested_schemas() {
         schemas.is_empty(),
         "flat schema should have no nested schemas"
     );
+}
+
+// ---- IntoParams tests (issue #3) ----
+
+vld::schema! {
+    #[derive(Debug)]
+    #[into_params(parameter_in = Query)]
+    pub struct SearchParams {
+        pub sample: String => vld::string().min(16).max(200),
+        pub page: Option<i64> => vld::number().int().gte(1).optional(),
+    }
+}
+
+impl_to_schema!(SearchParams);
+
+#[test]
+fn json_schema_to_params_preserves_string_constraints() {
+    let params = json_schema_to_params(&SearchParams::json_schema(), ParameterIn::Query);
+    assert_eq!(params.len(), 2);
+
+    let sample = params.iter().find(|p| p.name == "sample").unwrap();
+    assert!(matches!(sample.parameter_in, ParameterIn::Query));
+    assert!(matches!(sample.required, utoipa::openapi::Required::True));
+
+    let schema_json = serde_json::to_value(sample.schema.as_ref().unwrap()).unwrap();
+    assert_eq!(schema_json["type"], "string");
+    assert_eq!(schema_json["minLength"], 16);
+    assert_eq!(schema_json["maxLength"], 200);
+}
+
+#[test]
+fn json_schema_to_params_optional_field_not_required() {
+    let params = json_schema_to_params(&SearchParams::json_schema(), ParameterIn::Query);
+    let page = params.iter().find(|p| p.name == "page").unwrap();
+    assert!(matches!(page.required, utoipa::openapi::Required::False));
+
+    let schema_json = serde_json::to_value(page.schema.as_ref().unwrap()).unwrap();
+    assert_eq!(schema_json["type"], "integer");
+    assert_eq!(schema_json["minimum"], 1);
+}
+
+#[test]
+fn impl_to_schema_into_params_preserves_constraints() {
+    let params = SearchParams::into_params(|| Some(ParameterIn::Query));
+    assert_eq!(params.len(), 2);
+
+    let sample = params.iter().find(|p| p.name == "sample").unwrap();
+    let schema_json = serde_json::to_value(sample.schema.as_ref().unwrap()).unwrap();
+    assert_eq!(schema_json["minLength"], 16);
+}
+
+#[test]
+fn into_params_path_parameter_in() {
+    vld::schema! {
+        #[derive(Debug)]
+        #[into_params(parameter_in = Path)]
+        pub struct PathParams {
+            pub id: i64 => vld::number().int().positive(),
+        }
+    }
+    impl_to_schema!(PathParams);
+
+    let params = PathParams::into_params(|| None);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].name, "id");
+    assert!(matches!(params[0].parameter_in, ParameterIn::Path));
+    assert!(matches!(
+        params[0].required,
+        utoipa::openapi::Required::True
+    ));
+
+    let schema_json = serde_json::to_value(params[0].schema.as_ref().unwrap()).unwrap();
+    assert_eq!(schema_json["type"], "integer");
+}
+
+#[test]
+fn into_params_attribute_defaults_to_query() {
+    vld::schema! {
+        #[derive(Debug)]
+        #[into_params(parameter_in = Query)]
+        pub struct QueryOnly {
+            pub q: String => vld::string().min(1),
+        }
+    }
+    impl_to_schema!(QueryOnly);
+
+    let params = QueryOnly::into_params(|| None);
+    assert_eq!(params.len(), 1);
+    assert!(matches!(params[0].parameter_in, ParameterIn::Query));
+}
+
+#[test]
+fn into_params_without_attribute_returns_empty() {
+    vld::schema! {
+        #[derive(Debug)]
+        pub struct NoLocation {
+            pub q: String => vld::string().min(1),
+        }
+    }
+    impl_to_schema!(NoLocation);
+
+    let params = NoLocation::into_params(|| None);
+    assert!(params.is_empty());
+}
+
+#[test]
+fn derive_impl_into_params_preserves_constraints() {
+    #[derive(Debug, vld::Validate)]
+    #[into_params(parameter_in = Query)]
+    #[allow(dead_code)]
+    struct QueryParams {
+        #[vld(vld::string().min(16))]
+        sample: String,
+    }
+
+    impl_to_schema!(QueryParams);
+
+    let params = QueryParams::into_params(|| None);
+    assert_eq!(params.len(), 1);
+    let schema_json = serde_json::to_value(params[0].schema.as_ref().unwrap()).unwrap();
+    assert_eq!(schema_json["minLength"], 16);
+}
+
+// ---- Legacy migration API (deprecated aliases) ----
+
+mod legacy_migration {
+    #![allow(deprecated)]
+
+    use super::*;
+    use vld_utoipa::{impl_into_params, impl_to_schema, impl_to_schema_query};
+
+    vld::schema! {
+        #[derive(Debug)]
+        pub struct LegacyQueryParams {
+            pub q: String => vld::string().min(3).max(100),
+        }
+    }
+
+    vld::schema! {
+        #[derive(Debug)]
+        pub struct LegacySuffixParams {
+            pub id: i64 => vld::number().int().positive(),
+        }
+    }
+
+    vld::schema! {
+        #[derive(Debug)]
+        pub struct LegacyIntoParamsQuery {
+            pub page: i64 => vld::number().int().gte(1),
+        }
+    }
+
+    impl_to_schema_query!(LegacyQueryParams);
+    impl_to_schema!(LegacySuffixParams, query);
+    impl_into_params!(LegacyIntoParamsQuery, Query);
+
+    #[test]
+    fn legacy_impl_to_schema_query_still_works() {
+        let params = LegacyQueryParams::into_params(|| None);
+        assert_eq!(params.len(), 1);
+        assert!(matches!(params[0].parameter_in, ParameterIn::Query));
+        let schema_json = serde_json::to_value(params[0].schema.as_ref().unwrap()).unwrap();
+        assert_eq!(schema_json["minLength"], 3);
+    }
+
+    #[test]
+    fn legacy_impl_to_schema_suffix_query_still_works() {
+        let params = LegacySuffixParams::into_params(|| None);
+        assert_eq!(params.len(), 1);
+        assert!(matches!(params[0].parameter_in, ParameterIn::Query));
+    }
+
+    #[test]
+    fn legacy_impl_into_params_with_query_ident_still_works() {
+        let params = LegacyIntoParamsQuery::into_params(|| None);
+        assert_eq!(params.len(), 1);
+        assert!(matches!(params[0].parameter_in, ParameterIn::Query));
+        let schema_json = serde_json::to_value(params[0].schema.as_ref().unwrap()).unwrap();
+        assert_eq!(schema_json["minimum"], 1);
+    }
 }

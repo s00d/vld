@@ -1,7 +1,7 @@
 mod any;
 mod boolean;
 mod bytes;
-#[cfg(feature = "chrono")]
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 mod date;
 #[cfg(feature = "decimal")]
 mod decimal;
@@ -23,7 +23,7 @@ mod string;
 pub use any::ZAny;
 pub use boolean::ZBoolean;
 pub use bytes::ZBytes;
-#[cfg(feature = "chrono")]
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 pub use date::{ZDate, ZDateTime};
 #[cfg(feature = "decimal")]
 pub use decimal::ZDecimal;

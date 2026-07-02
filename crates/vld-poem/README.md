@@ -23,8 +23,8 @@ All extractors return `422 Unprocessable Entity` with a JSON error body on valid
 
 ```toml
 [dependencies]
-vld-poem = "0.3"
-vld = "0.3"
+vld-poem = "0.4"
+vld = "0.4"
 poem = "3"
 serde_json = "1"
 ```
@@ -82,6 +82,11 @@ curl -X POST http://localhost:3000/users \
 # Search (query params)
 curl "http://localhost:3000/search?q=hello&page=1&limit=10"
 ```
+
+## OpenAPI (vld-utoipa)
+
+Use [vld-utoipa](../vld-utoipa/README.md) with `#[into_params]` + `impl_to_schema!` for OpenAPI;
+runtime validation via `VldJson` / `VldQuery` / `VldPath` `FromRequest` extractors.
 
 ## License
 

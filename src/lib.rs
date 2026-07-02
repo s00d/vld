@@ -267,20 +267,28 @@ pub fn any() -> primitives::ZAny {
     primitives::ZAny::new()
 }
 
-/// Create a date validation schema. Parses ISO 8601 date strings (`YYYY-MM-DD`)
-/// into `chrono::NaiveDate`.
+/// Create a date validation schema. Parses ISO 8601 date strings (`YYYY-MM-DD`).
 ///
-/// Requires the `chrono` feature.
-#[cfg(feature = "chrono")]
+/// Output type depends on the enabled date backend:
+/// - `chrono` feature → `chrono::NaiveDate`
+/// - `jiff` feature → `jiff::civil::Date`
+/// - `time` feature → `time::Date`
+///
+/// When multiple backends are enabled, priority is: `chrono` > `jiff` > `time`.
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 pub fn date() -> primitives::ZDate {
     primitives::ZDate::new()
 }
 
-/// Create a datetime validation schema. Parses ISO 8601 datetime strings
-/// into `chrono::DateTime<chrono::Utc>`.
+/// Create a datetime validation schema. Parses ISO 8601 datetime strings.
 ///
-/// Requires the `chrono` feature.
-#[cfg(feature = "chrono")]
+/// Output type depends on the enabled date backend:
+/// - `chrono` feature → `chrono::DateTime<chrono::Utc>`
+/// - `jiff` feature → `jiff::Timestamp`
+/// - `time` feature → `time::OffsetDateTime` (UTC)
+///
+/// When multiple backends are enabled, priority is: `chrono` > `jiff` > `time`.
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 pub fn datetime() -> primitives::ZDateTime {
     primitives::ZDateTime::new()
 }
@@ -397,7 +405,7 @@ pub mod prelude {
         IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZJsonValue, ZLiteral, ZNumber,
         ZSocketAddr, ZString,
     };
-    #[cfg(feature = "chrono")]
+    #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
     pub use crate::primitives::{ZDate, ZDateTime};
     #[cfg(feature = "std")]
     pub use crate::primitives::{ZDuration, ZPath};

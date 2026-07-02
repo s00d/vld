@@ -45,13 +45,20 @@ use syn::{parse_macro_input, Data, DeriveInput, Expr, Fields, Lit, Meta};
 ///
 /// The expression inside `#[vld(...)]` is used as-is in the generated code.
 /// Make sure the types are in scope (e.g., use `vld::string()` or import via prelude).
-#[proc_macro_derive(Validate, attributes(vld))]
+#[proc_macro_derive(Validate, attributes(vld, into_params))]
 pub fn derive_validate(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
 
     // Check for #[serde(rename_all = "...")]
     let rename_all = get_serde_rename_all(&input.attrs);
+    let parameter_in_expr = match get_into_params_parameter_in(&input.attrs).as_deref() {
+        Some("query") => quote! { Some("query") },
+        Some("path") => quote! { Some("path") },
+        Some("header") => quote! { Some("header") },
+        Some("cookie") => quote! { Some("cookie") },
+        _ => quote! { None },
+    };
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -343,6 +350,12 @@ pub fn derive_validate(input: TokenStream) -> TokenStream {
                     )
                 }
             }
+
+            impl ::vld::json_schema::OpenApiParameterIn for #name {
+                fn parameter_in() -> Option<&'static str> {
+                    #parameter_in_expr
+                }
+            }
         }
     };
 
@@ -369,6 +382,30 @@ fn get_serde_rename_all(attrs: &[syn::Attribute]) -> Option<String> {
                             if let Lit::Str(s) = &lit.lit {
                                 return Some(s.value());
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Extract `#[into_params(parameter_in = ...)]` from struct-level attributes.
+fn get_into_params_parameter_in(attrs: &[syn::Attribute]) -> Option<String> {
+    for attr in attrs {
+        if !attr.path().is_ident("into_params") {
+            continue;
+        }
+        if let Ok(nested) = attr
+            .parse_args_with(syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated)
+        {
+            for meta in &nested {
+                if let Meta::NameValue(nv) = meta {
+                    if nv.path.is_ident("parameter_in") {
+                        if let Expr::Path(path) = &nv.value {
+                            let ident = path.path.get_ident()?;
+                            return Some(ident.to_string().to_ascii_lowercase());
                         }
                     }
                 }
