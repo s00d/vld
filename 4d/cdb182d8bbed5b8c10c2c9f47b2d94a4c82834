@@ -1,0 +1,22 @@
+Cargo.toml
+  s_d9039ecc7fcceb::t_b8c710234298ce 36
+  s_d9039ecc7fcceb::t_ce8f3fbfc2ba86 45-48
+Cargo.lock
+  s_d9039ecc7fcceb::t_b80a740391edff 6796,6822,6835,6845,6864,6874,6886,6895,6905,6914,6924,6933,6944,6953,6964,6976,6986,6997,7009,7020,7031,7042,7051,7060,7071,7091,7099,7109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "4dcdb182d8bbed5b8c10c2c9f47b2d94a4c82834",
+  "prompts": {},
+  "sessions": {
+    "s_d9039ecc7fcceb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "21638c1a-71ff-41cb-b8b1-c0021f98df52",
+        "model": "default"
+      },
+      "human_author": "Pavel Kuzmin <Virus191288@gmail.com>"
+    }
+  }
+}
