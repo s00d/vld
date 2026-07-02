@@ -126,5 +126,5 @@ harness = false
 pre-release-hook = [
   "bash",
   "-lc",
-  "\"${WORKSPACE_ROOT}/scripts/release-preflight.sh\" \"{{version}}\"",
+  "\"${WORKSPACE_ROOT}/scripts/release-hook.sh\" \"{{version}}\"",
 ]

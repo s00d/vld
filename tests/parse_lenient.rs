@@ -142,6 +142,27 @@ fn parse_lenient_not_object() {
     assert!(TestUser::parse_lenient(&input).is_err());
 }
 
+// ---- File helpers ----
+
+#[cfg(feature = "std")]
+fn temp_test_dir(label: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "vld_{label}_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock before UNIX epoch")
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).expect("failed to create temp dir");
+    dir
+}
+
+#[cfg(feature = "std")]
+fn cleanup_temp_dir(dir: &std::path::Path) {
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 // ---- ParseResult methods ----
 
 #[test]
@@ -209,16 +230,16 @@ fn parse_result_save_to_file() {
     });
     let result = TestUser::parse_lenient(&input).unwrap();
 
-    let dir = std::env::temp_dir().join("vld_test");
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = temp_test_dir("save");
     let path = dir.join("test_save.json");
 
-    result.save_to_file(&path).unwrap();
-
-    let content = std::fs::read_to_string(&path).unwrap();
+    result
+        .save_to_file(&path)
+        .expect("failed to save parse result");
+    let content = std::fs::read_to_string(&path).expect("failed to read saved parse result");
     assert!(content.contains("Alex"));
 
-    let _ = std::fs::remove_file(&path);
+    cleanup_temp_dir(&dir);
 }
 
 #[test]
@@ -273,22 +294,20 @@ fn parse_result_display() {
 #[cfg(feature = "std")]
 #[test]
 fn parse_from_file_path() {
-    let dir = std::env::temp_dir().join("vld_test_input");
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = temp_test_dir("input");
     let path = dir.join("input.json");
     std::fs::write(&path, r#"{"name":"Alex","email":"a@b.com","age":20,"role":"admin","nick":"dev","inner":{"city":"X"}}"#).unwrap();
 
     let user = TestUser::parse(path.as_path()).unwrap();
     assert_eq!(user.name, "Alex");
 
-    let _ = std::fs::remove_file(&path);
+    cleanup_temp_dir(&dir);
 }
 
 #[cfg(feature = "std")]
 #[test]
 fn parse_lenient_from_file() {
-    let dir = std::env::temp_dir().join("vld_test_input2");
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = temp_test_dir("input2");
     let path = dir.join("bad_input.json");
     std::fs::write(
         &path,
@@ -301,7 +320,7 @@ fn parse_lenient_from_file() {
     assert_eq!(result.value.name, "");
     assert_eq!(result.value.nick, "anon");
 
-    let _ = std::fs::remove_file(&path);
+    cleanup_temp_dir(&dir);
 }
 
 #[cfg(feature = "std")]
