@@ -1,0 +1,28 @@
+release.toml
+  s_d9039ecc7fcceb::t_2e5ad5e1ff4880 59-60
+scripts/release-preflight.sh
+  s_d9039ecc7fcceb::t_2e37418e707ed2 4-5,7-8,15,18
+crates/vld-schemars/src/lib.rs
+  s_d9039ecc7fcceb::t_0b739b53b535ce 280
+  s_d9039ecc7fcceb::t_e1565cf69d58fc 30
+  s_d9039ecc7fcceb::t_4b3711123c3a0a 222
+  s_d9039ecc7fcceb::t_152380eddc0b17 133,135
+Cargo.toml
+  s_d9039ecc7fcceb::t_56ab1e2840498f 124-130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "62bde46cbf8da58c0078f9d15333a14a1a2d22f5",
+  "prompts": {},
+  "sessions": {
+    "s_d9039ecc7fcceb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "21638c1a-71ff-41cb-b8b1-c0021f98df52",
+        "model": "default"
+      },
+      "human_author": "Pavel Kuzmin <Virus191288@gmail.com>"
+    }
+  }
+}
