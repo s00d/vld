@@ -33,7 +33,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.70"
 license = "MIT"
@@ -42,10 +42,10 @@ homepage = "https://github.com/s00d/vld"
 
 [workspace.dependencies]
 # Internal crates
-vld = { path = ".", version = "0.4.0" }
-vld-derive = { path = "crates/vld-derive", version = "0.4.0" }
-vld-http-common = { path = "crates/vld-http-common", version = "0.4.0" }
-vld-utoipa = { path = "crates/vld-utoipa", version = "0.4.0" }
+vld = { path = ".", version = "0.3.0" }
+vld-derive = { path = "crates/vld-derive", version = "0.3.0" }
+vld-http-common = { path = "crates/vld-http-common", version = "0.3.0" }
+vld-utoipa = { path = "crates/vld-utoipa", version = "0.3.0" }
 
 # Shared external
 serde = { version = "1", features = ["derive"] }

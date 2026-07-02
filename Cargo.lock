@@ -6793,7 +6793,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vld"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "criterion",
@@ -6819,7 +6819,7 @@ dependencies = [
 
 [[package]]
 name = "vld-actix"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -6832,7 +6832,7 @@ dependencies = [
 
 [[package]]
 name = "vld-aide"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "schemars",
  "serde",
@@ -6842,7 +6842,7 @@ dependencies = [
 
 [[package]]
 name = "vld-axum"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "bytes 1.11.1",
@@ -6861,7 +6861,7 @@ dependencies = [
 
 [[package]]
 name = "vld-clap"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "serde",
@@ -6871,7 +6871,7 @@ dependencies = [
 
 [[package]]
 name = "vld-config"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "config",
  "figment",
@@ -6883,7 +6883,7 @@ dependencies = [
 
 [[package]]
 name = "vld-derive"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6892,7 +6892,7 @@ dependencies = [
 
 [[package]]
 name = "vld-diesel"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "diesel",
  "serde",
@@ -6902,7 +6902,7 @@ dependencies = [
 
 [[package]]
 name = "vld-dioxus"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6911,7 +6911,7 @@ dependencies = [
 
 [[package]]
 name = "vld-fake"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "rand 0.8.5",
  "serde",
@@ -6921,7 +6921,7 @@ dependencies = [
 
 [[package]]
 name = "vld-http-common"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6930,7 +6930,7 @@ dependencies = [
 
 [[package]]
 name = "vld-lapin"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "lapin",
  "serde",
@@ -6941,7 +6941,7 @@ dependencies = [
 
 [[package]]
 name = "vld-leptos"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6950,7 +6950,7 @@ dependencies = [
 
 [[package]]
 name = "vld-ntex"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "ntex",
  "serde",
@@ -6961,7 +6961,7 @@ dependencies = [
 
 [[package]]
 name = "vld-poem"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "poem",
  "serde",
@@ -6973,7 +6973,7 @@ dependencies = [
 
 [[package]]
 name = "vld-redis"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "redis",
  "serde",
@@ -6983,7 +6983,7 @@ dependencies = [
 
 [[package]]
 name = "vld-rocket"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "rocket",
  "serde",
@@ -6994,7 +6994,7 @@ dependencies = [
 
 [[package]]
 name = "vld-salvo"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "salvo",
  "serde",
@@ -7006,7 +7006,7 @@ dependencies = [
 
 [[package]]
 name = "vld-schemars"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "regex-lite",
  "schemars",
@@ -7017,7 +7017,7 @@ dependencies = [
 
 [[package]]
 name = "vld-sea"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "sea-orm",
  "serde",
@@ -7028,7 +7028,7 @@ dependencies = [
 
 [[package]]
 name = "vld-sqlx"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -7039,7 +7039,7 @@ dependencies = [
 
 [[package]]
 name = "vld-surrealdb"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -7048,7 +7048,7 @@ dependencies = [
 
 [[package]]
 name = "vld-tauri"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -7057,7 +7057,7 @@ dependencies = [
 
 [[package]]
 name = "vld-tonic"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -7068,7 +7068,7 @@ dependencies = [
 
 [[package]]
 name = "vld-tower"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "bytes 1.11.1",
  "http 1.4.0",
@@ -7088,7 +7088,7 @@ dependencies = [
 
 [[package]]
 name = "vld-ts"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "vld",
@@ -7096,7 +7096,7 @@ dependencies = [
 
 [[package]]
 name = "vld-utoipa"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -7106,7 +7106,7 @@ dependencies = [
 
 [[package]]
 name = "vld-warp"
-version = "0.4.0"
+version = "0.3.0"
 dependencies = [
  "bytes 1.11.1",
  "serde",
