@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.4.0] - 2026-07-02
+
+
+
+### Changed
+
+
+- Refresh crate links and dependency versions
+
+- Enhance build and test process for vld-diesel
+
+
+### Fixed
+
+
+- Make path-within check deterministic in CI
+
+- Restore integration examples and tests build
+
+
+### chore
+
+
+- Downgrade workspace and crate versions to 0.3.0
+
+- Update dependencies and versions in Cargo files
+
+- Normalize integration dependency compatibility
+
+- Implement workspace-wide pre-release hook and update preflight script
+
+- Update pre-release hook and streamline release preflight script
+
+
+### ci
+
+
+- Unify workspace checks and restore crate version badges
+
+
+### release
+
+
+- V0.4.0 — unified utoipa OpenAPI, jiff/time date backends
+
+
 ## [0.3.0] - 2026-03-20
 
 
