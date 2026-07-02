@@ -1,4 +1,5 @@
 use vld_schemars::prelude::*;
+use vld_schemars::schemars;
 
 // === Forward: vld → schemars ===
 

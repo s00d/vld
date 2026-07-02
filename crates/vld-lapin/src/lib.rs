@@ -78,6 +78,7 @@ impl LapinChannel {
         <T as vld::schema::VldParse>::vld_parse_value(&value).map_err(VldLapinError::Validation)
     }
 
+    #[allow(clippy::useless_conversion)]
     pub async fn queue_declare(
         &self,
         queue: &str,
@@ -90,6 +91,7 @@ impl LapinChannel {
             .map_err(VldLapinError::Lapin)
     }
 
+    #[allow(clippy::useless_conversion)]
     pub async fn basic_get(
         &self,
         queue: &str,
@@ -101,6 +103,7 @@ impl LapinChannel {
             .map_err(VldLapinError::Lapin)
     }
 
+    #[allow(clippy::useless_conversion)]
     pub async fn publish<V>(
         &self,
         exchange: &str,

@@ -1,3 +1,8 @@
+#[cfg(feature = "sqlx-0_8")]
+use sqlx08 as sqlx;
+#[cfg(feature = "sqlx-0_9")]
+use sqlx09 as sqlx;
+
 use sqlx::{Row, SqlitePool};
 use vld_sqlx::prelude::*;
 

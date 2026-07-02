@@ -37,11 +37,11 @@
 //! }
 //! ```
 
-use std::sync::OnceLock;
 use salvo::extract::metadata::{Metadata, Source, SourceFrom, SourceParser};
 use salvo::extract::Extractible;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
+use std::sync::OnceLock;
 use vld::schema::VldParse;
 use vld_http_common::coerce_value;
 

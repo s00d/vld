@@ -1,5 +1,6 @@
-use schemars::JsonSchema;
 use vld_aide::prelude::*;
+use vld_aide::schemars;
+use vld_aide::schemars::JsonSchema;
 
 vld::schema! {
     #[derive(Debug)]

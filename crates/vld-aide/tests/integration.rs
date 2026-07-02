@@ -1,6 +1,7 @@
-use schemars::JsonSchema;
 use serde_json::json;
 use vld::prelude::*;
+use vld_aide::schemars;
+use vld_aide::schemars::JsonSchema;
 use vld_aide::{impl_json_schema, vld_to_schemars};
 
 // ---- vld_to_schemars tests ----

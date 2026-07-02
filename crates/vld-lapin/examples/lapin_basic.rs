@@ -5,6 +5,13 @@
 
 use vld_lapin::prelude::*;
 
+#[cfg(feature = "lapin-2")]
+use lapin2 as lapin;
+#[cfg(feature = "lapin-3")]
+use lapin3 as lapin;
+#[cfg(feature = "lapin-4")]
+use lapin4 as lapin;
+
 vld::schema! {
     #[derive(Debug, serde::Serialize)]
     pub struct EventSchema {
