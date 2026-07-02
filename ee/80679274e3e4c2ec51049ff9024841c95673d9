@@ -1,0 +1,19 @@
+scripts/release-preflight.sh
+  s_d9039ecc7fcceb::t_86f3ef1a4fa3f5 20-28,34-38,41-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "ee80679274e3e4c2ec51049ff9024841c95673d9",
+  "prompts": {},
+  "sessions": {
+    "s_d9039ecc7fcceb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "21638c1a-71ff-41cb-b8b1-c0021f98df52",
+        "model": "default"
+      },
+      "human_author": "Pavel Kuzmin <Virus191288@gmail.com>"
+    }
+  }
+}
