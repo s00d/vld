@@ -1,0 +1,39 @@
+crates/vld-schemars/examples/schemars_basic.rs
+  s_d9039ecc7fcceb::t_452c2b77f234bf 2
+crates/vld-aide/examples/aide_basic.rs
+  s_d9039ecc7fcceb::t_8d0b32e040ac19 2-3
+crates/vld-sqlx/tests/integration.rs
+  s_d9039ecc7fcceb::t_2a01c2184fe4a0 1-5
+crates/vld-salvo/src/lib.rs
+  s_d9039ecc7fcceb::t_37bcc1ce3b94c3 44
+crates/vld-aide/tests/integration.rs
+  s_d9039ecc7fcceb::t_fdc77cac14fb75 3-4
+crates/vld-lapin/examples/lapin_basic.rs
+  s_d9039ecc7fcceb::t_5ffe5652d70139 8-14
+crates/vld-schemars/tests/integration.rs
+  s_d9039ecc7fcceb::t_54e891e3e22853 3
+crates/vld-redis/Cargo.toml
+  s_d9039ecc7fcceb::t_96568e3b3094e2 18,25
+crates/vld-sqlx/examples/sqlx_basic.rs
+  s_d9039ecc7fcceb::t_043bc2373deda0 5-9
+crates/vld-lapin/tests/integration.rs
+  s_d9039ecc7fcceb::t_b76ba52abc0916 1-7
+crates/vld-lapin/src/lib.rs
+  s_d9039ecc7fcceb::t_83516c431f280d 81,94,106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "ecf72dbe0317c3c34de2b2a4834579a18417fc20",
+  "prompts": {},
+  "sessions": {
+    "s_d9039ecc7fcceb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "21638c1a-71ff-41cb-b8b1-c0021f98df52",
+        "model": "default"
+      },
+      "human_author": "Pavel Kuzmin <Virus191288@gmail.com>"
+    }
+  }
+}
