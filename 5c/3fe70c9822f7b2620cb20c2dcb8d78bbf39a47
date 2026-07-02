@@ -1,0 +1,95 @@
+crates/vld-redis/src/lib.rs
+  s_d9039ecc7fcceb::t_dc7fe26919b20d 30,33-35
+  s_d9039ecc7fcceb::t_914a4617d509e0 26-29,31-32
+crates/vld-redis/Cargo.toml
+  s_d9039ecc7fcceb::t_d16af83d472f16 16,19-20
+  s_d9039ecc7fcceb::t_667cbf3ab6f631 17-18,25-26
+crates/vld-fake/Cargo.toml
+  s_d9039ecc7fcceb::t_4e1995de62d21b 20
+crates/vld-warp/Cargo.toml
+  s_d9039ecc7fcceb::t_e732fafcd45b7a 19
+crates/vld-config/Cargo.toml
+  s_d9039ecc7fcceb::t_0ed26669f9b2bd 25,30
+crates/vld-redis/README.md
+  s_d9039ecc7fcceb::t_09e53468fa0a1c 12-16
+crates/vld-warp/README.md
+  s_d9039ecc7fcceb::t_785cfe3de3d501 12-16
+crates/vld-salvo/Cargo.toml
+  s_d9039ecc7fcceb::t_580d026bdc7c2e 19
+crates/vld-sqlx/Cargo.toml
+  s_d9039ecc7fcceb::t_07fe3bda6cfba4 17-22,26-27,32-33
+crates/vld-aide/src/lib.rs
+  s_d9039ecc7fcceb::t_c6a66a1bdfab05 54,57,59
+  s_d9039ecc7fcceb::t_8d00973e179b1e 50-53,55-56
+  s_d9039ecc7fcceb::t_4ce342b100bebe 58
+crates/vld-tonic/Cargo.toml
+  s_d9039ecc7fcceb::t_e3a2cdb009767a 20
+crates/vld-salvo/README.md
+  s_d9039ecc7fcceb::t_a7c4ad88b8ac67 12-16
+crates/vld-tonic/README.md
+  s_d9039ecc7fcceb::t_b3aa71840ddd74 12-14,16-17
+  s_d9039ecc7fcceb::t_15926512d12b20 15
+crates/vld-lapin/README.md
+  s_d9039ecc7fcceb::t_04d22c16ad6855 12-14,16-17
+  s_d9039ecc7fcceb::t_a6532cb3c66b0f 15
+crates/vld-sqlx/src/lib.rs
+  s_d9039ecc7fcceb::t_396b484e2ceadb 30-39
+  s_d9039ecc7fcceb::t_e4520b003cacea 42-46,412,570,707,842
+crates/vld-schemars/README.md
+  s_d9039ecc7fcceb::t_ac8c58b0dbb40f 9-13
+crates/vld-aide/README.md
+  s_d9039ecc7fcceb::t_8ad9655edfb203 12-16
+crates/vld-fake/src/lib.rs
+  s_d9039ecc7fcceb::t_6a9906ec92904d 62-97,162
+  s_d9039ecc7fcceb::t_8706fbff3b94b5 58
+scripts/ci-all.sh
+  s_d9039ecc7fcceb::t_a2bc3fac94dd32 21-23,28,31,33,35,37
+  s_d9039ecc7fcceb::t_bdf18dc4a8d2b0 27,34,36
+  s_d9039ecc7fcceb::t_631b5f7c3eec47 32
+  s_d9039ecc7fcceb::t_09517975915f3c 25
+  s_d9039ecc7fcceb::t_e7a9d72bb3942a 24,26,29-30
+crates/vld-aide/Cargo.toml
+  s_d9039ecc7fcceb::t_4c029c8739ec6f 16,19-20
+  s_d9039ecc7fcceb::t_c950b57d9b4bdd 17-18,23-24
+CHANGELOG.md
+  s_d9039ecc7fcceb::t_9c565ebe13e09f 26-29
+crates/vld-sqlx/README.md
+  s_d9039ecc7fcceb::t_f1630c6fed4edc 5-10
+crates/vld-schemars/src/lib.rs
+  s_d9039ecc7fcceb::t_1733d83fda44d2 54
+  s_d9039ecc7fcceb::t_82f60223843981 50,53
+  s_d9039ecc7fcceb::t_54a35084a47779 46-49,51-52
+crates/vld-config/README.md
+  s_d9039ecc7fcceb::t_bb56f6d6a4b25e 14-19
+Cargo.toml
+  s_d9039ecc7fcceb::t_633cbcf1be4ac8 117
+crates/vld-schemars/Cargo.toml
+  s_d9039ecc7fcceb::t_f3cad801ab8f8d 16,19-20
+  s_d9039ecc7fcceb::t_b3b9278a84b3c0 17-18,23-24
+crates/vld-lapin/Cargo.toml
+  s_d9039ecc7fcceb::t_02959cbb53ade8 19,27
+  s_d9039ecc7fcceb::t_6b1ff9270297cc 16-18,20-21,26,28
+crates/vld-lapin/src/lib.rs
+  s_d9039ecc7fcceb::t_6dbd5b3bab24bb 23-30,34-35,40-41
+  s_d9039ecc7fcceb::t_f108c60b64127a 39,42-45,111
+  s_d9039ecc7fcceb::t_28742f4ffbcc1a 88,99,119-125
+  s_d9039ecc7fcceb::t_444871e2d88835 31-33,36-38
+Cargo.lock
+  s_d9039ecc7fcceb::t_757b847a20ab84 11,33,53,322-324,330-357,364-393,409-432,439-461,543-548,632-644,671,682-695,765-793,923-945,998-1006,1075,1077,1320-1330,1430-1444,1594,1619-1628,1819-1827,2006,2019,2076,2085,2143-2148,2271-2280,2317-2325,2419-2429,2457-2462,2486,2488,2496,2498,2502,2504,2524,2526,2558,2560,2567-2577,2580,2582,2586,2588,2598,2600,2680,2811-2812,2834-2842,2855,2870,2930-3007,3009-3012,3016,3018,3020,3032-3040,3451-3463,3469-3471,3539-3587,3640-3642,3644-3645,3650,3656-3692,3742,3953-3969,4049-4054,4067,4079,4126,4155,4186,4213,4253,4268,4291,4414,4569-4572,4616-4621,4676,4681-4704,4707,4764,4927,5049,5208-5218,5309,5424-5434,5473-5478,5578-5601,5618-5635,5642,5651,5736-5741,5889,5995,6008,6025,6030-6059,6066,6070-6082,6103-6129,6132,6134,6136,6291,6296-6320,6323,6325,6426-6440,6571-6581,6661-6670,6768-6785,6822-6855,6864-6878,6898-6926,6928,6941,6954-6955,6965,6968,6972-6998,7009,7013,7018-7019,7031-7066,7070,7080,7091-7115,7259-7285,7299-7314,7318-7330,7484,7486,7746,7998-7999,8078,8097-8099,8142-8143,8177-8178,8201-8202,8454,8470-8478,8495-8506,8594-8604,8912,8985-9001,9008-9013
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "5c3fe70c9822f7b2620cb20c2dcb8d78bbf39a47",
+  "prompts": {},
+  "sessions": {
+    "s_d9039ecc7fcceb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "21638c1a-71ff-41cb-b8b1-c0021f98df52",
+        "model": "default"
+      },
+      "human_author": "Pavel Kuzmin <Virus191288@gmail.com>"
+    }
+  }
+}
