@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-10-01
 ### Changed
 
 - Bump optional core pins: `infer` 0.22, `rust_decimal` 1.43, `ipnet` 2.12.2, `phonenumber` 0.3.10
