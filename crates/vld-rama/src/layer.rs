@@ -95,7 +95,11 @@ where
             .unwrap_or(false);
 
         let (parts, body) = req.into_parts();
-        let bytes = match body.limited(vld_http_common::DEFAULT_BODY_LIMIT).collect().await {
+        let bytes = match body
+            .limited(vld_http_common::DEFAULT_BODY_LIMIT)
+            .collect()
+            .await
+        {
             Ok(collected) => collected.to_bytes(),
             Err(_) => {
                 let error_body = vld_http_common::format_payload_too_large();

@@ -169,10 +169,7 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldJson<T> {
         req: &'ex mut Request,
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
-        let value: serde_json::Value = req
-            .parse_json()
-            .await
-            .map_err(map_parse_error)?;
+        let value: serde_json::Value = req.parse_json().await.map_err(map_parse_error)?;
         T::vld_parse_value(&value)
             .map(VldJson)
             .map_err(VldSalvoError::from)
@@ -266,10 +263,7 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldForm<T> {
         req: &'ex mut Request,
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
-        let body_str = req
-            .parse_body::<String>()
-            .await
-            .map_err(map_parse_error)?;
+        let body_str = req.parse_body::<String>().await.map_err(map_parse_error)?;
         let map = vld_http_common::parse_query_string(&body_str);
         let value = serde_json::Value::Object(map);
         T::vld_parse_value(&value)

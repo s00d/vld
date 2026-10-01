@@ -155,8 +155,8 @@ where
                 }
             })?;
 
-        let value: serde_json::Value =
-            serde_json::from_slice(&body).map_err(|e| VldJsonRejection::parse(format!("Invalid JSON: {}", e)))?;
+        let value: serde_json::Value = serde_json::from_slice(&body)
+            .map_err(|e| VldJsonRejection::parse(format!("Invalid JSON: {}", e)))?;
 
         let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
 

@@ -191,8 +191,7 @@ impl<T> DerefMut for VldForm<T> {
 impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldForm<T> {
     async fn from_request(_req: &'a Request, body: &mut RequestBody) -> Result<Self> {
         let bytes = read_limited_body(body).await?;
-        let body_str =
-            String::from_utf8(bytes.to_vec()).map_err(|_| VldPoemError::utf8())?;
+        let body_str = String::from_utf8(bytes.to_vec()).map_err(|_| VldPoemError::utf8())?;
 
         let map = parse_query_to_json(&body_str);
         let value = serde_json::Value::Object(map);

@@ -172,8 +172,7 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> 
 
     if err.find::<warp::reject::LengthRequired>().is_some() {
         let body = vld_http_common::format_generic_error("Content-Length required");
-        let reply =
-            warp::reply::with_status(warp::reply::json(&body), StatusCode::LENGTH_REQUIRED);
+        let reply = warp::reply::with_status(warp::reply::json(&body), StatusCode::LENGTH_REQUIRED);
         return Ok(reply);
     }
 
