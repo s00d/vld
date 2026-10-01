@@ -1,0 +1,9 @@
+# Local Cargo config for the vld workspace.
+# (Checked in so CI/scripts and local builds share the same defaults.)
+
+[build]
+# Uncomment to park artifacts on a larger volume:
+# target-dir = "/Volumes/big/cargo-target/vld"
+
+[term]
+quiet = false

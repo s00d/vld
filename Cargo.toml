@@ -129,3 +129,26 @@ pre-release-hook = [
   "-lc",
   "\"${WORKSPACE_ROOT}/scripts/release-hook.sh\" \"{{version}}\"",
 ]
+
+# ---------------------------------------------------------------------------
+# Profiles — keep `target/` from eating tens of GB
+# ---------------------------------------------------------------------------
+# This workspace pulls ~30 integration crates (actix/rocket/rama/salvo/sqlx…).
+# Full debuginfo on every dependency is what balloons `target/debug` to 20–30G.
+#
+# - `dev`: line tables for workspace crates; no debuginfo for registry deps
+# - `ci`:  no debuginfo, no incremental (used by scripts/ci-all.sh)
+
+[profile.dev]
+debug = 1
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.ci]
+inherits = "dev"
+debug = 0
+incremental = false
+
+[profile.ci.package."*"]
+debug = false
