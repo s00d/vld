@@ -4,9 +4,9 @@ set -euo pipefail
 # Full local CI run (future-proof for new workspace crates).
 #
 # Why this stays up to date:
-# - workspace-wide build/test/clippy with `--all-targets` covers tests/examples/benches
-# - workspace-wide `--all-features` covers optional integrations without manual crate lists
-# - explicit feature-matrix checks remain only for core `vld`
+# - workspace-wide build/test/clippy with `--all-targets` (default features)
+# - explicit feature-matrix checks for dual-major integrations + core `vld`
+# - do NOT use `--all-features` on exclusive dual-feature crates (compile_error!)
 
 VLD_EXTENDED_FEATURES="chrono,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced"
 JIFF_FEATURES="jiff,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced"
@@ -35,6 +35,10 @@ cargo check -p vld-schemars --no-default-features --features "schemars-0"
 cargo check -p vld-schemars --no-default-features --features "schemars-1"
 cargo check -p vld-aide --no-default-features --features "schemars-0"
 cargo check -p vld-aide --no-default-features --features "schemars-1"
+cargo check -p vld-sea --no-default-features --features "sea-orm-1"
+# Entity-macro integration tests stay on sea-orm-1; sea-orm-2 has lib unit tests.
+cargo test -p vld-sea --no-default-features --features "sea-orm-2" --lib
+cargo test -p vld-utoipa --no-default-features --features "utoipa-6" --tests
 
 echo "==> Test vld feature matrix"
 cargo test -p vld --no-default-features

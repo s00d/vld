@@ -1,6 +1,6 @@
 //! # vld-sea — SeaORM integration for `vld`
 //!
-//! Validate [`ActiveModel`](sea_orm::ActiveModelTrait) fields **before**
+//! Validate [`ActiveModel`](crate::sea_orm::ActiveModelTrait) fields **before**
 //! `insert()` / `update()` hits the database.
 //!
 //! ## Approach
@@ -11,7 +11,7 @@
 //! 3. Or call [`validate_model`] on any `Serialize`-able struct (e.g. an input
 //!    DTO, or SeaORM `Model`).
 //! 4. Optionally hook into
-//!    [`ActiveModelBehavior::before_save`](sea_orm::ActiveModelBehavior::before_save)
+//!    [`ActiveModelBehavior::before_save`](crate::sea_orm::ActiveModelBehavior::before_save)
 //!    so validation runs automatically.
 //!
 //! ## Quick Start
@@ -41,7 +41,16 @@
 use std::fmt;
 use std::ops::Deref;
 
+#[cfg(all(feature = "sea-orm-1", feature = "sea-orm-2"))]
+compile_error!("Enable exactly one SeaORM version feature: `sea-orm-1` or `sea-orm-2`.");
+#[cfg(not(any(feature = "sea-orm-1", feature = "sea-orm-2")))]
+compile_error!("Enable one SeaORM version feature: `sea-orm-1` or `sea-orm-2`.");
+
+#[cfg(feature = "sea-orm-1")]
 pub use sea_orm;
+#[cfg(feature = "sea-orm-2")]
+pub use sea_orm2 as sea_orm;
+
 pub use vld;
 
 // ---------------------------------------------------------------------------
@@ -81,9 +90,9 @@ impl From<vld::error::VldError> for VldSeaError {
     }
 }
 
-impl From<VldSeaError> for sea_orm::DbErr {
+impl From<VldSeaError> for crate::sea_orm::DbErr {
     fn from(e: VldSeaError) -> Self {
-        sea_orm::DbErr::Custom(e.to_string())
+        crate::sea_orm::DbErr::Custom(e.to_string())
     }
 }
 
@@ -91,7 +100,7 @@ impl From<VldSeaError> for sea_orm::DbErr {
 // ActiveModel → JSON conversion
 // ---------------------------------------------------------------------------
 
-/// Convert an [`ActiveModel`](sea_orm::ActiveModelTrait) to a
+/// Convert an [`ActiveModel`](crate::sea_orm::ActiveModelTrait) to a
 /// [`serde_json::Value`] object.
 ///
 /// Only fields with `Set` or `Unchanged` values are included.
@@ -102,12 +111,12 @@ impl From<VldSeaError> for sea_orm::DbErr {
 /// `serde_json::Value::Null`.
 pub fn active_model_to_json<A>(model: &A) -> serde_json::Value
 where
-    A: sea_orm::ActiveModelTrait,
+    A: crate::sea_orm::ActiveModelTrait,
 {
-    use sea_orm::{ActiveValue, EntityTrait, IdenStatic, Iterable};
+    use crate::sea_orm::{ActiveValue, EntityTrait, IdenStatic, Iterable};
 
     let mut map = serde_json::Map::new();
-    for col in <<A as sea_orm::ActiveModelTrait>::Entity as EntityTrait>::Column::iter() {
+    for col in <<A as crate::sea_orm::ActiveModelTrait>::Entity as EntityTrait>::Column::iter() {
         match model.get(col) {
             ActiveValue::Set(v) | ActiveValue::Unchanged(v) => {
                 map.insert(col.as_str().to_string(), sea_value_to_json(v));
@@ -118,12 +127,12 @@ where
     serde_json::Value::Object(map)
 }
 
-/// Convert a [`sea_orm::Value`] to [`serde_json::Value`].
+/// Convert a [`crate::sea_orm::Value`] to [`serde_json::Value`].
 ///
 /// Handles the always-available variants. Feature-gated variants
 /// (chrono, uuid, json, etc.) fall through to `Null`.
-fn sea_value_to_json(v: sea_orm::Value) -> serde_json::Value {
-    use sea_orm::sea_query::Value as SV;
+fn sea_value_to_json(v: crate::sea_orm::Value) -> serde_json::Value {
+    use crate::sea_orm::sea_query::Value as SV;
 
     match v {
         SV::Bool(Some(b)) => serde_json::Value::Bool(b),
@@ -141,10 +150,39 @@ fn sea_value_to_json(v: sea_orm::Value) -> serde_json::Value {
         SV::Double(Some(n)) => serde_json::Number::from_f64(n)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
-        SV::String(Some(s)) => serde_json::Value::String(*s),
+        SV::String(Some(s)) => serde_json::Value::String(s.to_string()),
         SV::Char(Some(c)) => serde_json::Value::String(c.to_string()),
+        // sea-query 1 / sea-orm 2 — ActiveEnum columns
+        #[cfg(feature = "sea-orm-2")]
+        SV::Enum(opt) => match opt {
+            crate::sea_orm::sea_query::OptionEnum::Some(e) => {
+                serde_json::Value::String(e.value.to_string())
+            }
+            crate::sea_orm::sea_query::OptionEnum::None(_) => serde_json::Value::Null,
+        },
         // Bytes, Chrono, Uuid, Json, etc. — or any None variant
         _ => serde_json::Value::Null,
+    }
+}
+
+#[cfg(all(test, feature = "sea-orm-2"))]
+mod sea_value_enum_tests {
+    use super::sea_value_to_json;
+    use crate::sea_orm::sea_query::{Enum, OptionEnum, Value as SV};
+
+    #[test]
+    fn enum_some_maps_to_string() {
+        let v = SV::Enum(OptionEnum::Some(Box::new(Enum {
+            type_name: "status".into(),
+            value: "active".into(),
+        })));
+        assert_eq!(sea_value_to_json(v), serde_json::json!("active"));
+    }
+
+    #[test]
+    fn enum_none_maps_to_null() {
+        let v = SV::Enum(OptionEnum::None("status".into()));
+        assert_eq!(sea_value_to_json(v), serde_json::Value::Null);
     }
 }
 
@@ -152,12 +190,12 @@ fn sea_value_to_json(v: sea_orm::Value) -> serde_json::Value {
 // Validation functions
 // ---------------------------------------------------------------------------
 
-/// Validate an [`ActiveModel`](sea_orm::ActiveModelTrait) against schema `S`.
+/// Validate an [`ActiveModel`](crate::sea_orm::ActiveModelTrait) against schema `S`.
 ///
 /// Extracts all `Set` and `Unchanged` fields into a JSON object and runs
 /// `S::vld_parse_value()`.
 ///
-/// Use this in [`ActiveModelBehavior::before_save`](sea_orm::ActiveModelBehavior::before_save)
+/// Use this in [`ActiveModelBehavior::before_save`](crate::sea_orm::ActiveModelBehavior::before_save)
 /// to validate before every insert/update.
 ///
 /// ```rust,ignore
@@ -166,7 +204,7 @@ fn sea_value_to_json(v: sea_orm::Value) -> serde_json::Value {
 pub fn validate_active<S, A>(model: &A) -> Result<S, VldSeaError>
 where
     S: vld::schema::VldParse,
-    A: sea_orm::ActiveModelTrait,
+    A: crate::sea_orm::ActiveModelTrait,
 {
     let json = active_model_to_json(model);
     S::vld_parse_value(&json).map_err(VldSeaError::Validation)
@@ -202,7 +240,7 @@ where
 }
 
 /// Helper for use inside
-/// [`ActiveModelBehavior::before_save`](sea_orm::ActiveModelBehavior::before_save).
+/// [`ActiveModelBehavior::before_save`](crate::sea_orm::ActiveModelBehavior::before_save).
 ///
 /// Returns `Ok(())` on success or `Err(DbErr::Custom(...))` on failure,
 /// so it can be used directly with `?` in the `before_save` method.
@@ -218,15 +256,15 @@ where
 ///     }
 /// }
 /// ```
-pub fn before_save<S, A>(model: &A) -> Result<(), sea_orm::DbErr>
+pub fn before_save<S, A>(model: &A) -> Result<(), crate::sea_orm::DbErr>
 where
     S: vld::schema::VldParse,
-    A: sea_orm::ActiveModelTrait,
+    A: crate::sea_orm::ActiveModelTrait,
 {
     let json = active_model_to_json(model);
     S::vld_parse_value(&json)
         .map(|_| ())
-        .map_err(|e| sea_orm::DbErr::Custom(format!("Validation error: {}", e)))
+        .map_err(|e| crate::sea_orm::DbErr::Custom(format!("Validation error: {}", e)))
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +341,7 @@ impl<S, T: Clone> Clone for Validated<S, T> {
 // Macro: impl_vld_before_save!
 // ---------------------------------------------------------------------------
 
-/// Implements [`ActiveModelBehavior`](sea_orm::ActiveModelBehavior) with
+/// Implements [`ActiveModelBehavior`](crate::sea_orm::ActiveModelBehavior) with
 /// automatic vld validation in `before_save`.
 ///
 /// ```rust,ignore
@@ -316,26 +354,26 @@ impl<S, T: Clone> Clone for Validated<S, T> {
 #[macro_export]
 macro_rules! impl_vld_before_save {
     ($active_model:ty, $schema:ty) => {
-        #[sea_orm::prelude::async_trait::async_trait]
-        impl sea_orm::ActiveModelBehavior for $active_model {
-            async fn before_save<C: sea_orm::ConnectionTrait>(
+        #[$crate::sea_orm::prelude::async_trait::async_trait]
+        impl $crate::sea_orm::ActiveModelBehavior for $active_model {
+            async fn before_save<C: $crate::sea_orm::ConnectionTrait>(
                 self,
                 _db: &C,
                 _insert: bool,
-            ) -> Result<Self, sea_orm::DbErr> {
+            ) -> Result<Self, $crate::sea_orm::DbErr> {
                 $crate::before_save::<$schema, _>(&self)?;
                 Ok(self)
             }
         }
     };
     ($active_model:ty, insert: $ins_schema:ty, update: $upd_schema:ty) => {
-        #[sea_orm::prelude::async_trait::async_trait]
-        impl sea_orm::ActiveModelBehavior for $active_model {
-            async fn before_save<C: sea_orm::ConnectionTrait>(
+        #[$crate::sea_orm::prelude::async_trait::async_trait]
+        impl $crate::sea_orm::ActiveModelBehavior for $active_model {
+            async fn before_save<C: $crate::sea_orm::ConnectionTrait>(
                 self,
                 _db: &C,
                 insert: bool,
-            ) -> Result<Self, sea_orm::DbErr> {
+            ) -> Result<Self, $crate::sea_orm::DbErr> {
                 if insert {
                     $crate::before_save::<$ins_schema, _>(&self)?;
                 } else {

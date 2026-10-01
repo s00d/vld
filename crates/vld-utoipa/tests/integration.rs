@@ -1,8 +1,9 @@
 use serde_json::json;
-use utoipa::openapi::path::ParameterIn;
-use utoipa::openapi::RefOr;
-use utoipa::{IntoParams, PartialSchema, ToSchema};
 use vld::prelude::*;
+use vld_utoipa::utoipa;
+use vld_utoipa::utoipa::openapi::path::ParameterIn;
+use vld_utoipa::utoipa::openapi::RefOr;
+use vld_utoipa::utoipa::{IntoParams, PartialSchema, ToSchema};
 use vld_utoipa::{impl_to_schema, json_schema_to_params, json_schema_to_schema};
 
 // ---- json_schema_to_schema tests ----

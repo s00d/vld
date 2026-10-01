@@ -9,10 +9,9 @@
 
 [Salvo](https://salvo.rs) integration for the **vld** validation library.
 
-## Version features
+## Compatibility
 
-- `salvo-0_89` (default)
-- `salvo-0_93`
+Supports Salvo **1.x** (`salvo = "1"`). Crate MSRV is **1.94** (required by Salvo 1.0).
 
 ## Features
 
@@ -41,7 +40,7 @@ failures render as `422 Unprocessable Entity` with a JSON error body.
 [dependencies]
 vld-salvo = "0.4"
 vld = "0.4"
-salvo = "0.89"
+salvo = "1"
 serde_json = "1"
 ```
 

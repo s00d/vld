@@ -13,17 +13,26 @@ keywords = ["validation", "sea-orm", "orm", "activemodel", "database"]
 categories = ["web-programming", "database"]
 exclude = [".idea/", "tests/", "examples/"]
 
+[features]
+default = ["sea-orm-1"]
+sea-orm-1 = ["dep:sea-orm"]
+sea-orm-2 = ["dep:sea-orm2"]
+
 [dependencies]
 vld = { workspace = true }
-sea-orm = { version = "1", default-features = false }
+sea-orm = { version = "1", default-features = false, optional = true }
+sea-orm2 = { package = "sea-orm", version = "2", default-features = false, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
 vld = { workspace = true }
+# Entity derive macros hard-code the `sea_orm` crate name — integration tests
+# therefore run against sea-orm 1.x only. sea-orm 2 is covered by `cargo check`.
 sea-orm = { version = "1", default-features = false, features = ["macros"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [[example]]
 name = "sea_basic"
 path = "examples/sea_basic.rs"
+required-features = ["sea-orm-1"]

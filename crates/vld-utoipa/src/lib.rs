@@ -47,6 +47,16 @@
 //! // Returns `utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>`
 //! ```
 
+#[cfg(all(feature = "utoipa-5", feature = "utoipa-6"))]
+compile_error!("Enable exactly one utoipa version feature: `utoipa-5` or `utoipa-6`.");
+#[cfg(not(any(feature = "utoipa-5", feature = "utoipa-6")))]
+compile_error!("Enable one utoipa version feature: `utoipa-5` or `utoipa-6`.");
+
+#[cfg(feature = "utoipa-5")]
+pub use utoipa;
+#[cfg(feature = "utoipa-6")]
+pub use utoipa6 as utoipa;
+
 use serde_json::Value;
 use utoipa::openapi::path::{Parameter, ParameterBuilder, ParameterIn};
 use utoipa::openapi::schema::{
@@ -625,9 +635,6 @@ macro_rules! __impl_to_schema_legacy_suffix_cookie {
         $crate::__impl_to_schema_legacy_cookie!($ty);
     };
 }
-
-/// Re-export utoipa for use in macros
-pub use utoipa;
 
 #[doc(hidden)]
 pub trait __VldNestedSchemasFallback {

@@ -13,9 +13,15 @@ keywords = ["validation", "utoipa", "openapi", "schema", "vld"]
 categories = ["web-programming", "development-tools"]
 exclude = [".idea/", "tests/", "examples/"]
 
+[features]
+default = ["utoipa-5"]
+utoipa-5 = ["dep:utoipa"]
+utoipa-6 = ["dep:utoipa6"]
+
 [dependencies]
 vld = { workspace = true, features = ["openapi"] }
-utoipa = { version = "5" }
+utoipa = { version = "5", optional = true }
+utoipa6 = { package = "utoipa", version = "6", optional = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
@@ -25,3 +31,6 @@ vld = { workspace = true, features = ["openapi", "serialize", "derive"] }
 [[example]]
 name = "utoipa_basic"
 path = "examples/utoipa_basic.rs"
+# `#[utoipa::path]` / `OpenApi` macros require the crate to be named `utoipa`
+# (utoipa-5 feature). utoipa-6 is covered by lib + integration tests.
+required-features = ["utoipa-5"]

@@ -2,7 +2,7 @@
 name = "vld-salvo"
 version.workspace = true
 edition.workspace = true
-rust-version = "1.89"
+rust-version = "1.94"
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
@@ -16,12 +16,13 @@ exclude = [".idea/", "tests/", "examples/"]
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
-salvo = { version = ">=0.89, <0.94", default-features = false, features = ["test", "server", "http1", "cookie"] }
+salvo = { version = "1", default-features = false, features = ["server", "http1", "cookie"] }
 serde_json = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
 vld = { workspace = true }
+salvo = { version = "1", default-features = false, features = ["test", "server", "http1", "cookie"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [[example]]

@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bump optional core pins: `infer` 0.22, `rust_decimal` 1.43, `ipnet` 2.12.2, `phonenumber` 0.3.10
+- `vld-salvo`: Salvo **1.x** only (`salvo = "1"`); crate MSRV 1.94 (cross-major `>=0.89,<2` dual-loads `salvo_core` / breaks `Extractible`)
+- `vld-sea`: dual features `sea-orm-1` (default) / `sea-orm-2`; `Value::Enum` → JSON string on 2.x; entity-macro integration tests stay on 1.x; `sea-orm-2` requires Rust **1.94+**
+- `vld-utoipa`: dual features `utoipa-5` (default) / `utoipa-6` (CI tests both); `utoipa-6` requires Rust **1.88+**
+
+### Deferred
+
+- `syn` 3, ntex 4 (beta), aide 0.16 (alpha) — wait for stable / lower churn
+
 ## [0.4.3] - 2026-10-01
 
 ### Fixed

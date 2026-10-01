@@ -25,10 +25,25 @@ Validate `ActiveModel` fields **before** `insert()` / `update()` hits the databa
 
 ```toml
 [dependencies]
-vld-sea = "0.4"
+vld-sea = "0.4"          # default: sea-orm 1.x
 vld = "0.4"
 sea-orm = "1"
 ```
+
+SeaORM 2.x (library API; enable exactly one feature):
+
+```toml
+vld-sea = { version = "0.4", default-features = false, features = ["sea-orm-2"] }
+sea-orm = "2"
+```
+
+## Compatibility
+
+- Default `sea-orm-1`: crate MSRV follows workspace (**1.70**); SeaORM 1.x itself needs a newer toolchain.
+- Feature `sea-orm-2`: requires Rust **1.94+** (SeaORM 2 MSRV).
+- Integration tests/examples use SeaORM entity derive macros, which require the
+  crate to be named `sea_orm`, so they run on `sea-orm-1`. `sea-orm-2` is covered
+  by lib unit tests (`Value::Enum` conversion) + `cargo check`.
 
 ## Quick Start
 

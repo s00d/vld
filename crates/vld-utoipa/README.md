@@ -18,9 +18,25 @@ for JSON bodies and for query/path parameters, with no duplicate schema definiti
 ```toml
 [dependencies]
 vld = { version = "0.4", features = ["openapi"] }
-vld-utoipa = "0.4"
+vld-utoipa = "0.4"   # default: utoipa 5.x
 utoipa = "5"
 ```
+
+utoipa 6.x:
+
+```toml
+vld-utoipa = { version = "0.4", default-features = false, features = ["utoipa-6"] }
+utoipa = "6"
+```
+
+Enable exactly one of `utoipa-5` (default) or `utoipa-6`.
+
+## Compatibility
+
+- Default `utoipa-5`: crate MSRV follows workspace (**1.70**); utoipa 5.x itself needs a newer toolchain.
+- Feature `utoipa-6`: requires Rust **1.88+** (utoipa 6 MSRV).
+- The `utoipa_basic` example needs the crate named `utoipa` (feature `utoipa-5`);
+  `utoipa-6` is covered by lib + integration tests.
 
 ## One macro, same as derive
 
