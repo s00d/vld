@@ -54,18 +54,32 @@ use vld_http_common::coerce_value;
 /// Implements [`Writer`] so it can be returned from `#[handler]` functions
 /// via `Result<T, VldSalvoError>`.
 ///
-/// On write, renders a `422 Unprocessable Entity` JSON response using
-/// [`vld_http_common::format_vld_error`].
+/// On write, renders a JSON response (`422` for validation/parse, `413` for
+/// payload too large) using [`vld_http_common`] helpers.
 #[derive(Debug)]
 pub struct VldSalvoError {
     /// The underlying validation error.
     pub error: vld::error::VldError,
+    status: StatusCode,
 }
 
 impl VldSalvoError {
     /// Create a new `VldSalvoError` from a [`VldError`](vld::error::VldError).
     pub fn new(error: vld::error::VldError) -> Self {
-        Self { error }
+        Self {
+            error,
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+        }
+    }
+
+    fn payload_too_large() -> Self {
+        Self {
+            error: vld::error::VldError::single(
+                vld::error::IssueCode::ParseError,
+                "Payload too large",
+            ),
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+        }
     }
 }
 
@@ -79,15 +93,19 @@ impl std::error::Error for VldSalvoError {}
 
 impl From<vld::error::VldError> for VldSalvoError {
     fn from(error: vld::error::VldError) -> Self {
-        Self { error }
+        Self::new(error)
     }
 }
 
 #[async_trait]
 impl Writer for VldSalvoError {
     async fn write(mut self, _req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        let body = vld_http_common::format_vld_error(&self.error);
-        res.status_code(StatusCode::UNPROCESSABLE_ENTITY);
+        let body = if self.status == StatusCode::PAYLOAD_TOO_LARGE {
+            vld_http_common::format_payload_too_large()
+        } else {
+            vld_http_common::format_vld_error(&self.error)
+        };
+        res.status_code(self.status);
         res.render(Json(body));
     }
 }
@@ -97,8 +115,16 @@ impl Writer for VldSalvoError {
 // ---------------------------------------------------------------------------
 
 fn parse_error(msg: impl std::fmt::Display) -> VldSalvoError {
-    VldSalvoError {
-        error: vld::error::VldError::single(vld::error::IssueCode::ParseError, msg.to_string()),
+    VldSalvoError::new(vld::error::VldError::single(
+        vld::error::IssueCode::ParseError,
+        msg.to_string(),
+    ))
+}
+
+fn map_parse_error(e: salvo::http::ParseError) -> VldSalvoError {
+    match e {
+        salvo::http::ParseError::PayloadTooLarge => VldSalvoError::payload_too_large(),
+        other => parse_error(other),
     }
 }
 
@@ -146,7 +172,7 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldJson<T> {
         let value: serde_json::Value = req
             .parse_json()
             .await
-            .map_err(|e| parse_error(format_args!("Invalid JSON: {e}")))?;
+            .map_err(map_parse_error)?;
         T::vld_parse_value(&value)
             .map(VldJson)
             .map_err(VldSalvoError::from)
@@ -243,7 +269,7 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldForm<T> {
         let body_str = req
             .parse_body::<String>()
             .await
-            .map_err(|e| parse_error(format_args!("Invalid form body: {e}")))?;
+            .map_err(map_parse_error)?;
         let map = vld_http_common::parse_query_string(&body_str);
         let value = serde_json::Value::Object(map);
         T::vld_parse_value(&value)

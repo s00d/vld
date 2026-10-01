@@ -168,6 +168,18 @@ async fn json_malformed() {
     assert_eq!(resp.status(), 400);
 }
 
+#[tokio::test]
+async fn json_missing_content_length_is_411() {
+    // content_length_limit rejects missing CL as LengthRequired — must not map to 404.
+    let resp = warp::test::request()
+        .method("POST")
+        .path("/users")
+        .header("content-type", "application/json")
+        .reply(&routes_with_recovery())
+        .await;
+    assert_eq!(resp.status(), 411);
+}
+
 // ---------------------------------------------------------------------------
 // Tests — Query
 // ---------------------------------------------------------------------------

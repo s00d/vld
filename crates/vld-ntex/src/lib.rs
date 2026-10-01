@@ -49,12 +49,39 @@ use std::fmt;
 
 // ============================= Error / Rejection =============================
 
-/// Error type returned when validation fails.
+/// Error type returned when validation or body reading fails.
 ///
 /// Used by all `Vld*` extractors in this crate.
 #[derive(Debug)]
 pub struct VldNtexError {
     error: vld::error::VldError,
+    status: StatusCode,
+}
+
+impl VldNtexError {
+    fn validation(error: vld::error::VldError) -> Self {
+        Self {
+            error,
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+        }
+    }
+
+    fn parse(message: impl Into<String>) -> Self {
+        Self::validation(vld::error::VldError::single(
+            vld::error::IssueCode::ParseError,
+            message.into(),
+        ))
+    }
+
+    fn payload_too_large() -> Self {
+        Self {
+            error: vld::error::VldError::single(
+                vld::error::IssueCode::ParseError,
+                "Payload too large",
+            ),
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+        }
+    }
 }
 
 impl fmt::Display for VldNtexError {
@@ -65,13 +92,17 @@ impl fmt::Display for VldNtexError {
 
 impl<Err: ErrorRenderer> WebResponseError<Err> for VldNtexError {
     fn status_code(&self) -> StatusCode {
-        StatusCode::UNPROCESSABLE_ENTITY
+        self.status
     }
 
     fn error_response(&self, _: &HttpRequest) -> HttpResponse {
-        let body = vld_http_common::format_vld_error(&self.error);
+        let body = if self.status == StatusCode::PAYLOAD_TOO_LARGE {
+            vld_http_common::format_payload_too_large()
+        } else {
+            vld_http_common::format_vld_error(&self.error)
+        };
 
-        HttpResponse::build(StatusCode::UNPROCESSABLE_ENTITY)
+        HttpResponse::build(self.status)
             .header("content-type", "application/json")
             .body(body.to_string())
     }
@@ -109,14 +140,16 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldJson<
                 req, payload,
             )
             .await
-            .map_err(|e| VldNtexError {
-                error: vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    format!("JSON parse error: {}", e),
-                ),
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.to_ascii_lowercase().contains("overflow") {
+                    VldNtexError::payload_too_large()
+                } else {
+                    VldNtexError::parse(format!("JSON parse error: {}", e))
+                }
             })?;
 
-        let parsed = T::vld_parse_value(&json_value).map_err(|error| VldNtexError { error })?;
+        let parsed = T::vld_parse_value(&json_value).map_err(VldNtexError::validation)?;
 
         Ok(VldJson(parsed))
     }
@@ -153,7 +186,7 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldQuery
     ) -> Result<Self, Self::Error> {
         let query_string = req.query_string();
         let value = query_string_to_json(query_string);
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldNtexError { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
         Ok(VldQuery(parsed))
     }
 }
@@ -193,7 +226,7 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldPath<
         }
 
         let value = serde_json::Value::Object(map);
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldNtexError { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
         Ok(VldPath(parsed))
     }
 }
@@ -230,23 +263,21 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldForm<
     ) -> Result<Self, Self::Error> {
         let bytes = <ntex::util::Bytes as FromRequest<Err>>::from_request(req, payload)
             .await
-            .map_err(|e| VldNtexError {
-                error: vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    format!("Failed to read form body: {}", e),
-                ),
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.to_ascii_lowercase().contains("overflow") {
+                    VldNtexError::payload_too_large()
+                } else {
+                    VldNtexError::parse(format!("Failed to read form body: {}", e))
+                }
             })?;
 
         let body_bytes: &[u8] = &bytes;
-        let body_str = std::str::from_utf8(body_bytes).map_err(|_| VldNtexError {
-            error: vld::error::VldError::single(
-                vld::error::IssueCode::ParseError,
-                "Form body is not valid UTF-8",
-            ),
-        })?;
+        let body_str = std::str::from_utf8(body_bytes)
+            .map_err(|_| VldNtexError::parse("Form body is not valid UTF-8"))?;
 
         let value = query_string_to_json(body_str);
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldNtexError { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
         Ok(VldForm(parsed))
     }
 }
@@ -282,7 +313,7 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldHeade
         _payload: &mut ntex::http::Payload,
     ) -> Result<Self, Self::Error> {
         let value = headers_to_json(req.headers());
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldNtexError { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
         Ok(VldHeaders(parsed))
     }
 }
@@ -322,7 +353,7 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldCooki
             .unwrap_or("");
 
         let value = cookies_to_json(cookie_header);
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldNtexError { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
         Ok(VldCookie(parsed))
     }
 }

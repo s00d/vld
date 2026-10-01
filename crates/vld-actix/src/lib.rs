@@ -61,12 +61,39 @@ use std::pin::Pin;
 
 // ============================= Error / Rejection =============================
 
-/// Error type returned when validation fails.
+/// Error type returned when validation or body reading fails.
 ///
 /// Used by all `Vld*` extractors in this crate.
 #[derive(Debug)]
 pub struct VldJsonError {
     error: vld::error::VldError,
+    status: actix_web::http::StatusCode,
+}
+
+impl VldJsonError {
+    fn validation(error: vld::error::VldError) -> Self {
+        Self {
+            error,
+            status: actix_web::http::StatusCode::UNPROCESSABLE_ENTITY,
+        }
+    }
+
+    fn parse(message: impl Into<String>) -> Self {
+        Self::validation(vld::error::VldError::single(
+            vld::error::IssueCode::ParseError,
+            message.into(),
+        ))
+    }
+
+    fn payload_too_large() -> Self {
+        Self {
+            error: vld::error::VldError::single(
+                vld::error::IssueCode::ParseError,
+                "Payload too large",
+            ),
+            status: actix_web::http::StatusCode::PAYLOAD_TOO_LARGE,
+        }
+    }
 }
 
 impl fmt::Display for VldJsonError {
@@ -76,10 +103,18 @@ impl fmt::Display for VldJsonError {
 }
 
 impl ResponseError for VldJsonError {
-    fn error_response(&self) -> HttpResponse {
-        let body = vld_http_common::format_vld_error(&self.error);
+    fn status_code(&self) -> actix_web::http::StatusCode {
+        self.status
+    }
 
-        HttpResponse::UnprocessableEntity()
+    fn error_response(&self) -> HttpResponse {
+        let body = if self.status == actix_web::http::StatusCode::PAYLOAD_TOO_LARGE {
+            vld_http_common::format_payload_too_large()
+        } else {
+            vld_http_common::format_vld_error(&self.error)
+        };
+
+        HttpResponse::build(self.status)
             .content_type("application/json")
             .body(body.to_string())
     }
@@ -113,14 +148,17 @@ impl<T: vld::schema::VldParse> FromRequest for VldJson<T> {
         let json_fut = actix_web::web::Json::<serde_json::Value>::from_request(req, payload);
 
         Box::pin(async move {
-            let json_value = json_fut.await.map_err(|e| VldJsonError {
-                error: vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    format!("JSON parse error: {}", e),
-                ),
+            let json_value = json_fut.await.map_err(|e| {
+                if e.as_response_error().status_code()
+                    == actix_web::http::StatusCode::PAYLOAD_TOO_LARGE
+                {
+                    VldJsonError::payload_too_large()
+                } else {
+                    VldJsonError::parse(format!("JSON parse error: {}", e))
+                }
             })?;
 
-            let parsed = T::vld_parse_value(&json_value).map_err(|error| VldJsonError { error })?;
+            let parsed = T::vld_parse_value(&json_value).map_err(VldJsonError::validation)?;
 
             Ok(VldJson(parsed))
         })
@@ -159,7 +197,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldQuery<T> {
         Box::pin(async move {
             let value = query_string_to_json(&query_string);
 
-            let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonError { error })?;
+            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
 
             Ok(VldQuery(parsed))
         })
@@ -224,7 +262,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldPath<T> {
         let value = serde_json::Value::Object(map);
 
         Box::pin(async move {
-            let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonError { error })?;
+            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
 
             Ok(VldPath(parsed))
         })
@@ -278,23 +316,22 @@ impl<T: vld::schema::VldParse> FromRequest for VldForm<T> {
         let bytes_fut = actix_web::web::Bytes::from_request(req, payload);
 
         Box::pin(async move {
-            let body = bytes_fut.await.map_err(|e| VldJsonError {
-                error: vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    format!("Failed to read form body: {}", e),
-                ),
+            let body = bytes_fut.await.map_err(|e| {
+                if e.as_response_error().status_code()
+                    == actix_web::http::StatusCode::PAYLOAD_TOO_LARGE
+                {
+                    VldJsonError::payload_too_large()
+                } else {
+                    VldJsonError::parse(format!("Failed to read form body: {}", e))
+                }
             })?;
 
-            let body_str = std::str::from_utf8(&body).map_err(|_| VldJsonError {
-                error: vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    "Form body is not valid UTF-8",
-                ),
-            })?;
+            let body_str = std::str::from_utf8(&body)
+                .map_err(|_| VldJsonError::parse("Form body is not valid UTF-8"))?;
 
             let value = query_string_to_json(body_str);
 
-            let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonError { error })?;
+            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
 
             Ok(VldForm(parsed))
         })
@@ -348,7 +385,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldHeaders<T> {
         let value = headers_to_json(req.headers());
 
         Box::pin(async move {
-            let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonError { error })?;
+            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
 
             Ok(VldHeaders(parsed))
         })
@@ -407,7 +444,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldCookie<T> {
         Box::pin(async move {
             let value = cookies_to_json(&cookie_header);
 
-            let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonError { error })?;
+            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
 
             Ok(VldCookie(parsed))
         })

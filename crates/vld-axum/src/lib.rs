@@ -57,14 +57,39 @@ use http::StatusCode;
 
 // ============================= Rejection =====================================
 
-/// Rejection type returned when validation fails.
+/// Rejection type returned when validation or body reading fails.
 ///
 /// Used by all `Vld*` extractors in this crate.
 pub struct VldJsonRejection {
     error: vld::error::VldError,
+    status: StatusCode,
 }
 
 impl VldJsonRejection {
+    fn validation(error: vld::error::VldError) -> Self {
+        Self {
+            error,
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+        }
+    }
+
+    fn parse(message: impl Into<String>) -> Self {
+        Self::validation(vld::error::VldError::single(
+            vld::error::IssueCode::ParseError,
+            message.into(),
+        ))
+    }
+
+    fn payload_too_large() -> Self {
+        Self {
+            error: vld::error::VldError::single(
+                vld::error::IssueCode::ParseError,
+                "Payload too large",
+            ),
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+        }
+    }
+
     /// Get a reference to the underlying `VldError`.
     pub fn error(&self) -> &vld::error::VldError {
         &self.error
@@ -73,10 +98,14 @@ impl VldJsonRejection {
 
 impl IntoResponse for VldJsonRejection {
     fn into_response(self) -> Response {
-        let body = vld_http_common::format_vld_error(&self.error);
+        let body = if self.status == StatusCode::PAYLOAD_TOO_LARGE {
+            vld_http_common::format_payload_too_large()
+        } else {
+            vld_http_common::format_vld_error(&self.error)
+        };
 
         (
-            StatusCode::UNPROCESSABLE_ENTITY,
+            self.status,
             [(http::header::CONTENT_TYPE, "application/json")],
             body.to_string(),
         )
@@ -94,6 +123,7 @@ impl std::fmt::Debug for VldJsonRejection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("VldJsonRejection")
             .field("error", &self.error)
+            .field("status", &self.status)
             .finish()
     }
 }
@@ -112,25 +142,23 @@ where
 {
     type Rejection = VldJsonRejection;
 
-    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
-        let body = axum::body::to_bytes(req.into_body(), usize::MAX)
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        // Bytes extractor respects axum `DefaultBodyLimit` (unlike raw to_bytes).
+        let body = <axum::body::Bytes as FromRequest<S>>::from_request(req, state)
             .await
-            .map_err(|_| VldJsonRejection {
-                error: vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    "Failed to read request body",
-                ),
+            .map_err(|rejection| {
+                let resp = rejection.into_response();
+                if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    VldJsonRejection::payload_too_large()
+                } else {
+                    VldJsonRejection::parse("Failed to read request body")
+                }
             })?;
 
         let value: serde_json::Value =
-            serde_json::from_slice(&body).map_err(|e| VldJsonRejection {
-                error: vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    format!("Invalid JSON: {}", e),
-                ),
-            })?;
+            serde_json::from_slice(&body).map_err(|e| VldJsonRejection::parse(format!("Invalid JSON: {}", e)))?;
 
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonRejection { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
 
         Ok(VldJson(parsed))
     }
@@ -156,7 +184,7 @@ where
         let query_string = parts.uri.query().unwrap_or("");
         let value = query_string_to_json(query_string);
 
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonRejection { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
 
         Ok(VldQuery(parsed))
     }
@@ -201,12 +229,7 @@ where
                 parts, state,
             )
             .await
-            .map_err(|e| VldJsonRejection {
-                error: vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    format!("Path parameter error: {}", e),
-                ),
-            })?;
+            .map_err(|e| VldJsonRejection::parse(format!("Path parameter error: {}", e)))?;
 
         let mut map = serde_json::Map::new();
         for (k, v) in raw.0 {
@@ -214,7 +237,7 @@ where
         }
         let value = serde_json::Value::Object(map);
 
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonRejection { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
 
         Ok(VldPath(parsed))
     }
@@ -253,26 +276,24 @@ where
 {
     type Rejection = VldJsonRejection;
 
-    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
-        let body = axum::body::to_bytes(req.into_body(), usize::MAX)
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        let body = <axum::body::Bytes as FromRequest<S>>::from_request(req, state)
             .await
-            .map_err(|_| VldJsonRejection {
-                error: vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    "Failed to read request body",
-                ),
+            .map_err(|rejection| {
+                let resp = rejection.into_response();
+                if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    VldJsonRejection::payload_too_large()
+                } else {
+                    VldJsonRejection::parse("Failed to read request body")
+                }
             })?;
 
-        let body_str = std::str::from_utf8(&body).map_err(|_| VldJsonRejection {
-            error: vld::error::VldError::single(
-                vld::error::IssueCode::ParseError,
-                "Form body is not valid UTF-8",
-            ),
-        })?;
+        let body_str = std::str::from_utf8(&body)
+            .map_err(|_| VldJsonRejection::parse("Form body is not valid UTF-8"))?;
 
         let value = query_string_to_json(body_str);
 
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonRejection { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
 
         Ok(VldForm(parsed))
     }
@@ -314,7 +335,7 @@ where
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let value = headers_to_json(&parts.headers);
 
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonRejection { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
 
         Ok(VldHeaders(parsed))
     }
@@ -360,7 +381,7 @@ where
 
         let value = cookies_to_json(cookie_header);
 
-        let parsed = T::vld_parse_value(&value).map_err(|error| VldJsonRejection { error })?;
+        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
 
         Ok(VldCookie(parsed))
     }

@@ -4,3 +4,5 @@ examples/user_saved.json
 examples/user_corrected.json
 PUBLISHING.md
 docs.txt
+# Local unification research harness (do not publish / push)
+/scratch/

@@ -94,6 +94,19 @@ fn format_issues_basic() {
 }
 
 #[test]
+fn format_issues_with_code_joins_path_with_dots() {
+    use vld::error::{IssueCode, PathSegment, VldError};
+    let mut err = VldError::single(IssueCode::MissingField, "Required");
+    err.issues[0].path = vec![
+        PathSegment::Field("user".into()),
+        PathSegment::Field("age".into()),
+    ];
+    let issues = format_issues_with_code(&err);
+    assert_eq!(issues[0].path, ".user.age");
+    assert_eq!(issues[0].code, IssueCode::MissingField.key());
+}
+
+#[test]
 fn format_vld_error_structure() {
     let err = vld::error::VldError::single(vld::error::IssueCode::MissingField, "Required");
     let body = format_vld_error(&err);

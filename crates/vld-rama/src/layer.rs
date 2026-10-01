@@ -95,11 +95,11 @@ where
             .unwrap_or(false);
 
         let (parts, body) = req.into_parts();
-        let bytes = match body.collect().await {
+        let bytes = match body.limited(vld_http_common::DEFAULT_BODY_LIMIT).collect().await {
             Ok(collected) => collected.to_bytes(),
             Err(_) => {
-                let error_body = vld_http_common::format_generic_error("Failed to read body");
-                return Ok(json_response(StatusCode::BAD_REQUEST, &error_body));
+                let error_body = vld_http_common::format_payload_too_large();
+                return Ok(json_response(StatusCode::PAYLOAD_TOO_LARGE, &error_body));
             }
         };
 
@@ -111,8 +111,11 @@ where
         let json_value: serde_json::Value = match serde_json::from_slice(&bytes) {
             Ok(v) => v,
             Err(e) => {
-                let error_body = vld_http_common::format_json_parse_error(&e.to_string());
-                return Ok(json_response(StatusCode::BAD_REQUEST, &error_body));
+                let error_body = vld_http_common::format_vld_error(&vld::error::VldError::single(
+                    vld::error::IssueCode::ParseError,
+                    format!("Invalid JSON: {e}"),
+                ));
+                return Ok(json_response(StatusCode::UNPROCESSABLE_ENTITY, &error_body));
             }
         };
 

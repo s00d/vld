@@ -5,6 +5,7 @@ use rama::http::body::util::BodyExt;
 use rama::http::service::web::extract::{FromRequest, FromRequestBody};
 use rama::http::{Body, Request};
 use vld::schema::VldParse;
+use vld_http_common::DEFAULT_BODY_LIMIT;
 
 /// Rama extractor that validates **JSON request bodies**.
 ///
@@ -36,9 +37,10 @@ where
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send + 'static {
         async move {
             let bytes = body
+                .limited(DEFAULT_BODY_LIMIT)
                 .collect()
                 .await
-                .map_err(|_| VldRejection::parse("Failed to read request body"))?
+                .map_err(|_| VldRejection::payload_too_large())?
                 .to_bytes();
 
             let value: serde_json::Value = serde_json::from_slice(&bytes)

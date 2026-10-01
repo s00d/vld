@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- HTTP adapters: enforce body size limits (axum `Bytes`/`DefaultBodyLimit`, warp `content_length_limit`, poem `into_bytes_limit`, rama `Body::limited`) and return **413** on overflow
+- `vld-warp` `handle_rejection`: map `LengthRequired` → **411** and `PayloadTooLarge` → **413** (no longer collapse to 404)
+- actix/ntex/salvo: remapped payload overflow to **413** instead of always 422
+- poem: malformed JSON uses `format_vld_error` (422); rama `ValidateJsonLayer` aligned to 422 + validation body
+- `vld-http-common`: consistent issue path formatting (`.user.age`) for `format_issues` / `format_issues_with_code`
+
 ## [0.4.4] - 2026-10-01
 ### Changed
 

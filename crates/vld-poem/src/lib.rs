@@ -15,24 +15,62 @@
 //! | `VldHeaders<T>` | HTTP headers |
 //! | `VldCookie<T>` | Cookie values |
 
-use poem::error::ResponseError;
+use poem::error::{ReadBodyError, ResponseError};
 use poem::http::StatusCode;
 use poem::{FromRequest, Request, RequestBody, Result};
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 use vld::schema::VldParse;
+use vld_http_common::{
+    coerce_value, cookies_to_json, format_payload_too_large, format_utf8_error, format_vld_error,
+    parse_query_string as parse_query_to_json, DEFAULT_BODY_LIMIT,
+};
 
 // ---------------------------------------------------------------------------
 // Error type
 // ---------------------------------------------------------------------------
 
-/// Validation error returned by vld-poem extractors.
+/// Validation / parse error returned by vld-poem extractors.
 #[derive(Debug)]
-pub struct VldPoemError(pub serde_json::Value);
+pub struct VldPoemError {
+    /// JSON response body.
+    pub body: serde_json::Value,
+    status: StatusCode,
+}
+
+impl VldPoemError {
+    fn validation(err: vld::error::VldError) -> Self {
+        Self {
+            body: format_vld_error(&err),
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+        }
+    }
+
+    fn parse(message: impl fmt::Display) -> Self {
+        Self::validation(vld::error::VldError::single(
+            vld::error::IssueCode::ParseError,
+            message.to_string(),
+        ))
+    }
+
+    fn payload_too_large() -> Self {
+        Self {
+            body: format_payload_too_large(),
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+        }
+    }
+
+    fn utf8() -> Self {
+        Self {
+            body: format_utf8_error(),
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+        }
+    }
+}
 
 impl fmt::Display for VldPoemError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.body)
     }
 }
 
@@ -40,15 +78,27 @@ impl std::error::Error for VldPoemError {}
 
 impl ResponseError for VldPoemError {
     fn status(&self) -> StatusCode {
-        StatusCode::UNPROCESSABLE_ENTITY
+        self.status
     }
 
     fn as_response(&self) -> poem::Response {
         poem::Response::builder()
-            .status(StatusCode::UNPROCESSABLE_ENTITY)
+            .status(self.status)
             .content_type("application/json")
-            .body(serde_json::to_string(&self.0).unwrap_or_default())
+            .body(serde_json::to_string(&self.body).unwrap_or_default())
     }
+}
+
+async fn read_limited_body(body: &mut RequestBody) -> Result<Vec<u8>> {
+    let bytes = body
+        .take()?
+        .into_bytes_limit(DEFAULT_BODY_LIMIT)
+        .await
+        .map_err(|e| match e {
+            ReadBodyError::PayloadTooLarge => poem::Error::from(VldPoemError::payload_too_large()),
+            other => poem::Error::from(other),
+        })?;
+    Ok(bytes.to_vec())
 }
 
 // ---------------------------------------------------------------------------
@@ -74,13 +124,13 @@ impl<T> DerefMut for VldJson<T> {
 
 impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldJson<T> {
     async fn from_request(_req: &'a Request, body: &mut RequestBody) -> Result<Self> {
-        let bytes = body.take()?.into_bytes().await?;
+        let bytes = read_limited_body(body).await?;
         let value: serde_json::Value = serde_json::from_slice(&bytes)
-            .map_err(|e| VldPoemError(format_json_parse_error(&e.to_string())))?;
+            .map_err(|e| VldPoemError::parse(format!("Invalid JSON: {e}")))?;
 
         T::vld_parse_value(&value)
             .map(VldJson)
-            .map_err(|e| VldPoemError(format_vld_error(&e)).into())
+            .map_err(|e| VldPoemError::validation(e).into())
     }
 }
 
@@ -113,7 +163,7 @@ impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldQuery<T> {
 
         T::vld_parse_value(&value)
             .map(VldQuery)
-            .map_err(|e| VldPoemError(format_vld_error(&e)).into())
+            .map_err(|e| VldPoemError::validation(e).into())
     }
 }
 
@@ -140,27 +190,18 @@ impl<T> DerefMut for VldForm<T> {
 
 impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldForm<T> {
     async fn from_request(_req: &'a Request, body: &mut RequestBody) -> Result<Self> {
-        let bytes = body.take()?.into_bytes().await?;
-        let body_str = String::from_utf8(bytes.to_vec())
-            .map_err(|_| VldPoemError(vld_http_common::format_utf8_error()))?;
+        let bytes = read_limited_body(body).await?;
+        let body_str =
+            String::from_utf8(bytes.to_vec()).map_err(|_| VldPoemError::utf8())?;
 
         let map = parse_query_to_json(&body_str);
         let value = serde_json::Value::Object(map);
 
         T::vld_parse_value(&value)
             .map(VldForm)
-            .map_err(|e| VldPoemError(format_vld_error(&e)).into())
+            .map_err(|e| VldPoemError::validation(e).into())
     }
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-use vld_http_common::{
-    coerce_value, cookies_to_json, format_json_parse_error, format_vld_error,
-    parse_query_string as parse_query_to_json,
-};
 
 // ---------------------------------------------------------------------------
 // VldPath<T>
@@ -197,7 +238,7 @@ impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldPath<T> {
 
         T::vld_parse_value(&value)
             .map(VldPath)
-            .map_err(|e| VldPoemError(format_vld_error(&e)).into())
+            .map_err(|e| VldPoemError::validation(e).into())
     }
 }
 
@@ -238,7 +279,7 @@ impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldHeaders<T> 
 
         T::vld_parse_value(&value)
             .map(VldHeaders)
-            .map_err(|e| VldPoemError(format_vld_error(&e)).into())
+            .map_err(|e| VldPoemError::validation(e).into())
     }
 }
 
@@ -277,7 +318,7 @@ impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldCookie<T> {
 
         T::vld_parse_value(&value)
             .map(VldCookie)
-            .map_err(|e| VldPoemError(format_vld_error(&e)).into())
+            .map_err(|e| VldPoemError::validation(e).into())
     }
 }
 

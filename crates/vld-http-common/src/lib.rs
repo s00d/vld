@@ -6,6 +6,10 @@
 //! **Not intended for direct use by end users** — import via the
 //! framework-specific crate instead.
 
+/// Default max request body size for adapters that do not reuse the
+/// framework's built-in limit (2 MiB — same as axum `DefaultBodyLimit`).
+pub const DEFAULT_BODY_LIMIT: usize = 2 * 1024 * 1024;
+
 /// Coerce a raw string value into a typed JSON value.
 ///
 /// - `""` → `Null`
@@ -167,22 +171,33 @@ vld::schema! {
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
+fn format_path(path: &[vld::error::PathSegment]) -> String {
+    use vld::error::PathSegment;
+    let mut out = String::new();
+    for seg in path {
+        match seg {
+            PathSegment::Field(name) => {
+                out.push('.');
+                out.push_str(name);
+            }
+            PathSegment::Index(idx) => {
+                out.push('[');
+                out.push_str(&idx.to_string());
+                out.push(']');
+            }
+        }
+    }
+    out
+}
+
 /// Format a [`VldError`](vld::error::VldError) into a list of
 /// [`ValidationIssue`] structs.
 pub fn format_issues(err: &vld::error::VldError) -> Vec<ValidationIssue> {
     err.issues
         .iter()
-        .map(|i| {
-            let path: String = i
-                .path
-                .iter()
-                .map(|p| p.to_string())
-                .collect::<Vec<_>>()
-                .join(".");
-            ValidationIssue {
-                path,
-                message: i.message.clone(),
-            }
+        .map(|i| ValidationIssue {
+            path: format_path(&i.path),
+            message: i.message.clone(),
         })
         .collect()
 }
@@ -206,18 +221,10 @@ pub fn format_vld_error(err: &vld::error::VldError) -> serde_json::Value {
 pub fn format_issues_with_code(err: &vld::error::VldError) -> Vec<ValidationIssueWithCode> {
     err.issues
         .iter()
-        .map(|issue| {
-            let path: String = issue
-                .path
-                .iter()
-                .map(|p| p.to_string())
-                .collect::<Vec<_>>()
-                .join("");
-            ValidationIssueWithCode {
-                path,
-                message: issue.message.clone(),
-                code: issue.code.key().to_string(),
-            }
+        .map(|issue| ValidationIssueWithCode {
+            path: format_path(&issue.path),
+            message: issue.message.clone(),
+            code: issue.code.key().to_string(),
         })
         .collect()
 }

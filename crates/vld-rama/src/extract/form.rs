@@ -5,7 +5,7 @@ use rama::http::body::util::BodyExt;
 use rama::http::service::web::extract::{FromRequest, FromRequestBody};
 use rama::http::{Body, Method, Request};
 use vld::schema::VldParse;
-use vld_http_common::query_string_to_json;
+use vld_http_common::{query_string_to_json, DEFAULT_BODY_LIMIT};
 
 /// Rama extractor that validates **URL-encoded form bodies**.
 ///
@@ -53,9 +53,10 @@ where
                 query_string_to_json(&qs)
             } else {
                 let bytes = body
+                    .limited(DEFAULT_BODY_LIMIT)
                     .collect()
                     .await
-                    .map_err(|_| VldRejection::parse("Failed to read request body"))?
+                    .map_err(|_| VldRejection::payload_too_large())?
                     .to_bytes();
                 let body_str = std::str::from_utf8(&bytes)
                     .map_err(|_| VldRejection::parse("Form body is not valid UTF-8"))?;

@@ -71,15 +71,25 @@ impl Reject for ValidationFailed {}
 /// ```
 pub fn vld_json<T: VldParse + Send + 'static>(
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
-    warp::body::bytes().and_then(|bytes: bytes::Bytes| async move {
-        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
-            warp::reject::custom(InvalidJson {
-                message: e.to_string(),
-            })
-        })?;
+    vld_json_limit(vld_http_common::DEFAULT_BODY_LIMIT as u64)
+}
 
-        T::vld_parse_value(&value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
-    })
+/// Like [`vld_json`], but with an explicit body size limit (bytes).
+pub fn vld_json_limit<T: VldParse + Send + 'static>(
+    limit: u64,
+) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
+    warp::body::content_length_limit(limit)
+        .and(warp::body::bytes())
+        .and_then(|bytes: bytes::Bytes| async move {
+            let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
+                warp::reject::custom(InvalidJson {
+                    message: e.to_string(),
+                })
+            })?;
+
+            T::vld_parse_value(&value)
+                .map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +163,20 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> 
         return Ok(reply);
     }
 
+    if err.find::<warp::reject::PayloadTooLarge>().is_some() {
+        let body = vld_http_common::format_payload_too_large();
+        let reply =
+            warp::reply::with_status(warp::reply::json(&body), StatusCode::PAYLOAD_TOO_LARGE);
+        return Ok(reply);
+    }
+
+    if err.find::<warp::reject::LengthRequired>().is_some() {
+        let body = vld_http_common::format_generic_error("Content-Length required");
+        let reply =
+            warp::reply::with_status(warp::reply::json(&body), StatusCode::LENGTH_REQUIRED);
+        return Ok(reply);
+    }
+
     let body = vld_http_common::format_generic_error("Not Found");
     let reply = warp::reply::with_status(warp::reply::json(&body), StatusCode::NOT_FOUND);
     Ok(reply)
@@ -173,18 +197,28 @@ use vld_http_common::{coerce_value, cookies_to_json, parse_query_string as parse
 /// Values are coerced: `"42"` → number, `"true"` → bool, empty → null.
 pub fn vld_form<T: VldParse + Send + 'static>(
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
-    warp::body::bytes().and_then(|bytes: bytes::Bytes| async move {
-        let body_str = std::str::from_utf8(&bytes).map_err(|_| {
-            warp::reject::custom(InvalidJson {
-                message: "Form body is not valid UTF-8".into(),
-            })
-        })?;
+    vld_form_limit(vld_http_common::DEFAULT_BODY_LIMIT as u64)
+}
 
-        let map = parse_query_to_json(body_str);
-        let value = serde_json::Value::Object(map);
+/// Like [`vld_form`], but with an explicit body size limit (bytes).
+pub fn vld_form_limit<T: VldParse + Send + 'static>(
+    limit: u64,
+) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
+    warp::body::content_length_limit(limit)
+        .and(warp::body::bytes())
+        .and_then(|bytes: bytes::Bytes| async move {
+            let body_str = std::str::from_utf8(&bytes).map_err(|_| {
+                warp::reject::custom(InvalidJson {
+                    message: "Form body is not valid UTF-8".into(),
+                })
+            })?;
 
-        T::vld_parse_value(&value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
-    })
+            let map = parse_query_to_json(body_str);
+            let value = serde_json::Value::Object(map);
+
+            T::vld_parse_value(&value)
+                .map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -382,8 +416,8 @@ pub fn vld_cookie<T: VldParse + Send + 'static>(
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        handle_rejection, validate_path_params, vld_cookie, vld_form, vld_headers, vld_json,
-        vld_param, vld_path, vld_query, InvalidJson, ValidationFailed,
+        handle_rejection, validate_path_params, vld_cookie, vld_form, vld_form_limit, vld_headers,
+        vld_json, vld_json_limit, vld_param, vld_path, vld_query, InvalidJson, ValidationFailed,
     };
     pub use vld::prelude::*;
 }
