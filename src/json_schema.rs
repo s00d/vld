@@ -26,6 +26,14 @@ use serde_json::Value;
 pub trait JsonSchema {
     /// Generate a JSON Schema representation.
     fn json_schema(&self) -> Value;
+
+    /// Whether this schema should be included in an object's `required` array.
+    ///
+    /// By default, fields are required. Modifiers like `.optional()` can override
+    /// this to indicate that the property may be omitted.
+    fn is_required(&self) -> bool {
+        true
+    }
 }
 
 /// A `(name, json_schema_fn)` pair describing a nested schema.
@@ -200,6 +208,9 @@ impl<S: crate::schema::VldSchema + JsonSchema> JsonSchema for crate::modifiers::
             "oneOf": [inner, {"type": "null"}]
         })
     }
+    fn is_required(&self) -> bool {
+        false
+    }
 }
 
 impl<S: crate::schema::VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZNullable<S> {
@@ -218,6 +229,10 @@ impl<S: crate::schema::VldSchema + JsonSchema> JsonSchema for crate::modifiers::
             "oneOf": [inner, {"type": "null"}]
         })
     }
+
+    fn is_required(&self) -> bool {
+        false
+    }
 }
 
 impl<S: crate::schema::VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZDefault<S>
@@ -226,6 +241,10 @@ where
 {
     fn json_schema(&self) -> Value {
         self.inner_schema().json_schema()
+    }
+
+    fn is_required(&self) -> bool {
+        false
     }
 }
 

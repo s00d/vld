@@ -303,13 +303,17 @@ macro_rules! schema {
                             let __vld_key = $crate::__vld_resolve_key!(
                                 stringify!($field_name) $(, $rename)?
                             );
+
                             __vld_properties.insert(
                                 ::std::string::String::from(__vld_key),
                                 __vld_field_schema.json_schema(),
                             );
-                            __vld_required.push(
-                                ::std::string::String::from(__vld_key),
-                            );
+
+                            if __vld_field_schema.is_required() {
+                                __vld_required.push(
+                                    ::std::string::String::from(__vld_key),
+                                );
+                            }
                         }
                     )*
 
