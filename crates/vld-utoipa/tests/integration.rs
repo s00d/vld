@@ -493,7 +493,10 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
     assert!(js["properties"]["due_at"]["oneOf"].is_array());
     assert_eq!(js["properties"]["due_at"]["description"], "ISO date");
     assert!(js["properties"]["reporter"]["oneOf"].is_array());
-    assert_eq!(js["properties"]["reporter"]["description"], "reporter email");
+    assert_eq!(
+        js["properties"]["reporter"]["description"],
+        "reporter email"
+    );
     assert!(js["properties"]["meta"]["oneOf"].is_array());
     assert_eq!(js["properties"]["meta"]["description"], "freeform");
 

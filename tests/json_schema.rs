@@ -209,7 +209,10 @@ fn is_required_survives_wrapper_stacks() {
         .optional()
         .describe("nickname")
         .message("bad nickname")
-        .refine(|v| v.as_ref().map(|s| s.len() >= 3).unwrap_or(true), "short")
+        .refine(
+            |v| v.as_ref().map(|s| s.len() >= 3).unwrap_or(true),
+            "short",
+        )
         .catch(None)
         .transform(|v| v.map(|s| s.to_uppercase()));
     assert!(!optional_stack.is_required());
@@ -246,10 +249,7 @@ fn is_required_survives_wrapper_stacks() {
     assert!(nullable_stack.is_required());
     assert_one_of_nullish(&nullable_stack.json_schema(), "string");
     assert_eq!(nullable_stack.json_schema()["description"], "contact");
-    assert_eq!(
-        nullable_stack.json_schema()["oneOf"][0]["format"],
-        "email"
-    );
+    assert_eq!(nullable_stack.json_schema()["oneOf"][0]["format"], "email");
 
     // plain under wrappers stays required
     let plain_stack = vld::string()
@@ -264,10 +264,7 @@ fn is_required_survives_wrapper_stacks() {
     assert_eq!(plain_stack.json_schema()["minLength"], 2);
 
     // preprocess wraps outer schema — requiredness comes from inner
-    let pre_optional = vld::preprocess(
-        |v: &serde_json::Value| v.clone(),
-        vld::string().optional(),
-    );
+    let pre_optional = vld::preprocess(|v: &serde_json::Value| v.clone(), vld::string().optional());
     assert!(!pre_optional.is_required());
     assert_one_of_nullish(&pre_optional.json_schema(), "string");
 
@@ -534,16 +531,17 @@ fn object_openapi_required_pipeline() {
         )
         .field_schema(
             "slug",
-            vld::string()
-                .min(3)
-                .optional()
-                .describe("url slug")
-                .refine(|v| v.as_ref().map(|s| !s.contains(' ')).unwrap_or(true), "spaces"),
+            vld::string().min(3).optional().describe("url slug").refine(
+                |v| v.as_ref().map(|s| !s.contains(' ')).unwrap_or(true),
+                "spaces",
+            ),
         )
         .field_optional("draft_note", vld::string().max(200))
         .field_schema(
             "status",
-            vld::string().with_default("draft".into()).describe("workflow"),
+            vld::string()
+                .with_default("draft".into())
+                .describe("workflow"),
         )
         .field_schema("summary", vld::string().max(500).nullish())
         .field_schema(
@@ -632,15 +630,15 @@ fn object_openapi_required_pipeline() {
         .field_schema("name", vld::string())
         .field_schema("age", vld::number().int());
     let right = vld::object()
-        .field_schema("age", vld::number().int().optional().describe("optional age"))
+        .field_schema(
+            "age",
+            vld::number().int().optional().describe("optional age"),
+        )
         .field_schema("city", vld::string().min(1));
     let merged = left.extend(right).json_schema();
     assert_eq!(required_keys(&merged), vec!["name", "city"]);
     assert_one_of_nullish(&merged["properties"]["age"], "integer");
-    assert_eq!(
-        merged["properties"]["age"]["description"],
-        "optional age"
-    );
+    assert_eq!(merged["properties"]["age"]["description"], "optional age");
 }
 
 #[cfg(feature = "derive")]

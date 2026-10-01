@@ -342,7 +342,10 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
     assert!(js["properties"]["due_at"]["oneOf"].is_array());
     assert_eq!(js["properties"]["due_at"]["description"], "ISO date");
     assert!(js["properties"]["reporter"]["oneOf"].is_array());
-    assert_eq!(js["properties"]["reporter"]["description"], "reporter email");
+    assert_eq!(
+        js["properties"]["reporter"]["description"],
+        "reporter email"
+    );
     assert!(js["properties"]["meta"]["oneOf"].is_array());
 
     let schemars = vld_to_schemars(&js);
@@ -359,10 +362,7 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
         aide_required(&generated_json),
         vec!["title", "body", "reporter"]
     );
-    assert_eq!(
-        generated_json["properties"]["title"]["minLength"],
-        3
-    );
+    assert_eq!(generated_json["properties"]["title"]["minLength"], 3);
     assert!(generated_json["properties"]["labels"]["oneOf"].is_array());
     assert!(generated_json["properties"]["reporter"]["oneOf"].is_array());
 
