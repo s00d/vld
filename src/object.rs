@@ -15,6 +15,14 @@ pub trait DynSchema {
     fn dyn_json_schema(&self) -> Value {
         serde_json::json!({})
     }
+
+    /// Whether this field should appear in an object's JSON Schema `required` array.
+    ///
+    /// Only available with the `openapi` feature.
+    #[cfg(feature = "openapi")]
+    fn dyn_is_required(&self) -> bool {
+        true
+    }
 }
 
 /// Blanket implementation: any `VldSchema` whose output is `Serialize`
@@ -65,6 +73,10 @@ where
 
     fn dyn_json_schema(&self) -> Value {
         self.inner.json_schema()
+    }
+
+    fn dyn_is_required(&self) -> bool {
+        crate::json_schema::JsonSchema::is_required(&self.inner)
     }
 }
 
@@ -133,6 +145,13 @@ impl ZObject {
     }
 
     /// Add a field with its validation schema.
+    ///
+    /// For OpenAPI / JSON Schema output (`to_json_schema`), prefer
+    /// [`field_schema`](Self::field_schema) (preserves property schemas and
+    /// `is_required`) or [`field_optional`](Self::field_optional) (omits the
+    /// key from `required`). Plain `.field(..., schema.optional())` does not
+    /// erase the field from `required` because the type is erased without
+    /// [`JsonSchema`](crate::json_schema::JsonSchema).
     pub fn field<S: DynSchema + 'static>(mut self, name: impl Into<String>, schema: S) -> Self {
         self.fields.push(ObjectField {
             name: name.into(),
@@ -146,6 +165,8 @@ impl ZObject {
     /// Same as [`field()`](Self::field), but the field's schema will be
     /// included in the output of [`to_json_schema()`](Self::to_json_schema)
     /// and [`json_schema()`](crate::json_schema::JsonSchema::json_schema).
+    /// Also respects [`JsonSchema::is_required`](crate::json_schema::JsonSchema::is_required)
+    /// (e.g. `.optional()` / `.nullish()` / `.with_default(...)`).
     ///
     /// Requires the `openapi` feature.
     #[cfg(feature = "openapi")]
@@ -348,7 +369,12 @@ impl ZObject {
     /// Requires the `openapi` feature.
     #[cfg(feature = "openapi")]
     pub fn to_json_schema(&self) -> serde_json::Value {
-        let required: Vec<String> = self.fields.iter().map(|f| f.name.clone()).collect();
+        let required: Vec<String> = self
+            .fields
+            .iter()
+            .filter(|f| f.schema.dyn_is_required())
+            .map(|f| f.name.clone())
+            .collect();
         let mut props = serde_json::Map::new();
         for f in &self.fields {
             props.insert(f.name.clone(), f.schema.dyn_json_schema());
@@ -501,6 +527,16 @@ impl DynSchema for OptionalDynSchema {
         }
         self.0.dyn_parse(value)
     }
+
+    #[cfg(feature = "openapi")]
+    fn dyn_json_schema(&self) -> Value {
+        self.0.dyn_json_schema()
+    }
+
+    #[cfg(feature = "openapi")]
+    fn dyn_is_required(&self) -> bool {
+        false
+    }
 }
 
 /// Internal wrapper that rejects null values.
@@ -515,5 +551,15 @@ impl DynSchema for RequiredDynSchema {
             ));
         }
         self.0.dyn_parse(value)
+    }
+
+    #[cfg(feature = "openapi")]
+    fn dyn_json_schema(&self) -> Value {
+        self.0.dyn_json_schema()
+    }
+
+    #[cfg(feature = "openapi")]
+    fn dyn_is_required(&self) -> bool {
+        true
     }
 }

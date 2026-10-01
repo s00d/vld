@@ -256,18 +256,6 @@ fn convert_primitive(map: &serde_json::Map<String, Value>, type_str: &str) -> Re
     RefOr::T(Schema::Object(obj))
 }
 
-/// Returns `true` when `schema` is a `oneOf` that includes `{ "type": "null" }`.
-fn is_nullable_one_of(schema: &Value) -> bool {
-    schema
-        .get("oneOf")
-        .and_then(Value::as_array)
-        .is_some_and(|items| {
-            items
-                .iter()
-                .any(|item| item.get("type").and_then(Value::as_str) == Some("null"))
-        })
-}
-
 /// If `schema` is an optional/nullable `oneOf`, return the non-null branch.
 fn unwrap_nullable_schema(schema: &Value) -> &Value {
     if let Some(items) = schema.get("oneOf").and_then(Value::as_array) {
@@ -305,11 +293,11 @@ pub fn json_schema_to_params(value: &Value, parameter_in: ParameterIn) -> Vec<Pa
     properties
         .into_iter()
         .map(|(name, field_schema)| {
-            let nullable = is_nullable_one_of(&field_schema);
+            // `required` array is the source of truth (optional/nullish/default omit
+            // the key; nullable keeps it). Do not infer requiredness from oneOf+null —
+            // both optional and nullable emit that shape.
             let schema_value = unwrap_nullable_schema(&field_schema);
-            let required = if nullable {
-                Required::False
-            } else if required_fields.contains(&name.as_str()) {
+            let required = if required_fields.contains(&name.as_str()) {
                 Required::True
             } else {
                 Required::False

@@ -327,9 +327,11 @@ pub fn derive_validate(input: TokenStream) -> TokenStream {
                                 ::std::string::String::from(#field_json_keys),
                                 __vld_field_schema.json_schema(),
                             );
-                            __vld_required.push(
-                                ::std::string::String::from(#field_json_keys),
-                            );
+                            if __vld_field_schema.is_required() {
+                                __vld_required.push(
+                                    ::std::string::String::from(#field_json_keys),
+                                );
+                            }
                         }
                     )*
 

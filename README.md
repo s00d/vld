@@ -395,22 +395,26 @@ let any = vld::json_value().object().require_key("id").max_depth(4);
 ## Modifiers
 
 ```rust
-// Optional: null/missing -> None
+// Optional: null/missing -> None; omitted from OpenAPI `required`
 vld::string().optional()
 
-// Nullable: null -> None
+// Nullable: null -> None; key stays in OpenAPI `required`
 vld::string().nullable()
 
-// Nullish: both optional + nullable
+// Nullish: both optional + nullable; omitted from `required`
 vld::string().nullish()
 
-// Default: null/missing -> default value
+// Default: null/missing -> default value; omitted from `required`
 vld::string().with_default("fallback".to_string())
 
 // Catch: ANY error -> fallback value
 vld::string().min(3).catch("default".to_string())
 ```
 
+> **Note:** at object-parse time missing keys are normalized to `null`, so
+> runtime `optional` / `nullable` / `nullish` currently behave the same.
+> OpenAPI `required` *does* distinguish them: only optional / nullish / default
+> omit the key from `required`; nullable keeps it.
 ## Collections
 
 ### Array

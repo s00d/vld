@@ -29,8 +29,9 @@ pub trait JsonSchema {
 
     /// Whether this schema should be included in an object's `required` array.
     ///
-    /// By default, fields are required. Modifiers like `.optional()` can override
-    /// this to indicate that the property may be omitted.
+    /// By default, fields are required. Modifiers that allow omitting the key
+    /// (`.optional()`, `.nullish()`, `.with_default(...)`) return `false`.
+    /// `.nullable()` stays required (key must be present; value may be null).
     fn is_required(&self) -> bool {
         true
     }
@@ -255,6 +256,10 @@ where
     fn json_schema(&self) -> Value {
         self.inner_schema().json_schema()
     }
+
+    fn is_required(&self) -> bool {
+        self.inner_schema().is_required()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +273,10 @@ where
     fn json_schema(&self) -> Value {
         self.inner_schema().json_schema()
     }
+
+    fn is_required(&self) -> bool {
+        self.inner_schema().is_required()
+    }
 }
 
 impl<S: crate::schema::VldSchema + JsonSchema, F, U> JsonSchema
@@ -278,6 +287,10 @@ where
     fn json_schema(&self) -> Value {
         // Transform doesn't change the input schema
         self.inner_schema().json_schema()
+    }
+
+    fn is_required(&self) -> bool {
+        self.inner_schema().is_required()
     }
 }
 
@@ -290,11 +303,19 @@ impl<S: crate::schema::VldSchema + JsonSchema> JsonSchema for crate::combinators
         }
         schema
     }
+
+    fn is_required(&self) -> bool {
+        self.inner_schema().is_required()
+    }
 }
 
 impl<S: crate::schema::VldSchema + JsonSchema> JsonSchema for crate::combinators::ZMessage<S> {
     fn json_schema(&self) -> Value {
         self.inner_schema().json_schema()
+    }
+
+    fn is_required(&self) -> bool {
+        self.inner_schema().is_required()
     }
 }
 
@@ -306,6 +327,10 @@ where
     fn json_schema(&self) -> Value {
         self.inner_schema().json_schema()
     }
+
+    fn is_required(&self) -> bool {
+        self.inner_schema().is_required()
+    }
 }
 
 impl<F, S: crate::schema::VldSchema + JsonSchema> JsonSchema
@@ -315,6 +340,10 @@ where
 {
     fn json_schema(&self) -> Value {
         self.inner_schema().json_schema()
+    }
+
+    fn is_required(&self) -> bool {
+        self.inner_schema().is_required()
     }
 }
 
