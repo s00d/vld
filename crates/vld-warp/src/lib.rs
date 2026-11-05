@@ -16,9 +16,20 @@
 //! | [`validate_path_params::<T>(pairs)`] | Pre-extracted path params |
 //! | [`vld_headers::<T>()`] | HTTP headers |
 //! | [`vld_cookie::<T>()`] | Cookie values |
+//!
+//! Use [`handle_rejection`] with `.recover()` to turn rejections into JSON:
+//! validation / malformed body → 422, body over the limit → 413, plus the
+//! usual warp rejections (404, 405, 400, 411, 415) and 500 for anything
+//! unknown.
 
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use futures_util::{Stream, StreamExt};
 use std::convert::Infallible;
 use vld::schema::VldParse;
+use vld_http_common::{
+    cookies_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
+    percent_decode, query_string_to_json, VldHttpError,
+};
 use warp::http::StatusCode;
 use warp::reject::Reject;
 use warp::{Filter, Rejection, Reply};
@@ -27,7 +38,8 @@ use warp::{Filter, Rejection, Reply};
 // Rejection types
 // ---------------------------------------------------------------------------
 
-/// Rejection when JSON parsing fails.
+/// Rejection when JSON parsing fails (answered with 422 by
+/// [`handle_rejection`]).
 #[derive(Debug)]
 pub struct InvalidJson {
     pub message: String,
@@ -41,13 +53,62 @@ pub struct ValidationFailed {
 }
 impl Reject for ValidationFailed {}
 
+/// Rejection when a request body exceeds the filter's size limit (413).
+#[derive(Debug)]
+pub struct BodyTooLarge;
+impl Reject for BodyTooLarge {}
+
+fn reject_http(e: VldHttpError) -> Rejection {
+    if e.status() == 413 {
+        warp::reject::custom(BodyTooLarge)
+    } else {
+        warp::reject::custom(ValidationFailed {
+            error: e.into_error(),
+        })
+    }
+}
+
+fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, Rejection> {
+    T::vld_parse_value(value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+}
+
+/// Read the whole body, streaming, up to `limit` bytes. Works without a
+/// `Content-Length` header (chunked uploads).
+fn limited_body(limit: u64) -> impl Filter<Extract = (Bytes,), Error = Rejection> + Clone {
+    warp::body::stream().and_then(move |stream| collect_limited(stream, limit))
+}
+
+async fn collect_limited<S, B>(stream: S, limit: u64) -> Result<Bytes, Rejection>
+where
+    S: Stream<Item = Result<B, warp::Error>>,
+    B: Buf,
+{
+    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    let mut stream = std::pin::pin!(stream);
+    let mut buf = BytesMut::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| {
+            reject_http(VldHttpError::parse(format!(
+                "Failed to read request body: {e}"
+            )))
+        })?;
+        if buf.len().saturating_add(chunk.remaining()) > limit {
+            return Err(warp::reject::custom(BodyTooLarge));
+        }
+        buf.put(chunk);
+    }
+    Ok(buf.freeze())
+}
+
 // ---------------------------------------------------------------------------
 // vld_json filter
 // ---------------------------------------------------------------------------
 
 /// Warp filter that extracts and validates a JSON body.
 ///
-/// Returns the validated `T` or rejects with [`ValidationFailed`].
+/// Returns the validated `T` or rejects with [`ValidationFailed`] /
+/// [`InvalidJson`] / [`BodyTooLarge`] (body over
+/// [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT)).
 ///
 /// # Example
 ///
@@ -78,18 +139,14 @@ pub fn vld_json<T: VldParse + Send + 'static>(
 pub fn vld_json_limit<T: VldParse + Send + 'static>(
     limit: u64,
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
-    warp::body::content_length_limit(limit)
-        .and(warp::body::bytes())
-        .and_then(|bytes: bytes::Bytes| async move {
-            let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
-                warp::reject::custom(InvalidJson {
-                    message: e.to_string(),
-                })
-            })?;
-
-            T::vld_parse_value(&value)
-                .map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
-        })
+    limited_body(limit).and_then(|bytes: Bytes| async move {
+        let value = parse_json_body(&bytes).map_err(|e| {
+            warp::reject::custom(InvalidJson {
+                message: e.error().issues[0].message.clone(),
+            })
+        })?;
+        validate(&value)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -98,8 +155,7 @@ pub fn vld_json_limit<T: VldParse + Send + 'static>(
 
 /// Warp filter that extracts and validates query parameters.
 ///
-/// Parses the query string into a JSON object with value coercion,
-/// then validates via `T::vld_parse_value()`.
+/// See [`vld_http_common::parse_query_string`] for coercion and array rules.
 ///
 /// # Example
 ///
@@ -126,19 +182,25 @@ pub fn vld_query<T: VldParse + Send + 'static>(
     warp::query::raw()
         .or(warp::any().map(String::new))
         .unify()
-        .and_then(|qs: String| async move {
-            let map = parse_query_to_json(&qs);
-            let value = serde_json::Value::Object(map);
-            T::vld_parse_value(&value)
-                .map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
-        })
+        .and_then(|qs: String| async move { validate(&query_string_to_json(&qs)) })
 }
 
 // ---------------------------------------------------------------------------
 // Recovery handler
 // ---------------------------------------------------------------------------
 
-/// Recovery handler that converts vld rejections into JSON responses.
+/// Recovery handler that converts rejections into JSON responses.
+///
+/// | Rejection | Status |
+/// |---|---|
+/// | [`ValidationFailed`], [`InvalidJson`] | 422 (validation body) |
+/// | [`BodyTooLarge`], `PayloadTooLarge` | 413 |
+/// | `MethodNotAllowed` | 405 |
+/// | `UnsupportedMediaType` | 415 |
+/// | `LengthRequired` | 411 |
+/// | `MissingHeader`, `InvalidHeader`, `MissingCookie`, `InvalidQuery` | 400 |
+/// | not found | 404 |
+/// | anything else | 500 |
 ///
 /// Use with `warp::Filter::recover()`:
 ///
@@ -150,42 +212,56 @@ pub fn vld_query<T: VldParse + Send + 'static>(
 ///     .recover(handle_rejection);
 /// ```
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
-    if let Some(e) = err.find::<ValidationFailed>() {
-        let body = vld_http_common::format_vld_error(&e.error);
-        let reply =
-            warp::reply::with_status(warp::reply::json(&body), StatusCode::UNPROCESSABLE_ENTITY);
-        return Ok(reply);
-    }
+    use warp::reject as r;
 
-    if let Some(e) = err.find::<InvalidJson>() {
-        let body = vld_http_common::format_json_parse_error(&e.message);
-        let reply = warp::reply::with_status(warp::reply::json(&body), StatusCode::BAD_REQUEST);
-        return Ok(reply);
-    }
+    let (status, body) = if let Some(e) = err.find::<ValidationFailed>() {
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            vld_http_common::format_vld_error(&e.error),
+        )
+    } else if let Some(e) = err.find::<InvalidJson>() {
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            VldHttpError::parse(e.message.clone()).body(),
+        )
+    } else if err.find::<BodyTooLarge>().is_some() || err.find::<r::PayloadTooLarge>().is_some() {
+        (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            vld_http_common::format_payload_too_large(),
+        )
+    } else if err.is_not_found() {
+        (
+            StatusCode::NOT_FOUND,
+            vld_http_common::format_generic_error("Not Found"),
+        )
+    } else {
+        let known = |status: StatusCode, msg: String| (status, msg);
+        // Same priority as warp: any specific error beats 405, 405 beats 404.
+        let (status, msg) = if let Some(e) = err.find::<r::UnsupportedMediaType>() {
+            known(StatusCode::UNSUPPORTED_MEDIA_TYPE, e.to_string())
+        } else if let Some(e) = err.find::<r::LengthRequired>() {
+            known(StatusCode::LENGTH_REQUIRED, e.to_string())
+        } else if let Some(e) = err.find::<r::MissingHeader>() {
+            known(StatusCode::BAD_REQUEST, e.to_string())
+        } else if let Some(e) = err.find::<r::InvalidHeader>() {
+            known(StatusCode::BAD_REQUEST, e.to_string())
+        } else if let Some(e) = err.find::<r::MissingCookie>() {
+            known(StatusCode::BAD_REQUEST, e.to_string())
+        } else if let Some(e) = err.find::<r::InvalidQuery>() {
+            known(StatusCode::BAD_REQUEST, e.to_string())
+        } else if let Some(e) = err.find::<r::MethodNotAllowed>() {
+            known(StatusCode::METHOD_NOT_ALLOWED, e.to_string())
+        } else {
+            known(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal Server Error".to_string(),
+            )
+        };
+        (status, vld_http_common::format_generic_error(&msg))
+    };
 
-    if err.find::<warp::reject::PayloadTooLarge>().is_some() {
-        let body = vld_http_common::format_payload_too_large();
-        let reply =
-            warp::reply::with_status(warp::reply::json(&body), StatusCode::PAYLOAD_TOO_LARGE);
-        return Ok(reply);
-    }
-
-    if err.find::<warp::reject::LengthRequired>().is_some() {
-        let body = vld_http_common::format_generic_error("Content-Length required");
-        let reply = warp::reply::with_status(warp::reply::json(&body), StatusCode::LENGTH_REQUIRED);
-        return Ok(reply);
-    }
-
-    let body = vld_http_common::format_generic_error("Not Found");
-    let reply = warp::reply::with_status(warp::reply::json(&body), StatusCode::NOT_FOUND);
-    Ok(reply)
+    Ok(warp::reply::with_status(warp::reply::json(&body), status))
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-use vld_http_common::{coerce_value, cookies_to_json, parse_query_string as parse_query_to_json};
 
 // ---------------------------------------------------------------------------
 // vld_form filter
@@ -193,7 +269,7 @@ use vld_http_common::{coerce_value, cookies_to_json, parse_query_string as parse
 
 /// Warp filter that extracts and validates a URL-encoded form body.
 ///
-/// Values are coerced: `"42"` → number, `"true"` → bool, empty → null.
+/// Values are parsed the same way as query parameters.
 pub fn vld_form<T: VldParse + Send + 'static>(
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     vld_form_limit(vld_http_common::DEFAULT_BODY_LIMIT as u64)
@@ -203,21 +279,9 @@ pub fn vld_form<T: VldParse + Send + 'static>(
 pub fn vld_form_limit<T: VldParse + Send + 'static>(
     limit: u64,
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
-    warp::body::content_length_limit(limit)
-        .and(warp::body::bytes())
-        .and_then(|bytes: bytes::Bytes| async move {
-            let body_str = std::str::from_utf8(&bytes).map_err(|_| {
-                warp::reject::custom(InvalidJson {
-                    message: "Form body is not valid UTF-8".into(),
-                })
-            })?;
-
-            let map = parse_query_to_json(body_str);
-            let value = serde_json::Value::Object(map);
-
-            T::vld_parse_value(&value)
-                .map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
-        })
+    limited_body(limit).and_then(|bytes: Bytes| async move {
+        validate(&parse_form_body(&bytes).map_err(reject_http)?)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -226,8 +290,8 @@ pub fn vld_form_limit<T: VldParse + Send + 'static>(
 
 /// Warp filter that extracts and validates **a single path segment**.
 ///
-/// Works like `warp::path::param::<String>()` but coerces the raw string
-/// value (numbers, booleans, null) and validates via `T::vld_parse_value()`.
+/// Works like `warp::path::param::<String>()` but percent-decodes and
+/// coerces the raw value and validates via `T::vld_parse_value()`.
 ///
 /// The extracted segment is wrapped into a JSON object `{ "<name>": <coerced> }`
 /// so that the vld schema field name matches.
@@ -256,10 +320,10 @@ pub fn vld_param<T: VldParse + Send + 'static>(
     name: &'static str,
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     warp::path::param::<String>().and_then(move |raw: String| async move {
-        let mut map = serde_json::Map::new();
-        map.insert(name.to_string(), coerce_value(&raw));
-        let value = serde_json::Value::Object(map);
-        T::vld_parse_value(&value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+        validate(&path_params_to_json([(
+            name,
+            percent_decode(&raw).as_str(),
+        )]))
     })
 }
 
@@ -270,9 +334,9 @@ pub fn vld_param<T: VldParse + Send + 'static>(
 /// Warp filter that extracts and validates **all remaining path segments**.
 ///
 /// Uses `warp::path::tail()` internally — all segments after the current
-/// position are consumed and mapped to `param_names` in order.
-/// The number of remaining segments **must equal** the number of names;
-/// otherwise the request is rejected with 404 (not found).
+/// position are consumed, percent-decoded and mapped to `param_names` in
+/// order. The number of remaining segments **must equal** the number of
+/// names; otherwise the request is rejected with 404 (not found).
 ///
 /// Best suited for routes where all remaining segments are parameters
 /// (no static segments left).
@@ -304,18 +368,23 @@ pub fn vld_path<T: VldParse + Send + 'static>(
     param_names: &'static [&'static str],
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     warp::path::tail().and_then(move |tail: warp::path::Tail| async move {
-        let segments: Vec<&str> = tail.as_str().split('/').filter(|s| !s.is_empty()).collect();
+        let segments: Vec<String> = tail
+            .as_str()
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .map(percent_decode)
+            .collect();
 
         if segments.len() != param_names.len() {
             return Err(warp::reject::not_found());
         }
 
-        let mut map = serde_json::Map::new();
-        for (name, raw) in param_names.iter().zip(segments.iter()) {
-            map.insert(name.to_string(), coerce_value(raw));
-        }
-        let value = serde_json::Value::Object(map);
-        T::vld_parse_value(&value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+        validate(&path_params_to_json(
+            param_names
+                .iter()
+                .copied()
+                .zip(segments.iter().map(String::as_str)),
+        ))
     })
 }
 
@@ -324,6 +393,9 @@ pub fn vld_path<T: VldParse + Send + 'static>(
 // ---------------------------------------------------------------------------
 
 /// Validate pre-extracted path parameter pairs against a vld schema.
+///
+/// Values are percent-decoded (warp's `path::param::<String>()` yields the
+/// raw, still-encoded segment) and coerced.
 ///
 /// Useful for complex routes where static and dynamic segments are
 /// interleaved and you extract `String` params with
@@ -360,12 +432,13 @@ pub fn vld_path<T: VldParse + Send + 'static>(
 ///     });
 /// ```
 pub fn validate_path_params<T: VldParse>(params: &[(&str, &str)]) -> Result<T, Rejection> {
-    let mut map = serde_json::Map::new();
-    for (name, raw) in params {
-        map.insert(name.to_string(), coerce_value(raw));
-    }
-    let value = serde_json::Value::Object(map);
-    T::vld_parse_value(&value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+    let decoded: Vec<(&str, String)> = params
+        .iter()
+        .map(|(k, v)| (*k, percent_decode(v)))
+        .collect();
+    validate(&path_params_to_json(
+        decoded.iter().map(|(k, v)| (*k, v.as_str())),
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -374,21 +447,14 @@ pub fn validate_path_params<T: VldParse>(params: &[(&str, &str)]) -> Result<T, R
 
 /// Warp filter that extracts and validates HTTP headers.
 ///
-/// Header names are normalised to snake_case: `Content-Type` → `content_type`.
-/// Values are coerced: `"42"` → number, `"true"` → bool, etc.
+/// See [`vld_http_common::headers_to_json`]: names become snake_case
+/// (`Content-Type` → `content_type`), repeated headers are joined with `", "`.
 pub fn vld_headers<T: VldParse + Send + 'static>(
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     warp::header::headers_cloned().and_then(|headers: warp::http::HeaderMap| async move {
-        let mut map = serde_json::Map::new();
-        for (name, value) in headers.iter() {
-            let key = name.as_str().to_lowercase().replace('-', "_");
-            if let Ok(v) = value.to_str() {
-                map.insert(key, coerce_value(v));
-            }
-        }
-        let value = serde_json::Value::Object(map);
-
-        T::vld_parse_value(&value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+        validate(&headers_to_json(
+            headers.iter().map(|(n, v)| (n.as_str(), v.as_bytes())),
+        ))
     })
 }
 
@@ -399,15 +465,12 @@ pub fn vld_headers<T: VldParse + Send + 'static>(
 /// Warp filter that extracts and validates cookies from the `Cookie` header.
 ///
 /// Cookie names are used as-is for schema field matching.
-/// Values are coerced: `"42"` → number, `"true"` → bool, etc.
+/// Values are unquoted, percent-decoded and coerced.
 pub fn vld_cookie<T: VldParse + Send + 'static>(
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     warp::header::optional::<String>("cookie").and_then(
         |cookie_header: Option<String>| async move {
-            let value = cookies_to_json(cookie_header.as_deref().unwrap_or(""));
-
-            T::vld_parse_value(&value)
-                .map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+            validate(&cookies_to_json(cookie_header.as_deref().unwrap_or("")))
         },
     )
 }
@@ -416,7 +479,8 @@ pub fn vld_cookie<T: VldParse + Send + 'static>(
 pub mod prelude {
     pub use crate::{
         handle_rejection, validate_path_params, vld_cookie, vld_form, vld_form_limit, vld_headers,
-        vld_json, vld_json_limit, vld_param, vld_path, vld_query, InvalidJson, ValidationFailed,
+        vld_json, vld_json_limit, vld_param, vld_path, vld_query, BodyTooLarge, InvalidJson,
+        ValidationFailed,
     };
     pub use vld::prelude::*;
 }

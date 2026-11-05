@@ -99,8 +99,8 @@ async fn handler(request: Request<MyMessage>) -> Result<Response<()>, Status> {
 ```
 
 Metadata keys are converted from `kebab-case` to `snake_case`
-(`x-request-id` → `x_request_id`). Values are coerced (`"42"` → number,
-`"true"` → boolean).
+(`x-request-id` → `x_request_id`). Values are coerced losslessly (`"42"` → number,
+`"true"` → boolean, `"01234"` / `""` stay strings).
 
 ## Metadata Interceptor
 

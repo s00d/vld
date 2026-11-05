@@ -11,7 +11,9 @@
 //! | [`VldHeaders<T>`] | manual header extraction | HTTP headers |
 //! | [`VldCookie<T>`] | manual cookie parsing | Cookie values |
 //!
-//! All extractors return **422 Unprocessable Entity** on validation failure.
+//! All extractors return **422 Unprocessable Entity** on validation failure
+//! or malformed input, and **413 Payload Too Large** when the body exceeds
+//! axum's `DefaultBodyLimit` (2 MiB unless configured).
 //!
 //! # Quick example
 //!
@@ -54,60 +56,49 @@ use axum::extract::{FromRequest, FromRequestParts, Request};
 use axum::response::{IntoResponse, Response};
 use http::request::Parts;
 use http::StatusCode;
+use vld::schema::VldParse;
+use vld_http_common::{
+    cookies_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
+    query_string_to_json, VldHttpError,
+};
 
 // ============================= Rejection =====================================
 
 /// Rejection type returned when validation or body reading fails.
 ///
 /// Used by all `Vld*` extractors in this crate.
-pub struct VldJsonRejection {
-    error: vld::error::VldError,
-    status: StatusCode,
-}
+pub struct VldJsonRejection(VldHttpError);
 
 impl VldJsonRejection {
-    fn validation(error: vld::error::VldError) -> Self {
-        Self {
-            error,
-            status: StatusCode::UNPROCESSABLE_ENTITY,
-        }
-    }
-
-    fn parse(message: impl Into<String>) -> Self {
-        Self::validation(vld::error::VldError::single(
-            vld::error::IssueCode::ParseError,
-            message.into(),
-        ))
-    }
-
-    fn payload_too_large() -> Self {
-        Self {
-            error: vld::error::VldError::single(
-                vld::error::IssueCode::ParseError,
-                "Payload too large",
-            ),
-            status: StatusCode::PAYLOAD_TOO_LARGE,
-        }
-    }
-
     /// Get a reference to the underlying `VldError`.
     pub fn error(&self) -> &vld::error::VldError {
-        &self.error
+        self.0.error()
+    }
+
+    /// HTTP status of this rejection (422 or 413).
+    pub fn status(&self) -> StatusCode {
+        StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
+    }
+}
+
+impl From<VldHttpError> for VldJsonRejection {
+    fn from(e: VldHttpError) -> Self {
+        Self(e)
+    }
+}
+
+impl From<vld::error::VldError> for VldJsonRejection {
+    fn from(e: vld::error::VldError) -> Self {
+        Self(e.into())
     }
 }
 
 impl IntoResponse for VldJsonRejection {
     fn into_response(self) -> Response {
-        let body = if self.status == StatusCode::PAYLOAD_TOO_LARGE {
-            vld_http_common::format_payload_too_large()
-        } else {
-            vld_http_common::format_vld_error(&self.error)
-        };
-
         (
-            self.status,
+            self.status(),
             [(http::header::CONTENT_TYPE, "application/json")],
-            body.to_string(),
+            self.0.body().to_string(),
         )
             .into_response()
     }
@@ -115,17 +106,36 @@ impl IntoResponse for VldJsonRejection {
 
 impl std::fmt::Display for VldJsonRejection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Validation failed: {}", self.error)
+        self.0.fmt(f)
     }
 }
 
 impl std::fmt::Debug for VldJsonRejection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("VldJsonRejection")
-            .field("error", &self.error)
-            .field("status", &self.status)
+            .field("error", self.error())
+            .field("status", &self.status())
             .finish()
     }
+}
+
+impl std::error::Error for VldJsonRejection {}
+
+/// Read the body via axum's `Bytes` extractor (respects `DefaultBodyLimit`).
+async fn read_body<S: Send + Sync>(req: Request, state: &S) -> Result<bytes::Bytes, VldHttpError> {
+    <bytes::Bytes as FromRequest<S>>::from_request(req, state)
+        .await
+        .map_err(|rejection| {
+            if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                VldHttpError::payload_too_large()
+            } else {
+                VldHttpError::parse(format!("Failed to read request body: {rejection}"))
+            }
+        })
+}
+
+fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, VldJsonRejection> {
+    T::vld_parse_value(value).map_err(VldJsonRejection::from)
 }
 
 // ============================= VldJson =======================================
@@ -138,29 +148,13 @@ pub struct VldJson<T>(pub T);
 impl<S, T> FromRequest<S> for VldJson<T>
 where
     S: Send + Sync,
-    T: vld::schema::VldParse,
+    T: VldParse,
 {
     type Rejection = VldJsonRejection;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        // Bytes extractor respects axum `DefaultBodyLimit` (unlike raw to_bytes).
-        let body = <axum::body::Bytes as FromRequest<S>>::from_request(req, state)
-            .await
-            .map_err(|rejection| {
-                let resp = rejection.into_response();
-                if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
-                    VldJsonRejection::payload_too_large()
-                } else {
-                    VldJsonRejection::parse("Failed to read request body")
-                }
-            })?;
-
-        let value: serde_json::Value = serde_json::from_slice(&body)
-            .map_err(|e| VldJsonRejection::parse(format!("Invalid JSON: {}", e)))?;
-
-        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
-
-        Ok(VldJson(parsed))
+        let body = read_body(req, state).await?;
+        validate(&parse_json_body(&body)?).map(VldJson)
     }
 }
 
@@ -170,23 +164,19 @@ where
 ///
 /// Drop-in replacement for `axum::extract::Query<T>`.
 ///
-/// Values are coerced: `"42"` → number, `"true"`/`"false"` → boolean, empty → null.
+/// See [`vld_http_common::parse_query_string`] for coercion and array rules
+/// (`a=1&a=2` / `a[]=1` → arrays; non-canonical numbers stay strings).
 pub struct VldQuery<T>(pub T);
 
 impl<S, T> FromRequestParts<S> for VldQuery<T>
 where
     S: Send + Sync,
-    T: vld::schema::VldParse,
+    T: VldParse,
 {
     type Rejection = VldJsonRejection;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let query_string = parts.uri.query().unwrap_or("");
-        let value = query_string_to_json(query_string);
-
-        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
-
-        Ok(VldQuery(parsed))
+        validate(&query_string_to_json(parts.uri.query().unwrap_or(""))).map(VldQuery)
     }
 }
 
@@ -219,7 +209,7 @@ pub struct VldPath<T>(pub T);
 impl<S, T> FromRequestParts<S> for VldPath<T>
 where
     S: Send + Sync,
-    T: vld::schema::VldParse,
+    T: VldParse,
 {
     type Rejection = VldJsonRejection;
 
@@ -229,17 +219,12 @@ where
                 parts, state,
             )
             .await
-            .map_err(|e| VldJsonRejection::parse(format!("Path parameter error: {}", e)))?;
+            .map_err(|e| VldHttpError::parse(format!("Path parameter error: {e}")))?;
 
-        let mut map = serde_json::Map::new();
-        for (k, v) in raw.0 {
-            map.insert(k, coerce_value(&v));
-        }
-        let value = serde_json::Value::Object(map);
-
-        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
-
-        Ok(VldPath(parsed))
+        validate(&path_params_to_json(
+            raw.0.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+        ))
+        .map(VldPath)
     }
 }
 
@@ -250,7 +235,7 @@ where
 ///
 /// Drop-in replacement for `axum::extract::Form<T>`.
 ///
-/// Values are coerced the same way as query parameters.
+/// Values are parsed the same way as query parameters.
 ///
 /// # Example
 ///
@@ -272,30 +257,13 @@ pub struct VldForm<T>(pub T);
 impl<S, T> FromRequest<S> for VldForm<T>
 where
     S: Send + Sync,
-    T: vld::schema::VldParse,
+    T: VldParse,
 {
     type Rejection = VldJsonRejection;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let body = <axum::body::Bytes as FromRequest<S>>::from_request(req, state)
-            .await
-            .map_err(|rejection| {
-                let resp = rejection.into_response();
-                if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
-                    VldJsonRejection::payload_too_large()
-                } else {
-                    VldJsonRejection::parse("Failed to read request body")
-                }
-            })?;
-
-        let body_str = std::str::from_utf8(&body)
-            .map_err(|_| VldJsonRejection::parse("Form body is not valid UTF-8"))?;
-
-        let value = query_string_to_json(body_str);
-
-        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
-
-        Ok(VldForm(parsed))
+        let body = read_body(req, state).await?;
+        validate(&parse_form_body(&body)?).map(VldForm)
     }
 }
 
@@ -303,10 +271,9 @@ where
 
 /// Axum extractor that validates **HTTP headers**.
 ///
-/// Header names are normalised to snake_case for schema matching:
-/// `Content-Type` → `content_type`, `X-Request-Id` → `x_request_id`.
-///
-/// Values are coerced: `"42"` → number, `"true"` → boolean, etc.
+/// See [`vld_http_common::headers_to_json`]: names become snake_case
+/// (`X-Request-Id` → `x_request_id`), repeated headers are joined with `", "`,
+/// non-UTF-8 bytes are replaced with `U+FFFD`.
 ///
 /// # Example
 ///
@@ -328,16 +295,18 @@ pub struct VldHeaders<T>(pub T);
 impl<S, T> FromRequestParts<S> for VldHeaders<T>
 where
     S: Send + Sync,
-    T: vld::schema::VldParse,
+    T: VldParse,
 {
     type Rejection = VldJsonRejection;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let value = headers_to_json(&parts.headers);
-
-        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
-
-        Ok(VldHeaders(parsed))
+        let value = headers_to_json(
+            parts
+                .headers
+                .iter()
+                .map(|(n, v)| (n.as_str(), v.as_bytes())),
+        );
+        validate(&value).map(VldHeaders)
     }
 }
 
@@ -346,7 +315,7 @@ where
 /// Axum extractor that validates **cookie values** from the `Cookie` header.
 ///
 /// Cookie names are used as-is for schema field matching.
-/// Values are coerced the same way as query parameters.
+/// Values are unquoted, percent-decoded and coerced.
 ///
 /// # Example
 ///
@@ -368,7 +337,7 @@ pub struct VldCookie<T>(pub T);
 impl<S, T> FromRequestParts<S> for VldCookie<T>
 where
     S: Send + Sync,
-    T: vld::schema::VldParse,
+    T: VldParse,
 {
     type Rejection = VldJsonRejection;
 
@@ -378,34 +347,11 @@ where
             .get(http::header::COOKIE)
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-
-        let value = cookies_to_json(cookie_header);
-
-        let parsed = T::vld_parse_value(&value).map_err(VldJsonRejection::validation)?;
-
-        Ok(VldCookie(parsed))
+        validate(&cookies_to_json(cookie_header)).map(VldCookie)
     }
 }
 
-// ========================= Helper functions ==================================
-
-use vld_http_common::{coerce_value, cookies_to_json, query_string_to_json};
-
-/// Build a JSON object from HTTP headers.
-///
-/// Header names are normalised: `Content-Type` → `content_type`.
-fn headers_to_json(headers: &http::HeaderMap) -> serde_json::Value {
-    let mut map = serde_json::Map::new();
-
-    for (name, value) in headers.iter() {
-        let key = name.as_str().replace('-', "_");
-        if let Ok(v) = value.to_str() {
-            map.insert(key, coerce_value(v));
-        }
-    }
-
-    serde_json::Value::Object(map)
-}
+vld_http_common::impl_deref!(VldJson, VldQuery, VldPath, VldForm, VldHeaders, VldCookie);
 
 /// Prelude — import everything you need.
 pub mod prelude {

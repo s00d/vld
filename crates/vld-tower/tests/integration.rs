@@ -2,7 +2,9 @@ use bytes::Bytes;
 use http::{Request, Response, StatusCode};
 use http_body_util::BodyExt;
 use tower::{Service, ServiceBuilder, ServiceExt};
-use vld_tower::{try_validated, validated, ValidateJsonLayer};
+use vld_tower::{validated, ValidateJsonLayer, ValidatedBody};
+
+type In = ValidatedBody<http_body_util::Full<Bytes>>;
 
 // -- Schema --
 
@@ -25,7 +27,7 @@ vld::schema! {
 // -- Dummy inner service --
 
 async fn echo_service(
-    req: Request<http_body_util::Full<Bytes>>,
+    req: Request<In>,
 ) -> Result<Response<http_body_util::Full<Bytes>>, Box<dyn std::error::Error + Send + Sync>> {
     // Return the body as-is + extensions info
     let has_validated = req.extensions().get::<CreateUser>().is_some();
@@ -97,7 +99,7 @@ async fn invalid_json_returns_422() {
 }
 
 #[tokio::test]
-async fn malformed_json_returns_400() {
+async fn malformed_json_returns_422() {
     let svc = ServiceBuilder::new()
         .layer(ValidateJsonLayer::<CreateUser>::new())
         .service_fn(echo_service);
@@ -105,10 +107,10 @@ async fn malformed_json_returns_400() {
     let req = make_json_request("not json at all");
     let resp = svc.oneshot(req).await.unwrap();
 
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["error"], "Invalid JSON");
+    assert_eq!(json["error"], "Validation failed");
 }
 
 #[tokio::test]
@@ -143,7 +145,7 @@ async fn missing_fields_returns_422() {
 }
 
 #[tokio::test]
-async fn empty_body_returns_400() {
+async fn empty_body_returns_422() {
     let svc = ServiceBuilder::new()
         .layer(ValidateJsonLayer::<CreateUser>::new())
         .service_fn(echo_service);
@@ -157,17 +159,17 @@ async fn empty_body_returns_400() {
 
     let resp = svc.oneshot(req).await.unwrap();
     // Empty body is invalid JSON
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
 async fn validated_helper() {
     // Test the `validated` and `try_validated` helpers
     async fn handler_with_extract(
-        req: Request<http_body_util::Full<Bytes>>,
+        req: Request<In>,
     ) -> Result<Response<http_body_util::Full<Bytes>>, Box<dyn std::error::Error + Send + Sync>>
     {
-        let user: CreateUser = validated(&req);
+        let user: CreateUser = validated(&req).expect("validated");
         let resp_body = serde_json::json!({
             "name": user.name,
             "email": user.email,
@@ -195,12 +197,12 @@ async fn validated_helper() {
 }
 
 #[tokio::test]
-async fn try_validated_returns_none_without_middleware() {
+async fn validated_returns_none_without_middleware() {
     async fn handler(
         req: Request<http_body_util::Full<Bytes>>,
     ) -> Result<Response<http_body_util::Full<Bytes>>, Box<dyn std::error::Error + Send + Sync>>
     {
-        let user: Option<CreateUser> = try_validated(&req);
+        let user: Option<CreateUser> = validated(&req);
         Ok(Response::builder()
             .status(StatusCode::OK)
             .body(http_body_util::Full::new(Bytes::from(

@@ -9115,6 +9115,7 @@ dependencies = [
  "tokio",
  "tonic",
  "vld",
+ "vld-http-common",
 ]
 
 [[package]]
@@ -9161,6 +9162,7 @@ name = "vld-warp"
 version = "0.4.6"
 dependencies = [
  "bytes",
+ "futures-util",
  "serde",
  "serde_json",
  "tokio",

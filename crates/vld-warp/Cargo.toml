@@ -19,10 +19,11 @@ vld-http-common = { workspace = true }
 warp = { version = ">=0.3, <0.5" }
 serde_json = { workspace = true }
 bytes = "1"
+futures-util = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 vld = { workspace = true }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util"] }
 serde = { workspace = true }
 
 [[example]]

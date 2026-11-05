@@ -15,6 +15,7 @@ exclude = [".idea/", "tests/", "examples/"]
 
 [dependencies]
 vld = { workspace = true }
+vld-http-common = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tonic = { version = ">=0.12, <0.15", default-features = false }

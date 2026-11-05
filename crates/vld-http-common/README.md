@@ -10,22 +10,29 @@
 Shared HTTP utility functions for `vld` web-framework integration crates.
 
 This crate is **internal** — not intended for direct use. Import helpers via
-the framework-specific crate (`vld-axum`, `vld-actix`, `vld-rocket`,
-`vld-poem`, `vld-warp`) instead.
+the framework-specific crate (`vld-actix`, `vld-axum`, `vld-ntex`, `vld-poem`,
+`vld-rama`, `vld-rocket`, `vld-salvo`, `vld-tower`, `vld-warp`, `vld-tonic`)
+instead.
 
 ## Provided helpers
 
 | Function | Description |
 |---|---|
-| `coerce_value` | Coerce a string to a typed JSON value |
-| `parse_query_string` | Parse URL query string to `serde_json::Map` |
-| `query_string_to_json` | Parse URL query string to `serde_json::Value` |
-| `cookies_to_json` | Parse `Cookie` header to JSON object |
+| `coerce_value` | Lossless string → JSON coercion (canonical numbers, `true`/`false`; everything else stays a string) |
+| `parse_query_string` | Parse a query string / form body to `serde_json::Map` (repeated keys and `a[]` → arrays) |
+| `query_string_to_json` | Same, as `serde_json::Value` |
+| `parse_form_body` | Parse an urlencoded body (422 on invalid UTF-8) |
+| `parse_json_body` | Parse a JSON body (422 on malformed JSON) |
+| `cookies_to_json` | Parse `Cookie` header (unquoted, percent-decoded values) |
+| `headers_to_json` | Header pairs → JSON (`X-Id` → `x_id`, repeated joined with `", "`, lossy UTF-8) |
+| `path_params_to_json` | Decoded path params → JSON |
+| `is_json_content_type` | `application/json` / `application/*+json`, case-insensitive |
+| `VldHttpError` | Shared error: status (422 / 413) + JSON body |
 | `format_issues` | Format `VldError` issues as JSON array |
 | `format_vld_error` | Format `VldError` as full JSON error body |
 | `format_issues_with_code` | Format issues with `code` field |
-| `url_decode` | Minimal percent-decode |
-| `extract_path_param_names` | Extract `{param}` names from route pattern |
+| `url_decode` / `percent_decode` | UTF-8-correct percent decoding (form variant maps `+` to space) |
+| `DEFAULT_BODY_LIMIT` | 2 MiB default body limit |
 
 ## OpenAPI error responses
 

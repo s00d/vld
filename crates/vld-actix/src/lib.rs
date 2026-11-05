@@ -11,7 +11,16 @@
 //! | [`VldHeaders<T>`] | manual header extraction | HTTP headers |
 //! | [`VldCookie<T>`] | manual cookie parsing | Cookie values |
 //!
-//! All extractors return **422 Unprocessable Entity** on validation failure.
+//! All extractors return **422 Unprocessable Entity** on validation failure
+//! or malformed input, and **413 Payload Too Large** when the body exceeds
+//! the limit.
+//!
+//! # Body limits
+//!
+//! Body reading is delegated to actix, so its configuration applies:
+//! [`JsonConfig`](actix_web::web::JsonConfig) for [`VldJson`] (default 2 MiB)
+//! and [`PayloadConfig`](actix_web::web::PayloadConfig) for [`VldForm`]
+//! (default 256 KiB).
 //!
 //! # Quick example
 //!
@@ -54,10 +63,15 @@
 //! ```
 
 use actix_web::dev::Payload;
+use actix_web::http::StatusCode;
 use actix_web::{FromRequest, HttpRequest, HttpResponse, ResponseError};
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+use vld_http_common::{
+    cookies_to_json, headers_to_json, parse_form_body, path_params_to_json, query_string_to_json,
+    VldHttpError,
+};
 
 // ============================= Error / Rejection =============================
 
@@ -65,60 +79,61 @@ use std::pin::Pin;
 ///
 /// Used by all `Vld*` extractors in this crate.
 #[derive(Debug)]
-pub struct VldJsonError {
-    error: vld::error::VldError,
-    status: actix_web::http::StatusCode,
-}
+pub struct VldJsonError(VldHttpError);
 
 impl VldJsonError {
-    fn validation(error: vld::error::VldError) -> Self {
-        Self {
-            error,
-            status: actix_web::http::StatusCode::UNPROCESSABLE_ENTITY,
-        }
+    /// The underlying validation error.
+    pub fn error(&self) -> &vld::error::VldError {
+        self.0.error()
     }
+}
 
-    fn parse(message: impl Into<String>) -> Self {
-        Self::validation(vld::error::VldError::single(
-            vld::error::IssueCode::ParseError,
-            message.into(),
-        ))
+impl From<VldHttpError> for VldJsonError {
+    fn from(e: VldHttpError) -> Self {
+        Self(e)
     }
+}
 
-    fn payload_too_large() -> Self {
-        Self {
-            error: vld::error::VldError::single(
-                vld::error::IssueCode::ParseError,
-                "Payload too large",
-            ),
-            status: actix_web::http::StatusCode::PAYLOAD_TOO_LARGE,
-        }
+impl From<vld::error::VldError> for VldJsonError {
+    fn from(e: vld::error::VldError) -> Self {
+        Self(e.into())
     }
 }
 
 impl fmt::Display for VldJsonError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Validation failed: {}", self.error)
+        self.0.fmt(f)
     }
 }
 
 impl ResponseError for VldJsonError {
-    fn status_code(&self) -> actix_web::http::StatusCode {
-        self.status
+    fn status_code(&self) -> StatusCode {
+        StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
     }
 
     fn error_response(&self) -> HttpResponse {
-        let body = if self.status == actix_web::http::StatusCode::PAYLOAD_TOO_LARGE {
-            vld_http_common::format_payload_too_large()
-        } else {
-            vld_http_common::format_vld_error(&self.error)
-        };
-
-        HttpResponse::build(self.status)
+        HttpResponse::build(self.status_code())
             .content_type("application/json")
-            .body(body.to_string())
+            .body(self.0.body().to_string())
     }
 }
+
+/// Map an actix body-reading error: 413 stays 413, everything else is 422.
+fn body_error(e: actix_web::Error, what: &str) -> VldJsonError {
+    if e.as_response_error().status_code() == StatusCode::PAYLOAD_TOO_LARGE {
+        VldHttpError::payload_too_large().into()
+    } else {
+        VldHttpError::parse(format!("{what}: {e}")).into()
+    }
+}
+
+/// Validate a JSON value against `T`.
+fn validate<T: vld::schema::VldParse>(value: &serde_json::Value) -> Result<T, VldJsonError> {
+    T::vld_parse_value(value).map_err(VldJsonError::from)
+}
+
+/// Extractor future type.
+type ExtractFuture<T> = Pin<Box<dyn Future<Output = Result<T, VldJsonError>>>>;
 
 // ============================= VldJson =======================================
 
@@ -127,40 +142,18 @@ impl ResponseError for VldJsonError {
 /// Drop-in replacement for `actix_web::web::Json<T>`.
 pub struct VldJson<T>(pub T);
 
-impl<T> std::ops::Deref for VldJson<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldJson<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<T: vld::schema::VldParse> FromRequest for VldJson<T> {
     type Error = VldJsonError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+    type Future = ExtractFuture<Self>;
 
     fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
         let json_fut = actix_web::web::Json::<serde_json::Value>::from_request(req, payload);
 
         Box::pin(async move {
-            let json_value = json_fut.await.map_err(|e| {
-                if e.as_response_error().status_code()
-                    == actix_web::http::StatusCode::PAYLOAD_TOO_LARGE
-                {
-                    VldJsonError::payload_too_large()
-                } else {
-                    VldJsonError::parse(format!("JSON parse error: {}", e))
-                }
-            })?;
-
-            let parsed = T::vld_parse_value(&json_value).map_err(VldJsonError::validation)?;
-
-            Ok(VldJson(parsed))
+            let json_value = json_fut
+                .await
+                .map_err(|e| body_error(e, "JSON parse error"))?;
+            validate(&json_value).map(VldJson)
         })
     }
 }
@@ -171,36 +164,16 @@ impl<T: vld::schema::VldParse> FromRequest for VldJson<T> {
 ///
 /// Drop-in replacement for `actix_web::web::Query<T>`.
 ///
-/// Values are coerced: `"42"` → number, `"true"`/`"false"` → boolean, empty → null.
+/// See [`vld_http_common::parse_query_string`] for coercion and array rules.
 pub struct VldQuery<T>(pub T);
-
-impl<T> std::ops::Deref for VldQuery<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldQuery<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
 
 impl<T: vld::schema::VldParse> FromRequest for VldQuery<T> {
     type Error = VldJsonError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+    type Future = ExtractFuture<Self>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let query_string = req.query_string().to_owned();
-
-        Box::pin(async move {
-            let value = query_string_to_json(&query_string);
-
-            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
-
-            Ok(VldQuery(parsed))
-        })
+        let value = query_string_to_json(req.query_string());
+        Box::pin(async move { validate(&value).map(VldQuery) })
     }
 }
 
@@ -208,7 +181,8 @@ impl<T: vld::schema::VldParse> FromRequest for VldQuery<T> {
 
 /// Actix-web extractor that validates **URL path parameters**.
 ///
-/// Drop-in replacement for `actix_web::web::Path<T>`.
+/// Drop-in replacement for `actix_web::web::Path<T>`. Works with custom
+/// segment patterns such as `{id:\d+}`.
 ///
 /// Path segment values are coerced the same way as query parameters.
 ///
@@ -230,42 +204,13 @@ impl<T: vld::schema::VldParse> FromRequest for VldQuery<T> {
 /// ```
 pub struct VldPath<T>(pub T);
 
-impl<T> std::ops::Deref for VldPath<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldPath<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<T: vld::schema::VldParse> FromRequest for VldPath<T> {
     type Error = VldJsonError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+    type Future = ExtractFuture<Self>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let mut map = serde_json::Map::new();
-
-        // Extract param names from the matched route pattern, e.g. "/users/{id}"
-        if let Some(pattern) = req.match_pattern() {
-            for name in extract_path_param_names(&pattern) {
-                if let Some(value) = req.match_info().get(&name) {
-                    map.insert(name, coerce_value(value));
-                }
-            }
-        }
-
-        let value = serde_json::Value::Object(map);
-
-        Box::pin(async move {
-            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
-
-            Ok(VldPath(parsed))
-        })
+        let value = path_params_to_json(req.match_info().iter());
+        Box::pin(async move { validate(&value).map(VldPath) })
     }
 }
 
@@ -276,7 +221,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldPath<T> {
 ///
 /// Drop-in replacement for `actix_web::web::Form<T>`.
 ///
-/// Values are coerced the same way as query parameters.
+/// Values are parsed the same way as query parameters.
 ///
 /// # Example
 ///
@@ -295,45 +240,18 @@ impl<T: vld::schema::VldParse> FromRequest for VldPath<T> {
 /// ```
 pub struct VldForm<T>(pub T);
 
-impl<T> std::ops::Deref for VldForm<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldForm<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<T: vld::schema::VldParse> FromRequest for VldForm<T> {
     type Error = VldJsonError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+    type Future = ExtractFuture<Self>;
 
     fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
         let bytes_fut = actix_web::web::Bytes::from_request(req, payload);
 
         Box::pin(async move {
-            let body = bytes_fut.await.map_err(|e| {
-                if e.as_response_error().status_code()
-                    == actix_web::http::StatusCode::PAYLOAD_TOO_LARGE
-                {
-                    VldJsonError::payload_too_large()
-                } else {
-                    VldJsonError::parse(format!("Failed to read form body: {}", e))
-                }
-            })?;
-
-            let body_str = std::str::from_utf8(&body)
-                .map_err(|_| VldJsonError::parse("Form body is not valid UTF-8"))?;
-
-            let value = query_string_to_json(body_str);
-
-            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
-
-            Ok(VldForm(parsed))
+            let body = bytes_fut
+                .await
+                .map_err(|e| body_error(e, "Failed to read form body"))?;
+            validate(&parse_form_body(&body)?).map(VldForm)
         })
     }
 }
@@ -342,10 +260,8 @@ impl<T: vld::schema::VldParse> FromRequest for VldForm<T> {
 
 /// Actix-web extractor that validates **HTTP headers**.
 ///
-/// Header names are normalised to snake_case for schema matching:
-/// `Content-Type` → `content_type`, `X-Request-Id` → `x_request_id`.
-///
-/// Values are coerced: `"42"` → number, `"true"` → boolean, etc.
+/// See [`vld_http_common::headers_to_json`]: names become snake_case
+/// (`X-Request-Id` → `x_request_id`), repeated headers are joined with `", "`.
 ///
 /// # Example
 ///
@@ -364,31 +280,17 @@ impl<T: vld::schema::VldParse> FromRequest for VldForm<T> {
 /// ```
 pub struct VldHeaders<T>(pub T);
 
-impl<T> std::ops::Deref for VldHeaders<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldHeaders<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<T: vld::schema::VldParse> FromRequest for VldHeaders<T> {
     type Error = VldJsonError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+    type Future = ExtractFuture<Self>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let value = headers_to_json(req.headers());
-
-        Box::pin(async move {
-            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
-
-            Ok(VldHeaders(parsed))
-        })
+        let value = headers_to_json(
+            req.headers()
+                .iter()
+                .map(|(n, v)| (n.as_str(), v.as_bytes())),
+        );
+        Box::pin(async move { validate(&value).map(VldHeaders) })
     }
 }
 
@@ -397,7 +299,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldHeaders<T> {
 /// Actix-web extractor that validates **cookie values** from the `Cookie` header.
 ///
 /// Cookie names are used as-is for schema field matching.
-/// Values are coerced the same way as query parameters.
+/// Values are unquoted, percent-decoded and coerced.
 ///
 /// # Example
 ///
@@ -416,62 +318,22 @@ impl<T: vld::schema::VldParse> FromRequest for VldHeaders<T> {
 /// ```
 pub struct VldCookie<T>(pub T);
 
-impl<T> std::ops::Deref for VldCookie<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldCookie<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<T: vld::schema::VldParse> FromRequest for VldCookie<T> {
     type Error = VldJsonError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+    type Future = ExtractFuture<Self>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let cookie_header = req
             .headers()
             .get(actix_web::http::header::COOKIE)
             .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_owned();
-
-        Box::pin(async move {
-            let value = cookies_to_json(&cookie_header);
-
-            let parsed = T::vld_parse_value(&value).map_err(VldJsonError::validation)?;
-
-            Ok(VldCookie(parsed))
-        })
+            .unwrap_or("");
+        let value = cookies_to_json(cookie_header);
+        Box::pin(async move { validate(&value).map(VldCookie) })
     }
 }
 
-// ========================= Helper functions ==================================
-
-use vld_http_common::{
-    coerce_value, cookies_to_json, extract_path_param_names, query_string_to_json,
-};
-
-/// Build a JSON object from HTTP headers.
-///
-/// Header names are normalised: `content-type` → `content_type`.
-fn headers_to_json(headers: &actix_web::http::header::HeaderMap) -> serde_json::Value {
-    let mut map = serde_json::Map::new();
-
-    for (name, value) in headers.iter() {
-        let key = name.as_str().replace('-', "_");
-        if let Ok(v) = value.to_str() {
-            map.insert(key, coerce_value(v));
-        }
-    }
-
-    serde_json::Value::Object(map)
-}
+vld_http_common::impl_deref!(VldJson, VldQuery, VldPath, VldForm, VldHeaders, VldCookie);
 
 /// Prelude — import everything you need.
 pub mod prelude {

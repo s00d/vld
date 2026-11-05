@@ -10,7 +10,7 @@ use http::{Request, Response, StatusCode};
 use http_body_util::BodyExt;
 use serde::Serialize;
 use tower::{ServiceBuilder, ServiceExt};
-use vld_tower::{try_validated, validated, ValidateJsonLayer};
+use vld_tower::{validated, ValidateJsonLayer, ValidatedBody};
 
 // ===========================================================================
 // Schemas
@@ -37,10 +37,17 @@ vld::schema! {
 // Handler
 // ===========================================================================
 
+type In = ValidatedBody<http_body_util::Full<Bytes>>;
+
 async fn handler(
-    req: Request<http_body_util::Full<Bytes>>,
+    req: Request<In>,
 ) -> Result<Response<http_body_util::Full<Bytes>>, Box<dyn std::error::Error + Send + Sync>> {
-    let user: CreateUser = validated(&req);
+    let Some(user) = validated::<CreateUser>(&req) else {
+        return Ok(Response::builder()
+            .status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+            .body(http_body_util::Full::new(Bytes::from("expected JSON")))
+            .unwrap());
+    };
     println!("Validated user: {:?}", user);
 
     let resp = CreateUserResponse {
@@ -108,8 +115,8 @@ async fn main() {
     println!("\n=== Non-JSON request (passes through) ===");
     let svc_text = ServiceBuilder::new()
         .layer(ValidateJsonLayer::<CreateUser>::new())
-        .service_fn(|req: Request<http_body_util::Full<Bytes>>| async move {
-            let user: Option<CreateUser> = try_validated(&req);
+        .service_fn(|req: Request<In>| async move {
+            let user: Option<CreateUser> = validated(&req);
             let msg = match user {
                 Some(u) => format!("Got user: {:?}", u),
                 None => "No validated data (non-JSON request)".to_string(),

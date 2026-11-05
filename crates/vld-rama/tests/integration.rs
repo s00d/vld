@@ -4,8 +4,8 @@ use rama::http::service::web::WebService;
 use rama::http::{Body, Method, Request, StatusCode};
 use rama::{Layer, Service};
 use vld_rama::{
-    try_validated, validated, ValidateJsonLayer, Validated, VldCookie, VldForm, VldHeaders,
-    VldJson, VldPath, VldQuery,
+    validated, ValidateJsonLayer, Validated, VldCookie, VldForm, VldHeaders, VldJson, VldPath,
+    VldQuery,
 };
 
 vld::schema! {
@@ -199,8 +199,8 @@ async fn validate_json_layer_inserts_extension() {
         type Error = std::convert::Infallible;
 
         async fn serve(&self, req: Request) -> Result<Self::Output, Self::Error> {
-            let user = validated::<TestUser>(&req);
-            assert!(try_validated::<TestUser>(&req).is_some());
+            let user = validated::<TestUser>(&req).expect("validated");
+            assert!(validated::<TestUser>(&req).is_some());
             assert!(req.extensions().get_ref::<Validated<TestUser>>().is_some());
             Ok(rama::http::Response::builder()
                 .status(StatusCode::OK)
@@ -262,7 +262,7 @@ async fn validate_json_layer_passthrough_non_json() {
 
         async fn serve(&self, req: Request) -> Result<Self::Output, Self::Error> {
             use rama::http::service::web::response::IntoResponse;
-            assert!(try_validated::<TestUser>(&req).is_none());
+            assert!(validated::<TestUser>(&req).is_none());
             Ok(StatusCode::OK.into_response())
         }
     }
