@@ -13,8 +13,8 @@
 # target or system library is missing locally are skipped with a note.
 #
 # - every build uses the committed Cargo.lock (`--locked`); the msrv and
-#   minimal groups resolve their own lockfiles in a scratch copy / restore
-#   Cargo.lock on exit
+#   minimal groups resolve their own lockfiles in scratch copies (the
+#   workspace Cargo.lock is never rewritten)
 # - workspace-wide build/test/clippy use `--all-targets`; doctests run
 #   separately (`--all-targets` skips them)
 # - never `--all-features` on crates with exclusive dual-major features
@@ -51,7 +51,6 @@ CI=(--profile ci --locked)
 FAILED=()
 PASSED=0
 SKIPPED=()
-LOCK_BACKUP=""
 
 # step <description> <command...>: run, record the result, never abort.
 step() {
@@ -82,17 +81,7 @@ has_toolchain() {
   rustup run "$1" rustc --version >/dev/null 2>&1
 }
 
-# Cargo.lock is rewritten by the minimal group; restored here even on Ctrl-C.
-restore_lock() {
-  if [[ -n "${LOCK_BACKUP}" && -f "${LOCK_BACKUP}" ]]; then
-    cp "${LOCK_BACKUP}" "${ROOT_DIR}/Cargo.lock"
-    rm -f "${LOCK_BACKUP}"
-    LOCK_BACKUP=""
-  fi
-}
-
 on_exit() {
-  restore_lock
   if [[ "${OWN_TARGET}" != "1" ]]; then
     return
   fi
@@ -289,25 +278,44 @@ for p in json.load(sys.stdin)["packages"]:
   msrv_probe 1.94 vld-sqlx "sqlx-0_9,postgres,mysql,sqlite" no-default
 }
 
-# Lowest versions of the direct dependencies of the crates with wide version
-# ranges (warp, tonic, config, redis 0.x, schemars 0.x). Nightly only;
-# Cargo.lock is restored on exit.
+# Lowest versions of the direct (normal) dependencies of the crates with
+# wide version ranges (warp, tonic, config, redis 0.x, schemars 0.x) and of
+# the core crates they pull in. Nightly only. Runs in a scratch copy whose
+# workspace holds just those crates without dev-dependencies: the whole
+# workspace cannot resolve at direct-minimal versions (rama pins
+# time =0.3.47, dev-dependency floors differ between crates).
+MINIMAL_MEMBERS=(. crates/vld-derive crates/vld-http-common crates/vld-warp crates/vld-tonic
+  crates/vld-config crates/vld-redis crates/vld-schemars crates/vld-aide)
 group_minimal() {
   if ! has_toolchain nightly; then
     skip "minimal versions (rustup toolchain install nightly --profile minimal)"
     return
   fi
-  LOCK_BACKUP="$(mktemp)"
-  cp Cargo.lock "${LOCK_BACKUP}"
-  local mt="${CARGO_TARGET_DIR}/minimal"
-  step "minimal versions: resolve" cargo +nightly update -Z direct-minimal-versions
-  step "minimal: warp" env CARGO_TARGET_DIR="${mt}" cargo +nightly check -p vld-warp --locked
-  step "minimal: tonic" env CARGO_TARGET_DIR="${mt}" cargo +nightly check -p vld-tonic --locked
-  step "minimal: config-rs + figment" env CARGO_TARGET_DIR="${mt}" cargo +nightly check -p vld-config --features figment --locked
-  step "minimal: redis 0 + aio" env CARGO_TARGET_DIR="${mt}" cargo +nightly check -p vld-redis --features aio --locked
-  step "minimal: schemars 0" env CARGO_TARGET_DIR="${mt}" cargo +nightly check -p vld-schemars --locked
-  step "minimal: aide schemars 0" env CARGO_TARGET_DIR="${mt}" cargo +nightly check -p vld-aide --locked
-  restore_lock
+  local scratch members m
+  scratch="$(mktemp -d)"
+  tar -cf - --exclude=./target --exclude=./.git --exclude=./fuzz . | tar -xf - -C "${scratch}"
+  members=""
+  for m in "${MINIMAL_MEMBERS[@]}"; do members+="\"${m}\", "; done
+  (
+    cd "${scratch}" || exit 1
+    awk -v members="members = [${members%, }]" 'BEGIN{skip=0}
+      /^members = \[/{print members; skip=1; next} skip && /^\]/{skip=0; next} !skip' \
+      Cargo.toml >Cargo.toml.new && mv Cargo.toml.new Cargo.toml
+    for m in "${MINIMAL_MEMBERS[@]}"; do
+      awk '/^\[dev-dependencies\]/{skip=1; next} /^\[/{skip=0} !skip' "${m}/Cargo.toml" >"${m}/Cargo.toml.new" \
+        && mv "${m}/Cargo.toml.new" "${m}/Cargo.toml"
+    done
+  )
+  local min=(env CARGO_TARGET_DIR="${CARGO_TARGET_DIR}/minimal" cargo +nightly check --locked --manifest-path "${scratch}/Cargo.toml")
+  step "minimal versions: resolve" cargo +nightly update -Z direct-minimal-versions --manifest-path "${scratch}/Cargo.toml"
+  if [[ "${FAILED[*]-}" != *"minimal versions: resolve"* ]]; then
+    step "minimal: warp" "${min[@]}" -p vld-warp
+    step "minimal: tonic" "${min[@]}" -p vld-tonic
+    step "minimal: config-rs + figment" "${min[@]}" -p vld-config --features figment
+    step "minimal: redis 0 + aio" "${min[@]}" -p vld-redis --features aio
+    step "minimal: schemars 0 / aide" "${min[@]}" -p vld-schemars -p vld-aide
+  fi
+  rm -rf "${scratch}"
 }
 
 group_fmt() {
