@@ -38,6 +38,22 @@ macro_rules! impl_validate_fields {
             $( $field_name:ident : $field_type:ty $(as $rename:literal)? => $schema:expr ),* $(,)?
         }
     ) => {
+        $crate::impl_validate_fields!(@keyed $name {
+            $(
+                $field_name : $field_type => [
+                    $crate::__vld_resolve_key!(
+                        $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
+                    )
+                ] $schema
+            ),*
+        });
+    };
+    // Internal: every field with its JSON key expression.
+    (
+        @keyed $name:ident {
+            $( $field_name:ident : $field_type:ty => [$key:expr] $schema:expr ),* $(,)?
+        }
+    ) => {
         impl $name {
             /// Validate each field individually and return per-field results.
             ///
@@ -67,9 +83,7 @@ macro_rules! impl_validate_fields {
                     $(
                         $crate::__private::field_result(
                             __vld_obj,
-                            $crate::__vld_resolve_key!(
-                                $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
-                            ),
+                            $key,
                             $crate::__vld_cached!($schema),
                         )
                     ),*
@@ -111,9 +125,7 @@ macro_rules! impl_validate_fields {
                     #[allow(non_snake_case)]
                     let $field_name: $field_type = $crate::__private::lenient_field(
                         __vld_obj,
-                        $crate::__vld_resolve_key!(
-                            $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
-                        ),
+                        $key,
                         $crate::__vld_cached!($schema),
                         &mut __vld_results,
                     );

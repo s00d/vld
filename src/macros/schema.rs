@@ -78,6 +78,27 @@ macro_rules! __vld_struct_attrs {
 /// Each field has the format: `name: Type [as "json_key"] => schema`.
 /// The optional `as "json_key"` overrides the JSON property name used for parsing.
 ///
+/// # Serde renames
+///
+/// Without `as "json_key"`, the key follows the serde attributes written in
+/// the macro: field `#[serde(rename = "...")]` /
+/// `#[serde(rename(serialize = "...", deserialize = "..."))]`, then struct
+/// `#[serde(rename_all = "...")]` (also the `serialize` / `deserialize`
+/// form; same conventions as serde). `parse()` / `parse_value()` / JSON
+/// Schema use the **deserialize** names; `validate()` / `is_valid()`
+/// serialize the value and check it under the **serialize** names, so a
+/// `Serialize`d instance validates. `as "json_key"` sets both names (serde
+/// does not see it: pair it with a matching `#[serde(rename)]` if needed).
+/// `alias`, `flatten`, `skip` and `default` are not interpreted.
+///
+/// # Schema caching
+///
+/// Every field schema expression is evaluated **once per process** (on first
+/// use) and cached in a `static`, so it must be `Send + Sync + 'static`, and
+/// a schema built from runtime values (`vld::string().max(config.limit)`)
+/// freezes the values seen on the first parse. Build such schemas at runtime
+/// with [`vld::object()`](crate::object()) instead.
+///
 /// # OpenAPI parameters
 ///
 /// Raw identifiers map to their bare name (`r#type` → JSON key `"type"`).
@@ -187,6 +208,36 @@ macro_rules! schema {
             pub fn parse_value(
                 __vld_json: &$crate::serde_json::Value,
             ) -> ::std::result::Result<$name, $crate::error::VldError> {
+                Self::__vld_parse(__vld_json, false)
+            }
+
+            /// JSON key of a field: deserialize name (`ser == false`, parsing)
+            /// or serialize name (`ser == true`, `validate()`).
+            #[doc(hidden)]
+            pub fn __vld_key(__vld_field: &str, __vld_ser: bool) -> &'static str {
+                static __VLD_KEYS: ::std::sync::OnceLock<
+                    ::std::vec::Vec<(&'static str, ::std::string::String, ::std::string::String)>,
+                > = ::std::sync::OnceLock::new();
+                let __vld_keys = __VLD_KEYS.get_or_init(|| {
+                    #[allow(unused_variables)]
+                    let __vld_struct_attrs: &[&str] = &[$(stringify!($($struct_attr)*)),*];
+                    ::std::vec![$(
+                        $crate::__private::serde_keys(
+                            stringify!($field_name),
+                            $crate::__vld_resolve_key!(None $(, Some($rename))?),
+                            &[$(stringify!($field_meta)),*],
+                            __vld_struct_attrs,
+                        )
+                    ),*]
+                });
+                $crate::__private::key_of(__vld_keys, __vld_field, __vld_ser)
+            }
+
+            #[doc(hidden)]
+            pub fn __vld_parse(
+                __vld_json: &$crate::serde_json::Value,
+                __vld_ser: bool,
+            ) -> ::std::result::Result<$name, $crate::error::VldError> {
                 #[allow(unused_imports)]
                 use $crate::schema::VldSchema as _;
                 let __vld_obj = $crate::__private::expect_object(__vld_json)?;
@@ -197,9 +248,7 @@ macro_rules! schema {
                     let $field_name: ::std::option::Option<$field_type> =
                         $crate::__private::parse_field(
                             __vld_obj,
-                            $crate::__vld_resolve_key!(
-                                $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
-                            ),
+                            Self::__vld_key(stringify!($field_name), __vld_ser),
                             $crate::__vld_cached!($schema),
                             &mut __vld_errors,
                         );
@@ -230,12 +279,13 @@ macro_rules! schema {
             /// Validate an existing Rust value that can be serialized to JSON.
             ///
             /// The value is serialized via `serde`, then validated against the
-            /// schema. Returns `Ok(())` on success, `Err(VldError)` with all
-            /// issues on failure.
+            /// schema under the fields' **serialize** names (`parse()` reads
+            /// the deserialize names). Returns `Ok(())` on success,
+            /// `Err(VldError)` with all issues on failure.
             pub fn validate<__VldT: $crate::serde::Serialize>(
                 instance: &__VldT,
             ) -> ::std::result::Result<(), $crate::error::VldError> {
-                Self::parse_value(&$crate::__private::to_json(instance)?).map(|_| ())
+                Self::__vld_parse(&$crate::__private::to_json(instance)?, true).map(|_| ())
             }
 
             /// Check if a value is valid against the schema.
@@ -263,10 +313,7 @@ macro_rules! schema {
                             {
                                 let __vld_field_schema = $schema;
                                 (
-                                    $crate::__vld_resolve_key!(
-                                        $crate::__private::field_key(stringify!($field_name))
-                                        $(, $rename)?
-                                    ),
+                                    Self::__vld_key(stringify!($field_name), false),
                                     __vld_field_schema.json_schema(),
                                     __vld_field_schema.is_required(),
                                 )
@@ -401,8 +448,8 @@ macro_rules! schema_validated {
         }
 
         // 2. Generate validate_fields + parse_lenient (same as impl_validate_fields!)
-        $crate::impl_validate_fields!($name {
-            $( $field_name : $field_type $(as $rename)? => $schema ),*
+        $crate::impl_validate_fields!(@keyed $name {
+            $( $field_name : $field_type => [<$name>::__vld_key(stringify!($field_name), false)] $schema ),*
         });
     };
 }

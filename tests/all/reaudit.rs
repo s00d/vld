@@ -111,6 +111,68 @@ fn f05_union_macro_7_and_13() {
     }
 }
 
+// 6. `schema!` honors serde renames.
+vld::schema! {
+    #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct F06Camel {
+        first_name: String => vld::string().min(1),
+        #[serde(rename = "years")]
+        age_years: i64 => vld::i64().min(0),
+        #[serde(rename(serialize = "outName", deserialize = "inName"))]
+        split_name: String => vld::string(),
+    }
+}
+
+#[test]
+fn f06_schema_macro_serde_rename() {
+    let v = F06Camel::parse(
+        r#"{"firstName": "A", "years": 3, "inName": "x"}"#,
+    )
+    .unwrap();
+    assert_eq!(v.first_name, "A");
+    // A serialized instance validates (serialize names).
+    assert!(F06Camel::validate(&v).is_ok());
+    assert_eq!(
+        serde_json::to_value(&v).unwrap()["outName"],
+        json!("x")
+    );
+    let err = F06Camel::parse(r#"{"first_name": "A", "years": 3, "inName": "x"}"#)
+        .unwrap_err();
+    assert_eq!(crate::common::paths(&err), vec![".firstName"]);
+    #[cfg(feature = "openapi")]
+    {
+        let props = &F06Camel::json_schema()["properties"];
+        for k in ["firstName", "years", "inName"] {
+            assert!(props.get(k).is_some(), "{k}");
+        }
+    }
+}
+
+// 7. derive: validate() uses serialize names, parse uses deserialize names.
+#[cfg(feature = "derive")]
+mod f07 {
+    use serde_json::json;
+
+    #[derive(Debug, serde::Serialize, vld::Validate)]
+    #[serde(rename_all(serialize = "camelCase", deserialize = "kebab-case"))]
+    struct Split {
+        #[serde(rename(serialize = "a", deserialize = "b"))]
+        #[vld(vld::string().min(1))]
+        field: String,
+        #[vld(vld::string())]
+        other_name: String,
+    }
+
+    #[test]
+    fn f07_derive_split_rename() {
+        let v = Split::parse_value(&json!({"b": "x", "other-name": "y"})).unwrap();
+        assert!(Split::validate(&v).is_ok());
+        assert!(Split::is_valid(&json!({"a": "x", "otherName": "y"})));
+        assert!(!Split::is_valid(&json!({"b": "x", "other-name": "y"})));
+    }
+}
+
 // 22. Discriminator values compare numerically (1 == 1.0).
 #[test]
 fn f22_discriminator_numeric_equality() {

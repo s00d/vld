@@ -47,6 +47,145 @@ pub fn field_key(ident: &'static str) -> &'static str {
     ident.strip_prefix("r#").unwrap_or(ident)
 }
 
+/// `(ident, deserialize key, serialize key)` of a `schema!` field.
+///
+/// `as "key"` (`explicit`) wins; otherwise the field's `#[serde(rename ...)]`,
+/// then the struct's `#[serde(rename_all ...)]`, then the bare identifier.
+/// `field_attrs` / `struct_attrs` are the `stringify!`d attribute contents
+/// (`serde(rename = "x")`); non-serde attributes are ignored.
+pub fn serde_keys(
+    ident: &'static str,
+    explicit: Option<&'static str>,
+    field_attrs: &[&str],
+    struct_attrs: &[&str],
+) -> (&'static str, String, String) {
+    let bare = field_key(ident);
+    if let Some(k) = explicit {
+        return (ident, k.to_string(), k.to_string());
+    }
+    let (f_de, f_ser) = serde_attr_names(field_attrs, "rename");
+    let (s_de, s_ser) = serde_attr_names(struct_attrs, "rename_all");
+    let pick = |field: Option<String>, rule: Option<String>| {
+        field.unwrap_or_else(|| match rule {
+            Some(rule) => rename_field(bare, &rule),
+            None => bare.to_string(),
+        })
+    };
+    (ident, pick(f_de, s_de), pick(f_ser, s_ser))
+}
+
+/// Split at top-level commas (outside quotes and parentheses).
+fn split_top(s: &str) -> Vec<&str> {
+    let (mut out, mut depth, mut quoted, mut start) = (vec![], 0i32, false, 0);
+    let mut chars = s.char_indices();
+    while let Some((i, c)) = chars.next() {
+        match c {
+            '\\' if quoted => {
+                chars.next();
+            }
+            '"' => quoted = !quoted,
+            '(' if !quoted => depth += 1,
+            ')' if !quoted => depth -= 1,
+            ',' if !quoted && depth == 0 => {
+                out.push(s[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(s[start..].trim());
+    out
+}
+
+/// `"x"` → `x`.
+fn unquote(s: &str) -> Option<String> {
+    s.trim()
+        .strip_prefix('"')?
+        .strip_suffix('"')
+        .map(str::to_string)
+}
+
+/// `(deserialize, serialize)` values of `name = "x"` /
+/// `name(serialize = "a", deserialize = "b")` in `serde(...)` attribute texts.
+fn serde_attr_names(attrs: &[&str], name: &str) -> (Option<String>, Option<String>) {
+    let (mut de, mut ser) = (None, None);
+    for attr in attrs {
+        let Some(inner) = attr
+            .trim()
+            .strip_prefix("serde")
+            .map(str::trim_start)
+            .and_then(|a| a.strip_prefix('('))
+            .and_then(|a| a.trim_end().strip_suffix(')'))
+        else {
+            continue;
+        };
+        for item in split_top(inner) {
+            let Some(rest) = item.strip_prefix(name).map(str::trim_start) else {
+                continue;
+            };
+            if let Some(v) = rest.strip_prefix('=').and_then(unquote) {
+                de = Some(v.clone());
+                ser = Some(v);
+            } else if let Some(list) = rest
+                .strip_prefix('(')
+                .and_then(|l| l.trim_end().strip_suffix(')'))
+            {
+                for sub in split_top(list) {
+                    if let Some((k, v)) = sub.split_once('=') {
+                        match k.trim() {
+                            "deserialize" => de = unquote(v).or(de),
+                            "serialize" => ser = unquote(v).or(ser),
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (de, ser)
+}
+
+/// A snake_case field name in a serde `rename_all` convention.
+fn rename_field(name: &str, rule: &str) -> String {
+    let pascal = || -> String {
+        name.split('_')
+            .map(|w| {
+                let mut c = w.chars();
+                c.next()
+                    .map(|f| f.to_uppercase().chain(c).collect::<String>())
+                    .unwrap_or_default()
+            })
+            .collect()
+    };
+    match rule {
+        "lowercase" => name.to_lowercase(),
+        "UPPERCASE" | "SCREAMING_SNAKE_CASE" => name.to_uppercase(),
+        "PascalCase" => pascal(),
+        "camelCase" => {
+            let p = pascal();
+            let mut c = p.chars();
+            c.next()
+                .map(|f| f.to_lowercase().chain(c).collect())
+                .unwrap_or_default()
+        }
+        "kebab-case" => name.replace('_', "-"),
+        "SCREAMING-KEBAB-CASE" => name.replace('_', "-").to_uppercase(),
+        _ => name.to_string(),
+    }
+}
+
+/// Look up a field's key in the table built by [`serde_keys`].
+pub fn key_of(
+    keys: &'static [(&'static str, String, String)],
+    ident: &str,
+    ser: bool,
+) -> &'static str {
+    keys.iter()
+        .find(|k| k.0 == ident)
+        .map(|k| if ser { k.2.as_str() } else { k.1.as_str() })
+        .unwrap_or("")
+}
+
 /// Value of `key`, or `null` when missing.
 pub fn field_value<'a>(obj: &'a Map<String, Value>, key: &str) -> &'a Value {
     obj.get(key).unwrap_or(&NULL)
