@@ -38,9 +38,11 @@ pub trait JsonSchema {
 
     /// Whether this schema should be included in an object's `required` array.
     ///
-    /// By default, fields are required. Modifiers that allow omitting the key
-    /// (`.optional()`, `.nullish()`, `.with_default(...)`) return `false`.
-    /// `.nullable()` stays required (key must be present; value may be null).
+    /// By default, fields are required. Schemas that accept a missing key
+    /// return `false`: `.optional()`, `.nullable()` (a missing key parses as
+    /// `None`), `.nullish()`, `.with_default(...)`, `.catch(...)`, and the
+    /// null-accepting `vld::any()`, `vld::null()` and an unconstrained
+    /// `vld::json_value()`.
     fn is_required(&self) -> bool {
         true
     }

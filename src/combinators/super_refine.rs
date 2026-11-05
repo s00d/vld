@@ -61,4 +61,7 @@ where
             Err(errors)
         }
     }
+    fn output_json(&self, o: &Self::Output) -> Option<Value> {
+        self.inner.output_json(o)
+    }
 }

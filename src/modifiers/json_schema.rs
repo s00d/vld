@@ -46,8 +46,8 @@ where
 {
     fn json_schema(&self) -> Value {
         let mut schema = self.inner_schema().json_schema();
-        // ponytail: only date schemas override `output_json`; a wrapper
-        // between them and `with_default` (e.g. `describe`) falls back to serde.
+        // Wrappers forward `output_json`, so a date schema under `describe`
+        // & co. still yields its RFC 3339 form.
         let default = self
             .inner_schema()
             .output_json(self.default_value())

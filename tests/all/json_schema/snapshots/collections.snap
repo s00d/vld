@@ -76,7 +76,8 @@ expression: value
       },
       "minItems": 1,
       "type": "array",
-      "x-maxUniqueItems": 5
+      "x-maxUniqueItems": 5,
+      "x-minUniqueItems": 1
     }
   },
   "tuple": {

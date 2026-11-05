@@ -4,7 +4,7 @@ expression: value
 ---
 {
   "catch": {
-    "required": true,
+    "required": false,
     "schema": {
       "minLength": 1,
       "type": "string"
@@ -134,7 +134,7 @@ expression: value
     }
   },
   "plain_stack": {
-    "required": true,
+    "required": false,
     "schema": {
       "description": "name",
       "minLength": 2,

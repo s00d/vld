@@ -43,4 +43,7 @@ where
             Err(_) => Ok(self.fallback.clone()),
         }
     }
+    fn output_json(&self, o: &Self::Output) -> Option<Value> {
+        self.inner.output_json(o)
+    }
 }

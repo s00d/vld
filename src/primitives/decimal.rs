@@ -243,8 +243,9 @@ impl VldSchema for ZDecimal {
 #[cfg(feature = "openapi")]
 impl crate::openapi::JsonSchema for ZDecimal {
     fn json_schema(&self) -> serde_json::Value {
+        // JSON numbers are accepted as well as decimal strings.
         let mut schema = serde_json::json!({
-            "type": "string",
+            "type": ["string", "number"],
             "format": "decimal"
         });
         if let Some((v, excl)) = self.lower() {

@@ -118,7 +118,9 @@ where
             "items": self.element.json_schema(),
         });
         if let Some(min) = self.min_size {
+            // `minItems` counts duplicates too; generators need the distinct count.
             schema["minItems"] = serde_json::json!(min);
+            schema["x-minUniqueItems"] = serde_json::json!(min);
         }
         if let Some(max) = self.max_size {
             schema["x-maxUniqueItems"] = serde_json::json!(max);

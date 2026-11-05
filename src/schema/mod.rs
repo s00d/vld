@@ -59,7 +59,7 @@ pub trait VldSchema: Sized {
     /// Returns the parsed output on success.
     ///
     /// # Example
-    /// ```ignore
+    /// ```
     /// use vld::prelude::*;
     ///
     /// let schema = vld::array(vld::number().int().positive()).min_len(1);
@@ -73,7 +73,7 @@ pub trait VldSchema: Sized {
     /// Check if an existing Rust value passes this schema's validation.
     ///
     /// # Example
-    /// ```ignore
+    /// ```
     /// use vld::prelude::*;
     ///
     /// let schema = vld::string().email();

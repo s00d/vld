@@ -46,4 +46,7 @@ impl<T: VldSchema> VldSchema for ZMessage<T> {
             err
         })
     }
+    fn output_json(&self, o: &Self::Output) -> Option<Value> {
+        self.inner.output_json(o)
+    }
 }

@@ -258,7 +258,7 @@ macro_rules! backend_suite {
                 use vld::openapi::JsonSchema;
                 assert_eq!(date().json_schema(), json!({"type": "string", "format": "date"}));
                 assert_eq!(
-                    datetime().json_schema(),
+                    datetime().with_timezone_only().json_schema(),
                     json!({"type": "string", "format": "date-time"})
                 );
                 let js = date().with_default(d("2024-01-02")).json_schema();
@@ -271,7 +271,10 @@ macro_rules! backend_suite {
             $(#[$dt_default])?
             fn datetime_default_is_rfc3339() {
                 use vld::openapi::JsonSchema;
-                let js = datetime().with_default(dt("2024-01-02T03:04:05Z")).json_schema();
+                let js = datetime()
+                    .with_timezone_only()
+                    .with_default(dt("2024-01-02T03:04:05Z"))
+                    .json_schema();
                 assert_eq!(js["format"], "date-time");
                 let default = js["default"].clone();
                 assert!(

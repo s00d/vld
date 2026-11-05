@@ -126,7 +126,7 @@ string_formats! {
     Json: json / json_msg, "invalid_json", "json", is_valid_json, "Must be a string containing one valid JSON document.";
     IsoDate: iso_date / iso_date_msg, "invalid_iso_date", "date", is_valid_iso_date, "Must be a valid ISO 8601 calendar date (`YYYY-MM-DD`, real day of month).";
     IsoDatetime: iso_datetime / iso_datetime_msg, "invalid_iso_datetime", "date-time", is_valid_iso_datetime,
-        "Must be a valid ISO 8601 datetime: `YYYY-MM-DDTHH:MM[:SS[.frac]]` with optional `Z` / `±HH:MM`.";
+        "Must be a valid ISO 8601 datetime: `YYYY-MM-DDTHH:MM:SS[.frac]` (seconds required, `T`/`t`) with optional `Z`/`z` / `±HH:MM` — the same grammar as `vld::chrono::datetime()` & co.";
     IsoTime: iso_time / iso_time_msg, "invalid_iso_time", "time", is_valid_iso_time, "Must be a valid ISO 8601 time (`HH:MM[:SS[.frac]]`).";
     Hostname: hostname / hostname_msg, "invalid_hostname", "hostname", is_valid_hostname, "Must be a valid hostname.";
     Cuid2: cuid2 / cuid2_msg, "invalid_cuid2", "cuid2", is_valid_cuid2, "Must be a valid CUID2 (2-32 lowercase alphanumerics, starting with a letter).";

@@ -58,4 +58,8 @@ where
         let preprocessed = (self.preprocessor)(value);
         self.schema.parse_value(&preprocessed)
     }
+
+    fn output_json(&self, o: &Self::Output) -> Option<Value> {
+        self.schema.output_json(o)
+    }
 }

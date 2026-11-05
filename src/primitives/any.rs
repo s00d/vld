@@ -33,6 +33,10 @@ impl crate::openapi::JsonSchema for ZAny {
     fn json_schema(&self) -> serde_json::Value {
         serde_json::json!({})
     }
+    /// Accepts `null`, so a missing key passes.
+    fn is_required(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "openapi")]
@@ -85,6 +89,10 @@ impl VldSchema for ZNull {
 impl crate::openapi::JsonSchema for ZNull {
     fn json_schema(&self) -> serde_json::Value {
         serde_json::json!({"type": "null"})
+    }
+    /// A missing key is `null`, which passes.
+    fn is_required(&self) -> bool {
+        false
     }
 }
 

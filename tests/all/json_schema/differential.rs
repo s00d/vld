@@ -38,12 +38,6 @@ const KNOWN_DIVERGENCES: &[(&str, &str, bool, &str)] = &[
         "vld accepts naive datetimes; RFC 3339 `date-time` requires an offset",
     ),
     (
-        "iso_datetime",
-        r#""2024-01-15T10:30Z""#,
-        true,
-        "vld allows omitting seconds; RFC 3339 requires them",
-    ),
-    (
         "iso_time",
         r#""10:30:00""#,
         true,

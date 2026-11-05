@@ -613,20 +613,22 @@ impl VldSchema for ZFile {
 #[cfg(feature = "openapi")]
 impl crate::openapi::JsonSchema for ZFile {
     fn json_schema(&self) -> serde_json::Value {
+        // The input: a path string or `{"path": "..."}`.
         let mut schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": { "type": "string" },
-                "size": { "type": "integer", "minimum": 0 },
-                "mediaType": { "type": ["string", "null"] }
-            },
-            "required": ["path", "size"]
+            "anyOf": [
+                { "type": "string" },
+                {
+                    "type": "object",
+                    "required": ["path"],
+                    "properties": { "path": { "type": "string" } }
+                }
+            ]
         });
         if let Some(min) = self.min_size {
-            schema["properties"]["size"]["minimum"] = serde_json::json!(min);
+            schema["x-minFileSize"] = serde_json::json!(min);
         }
         if let Some(max) = self.max_size {
-            schema["properties"]["size"]["maximum"] = serde_json::json!(max);
+            schema["x-maxFileSize"] = serde_json::json!(max);
         }
         schema
     }

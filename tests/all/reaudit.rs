@@ -362,3 +362,154 @@ fn f35_literal_int_types() {
     assert_eq!(vld::literal(-3isize).parse("-3").unwrap(), -3isize);
     assert_eq!(vld::literal(0.1f32).parse("0.1").unwrap(), 0.1f32);
 }
+
+// 13. string().iso_datetime() and the backends' datetime() share one grammar.
+#[test]
+fn f13_iso_datetime_grammar() {
+    let s = vld::string().iso_datetime();
+    for ok in [
+        "2024-01-15T10:30:00Z",
+        "2024-01-15t10:30:00z",
+        "2024-01-15T10:30:00.5+02:00",
+        "2024-01-15T10:30:00",
+    ] {
+        assert!(s.parse_value(&json!(ok)).is_ok(), "{ok}");
+        #[cfg(feature = "chrono")]
+        assert!(
+            vld::chrono::datetime().parse_value(&json!(ok)).is_ok(),
+            "{ok}"
+        );
+    }
+    for bad in ["2024-01-15T10:30Z", "2024-01-15T10:30", "2024-01-15 10:30:00Z"] {
+        assert!(s.parse_value(&json!(bad)).is_err(), "{bad}");
+        #[cfg(feature = "chrono")]
+        assert!(
+            vld::chrono::datetime().parse_value(&json!(bad)).is_err(),
+            "{bad}"
+        );
+    }
+}
+
+#[cfg(feature = "openapi")]
+mod json_schema {
+    use serde_json::json;
+    use vld::openapi::JsonSchema;
+    use vld::prelude::*;
+
+    // 10. Schemas that accept a missing key are not `required`.
+    #[test]
+    fn f10_not_required() {
+        let o = vld::object()
+            .field("c", vld::string().catch("x".into()))
+            .field("a", vld::any())
+            .field("n", vld::null())
+            .field("j", vld::json_value())
+            .field("jo", vld::json_value().object())
+            .field("s", vld::string());
+        assert_eq!(o.json_schema()["required"], json!(["jo", "s"]));
+        assert!(o.parse(r#"{"jo": {}, "s": "x"}"#).is_ok());
+    }
+
+    // 11. time-of-day schema: a pattern, not `format: time`.
+    #[cfg(feature = "chrono")]
+    #[test]
+    fn f11_time_pattern() {
+        let js = vld::chrono::time().json_schema();
+        assert!(js.get("format").is_none());
+        assert_eq!(js["pattern"], r"^\d{2}:\d{2}:\d{2}(\.\d{1,9})?$");
+    }
+
+    // 12. datetime() accepting naive input is not plain `date-time`.
+    #[cfg(feature = "chrono")]
+    #[test]
+    fn f12_datetime_naive_schema() {
+        let js = vld::chrono::datetime().json_schema();
+        assert!(js.get("format").is_none());
+        assert_eq!(js["anyOf"][0], json!({"format": "date-time"}));
+        assert!(js["anyOf"][1]["pattern"].is_string());
+        let js = vld::chrono::datetime().with_timezone_only().json_schema();
+        assert_eq!(js["format"], "date-time");
+    }
+
+    // 14. decimal accepts numbers.
+    #[cfg(feature = "decimal")]
+    #[test]
+    fn f14_decimal_type() {
+        assert_eq!(
+            vld::decimal().json_schema()["type"],
+            json!(["string", "number"])
+        );
+    }
+
+    // 15. Encoded bytes also accept arrays.
+    #[test]
+    fn f15_bytes_any_of() {
+        let js = vld::bytes().base64().json_schema();
+        assert_eq!(js["anyOf"][0]["type"], "string");
+        assert_eq!(js["anyOf"][1]["type"], "array");
+        assert!(vld::bytes().base64().parse("[1, 2]").is_ok());
+        assert_eq!(vld::bytes().json_schema()["type"], "array");
+    }
+
+    // 16. ZFile describes its input.
+    #[cfg(feature = "file")]
+    #[test]
+    fn f16_file_input_schema() {
+        let js = vld::file().json_schema();
+        assert_eq!(js["anyOf"][0], json!({"type": "string"}));
+        assert_eq!(js["anyOf"][1]["required"], json!(["path"]));
+    }
+
+    // 17. require_key implies an object.
+    #[test]
+    fn f17_json_value_required_keys() {
+        let js = vld::json_value().require_key("a").json_schema();
+        assert_eq!(js["type"], "object");
+        assert_eq!(js["required"], json!(["a"]));
+    }
+
+    // 18. multipleOf 0 is omitted.
+    #[test]
+    fn f18_multiple_of_zero() {
+        assert!(vld::number()
+            .multiple_of(0.0)
+            .json_schema()
+            .get("multipleOf")
+            .is_none());
+        assert_eq!(vld::number().multiple_of(2.0).json_schema()["multipleOf"], 2.0);
+    }
+
+    // 25. output_json passes through wrappers (RFC 3339 default).
+    #[cfg(feature = "time")]
+    #[test]
+    fn f25_default_through_describe() {
+        let dt = vld::time::datetime()
+            .parse_value(&json!("2024-01-02T03:04:05Z"))
+            .unwrap();
+        let js = vld::time::datetime()
+            .describe("when")
+            .with_default(dt)
+            .json_schema();
+        assert_eq!(js["default"], "2024-01-02T03:04:05Z");
+        let js = vld::time::datetime()
+            .optional()
+            .with_default(Some(dt))
+            .json_schema();
+        assert_eq!(js["default"], "2024-01-02T03:04:05Z");
+    }
+
+    // 41. past/future and set min_size hints.
+    #[test]
+    fn f41_generator_hints() {
+        #[cfg(feature = "chrono")]
+        {
+            assert_eq!(vld::chrono::date().past().json_schema()["x-past"], true);
+            assert_eq!(
+                vld::chrono::datetime().future().json_schema()["x-future"],
+                true
+            );
+        }
+        let js = vld::set(vld::string()).min_size(2).json_schema();
+        assert_eq!(js["x-minUniqueItems"], 2);
+    }
+}

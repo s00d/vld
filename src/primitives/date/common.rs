@@ -205,15 +205,20 @@ impl<T: PartialOrd> Bounds<T> {
         errors
     }
 
-    /// `formatMinimum` / `formatMaximum` keywords.
+    /// `base` plus `formatMinimum` / `formatMaximum` and `x-past` / `x-future`.
     #[cfg(feature = "openapi")]
-    fn json_schema(&self, format: &str) -> Value {
-        let mut schema = serde_json::json!({"type": "string", "format": format});
+    fn json_schema(&self, mut schema: Value) -> Value {
         if let Some(b) = &self.min {
             schema["formatMinimum"] = serde_json::json!(b.display);
         }
         if let Some(b) = &self.max {
             schema["formatMaximum"] = serde_json::json!(b.display);
+        }
+        if self.past.is_some() {
+            schema["x-past"] = Value::Bool(true);
+        }
+        if self.future.is_some() {
+            schema["x-future"] = Value::Bool(true);
         }
         schema
     }
@@ -339,11 +344,12 @@ impl<B: DateBackend> VldSchema for ZDate<B> {
 }
 
 /// `{"type": "string", "format": "date"}`; `min`/`max` become
-/// `formatMinimum`/`formatMaximum`.
+/// `formatMinimum`/`formatMaximum`, `past()`/`future()` `x-past`/`x-future`.
 #[cfg(feature = "openapi")]
 impl<B: DateBackend> crate::openapi::JsonSchema for ZDate<B> {
     fn json_schema(&self) -> Value {
-        self.bounds.json_schema("date")
+        self.bounds
+            .json_schema(serde_json::json!({"type": "string", "format": "date"}))
     }
 }
 
@@ -564,14 +570,34 @@ impl<B: DateBackend> VldSchema for ZDateTime<B> {
     }
 }
 
-/// `{"type": "string", "format": "date-time"}`; `min`/`max` become
-/// `formatMinimum`/`formatMaximum`.
+/// `{"type": "string", "format": "date-time"}` when an offset is required
+/// ([`with_timezone_only`](ZDateTime::with_timezone_only),
+/// [`timezone_offset_only`](ZDateTime::timezone_offset_only)). By default naive
+/// input is accepted too, which `date-time` forbids, so the schema is
+/// `{"type": "string", "anyOf": [{"format": "date-time"}, {"pattern": <naive>}]}`.
+/// `min`/`max` become `formatMinimum`/`formatMaximum`, `past()`/`future()`
+/// `x-past`/`x-future`.
 #[cfg(feature = "openapi")]
 impl<B: DateBackend> crate::openapi::JsonSchema for ZDateTime<B> {
     fn json_schema(&self) -> Value {
-        self.bounds.json_schema("date-time")
+        let base = if self.allow_naive && self.required_timezone_offset.is_none() {
+            serde_json::json!({
+                "type": "string",
+                "anyOf": [
+                    {"format": "date-time"},
+                    {"pattern": NAIVE_DATETIME_PATTERN},
+                ],
+            })
+        } else {
+            serde_json::json!({"type": "string", "format": "date-time"})
+        };
+        self.bounds.json_schema(base)
     }
 }
+
+/// Naive `YYYY-MM-DDTHH:MM:SS[.frac]` (the calendar is checked by the parser).
+#[cfg(feature = "openapi")]
+const NAIVE_DATETIME_PATTERN: &str = r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d{1,9})?$";
 
 #[cfg(feature = "openapi")]
 impl<B: DateBackend> crate::openapi::CollectNestedSchemas for ZDateTime<B> {}
@@ -583,7 +609,8 @@ impl<B: DateBackend> crate::openapi::CollectNestedSchemas for ZDateTime<B> {}
 /// Created via `vld::chrono::time()`, `vld::jiff::time()` or `vld::time::time()`
 /// (or `vld::time_of_day()` when exactly one backend is enabled). Malformed
 /// input fails with `invalid_date` (kind `time`); bounds with `too_small` /
-/// `too_big` (origin `time`). JSON Schema: `{"type": "string", "format": "time"}`.
+/// `too_big` (origin `time`). JSON Schema: a `pattern` for `HH:MM:SS[.frac]`
+/// (`format: time` would require an offset).
 #[derive(Clone)]
 pub struct ZTime<B: DateBackend> {
     bounds: Bounds<B::Time>,
@@ -674,12 +701,16 @@ impl<B: DateBackend> VldSchema for ZTime<B> {
     }
 }
 
-/// `{"type": "string", "format": "time"}`; `min`/`max` become
+/// `{"type": "string", "pattern": "^\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?$"}`
+/// (not `format: time`, which requires an offset); `min`/`max` become
 /// `formatMinimum`/`formatMaximum`.
 #[cfg(feature = "openapi")]
 impl<B: DateBackend> crate::openapi::JsonSchema for ZTime<B> {
     fn json_schema(&self) -> Value {
-        self.bounds.json_schema("time")
+        self.bounds.json_schema(serde_json::json!({
+            "type": "string",
+            "pattern": r"^\d{2}:\d{2}:\d{2}(\.\d{1,9})?$",
+        }))
     }
 }
 

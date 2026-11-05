@@ -155,7 +155,7 @@ proptest! {
         prop_assert_eq!(got, valid, "{:?}", s);
     }
 
-    /// `iso_datetime` = valid date + `T` + valid time (+ optional `Z`).
+    /// `iso_datetime` = valid date + `T` + valid time with seconds (+ optional `Z`).
     #[test]
     fn iso_datetime_composes_date_and_time(
         (date, date_ok) in near_date(),
@@ -164,7 +164,8 @@ proptest! {
     ) {
         let s = format!("{date}T{time}{zone}");
         let got = vld::string().iso_datetime().parse_value(&json!(s)).is_ok();
-        prop_assert_eq!(got, date_ok && time_ok, "{:?}", s);
+        let with_secs = time.len() >= 8;
+        prop_assert_eq!(got, date_ok && time_ok && with_secs, "{:?}", s);
     }
 
     /// Backend date parsers agree with the string check on near-valid input.

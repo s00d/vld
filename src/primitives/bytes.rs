@@ -292,27 +292,31 @@ impl crate::openapi::JsonSchema for ZBytes {
         let padded = |n: usize| n.div_ceil(3) * 4;
         let unpadded = |n: usize| (n * 4).div_ceil(3);
         type Enc = fn(usize) -> usize;
+        let mut array = serde_json::json!({
+            "type": "array",
+            "items": { "type": "integer", "minimum": 0, "maximum": 255 }
+        });
+        super::length_schema(
+            &mut array,
+            ("minItems", "maxItems"),
+            mins.clone(),
+            maxs.clone(),
+        );
         let (format, min_enc, max_enc): (&str, Enc, Enc) = match self.string_mode {
-            BytesStringMode::Off => {
-                let mut schema = serde_json::json!({
-                    "type": "array",
-                    "items": { "type": "integer", "minimum": 0, "maximum": 255 }
-                });
-                super::length_schema(&mut schema, ("minItems", "maxItems"), mins, maxs);
-                return schema;
-            }
+            BytesStringMode::Off => return array,
             BytesStringMode::Base64 => ("byte", padded, padded),
             BytesStringMode::Base64Url => ("byte-base64url", unpadded, padded),
             BytesStringMode::Hex => ("byte-hex", |n| n * 2, |n| n * 2 + 2),
         };
-        let mut schema = serde_json::json!({ "type": "string", "format": format });
+        let mut string = serde_json::json!({ "type": "string", "format": format });
         super::length_schema(
-            &mut schema,
+            &mut string,
             ("minLength", "maxLength"),
             mins.map(min_enc),
             maxs.map(max_enc),
         );
-        schema
+        // Byte arrays are accepted in every mode.
+        serde_json::json!({ "anyOf": [string, array] })
     }
 }
 

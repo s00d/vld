@@ -6,7 +6,6 @@ use crate::openapi::{CollectNestedSchemas, JsonSchema};
 use crate::schema::{NestedSchemaEntry, VldSchema};
 
 crate::openapi::forward_inner_schema! {
-    impl[S] crate::combinators::ZCatch<S>, inner = S, where [S::Output: Clone];
     impl[S, F] crate::combinators::ZRefine<S, F>, inner = S, where [F: Fn(&S::Output) -> bool];
     impl[S, F, U] crate::combinators::ZTransform<S, F, U>, inner = S, where [F: Fn(S::Output) -> U];
     impl[S] crate::combinators::ZMessage<S>, inner = S;
@@ -17,6 +16,20 @@ crate::openapi::forward_inner_schema! {
 
 crate::openapi::collect_inner_schemas! {
     impl[S] crate::combinators::ZDescribe<S>, inner = S;
+    impl[S] crate::combinators::ZCatch<S>, inner = S, where [S::Output: Clone];
+}
+
+/// The inner schema; never `required` (a missing key yields the fallback).
+impl<S: VldSchema + JsonSchema> JsonSchema for crate::combinators::ZCatch<S>
+where
+    S::Output: Clone,
+{
+    fn json_schema(&self) -> Value {
+        self.inner_schema().json_schema()
+    }
+    fn is_required(&self) -> bool {
+        false
+    }
 }
 
 impl<S: VldSchema + JsonSchema> JsonSchema for crate::combinators::ZDescribe<S> {

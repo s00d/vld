@@ -39,6 +39,13 @@ macro_rules! option_wrapper {
                 }
                 self.inner.parse_value(value).map(Some)
             }
+
+            fn output_json(&self, o: &Self::Output) -> Option<Value> {
+                match o {
+                    Some(v) => self.inner.output_json(v),
+                    None => Some(Value::Null),
+                }
+            }
         }
     };
 }

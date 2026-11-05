@@ -854,7 +854,7 @@ mod schemas {
                 .min("08:00:00")
                 .max("18:00:00")
                 .json_schema(),
-            json!({"type": "string", "format": "time",
+            json!({"type": "string", "pattern": r"^\d{2}:\d{2}:\d{2}(\.\d{1,9})?$",
                    "formatMinimum": "08:00:00", "formatMaximum": "18:00:00"})
         );
     }

@@ -105,16 +105,10 @@ pub(crate) fn is_valid_time_of_day(s: &str) -> bool {
     time(s.as_bytes(), true)
 }
 
-/// `YYYY-MM-DDTHH:MM[:SS[.frac]][Z|±HH:MM]`.
+/// `YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]` — the grammar of
+/// [`split_datetime`], shared with the date backends' `datetime()`.
 pub(crate) fn is_valid_iso_datetime(s: &str) -> bool {
-    let b = s.as_bytes();
-    if b.len() < 16 || b[10] != b'T' || !date(&b[..10]) {
-        return false;
-    }
-    match offset_suffix(&b[11..]) {
-        Some((n, _)) => time(&b[11..b.len() - n], false),
-        None => false,
-    }
+    split_datetime(s).is_some()
 }
 
 /// Strict RFC 3339 split used by the date backends:
@@ -122,7 +116,6 @@ pub(crate) fn is_valid_iso_datetime(s: &str) -> bool {
 ///
 /// Returns the naive part normalized to an uppercase `T`
 /// (`YYYY-MM-DDTHH:MM:SS[.frac]`) and the offset in seconds, if present.
-#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 pub(crate) fn split_datetime(s: &str) -> Option<(String, Option<i32>)> {
     let b = s.as_bytes();
     if b.len() < 19 || !matches!(b[10], b'T' | b't') || !date(&b[..10]) {
@@ -163,10 +156,11 @@ mod tests {
         assert!(!is_valid_iso_date("2023-02-29"));
         assert!(!is_valid_iso_date("2024-02-31"));
         assert!(!is_valid_iso_date("2024-04-31"));
-        assert!(is_valid_iso_datetime("2024-01-01T10:00+03:00"));
-        assert!(is_valid_iso_datetime("2024-01-01T10:00:00.5Z"));
-        assert!(!is_valid_iso_datetime("2024-01-01T10:00+garbage"));
-        assert!(!is_valid_iso_datetime("2024-01-01T10:00Zjunk"));
-        assert!(!is_valid_iso_datetime("2024-01-01T10:00+25:00"));
+        assert!(is_valid_iso_datetime("2024-01-01T10:00:00+03:00"));
+        assert!(is_valid_iso_datetime("2024-01-01t10:00:00.5z"));
+        assert!(!is_valid_iso_datetime("2024-01-01T10:00+03:00"));
+        assert!(!is_valid_iso_datetime("2024-01-01T10:00:00+garbage"));
+        assert!(!is_valid_iso_datetime("2024-01-01T10:00:00Zjunk"));
+        assert!(!is_valid_iso_datetime("2024-01-01T10:00:00+25:00"));
     }
 }

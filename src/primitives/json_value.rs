@@ -116,7 +116,8 @@ impl VldSchema for ZJsonValue {
 impl crate::openapi::JsonSchema for ZJsonValue {
     fn json_schema(&self) -> serde_json::Value {
         let mut schema = serde_json::json!({});
-        if self.require_object {
+        // `require_key` implies an object too.
+        if self.require_object || !self.required_keys.is_empty() {
             schema["type"] = serde_json::json!("object");
             if !self.required_keys.is_empty() {
                 schema["required"] = serde_json::json!(self.required_keys);
@@ -128,6 +129,10 @@ impl crate::openapi::JsonSchema for ZJsonValue {
             schema["x-maxDepth"] = serde_json::json!(depth);
         }
         schema
+    }
+    /// Required only when `null` is rejected (object / array / required keys).
+    fn is_required(&self) -> bool {
+        self.require_object || self.require_array || !self.required_keys.is_empty()
     }
 }
 

@@ -38,4 +38,7 @@ impl<T: VldSchema> VldSchema for ZDescribe<T> {
     fn parse_value(&self, value: &Value) -> Result<T::Output, VldError> {
         self.inner.parse_value(value)
     }
+    fn output_json(&self, o: &Self::Output) -> Option<Value> {
+        self.inner.output_json(o)
+    }
 }
