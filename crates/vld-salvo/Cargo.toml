@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-salvo"
 readme = "README.md"
 keywords = ["validation", "salvo", "web", "json", "extractor"]
 categories = ["web-programming", "web-programming::http-server"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true }

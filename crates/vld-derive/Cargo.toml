@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-derive"
 readme = "README.md"
 keywords = ["validation", "derive", "macro", "vld"]
 categories = ["development-tools::procedural-macro-helpers"]
-exclude = [".idea/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [lib]
 proc-macro = true

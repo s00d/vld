@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-ts"
 readme = "README.md"
 keywords = ["validation", "typescript", "zod", "codegen", "json-schema"]
 categories = ["development-tools", "web-programming"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [dependencies]
 serde_json = { workspace = true }

@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-ntex"
 readme = "README.md"
 keywords = ["validation", "ntex", "web", "json", "extractor"]
 categories = ["web-programming", "web-programming::http-server"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [features]
 default = ["ntex-4"]
@@ -37,3 +37,8 @@ vld = { workspace = true }
 [[example]]
 name = "ntex_basic"
 path = "examples/ntex_basic.rs"
+
+[package.metadata.docs.rs]
+# One major per dual-major crate (they are mutually exclusive): the newest.
+no-default-features = true
+features = ["ntex-4"]

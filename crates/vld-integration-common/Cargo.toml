@@ -10,7 +10,7 @@ description = "Shared helpers for vld integration crates (internal)"
 documentation = "https://docs.rs/vld-integration-common"
 keywords = ["validation", "vld", "helpers"]
 categories = ["parsing"]
-exclude = [".idea/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true }

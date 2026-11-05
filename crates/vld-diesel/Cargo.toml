@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-diesel"
 readme = "README.md"
 keywords = ["validation", "diesel", "orm", "database", "vld"]
 categories = ["database", "web-programming"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [features]
 default = ["sqlite"]
@@ -24,7 +24,7 @@ vld = { workspace = true }
 diesel = { version = "2", default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
-vld-integration-common = { path = "../vld-integration-common", version = "0.4.6" }
+vld-integration-common = { workspace = true }
 
 [dev-dependencies]
 diesel = { version = "2", features = ["sqlite"] }
@@ -33,3 +33,6 @@ vld = { workspace = true }
 [[example]]
 name = "diesel_basic"
 path = "examples/diesel_basic.rs"
+
+[package.metadata.docs.rs]
+all-features = true

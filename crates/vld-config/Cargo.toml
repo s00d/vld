@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-config"
 readme = "README.md"
 keywords = ["validation", "config", "toml", "yaml", "vld"]
 categories = ["config", "web-programming"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [features]
 default = ["config-rs"]
@@ -40,3 +40,6 @@ required-features = ["config-rs"]
 name = "figment_basic"
 path = "examples/figment_basic.rs"
 required-features = ["figment"]
+
+[package.metadata.docs.rs]
+all-features = true
