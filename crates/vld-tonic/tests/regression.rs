@@ -39,3 +39,30 @@ fn metadata_uses_lossless_shared_coercion() {
     assert_eq!(meta.x_account, "01234");
     assert_eq!(meta.x_page, 3);
 }
+
+/// The interceptor stores `Validated<T>`, not a bare `T` that could collide
+/// with another extension of the same type.
+#[test]
+fn interceptor_stores_validated_wrapper() {
+    vld::schema! {
+        #[derive(Debug, Clone)]
+        struct Auth {
+            authorization: String => vld::string().min(1),
+        }
+    }
+
+    let mut req = Request::new(());
+    req.metadata_mut()
+        .insert("authorization", "Bearer x".parse().unwrap());
+    let req = vld_tonic::metadata_interceptor::<Auth>(req).unwrap();
+    assert!(req.extensions().get::<Auth>().is_none());
+    assert_eq!(
+        req.extensions()
+            .get::<vld_tonic::Validated<Auth>>()
+            .unwrap()
+            .authorization,
+        "Bearer x"
+    );
+    let auth: Auth = vld_tonic::validated_metadata(&req).unwrap();
+    assert_eq!(auth.authorization, "Bearer x");
+}

@@ -61,7 +61,7 @@ pub fn vld_status_with_code(error: &VldError, code: Code) -> Status {
     let body = serde_json::json!({
         "error": "VALIDATION_ERROR",
         "message": "Request validation failed",
-        "details": vld_http_common::format_issues_with_code(error),
+        "details": vld_http_common::format_issues(error),
     });
 
     Status::new(code, body.to_string())
@@ -154,7 +154,9 @@ where
 /// Validate gRPC request metadata against a vld schema.
 ///
 /// Metadata keys are converted from `kebab-case` to `snake_case`
-/// (e.g. `x-request-id` → `x_request_id`).
+/// (e.g. `x-request-id` → `x_request_id`); keys containing `_` are ignored
+/// (see [`vld_http_common::headers_to_json`]) and binary (`-bin`) keys are
+/// skipped.
 /// Values are coerced with [`vld_http_common::coerce_value`] (lossless:
 /// `"42"` → number, `"true"` → boolean, `"01234"` stays a string) and
 /// validated with [`vld_http_common::parse_coerced`], so a string field still
@@ -190,9 +192,22 @@ where
     vld_http_common::parse_coerced::<T>(&json).map_err(|e| vld_status(&e))
 }
 
+/// The validated metadata, stored in the request extensions by
+/// [`metadata_interceptor`] (a wrapper, so it never collides with other
+/// extensions of type `T`).
+#[derive(Debug, Clone)]
+pub struct Validated<T>(pub T);
+
+impl<T> std::ops::Deref for Validated<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
 /// Retrieve a validated metadata struct from request extensions.
 ///
-/// Use after [`metadata_interceptor`] has stored the validated value.
+/// Use after [`metadata_interceptor`] has stored the [`Validated<T>`].
 ///
 /// # Example
 ///
@@ -207,16 +222,19 @@ pub fn validated_metadata<T, M>(request: &Request<M>) -> Option<T>
 where
     T: Clone + Send + Sync + 'static,
 {
-    request.extensions().get::<T>().cloned()
+    request
+        .extensions()
+        .get::<Validated<T>>()
+        .map(|v| v.0.clone())
 }
 
 // ========================= Interceptor =======================================
 
 /// A tonic interceptor function that validates request metadata.
 ///
-/// The validated struct is stored in request extensions and can be
-/// retrieved in handlers via [`validated_metadata`] or
-/// `request.extensions().get::<T>()`.
+/// The validated struct is stored in request extensions as
+/// [`Validated<T>`] and can be retrieved in handlers via
+/// [`validated_metadata`] or `request.extensions().get::<Validated<T>>()`.
 ///
 /// # Example
 ///
@@ -243,7 +261,7 @@ where
     T: VldParse + Clone + Send + Sync + 'static,
 {
     let validated: T = validate_metadata(&request)?;
-    request.extensions_mut().insert(validated);
+    request.extensions_mut().insert(Validated(validated));
     Ok(request)
 }
 
@@ -297,7 +315,7 @@ pub mod prelude {
     pub use crate::{
         impl_validate, metadata_interceptor, validate, validate_metadata, validate_ref,
         validate_with, validate_with_ref, validated_metadata, vld_status, vld_status_with_code,
-        VldMessage,
+        Validated, VldMessage,
     };
     pub use vld::prelude::*;
 }
