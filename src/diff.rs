@@ -3,8 +3,14 @@
 //! Useful for API versioning: detect when a schema change will break
 //! existing consumers.
 //!
-//! Requires the `openapi` feature (schemas are represented as
-//! `serde_json::Value` in JSON Schema format).
+//! Requires the `diff` feature. It works on plain `serde_json::Value` JSON
+//! Schemas (e.g. from `json_schema()` with the `openapi` feature, or any other
+//! source).
+//!
+//! Nullable wrappers (`anyOf`/`oneOf` of `[X, {"type": "null"}]`, as emitted
+//! by `.optional()` / `.nullable()`) are unwrapped and `X` is compared;
+//! gaining `null` is non-breaking, losing it is breaking. `anyOf` / `oneOf` /
+//! `allOf` branches are compared position by position, `$ref` targets by name.
 //!
 //! # Example
 //!
@@ -120,7 +126,8 @@ impl fmt::Display for SchemaDiff {
 ///
 /// The comparison is heuristic and focuses on the most common JSON Schema
 /// properties: `type`, `required`, `properties`, `format`, `minimum`,
-/// `maximum`, `minLength`, `maxLength`, `minItems`, `maxItems`, `enum`, `pattern`.
+/// `maximum`, `minLength`, `maxLength`, `minItems`, `maxItems`, `enum`, `pattern`,
+/// `items`, `additionalProperties`, `anyOf` / `oneOf` / `allOf` and `$ref`.
 pub fn diff_schemas(old: &Value, new: &Value) -> SchemaDiff {
     let mut changes = Vec::new();
     diff_value(old, new, "", &mut changes);
@@ -128,19 +135,48 @@ pub fn diff_schemas(old: &Value, new: &Value) -> SchemaDiff {
 }
 
 fn diff_value(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChange>) {
-    // Type change
-    if old.get("type") != new.get("type") {
+    // Nullable wrappers: compare the inner schema, report the nullability change.
+    let (old, old_null) = split_nullable(old);
+    let (new, new_null) = split_nullable(new);
+    if old_null != new_null {
         changes.push(SchemaChange {
-            path: join_path(path, "type"),
+            path: join_path(path, "nullable"),
+            kind: if new_null {
+                ChangeKind::NonBreaking
+            } else {
+                ChangeKind::Breaking
+            },
+            description: if new_null {
+                "Now accepts null".into()
+            } else {
+                "No longer accepts null".into()
+            },
+        });
+    }
+
+    // References: targets are not resolved, compare by name.
+    if old.get("$ref") != new.get("$ref") {
+        changes.push(SchemaChange {
+            path: join_path(path, "$ref"),
             kind: ChangeKind::Breaking,
             description: format!(
-                "Type changed from {} to {}",
-                fmt_val(old.get("type")),
-                fmt_val(new.get("type"))
+                "Reference changed from {} to {}",
+                fmt_val(old.get("$ref")),
+                fmt_val(new.get("$ref"))
             ),
         });
-        return; // If type changed, comparing sub-properties is not meaningful
+        return;
     }
+
+    if !diff_type(old, new, path, changes) {
+        return; // incompatible types: comparing sub-properties is not meaningful
+    }
+
+    // Composition branches (`anyOf`/`oneOf` widen when branches are added,
+    // `allOf` narrows).
+    diff_composition(old, new, path, "anyOf", true, changes);
+    diff_composition(old, new, path, "oneOf", true, changes);
+    diff_composition(old, new, path, "allOf", false, changes);
 
     // Required fields
     diff_required(old, new, path, changes);
@@ -203,67 +239,185 @@ fn diff_value(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChan
         diff_value(old_items, new_items, &join_path(path, "items"), changes);
     }
 
-    // AdditionalProperties
-    if old.get("additionalProperties") != new.get("additionalProperties") {
-        let old_ap = old.get("additionalProperties");
-        let new_ap = new.get("additionalProperties");
-        // false → true is non-breaking; true → false is breaking
-        let kind = match (old_ap, new_ap) {
-            (Some(Value::Bool(true)), Some(Value::Bool(false))) => ChangeKind::Breaking,
-            (Some(Value::Bool(false)), Some(Value::Bool(true))) => ChangeKind::NonBreaking,
-            (None, Some(Value::Bool(false))) => ChangeKind::Breaking,
-            _ => ChangeKind::NonBreaking,
-        };
-        changes.push(SchemaChange {
-            path: join_path(path, "additionalProperties"),
-            kind,
-            description: format!(
-                "additionalProperties changed from {} to {}",
-                fmt_val(old_ap),
-                fmt_val(new_ap)
-            ),
-        });
+    diff_additional_properties(old, new, path, changes);
+}
+
+/// `anyOf`/`oneOf` of exactly `[X, {"type": "null"}]` (either order) → `(X, true)`.
+fn split_nullable(v: &Value) -> (&Value, bool) {
+    for key in ["anyOf", "oneOf"] {
+        if let Some([a, b]) = v.get(key).and_then(Value::as_array).map(Vec::as_slice) {
+            let is_null = |x: &Value| x.get("type").and_then(Value::as_str) == Some("null");
+            if is_null(b) {
+                return (a, true);
+            }
+            if is_null(a) {
+                return (b, true);
+            }
+        }
     }
+    (v, false)
+}
+
+/// `type` as a set (`None` = unconstrained).
+fn type_set(v: &Value) -> Option<BTreeSet<String>> {
+    match v.get("type")? {
+        Value::String(s) => Some(BTreeSet::from([s.clone()])),
+        Value::Array(a) => Some(
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(String::from)
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
+/// Report a `type` change. Returns `false` when the types are incompatible
+/// (neither accepts all values of the other).
+fn diff_type(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChange>) -> bool {
+    if old.get("type") == new.get("type") {
+        return true;
+    }
+    let (o, n) = (type_set(old), type_set(new));
+    let (widened, narrowed) = match (&o, &n) {
+        (Some(o), Some(n)) => (n.is_superset(o), n.is_subset(o)),
+        (Some(_), None) => (true, false),
+        (None, Some(_)) => (false, true),
+        (None, None) => (true, true),
+    };
+    changes.push(SchemaChange {
+        path: join_path(path, "type"),
+        kind: if widened {
+            ChangeKind::NonBreaking
+        } else {
+            ChangeKind::Breaking
+        },
+        description: format!(
+            "Type changed from {} to {}",
+            fmt_val(old.get("type")),
+            fmt_val(new.get("type"))
+        ),
+    });
+    widened || narrowed
+}
+
+fn diff_composition(
+    old: &Value,
+    new: &Value,
+    path: &str,
+    key: &str,
+    is_union: bool,
+    changes: &mut Vec<SchemaChange>,
+) {
+    let base = join_path(path, key);
+    // Adding a union branch widens; adding an `allOf` member narrows.
+    let (on_add, on_remove) = if is_union {
+        (ChangeKind::NonBreaking, ChangeKind::Breaking)
+    } else {
+        (ChangeKind::Breaking, ChangeKind::NonBreaking)
+    };
+    match (
+        old.get(key).and_then(Value::as_array),
+        new.get(key).and_then(Value::as_array),
+    ) {
+        (Some(o), Some(n)) => {
+            for (i, (a, b)) in o.iter().zip(n).enumerate() {
+                diff_value(a, b, &format!("{}[{}]", base, i), changes);
+            }
+            if n.len() > o.len() {
+                changes.push(SchemaChange {
+                    path: base,
+                    kind: on_add,
+                    description: format!("{} branch(es) added to {}", n.len() - o.len(), key),
+                });
+            } else if n.len() < o.len() {
+                changes.push(SchemaChange {
+                    path: base,
+                    kind: on_remove,
+                    description: format!("{} branch(es) removed from {}", o.len() - n.len(), key),
+                });
+            }
+        }
+        (None, Some(_)) => changes.push(SchemaChange {
+            path: base,
+            kind: ChangeKind::Breaking,
+            description: format!("{} added", key),
+        }),
+        (Some(_), None) => changes.push(SchemaChange {
+            path: base,
+            kind: on_remove,
+            description: format!("{} removed", key),
+        }),
+        (None, None) => {}
+    }
+}
+
+fn diff_additional_properties(
+    old: &Value,
+    new: &Value,
+    path: &str,
+    changes: &mut Vec<SchemaChange>,
+) {
+    let (old_ap, new_ap) = (
+        old.get("additionalProperties"),
+        new.get("additionalProperties"),
+    );
+    if old_ap == new_ap {
+        return;
+    }
+    let p = join_path(path, "additionalProperties");
+    if let (Some(o @ Value::Object(_)), Some(n @ Value::Object(_))) = (old_ap, new_ap) {
+        diff_value(o, n, &p, changes);
+        return;
+    }
+    // 0 = anything (absent / true), 1 = constrained by a schema, 2 = forbidden (false)
+    let level = |v: Option<&Value>| match v {
+        None | Some(Value::Bool(true)) => 0,
+        Some(Value::Bool(false)) => 2,
+        Some(_) => 1,
+    };
+    let kind = if level(new_ap) > level(old_ap) {
+        ChangeKind::Breaking
+    } else {
+        ChangeKind::NonBreaking
+    };
+    changes.push(SchemaChange {
+        path: p,
+        kind,
+        description: format!(
+            "additionalProperties changed from {} to {}",
+            fmt_val(old_ap),
+            fmt_val(new_ap)
+        ),
+    });
 }
 
 fn diff_required(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChange>) {
     let old_req = extract_string_set(old.get("required"));
     let new_req = extract_string_set(new.get("required"));
+    let old_props = old.get("properties").and_then(Value::as_object);
+    let new_props = new.get("properties").and_then(Value::as_object);
 
     for added in new_req.difference(&old_req) {
-        // New required field — need to check if it's also a new property
-        let is_new_prop = old
-            .get("properties")
-            .and_then(|p| p.as_object())
-            .map(|p| !p.contains_key(added.as_str()))
-            .unwrap_or(true);
-
-        let kind = if is_new_prop {
-            // New required property without a default — breaking
-            ChangeKind::Breaking
-        } else {
-            // Existing optional field made required — breaking
-            ChangeKind::Breaking
-        };
-
+        // A brand-new required property is reported once, by `diff_properties`.
+        let is_new_prop = matches!((old_props, new_props), (Some(o), Some(n))
+            if !o.contains_key(added.as_str()) && n.contains_key(added.as_str()));
+        if is_new_prop {
+            continue;
+        }
         changes.push(SchemaChange {
             path: join_path(path, &format!("required[{}]", added)),
-            kind,
+            kind: ChangeKind::Breaking,
             description: format!("Field \"{}\" is now required", added),
         });
     }
 
     for removed in old_req.difference(&new_req) {
-        // Field no longer required — non-breaking
-        let prop_removed = new
-            .get("properties")
-            .and_then(|p| p.as_object())
+        // A removed property is reported by `diff_properties`.
+        let prop_removed = new_props
             .map(|p| !p.contains_key(removed.as_str()))
             .unwrap_or(false);
-
-        if prop_removed {
-            // Field removed entirely — that's handled in diff_properties
-        } else {
+        if !prop_removed {
             changes.push(SchemaChange {
                 path: join_path(path, &format!("required[{}]", removed)),
                 kind: ChangeKind::NonBreaking,
