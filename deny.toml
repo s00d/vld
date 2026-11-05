@@ -1,0 +1,60 @@
+# cargo-deny configuration (https://embarkstudios.github.io/cargo-deny/).
+# Run: `cargo deny --all-features check` (CI job `deny`).
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+# Unmaintained / unsound crates only fail the check when a workspace crate
+# depends on them directly; deep transitive ones are reported by `cargo audit`.
+unmaintained = "workspace"
+unsound = "workspace"
+ignore = [
+    # rsa: Marvin attack (timing side channel), no fixed release exists.
+    # Only reachable through sqlx-mysql when vld-sqlx's optional `mysql`
+    # feature is enabled; vld never performs RSA operations itself.
+    { id = "RUSTSEC-2023-0071", reason = "rsa via optional sqlx-mysql; no fix upstream" },
+    # h2 0.3 unbounded empty DATA frames; fixed only in h2 >= 0.4.16.
+    # h2 0.3 is pinned by actix-http 3 (vld-actix); vld does not use h2
+    # directly. Drop once actix-web moves to h2 0.4.
+    { id = "RUSTSEC-2026-0258", reason = "h2 0.3 pinned by actix-http 3; fix only in h2 0.4" },
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# Every license currently present in the (all-features) dependency graph.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+[licenses.private]
+# Unpublished workspace crates (examples/playground) carry no license.
+ignore = true
+
+[bans]
+# Integration crates support several majors of the same framework; duplicates
+# are expected, so only warn.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
