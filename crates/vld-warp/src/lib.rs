@@ -11,9 +11,9 @@
 //! | [`vld_json::<T>()`] | JSON body |
 //! | [`vld_query::<T>()`] | Query string |
 //! | [`vld_form::<T>()`] | URL-encoded form body |
-//! | [`vld_param::<T>(name)`] | Single path segment |
-//! | [`vld_path::<T>(names)`] | All remaining path segments (tail) |
-//! | [`validate_path_params::<T>(pairs)`] | Pre-extracted path params |
+//! | [`vld_param::<T>(name)`](vld_param) | Single path segment |
+//! | [`vld_path::<T>(names)`](vld_path) | All remaining path segments (tail) |
+//! | [`validate_path_params::<T>(pairs)`](validate_path_params) | Pre-extracted path params |
 //! | [`vld_headers::<T>()`] | HTTP headers |
 //! | [`vld_cookie::<T>()`] | Cookie values |
 //!
