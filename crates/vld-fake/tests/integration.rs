@@ -1158,3 +1158,66 @@ fn typed_fake_field_access() {
     let _email: &str = &user.email;
     let _age: i64 = user.age;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  $ref resolution (vld::nested! emits `#/components/schemas/X`)
+// ═══════════════════════════════════════════════════════════════════════════
+
+vld::schema! {
+    #[derive(Debug, Clone, serde::Serialize)]
+    pub struct RefAddress {
+        pub city: String => vld::string().min(1).max(100),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug, Clone, serde::Serialize)]
+    pub struct RefUser {
+        pub name:    String     => vld::string().min(2).max(50),
+        pub address: RefAddress => vld::nested!(RefAddress),
+    }
+}
+
+vld_fake::impl_fake!(RefUser);
+
+#[test]
+fn typed_fake_resolves_nested_ref() {
+    assert!(RefUser::json_schema()["properties"]["address"]["$ref"].is_string());
+    for _ in 0..20 {
+        let u = RefUser::fake();
+        assert!(!u.address.city.is_empty());
+    }
+    let _ = RefUser::fake_seeded(7);
+    assert_eq!(RefUser::fake_many(3).len(), 3);
+}
+
+#[test]
+fn raw_ref_resolves_defs_and_components() {
+    let target = json!({"type": "object", "required": ["n"], "properties": {"n": {"type": "integer", "minimum": 1, "maximum": 3}}});
+    for (root, r) in [
+        ("$defs", "#/$defs/T"),
+        ("definitions", "#/definitions/T"),
+        ("$defs", "#/components/schemas/T"),
+    ] {
+        let mut schema =
+            json!({"type": "object", "required": ["t"], "properties": {"t": {"$ref": r}}});
+        schema[root] = json!({ "T": target });
+        let v = fake_value(&schema);
+        let n = v["t"]["n"].as_i64().expect("ref resolved to object");
+        assert!((1..=3).contains(&n));
+    }
+    let doc = json!({
+        "components": {"schemas": {"T": target}},
+        "$ref": "#/components/schemas/T"
+    });
+    assert!(fake_value(&doc)["n"].is_i64());
+}
+
+#[test]
+fn type_array_uses_non_null_type() {
+    let schema = json!({"type": ["integer", "null"], "minimum": 5, "maximum": 6});
+    for _ in 0..10 {
+        let n = fake_value(&schema).as_i64().unwrap();
+        assert!((5..=6).contains(&n));
+    }
+}

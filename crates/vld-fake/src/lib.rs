@@ -119,11 +119,15 @@ pub fn fake_many(schema: &Value, count: usize) -> Vec<Value> {
 /// Panics if the generated value does not pass validation (should not happen
 /// unless the schema is ambiguous).
 pub fn fake_parsed<T: VldParse>(schema: &Value) -> T {
-    let val = fake_value(schema);
-    T::vld_parse_value(&val).unwrap_or_else(|e| {
+    parse_or_panic(&fake_value(schema))
+}
+
+#[doc(hidden)]
+pub fn parse_or_panic<T: VldParse>(val: &Value) -> T {
+    T::vld_parse_value(val).unwrap_or_else(|e| {
         panic!(
             "vld_fake::fake_parsed: generated value failed validation.\nValue: {}\nError: {:?}",
-            serde_json::to_string_pretty(&val).unwrap_or_default(),
+            serde_json::to_string_pretty(val).unwrap_or_default(),
             e,
         )
     })
@@ -151,6 +155,9 @@ pub struct FakeGen<R: Rng> {
     depth: usize,
     /// Auto-incrementing counter for unique values.
     counter: u64,
+    /// Named definitions used to resolve `$ref` (collected from the root
+    /// schema's `$defs` / `definitions` / `components.schemas`).
+    defs: Map<String, Value>,
 }
 
 const MAX_DEPTH: usize = 12;
@@ -162,6 +169,7 @@ impl FakeGen<rand::rngs::ThreadRng> {
             rng: thread_rng_compat(),
             depth: 0,
             counter: 0,
+            defs: Map::new(),
         }
     }
 }
@@ -179,6 +187,7 @@ impl<R: Rng> FakeGen<R> {
             rng,
             depth: 0,
             counter: 0,
+            defs: Map::new(),
         }
     }
 
@@ -204,10 +213,39 @@ impl<R: Rng> FakeGen<R> {
         if self.depth > MAX_DEPTH {
             return Value::Null;
         }
+        if self.depth == 0 {
+            self.collect_defs(schema);
+        }
         self.depth += 1;
         let result = self.dispatch(schema, hint);
         self.depth -= 1;
         result
+    }
+
+    /// Register definitions embedded in a root schema so `$ref`s resolve.
+    fn collect_defs(&mut self, schema: &Value) {
+        for defs in [
+            schema.get("$defs"),
+            schema.get("definitions"),
+            schema.pointer("/components/schemas"),
+        ]
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+        {
+            for (k, v) in defs {
+                self.defs.insert(k.clone(), v.clone());
+            }
+        }
+    }
+
+    /// Resolve a local `$ref` (`#/components/schemas/X`, `#/$defs/X`,
+    /// `#/definitions/X`) against the collected definitions.
+    fn resolve_ref(&self, r: &str) -> Option<Value> {
+        let name = ["#/components/schemas/", "#/$defs/", "#/definitions/"]
+            .iter()
+            .find_map(|p| r.strip_prefix(p))?;
+        self.defs.get(name).cloned()
     }
 
     fn dispatch(&mut self, schema: &Value, hint: Option<&str>) -> Value {
@@ -215,6 +253,14 @@ impl<R: Rng> FakeGen<R> {
             Some(o) => o,
             None => return Value::Null,
         };
+
+        // ---- $ref ----
+        if let Some(r) = obj.get("$ref").and_then(Value::as_str) {
+            return match self.resolve_ref(r) {
+                Some(target) => self.value_with_hint(&target, hint),
+                None => Value::Null,
+            };
+        }
 
         // ---- const / enum ----
         if let Some(c) = obj.get("const") {
@@ -255,7 +301,16 @@ impl<R: Rng> FakeGen<R> {
         }
 
         // ---- type-based dispatch ----
-        let ty = obj.get("type").and_then(Value::as_str).unwrap_or("string");
+        // `type` may be an array (`["string", "null"]`): use the first non-null.
+        let ty = match obj.get("type") {
+            Some(Value::Array(types)) => types
+                .iter()
+                .filter_map(Value::as_str)
+                .find(|t| *t != "null")
+                .unwrap_or("null"),
+            Some(t) => t.as_str().unwrap_or("string"),
+            None => "string",
+        };
 
         match ty {
             "string" => self.gen_string(obj, hint),
@@ -1471,6 +1526,11 @@ impl<R: Rng> FakeGen<R> {
         let mut required: Vec<String> = Vec::new();
 
         for s in schemas {
+            let resolved = s
+                .get("$ref")
+                .and_then(Value::as_str)
+                .and_then(|r| self.resolve_ref(r));
+            let s = resolved.as_ref().unwrap_or(s);
             if let Some(obj) = s.as_object() {
                 if let Some(props) = obj.get("properties").and_then(Value::as_object) {
                     for (k, v) in props {
@@ -1627,36 +1687,69 @@ macro_rules! impl_fake {
     ($ty:ty) => {
         impl $crate::FakeData for $ty {
             fn fake() -> Self {
-                let schema = <$ty>::json_schema();
-                $crate::fake_parsed::<$ty>(&schema)
+                $crate::fake_parsed::<$ty>(&$crate::__fake_schema!($ty))
             }
 
             fn fake_many(count: usize) -> Vec<Self> {
-                let schema = <$ty>::json_schema();
-                let mut gen = $crate::FakeGen::new();
+                let schema = $crate::__fake_schema!($ty);
                 (0..count)
-                    .map(|_| {
-                        let val = gen.value(&schema);
-                        <$ty as ::vld::prelude::VldParse>::vld_parse_value(&val)
-                            .expect("vld_fake: generated value failed validation")
-                    })
+                    .map(|_| $crate::fake_parsed::<$ty>(&schema))
                     .collect()
             }
 
             fn fake_seeded(seed: u64) -> Self {
-                let schema = <$ty>::json_schema();
-                let val = $crate::fake_value_seeded(&schema, seed);
-                <$ty as ::vld::prelude::VldParse>::vld_parse_value(&val)
-                    .expect("vld_fake: generated value failed validation")
+                let schema = $crate::__fake_schema!($ty);
+                $crate::parse_or_panic(&$crate::fake_value_seeded(&schema, seed))
             }
 
             fn try_fake() -> Result<Self, ::vld::error::VldError> {
-                let schema = <$ty>::json_schema();
-                $crate::try_fake_parsed::<$ty>(&schema)
+                $crate::try_fake_parsed::<$ty>(&$crate::__fake_schema!($ty))
             }
         }
     };
 }
+
+/// `json_schema()` of `$ty` with its nested schemas embedded under `$defs`,
+/// so the `$ref`s emitted by `vld::nested!` resolve.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __fake_schema {
+    ($ty:ty) => {{
+        #[allow(unused_imports)]
+        use $crate::__VldNestedSchemasFallback as _;
+        $crate::with_nested_defs(<$ty>::json_schema(), <$ty>::__vld_nested_schemas())
+    }};
+}
+
+/// Embed `nested` schemas into `schema` under `$defs`.
+#[doc(hidden)]
+pub fn with_nested_defs(
+    mut schema: Value,
+    nested: Vec<vld::json_schema::NestedSchemaEntry>,
+) -> Value {
+    if let Some(obj) = schema.as_object_mut() {
+        if !nested.is_empty() {
+            let defs = nested
+                .into_iter()
+                .map(|(name, f)| (name.to_string(), f()))
+                .collect();
+            obj.insert("$defs".into(), Value::Object(defs));
+        }
+    }
+    schema
+}
+
+/// Fallback so `impl_fake!` compiles for types without `__vld_nested_schemas`.
+/// An inherent `__vld_nested_schemas` (from `vld::schema!`) always takes
+/// precedence over this trait method.
+#[doc(hidden)]
+pub trait __VldNestedSchemasFallback {
+    fn __vld_nested_schemas() -> Vec<vld::json_schema::NestedSchemaEntry> {
+        Vec::new()
+    }
+}
+
+impl<T: ?Sized> __VldNestedSchemasFallback for T {}
 
 // ──────────────────── prelude ────────────────────────────────────────────
 
