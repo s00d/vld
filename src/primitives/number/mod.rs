@@ -1,23 +1,27 @@
-//! Number schemas: [`ZNumber`] (`f64`) and [`ZInt`] (`i64`) share one check list.
+//! Number schemas: [`ZNumber`] (`f64`), [`ZInteger`] (`i8`..`u64`, with
+//! [`ZInt`] = `ZInteger<i64>`) and [`ZF32`] share one check list.
 
 use serde_json::Value;
 use std::cmp::Ordering;
 
+mod f32;
 mod float;
 mod int;
 
+pub use f32::ZF32;
 pub use float::ZNumber;
-pub use int::ZInt;
+pub use int::{IntType, ZInt, ZInteger};
 
 use crate::error::{IssueCode, SizeOrigin};
 
-pub(super) const MAX_SAFE: i64 = 9_007_199_254_740_991;
+pub(super) const MAX_SAFE: i128 = 9_007_199_254_740_991;
 
-/// A numeric value or bound: floats for [`ZNumber`], exact integers for [`ZInt`].
+/// A numeric value or bound: floats for [`ZNumber`], exact integers for
+/// [`ZInteger`] (`i128` holds every `i64` and `u64`).
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Num {
     F(f64),
-    I(i64),
+    I(i128),
 }
 
 impl Num {
@@ -39,7 +43,11 @@ impl Num {
     pub(super) fn json(self) -> Value {
         match self {
             Num::F(f) => serde_json::json!(f),
-            Num::I(i) => serde_json::json!(i),
+            Num::I(i) => match (i64::try_from(i), u64::try_from(i)) {
+                (Ok(v), _) => v.into(),
+                (_, Ok(v)) => v.into(),
+                _ => serde_json::json!(i as f64),
+            },
         }
     }
 }

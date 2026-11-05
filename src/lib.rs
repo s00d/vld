@@ -96,6 +96,25 @@ pub fn number() -> primitives::ZNumber {
     primitives::ZNumber::new()
 }
 
+macro_rules! int_constructors {
+    ($($name:ident: $t:ty),+ $(,)?) => {$(
+        #[doc = concat!("Create a `", stringify!($t), "` integer schema (exact, range-checked; see [`primitives::ZInteger`]).")]
+        pub fn $name() -> primitives::ZInteger<$t> {
+            primitives::ZInteger::new()
+        }
+    )+};
+}
+
+int_constructors! {
+    i8: i8, i16: i16, i32: i32, i64: i64, isize: isize,
+    u8: u8, u16: u16, u32: u32, u64: u64, usize: usize,
+}
+
+/// Create an `f32` number schema (rejects values outside the `f32` range).
+pub fn f32() -> primitives::ZF32 {
+    primitives::ZF32::new()
+}
+
 /// Create a boolean validation schema.
 pub fn boolean() -> primitives::ZBoolean {
     primitives::ZBoolean::new()

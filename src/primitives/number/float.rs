@@ -174,7 +174,7 @@ impl ZNumber {
 
     /// Convert to integer validation. Returns `ZInt` with `Output = i64`.
     pub fn int(self) -> ZInt {
-        ZInt::new(self)
+        ZInt::from_number(self)
     }
 
     /// Coerce strings and booleans to numbers.
@@ -255,22 +255,31 @@ impl VldSchema for ZNumber {
 #[cfg(feature = "openapi")]
 impl crate::openapi::JsonSchema for ZNumber {
     fn json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({"type": "number"});
+        self.schema("number", None)
+    }
+}
+
+impl ZNumber {
+    /// JSON Schema of the checks; `range` is the output type's own
+    /// `[min, max]`, intersected with the user bounds.
+    #[cfg(feature = "openapi")]
+    pub(super) fn schema(&self, ty: &str, range: Option<(Num, Num)>) -> Value {
+        let mut schema = serde_json::json!({ "type": ty });
         // Strictest bound: larger lower bound wins, exclusive wins ties.
         let pick = |a: (Num, bool), b: (Num, bool), want: Ordering| match b.0.cmp(a.0) {
             Some(o) if o == want => b,
             Some(Ordering::Equal) if b.1 => b,
             _ => a,
         };
-        let lower = self
-            .checks
-            .iter()
-            .filter_map(|c| c.kind.lower())
+        let lower = range
+            .map(|(lo, _)| (lo, false))
+            .into_iter()
+            .chain(self.checks.iter().filter_map(|c| c.kind.lower()))
             .reduce(|a, b| pick(a, b, Ordering::Greater));
-        let upper = self
-            .checks
-            .iter()
-            .filter_map(|c| c.kind.upper())
+        let upper = range
+            .map(|(_, hi)| (hi, false))
+            .into_iter()
+            .chain(self.checks.iter().filter_map(|c| c.kind.upper()))
             .reduce(|a, b| pick(a, b, Ordering::Less));
         if let Some((v, excl)) = lower {
             let key = if excl { "exclusiveMinimum" } else { "minimum" };

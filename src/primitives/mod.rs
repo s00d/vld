@@ -39,7 +39,7 @@ pub use file::{FileStorage, ValidatedFile, ZFile};
 pub use ip_network::ZIpNetwork;
 pub use json_value::ZJsonValue;
 pub use literal::{IntoLiteral, ZLiteral};
-pub use number::{ZInt, ZNumber};
+pub use number::{IntType, ZInt, ZInteger, ZNumber, ZF32};
 pub use path::ZPath;
 pub use socket_addr::ZSocketAddr;
 pub use string::ZString;
