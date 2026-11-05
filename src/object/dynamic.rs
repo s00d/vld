@@ -374,12 +374,10 @@ impl VldSchema for ZObject {
                 UnknownFieldMode::Strip => {}
                 UnknownFieldMode::Strict => {
                     for key in &unknown_keys {
-                        let mut issue_err = VldError::single(
-                            IssueCode::UnrecognizedField,
-                            format!("Unrecognized field: \"{}\"", key),
+                        errors = errors.merge(
+                            VldError::from_code(IssueCode::UnrecognizedField)
+                                .with_prefix(PathSegment::Field((*key).clone())),
                         );
-                        issue_err = issue_err.with_prefix(PathSegment::Field((*key).clone()));
-                        errors = errors.merge(issue_err);
                     }
                 }
                 UnknownFieldMode::Passthrough => {

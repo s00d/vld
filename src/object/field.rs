@@ -41,10 +41,7 @@ pub(crate) struct RequiredDynSchema(pub(crate) Box<dyn DynSchema + Send + Sync>)
 impl DynSchema for RequiredDynSchema {
     fn dyn_parse(&self, value: &Value) -> Result<Value, VldError> {
         if value.is_null() {
-            return Err(VldError::single(
-                IssueCode::MissingField,
-                "Required field is missing or null",
-            ));
+            return Err(VldError::from_code(IssueCode::MissingField));
         }
         self.0.dyn_parse(value)
     }

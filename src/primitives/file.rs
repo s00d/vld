@@ -298,7 +298,7 @@ fn extract_path(value: &Value) -> Result<&str, VldError> {
         Value::Object(obj) => obj.get("path").and_then(Value::as_str).ok_or_else(|| {
             VldError::from_code_with_value(
                 IssueCode::InvalidType {
-                    expected: "string or object with {path: string}".to_string(),
+                    expected: "file".to_string(),
                     received: value_type_name(value),
                 },
                 value,
@@ -306,7 +306,7 @@ fn extract_path(value: &Value) -> Result<&str, VldError> {
         }),
         _ => Err(VldError::from_code_with_value(
             IssueCode::InvalidType {
-                expected: "string or object with {path: string}".to_string(),
+                expected: "file".to_string(),
                 received: value_type_name(value),
             },
             value,
@@ -457,7 +457,7 @@ impl VldSchema for ZFile {
     fn parse_value(&self, value: &Value) -> Result<ValidatedFile, VldError> {
         let path_str = extract_path(value).map_err(|e| {
             if self.custom_type_error.is_some() {
-                crate::primitives::type_error(&self.custom_type_error, "file path", value)
+                crate::primitives::type_error(&self.custom_type_error, "file", value)
             } else {
                 e
             }
@@ -468,16 +468,10 @@ impl VldSchema for ZFile {
         }
 
         if !path.exists() {
-            return Err(io_err(
-                format!("File does not exist: {}", path.display()),
-                value,
-            ));
+            return Err(file_err(IssueCode::PathNotFound, value));
         }
         if !path.is_file() {
-            return Err(io_err(
-                format!("Path is not a file: {}", path.display()),
-                value,
-            ));
+            return Err(file_err(IssueCode::PathNotFile, value));
         }
 
         let extension = path

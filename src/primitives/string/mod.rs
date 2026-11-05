@@ -31,6 +31,7 @@ pub struct ZString {
     transforms: Vec<StringTransform>,
     coerce: bool,
     custom_type_error: Option<String>,
+    messages: crate::primitives::Messages,
 }
 
 impl ZString {
@@ -40,6 +41,7 @@ impl ZString {
             transforms: vec![],
             coerce: false,
             custom_type_error: None,
+            messages: None,
         }
     }
 
@@ -73,6 +75,10 @@ impl ZString {
     /// (`"invalid_email"`, `"invalid_url"`, `"invalid_uuid"`, `"invalid_ip"`,
     /// `"invalid_currency"`, `"invalid_phone_e164"`, …).
     ///
+    /// The closure is consulted when an issue is built, so it covers checks
+    /// added before **and after** this call; a per-check message
+    /// (`*_msg(...)`) takes precedence over it. A later call replaces it.
+    ///
     /// # Example
     /// ```
     /// use vld::prelude::*;
@@ -85,13 +91,9 @@ impl ZString {
     /// ```
     pub fn with_messages<F>(mut self, f: F) -> Self
     where
-        F: Fn(&str) -> Option<String>,
+        F: Fn(&str) -> Option<String> + Send + Sync + 'static,
     {
-        for check in &mut self.checks {
-            if let Some(msg) = f(check.kind.key()) {
-                check.msg = Some(msg);
-            }
-        }
+        self.messages = Some(std::sync::Arc::new(f));
         self
     }
 
@@ -240,9 +242,10 @@ impl VldSchema for ZString {
         for check in &self.checks {
             if let Some(code) = check.kind.failure(&s) {
                 let received = received.get_or_insert_with(|| Value::String(s.clone()));
+                let bulk = || self.messages.as_ref().and_then(|f| f(check.kind.key()));
+                let msg = check.msg.clone().or_else(bulk);
                 errors.issues.push(
-                    ValidationIssue::with_override(code, check.msg.as_ref())
-                        .with_received(received),
+                    ValidationIssue::with_override(code, msg.as_ref()).with_received(received),
                 );
             }
         }

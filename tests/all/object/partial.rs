@@ -44,7 +44,7 @@ fn required_undoes_partial_for_absent_and_null() {
         let err = parse_err(&s, input);
         assert_eq!(paths(&err), [".name"]);
         assert_eq!(err.issues[0].code, IssueCode::MissingField);
-        assert_eq!(err.issues[0].message, "Required field is missing or null");
+        assert_eq!(err.issues[0].message, "Required field is missing");
     }
     assert!(s.parse_value(&json!({"name": "a", "age": 1})).is_ok());
 }

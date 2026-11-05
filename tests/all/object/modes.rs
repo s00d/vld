@@ -65,7 +65,7 @@ fn strict_rejects_each_unknown_key() {
         .issues
         .iter()
         .all(|i| i.code == IssueCode::UnrecognizedField));
-    assert_eq!(err.issues[0].message, "Unrecognized field: \"x\"");
+    assert_eq!(err.issues[0].message, "Unrecognized field");
 }
 
 #[test]

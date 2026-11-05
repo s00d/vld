@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, SizeOrigin, VldError};
+use crate::error::{IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 macro_rules! impl_tuple_schema {
@@ -10,10 +10,7 @@ macro_rules! impl_tuple_schema {
 
             fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
                 let arr = value.as_array().ok_or_else(|| {
-                    VldError::from_code(IssueCode::InvalidType {
-                            expected: "array".to_string(),
-                            received: value_type_name(value),
-                        })
+                    crate::primitives::type_error(&None, "array", value)
                 })?;
 
                 if arr.len() != $count {

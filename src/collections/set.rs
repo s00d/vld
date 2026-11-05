@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::collections::HashSet;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, SizeOrigin, VldError};
+use crate::error::{IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 /// Schema for validating a JSON array into a `HashSet` (unique elements).
@@ -54,10 +54,7 @@ where
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let arr = value.as_array().ok_or_else(|| {
-            VldError::from_code(IssueCode::InvalidType {
-                expected: "array".to_string(),
-                received: value_type_name(value),
-            })
+            crate::primitives::type_error(&None, "array", value)
         })?;
 
         let mut result = HashSet::new();

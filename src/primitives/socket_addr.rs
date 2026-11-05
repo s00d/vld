@@ -49,7 +49,7 @@ impl VldSchema for ZSocketAddr {
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            crate::primitives::type_error(&self.custom_type_error, "socket address string", value)
+            crate::primitives::type_error(&self.custom_type_error, "socket_addr", value)
         })?;
         let addr = s.parse::<SocketAddr>().map_err(|_| {
             VldError::from_code_with_value(

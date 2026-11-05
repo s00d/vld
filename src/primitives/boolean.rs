@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::VldError;
 use crate::schema::VldSchema;
 
 /// Schema for boolean validation. Created via [`vld::boolean()`](crate::boolean).
@@ -50,14 +50,9 @@ impl VldSchema for ZBoolean {
             Value::String(s) if self.coerce => match s.as_str() {
                 "true" | "1" => Ok(true),
                 "false" | "0" => Ok(false),
-                _ => Err(VldError::single_with_value(
-                    IssueCode::InvalidType {
-                        expected: "boolean".into(),
-                        received: "string".into(),
-                    },
-                    self.custom_type_error
-                        .clone()
-                        .unwrap_or_else(|| format!("Cannot coerce \"{}\" to boolean", s)),
+                _ => Err(crate::primitives::type_error(
+                    &self.custom_type_error,
+                    "boolean",
                     value,
                 )),
             },

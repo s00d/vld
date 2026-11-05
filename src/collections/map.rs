@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
+use crate::error::{IssueCode, PathSegment, VldError};
 use crate::schema::VldSchema;
 
 /// Schema for validating a JSON array of `[key, value]` pairs into a `HashMap`.
@@ -52,10 +52,7 @@ where
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let arr = value.as_array().ok_or_else(|| {
-            VldError::from_code(IssueCode::InvalidType {
-                expected: "array".to_string(),
-                received: value_type_name(value),
-            })
+            crate::primitives::type_error(&None, "array", value)
         })?;
 
         let mut result = HashMap::new();

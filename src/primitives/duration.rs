@@ -134,7 +134,7 @@ impl VldSchema for ZDuration {
         .ok_or_else(|| {
             crate::primitives::type_error(
                 &self.custom_type_error,
-                "duration as seconds or string (`PT15S`, `1.5s`, `250ms`)",
+                "duration",
                 value,
             )
         })?;

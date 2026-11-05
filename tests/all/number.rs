@@ -16,6 +16,7 @@ fn accepts_numbers_only() {
 }
 
 /// `(schema, input, expected code key or None)` at and around every bound.
+#[allow(deprecated)] // `finite()` is a deprecated no-op
 #[test]
 fn bound_table() {
     let cases: Vec<(ZNumber, f64, Option<&str>)> = vec![

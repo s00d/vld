@@ -74,14 +74,14 @@ impl VldSchema for ZJsonValue {
         if self.require_object && !value.is_object() {
             return Err(crate::primitives::type_error(
                 &self.custom_type_error,
-                "object JSON value",
+                "object",
                 value,
             ));
         }
         if self.require_array && !value.is_array() {
             return Err(crate::primitives::type_error(
                 &self.custom_type_error,
-                "array JSON value",
+                "array",
                 value,
             ));
         }
@@ -89,7 +89,7 @@ impl VldSchema for ZJsonValue {
             let obj = value.as_object().ok_or_else(|| {
                 crate::primitives::type_error(
                     &self.custom_type_error,
-                    "object (required keys need an object)",
+                    "object",
                     value,
                 )
             })?;

@@ -41,6 +41,35 @@ pub trait MessageResolver {
     /// Return a translated template for the given error code key,
     /// or `None` to keep the original message.
     fn resolve(&self, key: &str) -> Option<String>;
+
+    /// Plural category of `n` (`"one"`, `"few"`, `"many"`, `"other"`) for
+    /// templates with count variants (see [`translate_issue`]). Default:
+    /// English rule ([`plural_en`]).
+    fn plural_category(&self, n: u64) -> &'static str {
+        plural_en(n)
+    }
+}
+
+/// English / German / Spanish plural rule: `1` → `"one"`, else `"other"`.
+pub fn plural_en(n: u64) -> &'static str {
+    if n == 1 {
+        "one"
+    } else {
+        "other"
+    }
+}
+
+/// Russian plural rule: `"one"` (1, 21, 31, …), `"few"` (2-4, 22-24, …),
+/// `"many"` (0, 5-20, 25-30, …).
+pub fn plural_ru(n: u64) -> &'static str {
+    let (m10, m100) = (n % 10, n % 100);
+    if m10 == 1 && m100 != 11 {
+        "one"
+    } else if (2..=4).contains(&m10) && !(12..=14).contains(&m100) {
+        "few"
+    } else {
+        "many"
+    }
 }
 
 /// Simple [`MessageResolver`] backed by a `HashMap<String, String>`.
@@ -56,17 +85,32 @@ pub trait MessageResolver {
 /// ```
 pub struct MapResolver {
     map: HashMap<String, String>,
+    plural: fn(u64) -> &'static str,
 }
 
 impl MapResolver {
+    /// Resolver over `map`, with the English plural rule.
     pub fn new(map: HashMap<String, String>) -> Self {
-        Self { map }
+        Self {
+            map,
+            plural: plural_en,
+        }
+    }
+
+    /// Use another plural rule (e.g. [`plural_ru`]).
+    pub fn with_plural_rule(mut self, rule: fn(u64) -> &'static str) -> Self {
+        self.plural = rule;
+        self
     }
 }
 
 impl MessageResolver for MapResolver {
     fn resolve(&self, key: &str) -> Option<String> {
         self.map.get(key).cloned()
+    }
+
+    fn plural_category(&self, n: u64) -> &'static str {
+        (self.plural)(n)
     }
 }
 
@@ -104,36 +148,61 @@ impl<F: Fn(&str) -> Option<String>> MessageResolver for FnResolver<F> {
 /// first template found is filled with [`IssueCode::params()`]. Without any
 /// match the original message is kept.
 ///
+/// **Custom messages are kept**: an issue whose message is not the default
+/// English one ([`ValidationIssue::has_custom_message`] — set by `*_msg`
+/// builders, `with_messages`, `.message()`, `type_error()`, `refine`, …) is
+/// returned unchanged. A union's `[variant N] ` prefix is preserved.
+///
+/// **Plurals**: for codes with a count ([`IssueCode::plural_count`]:
+/// the `minimum` / `maximum` / `expected` of size checks) the key
+/// `<key>_<category>` is tried before `<key>`, where the category comes from
+/// [`MessageResolver::plural_category`] (`too_small.string_one`,
+/// `invalid_length.string_few`, …). The plain key is the fallback, so it
+/// holds the `"other"` (English) / `"many"` (Russian) form.
+///
 /// Type names in `invalid_type` messages are translated through the keys
-/// `type.<name>` (`type.string`, `type.null`, …) when the resolver has them.
+/// `type.<name>` (`type.string`, `type.date`, …) when the resolver has them.
 ///
 /// Exclusive bounds (`gt()`, `lt()`, `positive()`, …) use the
 /// `"too_small_exclusive"` / `"too_big_exclusive"` keys, so an inclusive
 /// "at least" template is never applied to a "greater than" check.
 pub fn translate_issue(issue: &ValidationIssue, resolver: &dyn MessageResolver) -> ValidationIssue {
-    let message = issue
+    let (prefix, _) = split_union_prefix(&issue.message);
+    let mut out = issue.clone();
+    if issue.has_custom_message() {
+        return out;
+    }
+    let category = issue
         .code
-        .message_keys()
-        .iter()
-        .find_map(|k| resolver.resolve(k))
-        .map(|template| {
-            // Type names (`{expected}` / `{received}` of `invalid_type`) are
-            // looked up as `type.<name>`.
-            issue
-                .code
-                .render_with(&template, |name, value| match (&issue.code, name) {
-                    (crate::error::IssueCode::InvalidType { .. }, "expected" | "received") => {
-                        resolver.resolve(&format!("type.{value}"))
-                    }
-                    _ => None,
-                })
-        })
-        .unwrap_or_else(|| issue.message.clone());
-    ValidationIssue {
-        code: issue.code.clone(),
-        message,
-        path: issue.path.clone(),
-        received: issue.received.clone(),
+        .plural_count()
+        .map(|n| resolver.plural_category(n));
+    let template = issue.code.message_keys().iter().find_map(|k| {
+        category
+            .filter(|c| *c != "other")
+            .and_then(|c| resolver.resolve(&format!("{k}_{c}")))
+            .or_else(|| resolver.resolve(k))
+    });
+    if let Some(template) = template {
+        // Type names (`{expected}` / `{received}` of `invalid_type`) are
+        // looked up as `type.<name>`.
+        let message = issue
+            .code
+            .render_with(&template, |name, value| match (&issue.code, name) {
+                (crate::error::IssueCode::InvalidType { .. }, "expected" | "received") => {
+                    resolver.resolve(&format!("type.{value}"))
+                }
+                _ => None,
+            });
+        out.message = format!("{prefix}{message}");
+    }
+    out
+}
+
+/// `"[variant 2] msg"` → `("[variant 2] ", "msg")`; no prefix → `("", msg)`.
+pub(crate) fn split_union_prefix(message: &str) -> (&str, &str) {
+    match crate::combinators::split_variant_prefix(message) {
+        Some((_, rest)) => message.split_at(message.len() - rest.len()),
+        None => ("", message),
     }
 }
 
@@ -176,15 +245,37 @@ pub fn translate_error(error: &VldError, resolver: &dyn MessageResolver) -> VldE
 /// `too_big_exclusive` and `custom`) is present.
 const ENGLISH: &[(&str, &str)] = &[
     ("invalid_type", "Expected {expected}, received {received}"),
+    // Labels of the `invalid_type` type keys that are not plain words
+    // (`string`, `number`, … render as themselves).
+    ("type.date", "date string (YYYY-MM-DD)"),
+    ("type.datetime", "datetime string"),
+    ("type.time", "time string (HH:MM:SS)"),
+    (
+        "type.duration",
+        "duration as seconds or string (`PT15S`, `1.5s`, `250ms`)",
+    ),
+    ("type.decimal", "decimal as string or number"),
+    ("type.path", "path string"),
+    ("type.file", "file path or object with a string `path`"),
+    ("type.socket_addr", "socket address string"),
+    ("type.ip_network", "CIDR string"),
+    ("type.bytes", "bytes array"),
+    ("type.bytes_or_string", "bytes array or encoded string"),
+    ("type.byte", "byte (integer 0..=255)"),
     // Lower bounds
     ("too_small", "Value must be at least {minimum}"),
     ("too_small.string", "String must be at least {minimum} characters"),
+    ("too_small.string_one", "String must be at least {minimum} character"),
     ("too_small.number", "Number must be at least {minimum}"),
     ("too_small.decimal", "Decimal must be at least {minimum}"),
     ("too_small.array", "Array must have at least {minimum} elements"),
+    ("too_small.array_one", "Array must have at least {minimum} element"),
     ("too_small.set", "Set must have at least {minimum} unique elements"),
+    ("too_small.set_one", "Set must have at least {minimum} unique element"),
     ("too_small.record", "Record must have at least {minimum} keys"),
+    ("too_small.record_one", "Record must have at least {minimum} key"),
     ("too_small.object", "Object must contain at least {minimum} keys"),
+    ("too_small.object_one", "Object must contain at least {minimum} key"),
     ("too_small.bytes", "Bytes length must be at least {minimum}"),
     ("too_small.date", "Date must be on or after {minimum}"),
     ("too_small.datetime", "Datetime must be on or after {minimum}"),
@@ -204,12 +295,17 @@ const ENGLISH: &[(&str, &str)] = &[
     // Upper bounds
     ("too_big", "Value must be at most {maximum}"),
     ("too_big.string", "String must be at most {maximum} characters"),
+    ("too_big.string_one", "String must be at most {maximum} character"),
     ("too_big.number", "Number must be at most {maximum}"),
     ("too_big.decimal", "Decimal must be at most {maximum}"),
     ("too_big.array", "Array must have at most {maximum} elements"),
+    ("too_big.array_one", "Array must have at most {maximum} element"),
     ("too_big.set", "Set must have at most {maximum} unique elements"),
+    ("too_big.set_one", "Set must have at most {maximum} unique element"),
     ("too_big.record", "Record must have at most {maximum} keys"),
+    ("too_big.record_one", "Record must have at most {maximum} key"),
     ("too_big.object", "Object must contain at most {maximum} keys"),
+    ("too_big.object_one", "Object must contain at most {maximum} key"),
     ("too_big.bytes", "Bytes length must be at most {maximum}"),
     ("too_big.date", "Date must be on or before {maximum}"),
     ("too_big.datetime", "Datetime must be on or before {maximum}"),
@@ -229,8 +325,14 @@ const ENGLISH: &[(&str, &str)] = &[
     // Exact length
     ("invalid_length", "Length must be exactly {expected}"),
     ("invalid_length.string", "String must be exactly {expected} characters"),
+    (
+        "invalid_length.string_one",
+        "String must be exactly {expected} character",
+    ),
     ("invalid_length.array", "Array must have exactly {expected} elements"),
+    ("invalid_length.array_one", "Array must have exactly {expected} element"),
     ("invalid_length.tuple", "Expected tuple of {expected} elements"),
+    ("invalid_length.tuple_one", "Expected tuple of {expected} element"),
     ("invalid_length.bytes", "Bytes length must be exactly {expected}"),
     // Strings
     ("invalid_string", "Invalid string ({validation})"),
@@ -326,7 +428,7 @@ const ENGLISH: &[(&str, &str)] = &[
     ("not_in_future.date", "Date must be in the future"),
     ("not_in_future.datetime", "Datetime must be in the future"),
     // Numbers
-    ("not_int", "Expected integer, received float"),
+    ("not_int", "Expected integer"),
     ("not_finite", "Number must be finite"),
     ("not_multiple_of", "Number must be a multiple of {divisor}"),
     (
@@ -357,6 +459,9 @@ const ENGLISH: &[(&str, &str)] = &[
     ("path_outside_base", "Path must be within base directory: {base}"),
     ("path_not_absolute", "Path must be absolute"),
     ("path_not_relative", "Path must be relative"),
+    ("path_not_found", "Path does not exist"),
+    ("path_not_file", "Path is not a file"),
+    ("path_not_dir", "Path is not a directory"),
     ("json_too_deep", "JSON depth exceeds max {max_depth}"),
     (
         "file_type_not_allowed",
@@ -433,7 +538,7 @@ fn table(t: &[(&str, &str)]) -> MapResolver {
 /// Create a [`MapResolver`] with Russian messages (every English key, plus
 /// `type.<name>` translations of the `{expected}` / `{received}` type names).
 pub fn russian() -> MapResolver {
-    table(super::i18n_langs::RUSSIAN)
+    table(super::i18n_langs::RUSSIAN).with_plural_rule(plural_ru)
 }
 
 /// Create a [`MapResolver`] with German messages (every English key, plus

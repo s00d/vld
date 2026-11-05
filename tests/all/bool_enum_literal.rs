@@ -33,7 +33,7 @@ fn boolean_strict_and_coerce() {
         assert_issue!(&err, "", IssueCode::InvalidType { .. });
         assert_eq!(
             err.issues[0].message,
-            format!("Cannot coerce \"{bad}\" to boolean")
+            "Expected boolean, received string"
         );
     }
     assert_issue!(

@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::marker::PhantomData;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, SizeOrigin, VldError};
+use crate::error::{IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 /// How a record turns a JSON object key into an output key: [`AnyKey`]
@@ -126,10 +126,7 @@ where
 
     fn parse_value(&self, value: &Value) -> Result<M, VldError> {
         let obj = value.as_object().ok_or_else(|| {
-            VldError::from_code(IssueCode::InvalidType {
-                expected: "object".to_string(),
-                received: value_type_name(value),
-            })
+            crate::primitives::type_error(&None, "object", value)
         })?;
 
         let mut errors = VldError::new();

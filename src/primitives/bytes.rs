@@ -170,9 +170,9 @@ impl VldSchema for ZBytes {
     fn parse_value(&self, value: &Value) -> Result<Vec<u8>, VldError> {
         let type_err = || {
             let expected = if self.string_mode != BytesStringMode::Off {
-                "bytes array or encoded string"
+                "bytes_or_string"
             } else {
-                "bytes array"
+                "bytes"
             };
             crate::primitives::type_error(&self.custom_type_error, expected, value)
         };
@@ -184,7 +184,7 @@ impl VldSchema for ZBytes {
                     let n = item.as_u64().ok_or_else(|| {
                         crate::primitives::type_error(
                             &self.custom_type_error,
-                            "byte (integer 0..=255)",
+                            "byte",
                             item,
                         )
                         .with_prefix(PathSegment::Index(i))

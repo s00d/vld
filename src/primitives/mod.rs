@@ -52,6 +52,9 @@ use serde_json::Value;
 
 use crate::error::{issue_error, value_type_name, IssueCode, VldError};
 
+/// A `with_messages` closure: check key → replacement message.
+pub(crate) type Messages = Option<std::sync::Arc<dyn Fn(&str) -> Option<String> + Send + Sync>>;
+
 /// Build the standard `invalid_type` error, honouring a `.type_error(...)` override.
 pub(crate) fn type_error(custom: &Option<String>, expected: &str, value: &Value) -> VldError {
     issue_error(

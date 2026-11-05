@@ -173,6 +173,173 @@ mod f07 {
     }
 }
 
+fn msg<S: VldSchema>(s: &S, input: serde_json::Value) -> String
+where
+    S::Output: std::fmt::Debug,
+{
+    crate::common::parse_err(s, input).issues[0].message.clone()
+}
+
+// 8. Translation keeps custom messages (and union prefixes).
+#[test]
+fn f08_translate_keeps_custom_messages() {
+    use vld::i18n::{german, translate_error};
+    let de = |e: &VldError| translate_error(e, &german()).issues[0].message.clone();
+    let err = crate::common::parse_err(&vld::string().min_msg(3, "my custom"), json!("ab"));
+    assert!(err.issues[0].has_custom_message());
+    assert_eq!(de(&err), "my custom");
+    let s = vld::string().min(3).with_messages(|_| Some("bulk".into()));
+    assert_eq!(de(&crate::common::parse_err(&s, json!("ab"))), "bulk");
+    let err = crate::common::parse_err(&vld::string().min(3), json!("ab"));
+    assert!(!err.issues[0].has_custom_message());
+    assert_eq!(
+        de(&err),
+        "Zeichenkette muss mindestens 3 Zeichen lang sein"
+    );
+    let u = vld::union(vld::string().min(3), vld::number());
+    let t = translate_error(&crate::common::parse_err(&u, json!("ab")), &german());
+    assert_eq!(
+        t.issues[1].message,
+        "[variant 1] Zeichenkette muss mindestens 3 Zeichen lang sein"
+    );
+}
+
+// 19. Message wording: not_int, singular/plural, Russian invalid_type.
+#[test]
+fn f19_messages() {
+    use vld::i18n::{russian, translate_error};
+    assert_eq!(
+        msg(&vld::i32().coerce(), json!("1.5")),
+        "Expected integer"
+    );
+    assert_eq!(
+        msg(&vld::char(), json!("ab")),
+        "String must be exactly 1 character"
+    );
+    assert_eq!(
+        msg(&vld::array(vld::string()).min_len(1), json!([])),
+        "Array must have at least 1 element"
+    );
+    let ru = |s: &ZString, v: serde_json::Value| {
+        translate_error(&crate::common::parse_err(s, v), &russian()).issues[0]
+            .message
+            .clone()
+    };
+    assert_eq!(
+        ru(&vld::string().len(1), json!("")),
+        "Строка должна содержать ровно 1 символ"
+    );
+    assert_eq!(
+        ru(&vld::string().len(3), json!("")),
+        "Строка должна содержать ровно 3 символа"
+    );
+    assert_eq!(
+        ru(&vld::string().len(5), json!("")),
+        "Строка должна содержать ровно 5 символов"
+    );
+    assert_eq!(
+        ru(&vld::string().len(12), json!("")),
+        "Строка должна содержать ровно 12 символов"
+    );
+    assert_eq!(
+        ru(&vld::string().min(21), json!("")),
+        "Строка должна содержать не менее 21 символа"
+    );
+    assert_eq!(
+        ru(&vld::string(), json!(true)),
+        "Ожидался тип «строка», получен «логическое значение»"
+    );
+}
+
+// 20. invalid_type carries stable type keys; English renders the label.
+#[test]
+fn f20_type_keys() {
+    let err = crate::common::parse_err(&vld::duration(), json!(true));
+    assert_issue!(&err, "", IssueCode::InvalidType { expected, .. } if expected == "duration");
+    assert!(err.issues[0].message.starts_with("Expected duration as seconds"));
+    let t = vld::i18n::translate_error(&err, &vld::i18n::russian());
+    assert_eq!(
+        t.issues[0].message,
+        "Ожидался тип «длительность (секунды или строка)», получен «логическое значение»"
+    );
+    let err = crate::common::parse_err(&vld::path(), json!(1));
+    assert_issue!(&err, "", IssueCode::InvalidType { expected, .. } if expected == "path");
+    assert_eq!(err.issues[0].message, "Expected path string, received number");
+}
+
+// 21. strict() / required() issues use templates (translatable).
+#[test]
+fn f21_object_templates() {
+    use vld::i18n::{german, translate_error};
+    let s = vld::object().field("a", vld::string()).strict();
+    let err = crate::common::parse_err(&s, json!({"a": "x", "b": 1}));
+    assert_eq!(crate::common::paths(&err), [".b"]);
+    assert_eq!(
+        translate_error(&err, &german()).issues[0].message,
+        "Unbekanntes Feld"
+    );
+    let s = vld::object().field("a", vld::string()).partial().required();
+    let err = crate::common::parse_err(&s, json!({"a": null}));
+    assert_eq!(
+        translate_error(&err, &german()).issues[0].message,
+        "Pflichtfeld fehlt"
+    );
+}
+
+// 28. with_messages covers checks added after it.
+#[test]
+fn f28_with_messages_order_independent() {
+    let s = vld::string()
+        .with_messages(|k| (k == "too_small").then(|| "short!".to_string()))
+        .min(3);
+    assert_eq!(msg(&s, json!("ab")), "short!");
+    let n = vld::number()
+        .with_messages(|k| (k == "too_big").then(|| "big!".to_string()))
+        .max(1.0);
+    assert_eq!(msg(&n, json!(2)), "big!");
+    // A per-check message wins over the bulk closure.
+    let s = vld::string()
+        .min_msg(3, "own")
+        .with_messages(|_| Some("bulk".into()));
+    assert_eq!(msg(&s, json!("ab")), "own");
+}
+
+// 31. Path existence failures have their own codes.
+#[test]
+fn f31_path_codes() {
+    let dir = crate::common::tempdir();
+    let file = dir.path().join("f.txt");
+    std::fs::write(&file, b"x").unwrap();
+    let s = |p: &std::path::Path| json!(p.to_string_lossy());
+    let code = |schema: &vld::primitives::ZPath, v| {
+        crate::common::parse_err(schema, v).issues[0].code.clone()
+    };
+    assert_eq!(
+        code(&vld::path().exists(), s(&dir.path().join("nope"))),
+        IssueCode::PathNotFound
+    );
+    assert_eq!(code(&vld::path().file(), s(dir.path())), IssueCode::PathNotFile);
+    assert_eq!(code(&vld::path().dir(), s(&file)), IssueCode::PathNotDir);
+    #[cfg(feature = "file")]
+    {
+        let err = crate::common::parse_err(&vld::file(), s(dir.path()));
+        assert_eq!(err.issues[0].code, IssueCode::PathNotFile);
+    }
+}
+
+// 32. Container type errors carry the received value.
+#[test]
+fn f32_container_received() {
+    let one = Some(json!(1));
+    let rec = |e: VldError| e.issues[0].received.clone();
+    assert_eq!(rec(vld::array(vld::string()).parse("1").unwrap_err()), one);
+    assert_eq!(rec(vld::object().parse("1").unwrap_err()), one);
+    assert_eq!(rec(vld::record(vld::string()).parse("1").unwrap_err()), one);
+    assert_eq!(rec(vld::set(vld::string()).parse("1").unwrap_err()), one);
+    assert_eq!(rec(vld::map(vld::string(), vld::string()).parse("1").unwrap_err()), one);
+    assert_eq!(rec((vld::string(),).parse("1").unwrap_err()), one);
+}
+
 // 22. Discriminator values compare numerically (1 == 1.0).
 #[test]
 fn f22_discriminator_numeric_equality() {

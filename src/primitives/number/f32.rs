@@ -68,7 +68,7 @@ impl ZF32 {
     /// Override error messages in bulk by check key (see [`ZNumber::with_messages`]).
     pub fn with_messages<F>(mut self, f: F) -> Self
     where
-        F: Fn(&str) -> Option<String>,
+        F: Fn(&str) -> Option<String> + Send + Sync + 'static,
     {
         self.inner = self.inner.with_messages(f);
         self
@@ -113,7 +113,7 @@ impl VldSchema for ZF32 {
         let out = f as f32;
         // Rounding to f32 overflows to infinity only past the finite range
         // (values within half an ulp of f32::MAX round down to it).
-        let limit = widen(f32::MAX);
+        let limit = f64::from(f32::MAX);
         if out == f32::NEG_INFINITY {
             return Err(VldError::from_code_with_value(
                 IssueCode::TooSmall {

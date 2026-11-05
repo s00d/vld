@@ -49,9 +49,24 @@
 //! | `ParseError` | `parse_error` | — | — |
 //! | `Custom` | the user code | `<code>`, `custom` | `code` |
 //!
+//! | `PathNotFound` | `path_not_found` | — | — |
+//! | `PathNotFile` | `path_not_file` | — | — |
+//! | `PathNotDir` | `path_not_dir` | — | — |
+//!
 //! Origins ([`SizeOrigin::key`]): `string`, `number`, `decimal`, `array`,
-//! `tuple`, `set`, `record`, `object`, `bytes`, `date`, `datetime`,
+//! `tuple`, `set`, `record`, `object`, `bytes`, `date`, `datetime`, `time`,
 //! `duration`, `file`, `image_width`, `image_height`, `port`, `contains`.
+//!
+//! `invalid_type`'s `expected` / `received` are stable type keys
+//! (`string`, `number`, `integer`, `boolean`, `array`, `object`, `null`,
+//! `never`, `date`, `datetime`, `time`, `duration`, `decimal`, `path`,
+//! `file`, `socket_addr`, `ip_network`, `bytes`, `bytes_or_string`, `byte`);
+//! messages render them through the `type.<key>` templates (English:
+//! `type.date` → "date string (YYYY-MM-DD)", plain words render as
+//! themselves).
+//!
+//! Size templates have plural variants (`too_small.string_one`, Russian
+//! `invalid_length.string_few`, …); see [`i18n::translate_issue`].
 
 use std::fmt;
 
@@ -114,6 +129,15 @@ impl ValidationIssue {
     pub fn with_received(mut self, value: &serde_json::Value) -> Self {
         self.received = Some(truncate_value(value));
         self
+    }
+
+    /// Whether `message` differs from the default English message of `code`
+    /// (ignoring a union's `[variant N] ` prefix): set by `*_msg` builders,
+    /// `with_messages`, `.message()`, `type_error()`, refinements, or an
+    /// earlier translation. [`i18n::translate_error`] keeps such messages.
+    pub fn has_custom_message(&self) -> bool {
+        let (_, message) = i18n::split_union_prefix(&self.message);
+        message != self.code.default_message()
     }
 }
 
@@ -319,10 +343,7 @@ pub(crate) fn expect_object(
     value: &serde_json::Value,
 ) -> Result<&serde_json::Map<String, serde_json::Value>, VldError> {
     value.as_object().ok_or_else(|| {
-        VldError::from_code(IssueCode::InvalidType {
-            expected: "object".to_string(),
-            received: value_type_name(value),
-        })
+        crate::primitives::type_error(&None, "object", value)
     })
 }
 

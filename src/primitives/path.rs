@@ -157,7 +157,7 @@ impl VldSchema for ZPath {
 
     fn parse_value(&self, value: &Value) -> Result<PathBuf, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            crate::primitives::type_error(&self.custom_type_error, "path string", value)
+            crate::primitives::type_error(&self.custom_type_error, "path", value)
         })?;
         let mut p = PathBuf::from(s);
 
@@ -176,26 +176,15 @@ impl VldSchema for ZPath {
         if let Some(base) = &self.within_base {
             p = resolve_within(base, &p).ok_or_else(|| outside_base_error(base, value))?;
         }
+        let fail = |code| Err(VldError::from_code_with_value(code, value));
         if self.must_exist && !p.exists() {
-            return Err(VldError::single_with_value(
-                IssueCode::IoError,
-                format!("Path does not exist: {}", p.display()),
-                value,
-            ));
+            return fail(IssueCode::PathNotFound);
         }
         if self.must_be_file && !p.is_file() {
-            return Err(VldError::single_with_value(
-                IssueCode::IoError,
-                format!("Path is not a file: {}", p.display()),
-                value,
-            ));
+            return fail(IssueCode::PathNotFile);
         }
         if self.must_be_dir && !p.is_dir() {
-            return Err(VldError::single_with_value(
-                IssueCode::IoError,
-                format!("Path is not a directory: {}", p.display()),
-                value,
-            ));
+            return fail(IssueCode::PathNotDir);
         }
         Ok(p)
     }

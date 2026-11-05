@@ -26,6 +26,7 @@ pub struct ZNumber {
     checks: Vec<NumberCheck>,
     pub(super) coerce: bool,
     custom_type_error: Option<String>,
+    messages: crate::primitives::Messages,
 }
 
 impl ZNumber {
@@ -34,6 +35,7 @@ impl ZNumber {
             checks: vec![],
             coerce: false,
             custom_type_error: None,
+            messages: None,
         }
     }
 
@@ -62,6 +64,10 @@ impl ZNumber {
     /// `"not_positive"`, `"not_finite"`, `"not_multiple_of"`, `"not_safe"`)
     /// and should return `Some(new_message)` to replace, or `None` to keep the original.
     ///
+    /// The closure is consulted when an issue is built, so it covers checks
+    /// added before **and after** this call; a per-check message
+    /// (`*_msg(...)`) takes precedence over it. A later call replaces it.
+    ///
     /// # Example
     /// ```
     /// use vld::prelude::*;
@@ -74,13 +80,9 @@ impl ZNumber {
     /// ```
     pub fn with_messages<F>(mut self, f: F) -> Self
     where
-        F: Fn(&str) -> Option<String>,
+        F: Fn(&str) -> Option<String> + Send + Sync + 'static,
     {
-        for check in &mut self.checks {
-            if let Some(msg) = f(check.kind.key()) {
-                check.msg = Some(msg);
-            }
-        }
+        self.messages = Some(std::sync::Arc::new(f));
         self
     }
 
@@ -155,6 +157,13 @@ impl ZNumber {
     }
 
     /// Must be finite (not NaN or infinity).
+    ///
+    /// A no-op: JSON numbers are always finite and `.coerce()` already
+    /// rejects `"NaN"` / `"inf"` strings.
+    #[deprecated(
+        since = "0.5.0",
+        note = "no-op: JSON cannot carry NaN/infinity and coerce() rejects them"
+    )]
     pub fn finite(self) -> Self {
         self.push(Kind::Finite)
     }
@@ -217,8 +226,10 @@ impl ZNumber {
         let mut errors = VldError::new();
         for check in &self.checks {
             if let Some(code) = check.kind.failure(n) {
+                let bulk = || self.messages.as_ref().and_then(|f| f(check.kind.key()));
+                let msg = check.msg.clone().or_else(bulk);
                 errors.issues.push(
-                    ValidationIssue::with_override(code, check.msg.as_ref()).with_received(value),
+                    ValidationIssue::with_override(code, msg.as_ref()).with_received(value),
                 );
             }
         }
@@ -289,8 +300,9 @@ impl ZNumber {
             let key = if excl { "exclusiveMaximum" } else { "maximum" };
             schema[key] = v.json();
         }
+        // `multipleOf` must be > 0: a zero divisor (never matches) is omitted.
         let mut multiples = self.checks.iter().filter_map(|c| match c.kind {
-            Kind::MultipleOf(v) => Some(v.json()),
+            Kind::MultipleOf(v) if v.as_f64() != 0.0 => Some(v.json()),
             _ => None,
         });
         if let Some(m) = multiples.next() {

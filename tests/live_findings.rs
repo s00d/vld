@@ -45,7 +45,7 @@ fn translations_cover_types_and_units() {
     let ru = vld::i18n::russian();
     let err = vld::string().parse_value(&json!(true)).unwrap_err();
     let msg = &vld::i18n::translate_error(&err, &ru).issues[0].message;
-    assert_eq!(msg, "Ожидалось строка, получено логическое значение");
+    assert_eq!(msg, "Ожидался тип «строка», получен «логическое значение»");
 
     let err = vld::string().min(3).parse_value(&json!("ab")).unwrap_err();
     let msg = &vld::i18n::translate_error(&err, &ru).issues[0].message;

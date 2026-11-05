@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, SizeOrigin, VldError};
+use crate::error::{IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 /// Canonical text form for duplicate detection: object keys sorted, integral
@@ -122,10 +122,7 @@ impl<T: VldSchema> VldSchema for ZArray<T> {
 
     fn parse_value(&self, value: &Value) -> Result<Vec<T::Output>, VldError> {
         let arr = value.as_array().ok_or_else(|| {
-            VldError::from_code(IssueCode::InvalidType {
-                expected: "array".to_string(),
-                received: value_type_name(value),
-            })
+            crate::primitives::type_error(&None, "array", value)
         })?;
 
         let mut errors = VldError::new();

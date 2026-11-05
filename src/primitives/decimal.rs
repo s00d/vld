@@ -184,7 +184,7 @@ impl VldSchema for ZDecimal {
             _ => {
                 return Err(crate::primitives::type_error(
                     &self.custom_type_error,
-                    "decimal as string or number",
+                    "decimal",
                     value,
                 ))
             }

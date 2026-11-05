@@ -154,7 +154,7 @@ impl<T: IntType> ZInteger<T> {
     /// integer check itself.
     pub fn with_messages<F>(mut self, f: F) -> Self
     where
-        F: Fn(&str) -> Option<String>,
+        F: Fn(&str) -> Option<String> + Send + Sync + 'static,
     {
         if let Some(msg) = f("not_int") {
             self.custom_int_error = Some(msg);

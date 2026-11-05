@@ -48,7 +48,7 @@ impl VldSchema for ZIpNetwork {
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            crate::primitives::type_error(&self.custom_type_error, "CIDR string", value)
+            crate::primitives::type_error(&self.custom_type_error, "ip_network", value)
         })?;
         let net = s.parse::<ipnet::IpNet>().map_err(|_| {
             VldError::from_code_with_value(

@@ -200,7 +200,7 @@ fn path_filesystem_checks() {
     assert!(vld::path().exists().parse_value(&s(&file)).is_ok());
     assert!(vld::path().exists().parse_value(&s(dir.path())).is_ok());
     let err = parse_err(&vld::path().exists(), s(&missing));
-    assert_eq!(codes(&err), ["io_error"]);
+    assert_eq!(codes(&err), ["path_not_found"]);
     assert!(
         err.issues[0].message.starts_with("Path does not exist"),
         "{err}"
@@ -391,7 +391,7 @@ mod file {
         let missing = dir.path().join("missing.txt");
         assert!(parse_err(&vld::file(), s(&missing)).issues[0]
             .message
-            .starts_with("File does not exist"));
+            .starts_with("Path does not exist"));
         assert!(parse_err(&vld::file(), s(dir.path())).issues[0]
             .message
             .starts_with("Path is not a file"));

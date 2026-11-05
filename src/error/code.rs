@@ -341,6 +341,12 @@ pub enum IssueCode {
     PathNotAbsolute,
     /// Path must be relative.
     PathNotRelative,
+    /// Path does not exist (`exists()`, `file()`, `dir()`, `vld::file()`).
+    PathNotFound,
+    /// Path exists but is not a regular file.
+    PathNotFile,
+    /// Path exists but is not a directory.
+    PathNotDir,
     /// JSON nesting is deeper than `max_depth`.
     JsonTooDeep { max_depth: usize },
     /// File extension / media type / magic type is not in the allow list.
@@ -416,6 +422,9 @@ impl IssueCode {
             PathOutsideBase { .. } => "path_outside_base",
             PathNotAbsolute => "path_not_absolute",
             PathNotRelative => "path_not_relative",
+            PathNotFound => "path_not_found",
+            PathNotFile => "path_not_file",
+            PathNotDir => "path_not_dir",
             JsonTooDeep { .. } => "json_too_deep",
             FileTypeNotAllowed { .. } => "file_type_not_allowed",
             FileTypeDenied { .. } => "file_type_denied",
@@ -483,6 +492,18 @@ impl IssueCode {
         keys
     }
 
+    /// Count selecting a plural template variant: the `minimum` / `maximum`
+    /// of `too_small` / `too_big` or the `expected` of `invalid_length`,
+    /// when it is a non-negative integer.
+    pub fn plural_count(&self) -> Option<u64> {
+        match self {
+            IssueCode::TooSmall { minimum, .. } => minimum.as_u64(),
+            IssueCode::TooBig { maximum, .. } => maximum.as_u64(),
+            IssueCode::InvalidLength { expected, .. } => Some(*expected as u64),
+            _ => None,
+        }
+    }
+
     /// One template parameter by name (`"minimum"`, `"expected"`, …).
     fn param(&self, name: &str) -> Option<Cow<'_, str>> {
         use IssueCode::*;
@@ -546,6 +567,7 @@ impl IssueCode {
 
     /// Fill the `{name}` placeholders of `template` from this code's
     /// parameters (unknown placeholders are kept as is).
+    #[cfg(test)]
     pub(crate) fn render(&self, template: &str) -> String {
         self.render_with(template, |_, _| None)
     }
@@ -579,13 +601,27 @@ impl IssueCode {
 
     /// Default English message, rendered from the
     /// [`english()`](super::i18n::english) template table and [`params()`](Self::params).
+    ///
+    /// Size checks with a count of 1 use the `_one` variant
+    /// (`"String must be exactly 1 character"`); `invalid_type` type keys
+    /// render through their `type.<key>` label when one exists.
     pub fn default_message(&self) -> String {
         let (base, sub) = match self {
             IssueCode::Custom { .. } => ("custom", None),
             other => other.template_key(),
         };
-        let template = super::i18n::english_template_for(base, sub).unwrap_or("{code}");
-        self.render(template)
+        let one = sub
+            .filter(|_| self.plural_count() == Some(1))
+            .and_then(|s| super::i18n::english_template_for(base, Some(&format!("{s}_one"))));
+        let template = one
+            .or_else(|| super::i18n::english_template_for(base, sub))
+            .unwrap_or("{code}");
+        self.render_with(template, |name, value| match (self, name) {
+            (IssueCode::InvalidType { .. }, "expected" | "received") => {
+                super::i18n::english_template_for("type", Some(value)).map(str::to_string)
+            }
+            _ => None,
+        })
     }
 }
 
@@ -681,6 +717,9 @@ mod tests {
             PathOutsideBase { base: "/b".into() },
             PathNotAbsolute,
             PathNotRelative,
+            PathNotFound,
+            PathNotFile,
+            PathNotDir,
             JsonTooDeep { max_depth: 1 },
             FileTypeNotAllowed {
                 kind: FileTypeKind::Extension,
@@ -734,6 +773,9 @@ mod tests {
                 | PathOutsideBase { .. }
                 | PathNotAbsolute
                 | PathNotRelative
+                | PathNotFound
+                | PathNotFile
+                | PathNotDir
                 | JsonTooDeep { .. }
                 | FileTypeNotAllowed { .. }
                 | FileTypeDenied { .. }

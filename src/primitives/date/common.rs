@@ -317,7 +317,7 @@ impl<B: DateBackend> VldSchema for ZDate<B> {
         let s = value.as_str().ok_or_else(|| {
             crate::primitives::type_error(
                 &self.custom_type_error,
-                "date string (YYYY-MM-DD)",
+                "date",
                 value,
             )
         })?;
@@ -529,7 +529,7 @@ impl<B: DateBackend> VldSchema for ZDateTime<B> {
 
     fn parse_value(&self, value: &Value) -> Result<B::DateTime, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            crate::primitives::type_error(&self.custom_type_error, "datetime string", value)
+            crate::primitives::type_error(&self.custom_type_error, "datetime", value)
         })?;
 
         let naive_offset = (self.allow_naive && self.required_timezone_offset.is_none())
@@ -652,7 +652,7 @@ impl<B: DateBackend> VldSchema for ZTime<B> {
 
     fn parse_value(&self, value: &Value) -> Result<B::Time, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            crate::primitives::type_error(&self.custom_type_error, "time string (HH:MM:SS)", value)
+            crate::primitives::type_error(&self.custom_type_error, "time", value)
         })?;
         let time = parse_time::<B>(s).ok_or_else(|| {
             VldError::from_code_with_value(
