@@ -2,7 +2,9 @@
 
 use poem::http::{HeaderValue, Method};
 use poem::{get, handler, post, Endpoint, Route};
-use vld_http_common::conformance::{Cookies, Headers, PathId, Query, Request, Response, User};
+use vld_http_common::conformance::{
+    Cookies, Headers, PathId, PathNone, PathStr, Query, Request, Response, User,
+};
 use vld_poem::prelude::*;
 
 #[handler]
@@ -22,6 +24,14 @@ async fn path(p: VldPath<PathId>) -> String {
     p.reply()
 }
 #[handler]
+async fn pstr(p: VldPath<PathStr>) -> String {
+    p.s.clone()
+}
+#[handler]
+async fn pnone(p: VldPath<PathNone>) -> String {
+    p.reply()
+}
+#[handler]
 async fn headers(h: VldHeaders<Headers>) -> String {
     h.x_tag.clone()
 }
@@ -36,6 +46,8 @@ async fn send(r: Request) -> Response {
         .at("/form", post(form))
         .at("/query", get(query))
         .at("/path/:id", get(path))
+        .at("/pstr/:s", get(pstr))
+        .at("/pnone", get(pnone))
         .at("/headers", get(headers))
         .at("/cookie", get(cookie));
     let mut req = poem::Request::builder()
@@ -58,10 +70,16 @@ vld_http_common::conformance_suite! {
     cases = [
         json_valid,
         json_content_type_case_insensitive,
+        json_content_type_bare_param,
+        json_content_type_unterminated_quote,
+        json_content_type_empty_suffix,
         json_malformed,
         json_validation_error,
         json_oversized,
         form_valid,
+        form_content_type_params,
+        form_wrong_content_type,
+        form_too_many_fields,
         form_validation_error,
         form_non_utf8,
         form_oversized,
@@ -70,9 +88,18 @@ vld_http_common::conformance_suite! {
         query_missing_field,
         path_valid,
         path_invalid,
+        path_percent_decoding,
+        #[ignore = "poem's router drops params that are not UTF-8 before extraction (422 missing field)"]
+        path_invalid_utf8,
+        path_no_params_optional,
         headers_valid,
+        headers_underscore_ignored,
+        headers_underscore_only,
         headers_missing,
         cookie_quoted_encoded,
+        cookie_multiple_headers,
+        cookie_duplicate_first_wins,
+        cookie_non_ascii,
         cookie_missing,
     ],
 }

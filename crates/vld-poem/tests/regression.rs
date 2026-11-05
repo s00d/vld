@@ -34,6 +34,32 @@ fn app() -> Route {
         .at("/twice", post(double_body))
 }
 
+/// The body limit is configurable with `VldBodyLimit` request data
+/// (it was hard-coded to 2 MiB).
+#[tokio::test]
+async fn body_limit_from_request_data() {
+    use poem::EndpointExt;
+    let small = TestClient::new(Route::new().at("/j", post(json_handler).data(VldBodyLimit(8))));
+    small
+        .post("/j")
+        .content_type("application/json")
+        .body(r#"{"name":"Alice"}"#)
+        .send()
+        .await
+        .assert_status(poem::http::StatusCode::PAYLOAD_TOO_LARGE);
+
+    let big = format!(r#"{{"name":"{}"}}"#, "x".repeat(3 << 20));
+    let large =
+        TestClient::new(Route::new().at("/j", post(json_handler).data(VldBodyLimit(4 << 20))));
+    large
+        .post("/j")
+        .content_type("application/json")
+        .body(big)
+        .send()
+        .await
+        .assert_status_is_ok();
+}
+
 #[tokio::test]
 async fn json_too_large_returns_413_json() {
     let big = format!(
@@ -93,7 +119,7 @@ fn display_is_human_readable() {
     let err: VldPoemError =
         vld::error::VldError::single(vld::error::IssueCode::MissingField, "Required").into();
     assert!(err.to_string().starts_with("Validation failed"));
-    assert_eq!(err.body["error"], "Validation failed");
+    assert_eq!(err.body()["error"], "Validation failed");
 }
 
 mod path_from_route {
