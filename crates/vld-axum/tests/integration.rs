@@ -422,6 +422,7 @@ async fn form_missing_fields() {
             Request::builder()
                 .method("POST")
                 .uri("/login")
+                .header("content-type", "application/x-www-form-urlencoded")
                 .body(Body::from(""))
                 .unwrap(),
         )

@@ -159,3 +159,31 @@ async fn non_ascii_header_is_not_dropped() {
         .unwrap();
     assert_eq!(send(req).await, (StatusCode::OK, "café".into()));
 }
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct NestedPath {
+        pub id: String => vld::string(),
+        pub rest: String => vld::string(),
+    }
+}
+
+/// Invalid UTF-8 in a nested router's params (incl. a wildcard) is decoded
+/// lossily from the original URI instead of failing with 422.
+#[tokio::test]
+async fn nested_invalid_utf8_path_params_are_lossy() {
+    async fn h(p: vld_axum::VldPath<NestedPath>) -> String {
+        format!("{}|{}", p.id, p.rest)
+    }
+    let app = Router::new().nest("/api", Router::new().route("/u/{id}/{*rest}", get(h)));
+    let req = Request::builder()
+        .uri("/api/u/a%FF/x%2Fy/z")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(bytes, "a\u{FFFD}|x/y/z");
+}
