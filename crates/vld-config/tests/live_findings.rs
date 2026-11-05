@@ -48,3 +48,12 @@ fn from_value_stays_strict() {
     let v = serde_json::json!({"host": 12345, "port": 1, "tags": []});
     assert!(vld_config::from_value::<Settings>(&v).is_err());
 }
+
+/// `from_value_coerced` behaves like `from_config` / `from_figment`.
+#[test]
+fn from_value_coerced_matches_the_backends() {
+    let v = serde_json::json!({"host": 12345, "port": 1, "tags": true});
+    let s: Settings = vld_config::from_value_coerced(&v).unwrap();
+    assert_eq!(s.host, "12345");
+    assert_eq!(s.tags, vec!["true".to_string()]);
+}

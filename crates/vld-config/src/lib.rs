@@ -64,7 +64,8 @@
 //! string (`APP_HOST=12345` into `vld::string()` is `"12345"`), and a single
 //! value is wrapped into an array where the schema expects one. The text is
 //! the backend's parsed value, so a lossy parse (`"01234"` → `1234`) yields
-//! `"1234"`. [`from_value`] validates the JSON value as is.
+//! `"1234"`. [`from_value`] validates the JSON value **as is** (strict);
+//! [`from_value_coerced`] applies the same coercion as the backends.
 
 use std::fmt;
 use vld::schema::VldParse;
@@ -177,12 +178,33 @@ pub fn from_builder<T: VldParse>(
     from_config(&config)
 }
 
-/// Validate a raw `serde_json::Value` as if it came from a config source.
+/// Validate a raw `serde_json::Value` **strictly** (no coercion): a number
+/// where the schema expects a string is an error.
 ///
 /// Useful when you've already loaded the config data into a JSON value
-/// (e.g. from a custom source) and just want `vld` validation.
+/// (e.g. from a custom source) and just want `vld` validation. For values that
+/// come from a typed source like env vars, use [`from_value_coerced`], which
+/// behaves like [`from_config`] / [`from_figment`].
 pub fn from_value<T: VldParse>(value: &serde_json::Value) -> Result<T, VldConfigError> {
     T::vld_parse_value(value).map_err(VldConfigError::Validation)
+}
+
+/// Validate a raw `serde_json::Value` with the coercion [`from_config`] /
+/// [`from_figment`] apply ([`vld::schema::parse_coerced`]): numbers / booleans
+/// become text where the schema expects a string, and a single value is
+/// wrapped where it expects an array.
+///
+/// ```
+/// vld::schema! {
+///     #[derive(Debug)]
+///     pub struct S { pub host: String => vld::string() }
+/// }
+/// let v = serde_json::json!({"host": 12345});
+/// assert!(vld_config::from_value::<S>(&v).is_err());
+/// assert_eq!(vld_config::from_value_coerced::<S>(&v).unwrap().host, "12345");
+/// ```
+pub fn from_value_coerced<T: VldParse>(value: &serde_json::Value) -> Result<T, VldConfigError> {
+    vld::schema::parse_coerced::<T>(value).map_err(VldConfigError::Validation)
 }
 
 // ---------------------------------------------------------------------------
