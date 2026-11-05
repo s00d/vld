@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [Unreleased]
+### Fixed
+
+- JSON Schema / OpenAPI: `.with_default(value)` now emits `"default": value` ([#8](https://github.com/s00d/vld/issues/8)). The `JsonSchema` impl for `ZDefault` requires the output type to be `serde::Serialize`
+- `chrono`, `jiff`, `time` (human-readable) and `ipnet` optional deps now enable their `serde` features so date/network outputs keep working with `with_default` in schemas
 
 ## [0.4.5] - 2026-10-01
 ### Fixed

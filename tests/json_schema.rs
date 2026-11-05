@@ -880,3 +880,54 @@ fn nested_behind_message_still_collected() {
         names
     );
 }
+
+// Issue #8: with_default() value emitted as "default".
+vld::schema! {
+    struct CreateAddress {
+        city: String => vld::string().min(1),
+        is_current: bool as "isCurrent" => vld::boolean().with_default(false),
+        tags: Vec<String> => vld::array(vld::string()).with_default(vec!["a".into()]),
+    }
+}
+
+#[test]
+fn with_default_emits_default() {
+    let js = CreateAddress::json_schema();
+    assert_eq!(js["required"], serde_json::json!(["city"]));
+    assert_eq!(
+        js["properties"]["isCurrent"],
+        serde_json::json!({"type": "boolean", "default": false})
+    );
+    assert_eq!(
+        js["properties"]["tags"]["default"],
+        serde_json::json!(["a"])
+    );
+}
+
+// Compile guard: date/time/net outputs must stay usable with `with_default` + JSON Schema.
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
+#[test]
+fn with_default_date_emits_default() {
+    let d = vld::date().parse(r#""2024-01-02""#).unwrap();
+    let js = vld::date().with_default(d).json_schema();
+    assert_eq!(js["default"], "2024-01-02");
+    let dt = vld::datetime().parse(r#""2024-01-02T03:04:05Z""#).unwrap();
+    assert!(vld::datetime().with_default(dt).json_schema()["default"].is_string());
+}
+
+#[cfg(feature = "net")]
+#[test]
+fn with_default_ip_network_emits_default() {
+    let n = vld::ip_network().parse(r#""10.0.0.0/8""#).unwrap();
+    assert_eq!(
+        vld::ip_network().with_default(n).json_schema()["default"],
+        "10.0.0.0/8"
+    );
+}
+
+#[cfg(feature = "decimal")]
+#[test]
+fn with_default_decimal_compiles() {
+    let n = vld::decimal().parse(r#""1.5""#).unwrap();
+    assert!(!vld::decimal().with_default(n).json_schema()["default"].is_null());
+}

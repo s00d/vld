@@ -238,10 +238,17 @@ impl<S: crate::schema::VldSchema + JsonSchema> JsonSchema for crate::modifiers::
 
 impl<S: crate::schema::VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZDefault<S>
 where
-    S::Output: Clone,
+    S::Output: Clone + serde::Serialize,
 {
     fn json_schema(&self) -> Value {
-        self.inner_schema().json_schema()
+        let mut schema = self.inner_schema().json_schema();
+        if let (Some(obj), Ok(default)) = (
+            schema.as_object_mut(),
+            serde_json::to_value(self.default_value()),
+        ) {
+            obj.insert("default".to_string(), default);
+        }
+        schema
     }
 
     fn is_required(&self) -> bool {

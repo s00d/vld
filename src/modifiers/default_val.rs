@@ -31,6 +31,11 @@ where
     pub fn inner_schema(&self) -> &T {
         &self.inner
     }
+
+    /// Access the default value (emitted as `"default"` in JSON Schema).
+    pub fn default_value(&self) -> &T::Output {
+        &self.default_value
+    }
 }
 
 impl<T: VldSchema> VldSchema for ZDefault<T>
