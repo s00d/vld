@@ -1,3 +1,6 @@
+// The deprecated `validate_*` aliases are still covered here.
+#![allow(deprecated)]
+
 use serde::Serialize;
 use vld_tauri::prelude::*;
 
@@ -314,4 +317,22 @@ fn issue_paths_have_no_leading_dot() {
     .to_string();
     assert!(e.contains("name: "), "{e}");
     assert!(!e.contains(".name"), "{e}");
+}
+
+#[test]
+fn root_issue_has_no_empty_path_prefix() {
+    let e = serde_json::from_value::<VldPayload<CreateUser>>(serde_json::json!(42))
+        .unwrap_err()
+        .to_string();
+    assert!(e.starts_with("Validation failed: "), "{e}");
+    assert!(!e.contains(": : "), "{e}");
+    assert!(!e.starts_with("Validation failed: :"), "{e}");
+}
+
+#[test]
+fn vld_event_is_vld_payload() {
+    let e: VldEvent<UserUpdate> =
+        serde_json::from_value(serde_json::json!({"id": 1, "name": "Eve"})).unwrap();
+    let p: VldPayload<UserUpdate> = e;
+    assert_eq!(p.0.id, 1);
 }

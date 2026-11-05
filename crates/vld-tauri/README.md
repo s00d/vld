@@ -12,15 +12,17 @@
 **Zero dependency on `tauri` itself** — only `vld` + `serde` + `serde_json`.
 Add `tauri` separately in your app.
 
+> **0.5:** `validate_event`, `validate_state`, `validate_plugin_config` and
+> `validate_channel_message` are deprecated — they were identical to `validate`.
+> `VldEvent<T>` is now a type alias of `VldPayload<T>` (construct / match it as
+> `VldPayload(x)`).
+
 ## What can be validated
 
 | Area | Function / Type | Description |
 |------|-----------------|-------------|
-| IPC commands | `validate()`, `VldPayload<T>` | Validate `#[tauri::command]` arguments |
-| Events | `validate_event()`, `VldEvent<T>` | Validate `emit()`/`listen()` payloads |
-| App state | `validate_state()` | Validate config/state before `app.manage()` |
-| Plugin config | `validate_plugin_config()` | Validate plugin JSON configuration |
-| Channels | `validate_channel_message()` | Validate outgoing `Channel::send()` data |
+| IPC commands, events, app state, plugin config, channel messages | `validate()`, `VldPayload<T>` | Validate `#[tauri::command]` arguments, `emit()`/`listen()` payloads, config before `app.manage()`, outgoing `Channel::send()` data |
+| Events | `VldEvent<T>` | Type alias of `VldPayload<T>` |
 | Raw JSON | `validate_args()` | Validate a raw JSON string |
 | Error type | `VldTauriError` | Serializable error for command results |
 
