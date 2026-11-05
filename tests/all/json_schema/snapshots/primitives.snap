@@ -35,14 +35,14 @@ expression: value
     "schema": {
       "anyOf": [
         {
-          "description": "Duration like `PT15S`, `10s`, `250ms`",
+          "description": "Duration like `PT15S`, `1.5s`, `250ms`",
           "type": "string",
           "x-minSeconds": 5.0
         },
         {
           "description": "Duration in seconds",
           "minimum": 5,
-          "type": "integer"
+          "type": "number"
         }
       ]
     }

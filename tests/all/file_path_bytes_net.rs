@@ -123,11 +123,19 @@ fn duration_formats_and_bounds() {
         (json!("PT5S"), Duration::from_secs(5)),
         (json!("10s"), Duration::from_secs(10)),
         (json!("250ms"), Duration::from_millis(250)),
+        (json!(1.5), Duration::from_millis(1500)),
+        (json!("1.5s"), Duration::from_millis(1500)),
+        (json!("PT1.5S"), Duration::from_millis(1500)),
     ];
     for (input, want) in table {
         assert_eq!(d.parse_value(&input).unwrap(), want, "{input}");
     }
-    for bad in [json!(-1), json!(1.5), json!("five"), json!(""), json!(null)] {
+    assert_issue!(
+        parse_err(&d, json!(-1)),
+        "",
+        IssueCode::TooSmall { origin: SizeOrigin::Duration, .. }
+    );
+    for bad in [json!("five"), json!(""), json!(null)] {
         assert_issue!(parse_err(&d, bad), "", IssueCode::InvalidType { .. });
     }
     let bounded = vld::duration().min_secs(1).max_secs(10);
