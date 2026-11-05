@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [Unreleased]
+
+## [0.4.6] - 2026-11-05
 ### Fixed
 
 - JSON Schema / OpenAPI: `.with_default(value)` now emits `"default": value` ([#8](https://github.com/s00d/vld/issues/8)). The `JsonSchema` impl for `ZDefault` requires the output type to be `serde::Serialize`
