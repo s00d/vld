@@ -289,9 +289,21 @@ mod figment_tests {
     fn from_figment_extraction_error() {
         // Empty figment — extraction should fail
         let figment = figment::Figment::new();
+        // An empty figment extracts as `{}`: every required key is missing.
         let err = from_figment::<AppSettings>(&figment).unwrap_err();
         match err {
-            VldConfigError::Source(_) | VldConfigError::Validation(_) => {} // both are fine
+            VldConfigError::Validation(e) => {
+                // `schema!` reads a missing key as `null`.
+                let paths: Vec<String> = e
+                    .issues
+                    .iter()
+                    .map(|i| i.path.iter().map(|p| p.to_string()).collect())
+                    .collect();
+                assert_eq!(paths, [".host", ".port", ".debug"]);
+                assert!(e.issues.iter().all(|i| i.code.key() == "invalid_type"
+                    && i.received == Some(serde_json::Value::Null)));
+            }
+            other => panic!("expected a validation error, got {other:?}"),
         }
     }
 }
