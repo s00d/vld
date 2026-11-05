@@ -45,6 +45,16 @@ pub(crate) fn is_valid_base64(s: &str) -> bool {
     crate::primitives::bytes::decode_base64(s).is_some()
 }
 
+/// Base64URL (`-` / `_` alphabet), padding optional.
+pub(crate) fn is_valid_base64url(s: &str) -> bool {
+    !s.contains(['+', '/']) && crate::primitives::bytes::decode_base64_url(s).is_some()
+}
+
+/// A complete JSON document.
+pub(crate) fn is_valid_json(s: &str) -> bool {
+    serde_json::from_str::<serde::de::IgnoredAny>(s).is_ok()
+}
+
 pub(crate) fn is_valid_cuid2(s: &str) -> bool {
     (2..=32).contains(&s.len())
         && s.as_bytes()[0].is_ascii_lowercase()

@@ -58,7 +58,7 @@ pub(crate) fn decode_base64(s: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn decode_base64_url(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn decode_base64_url(s: &str) -> Option<Vec<u8>> {
     let mut std = s.replace('-', "+").replace('_', "/");
     let rem = std.len() % 4;
     if rem != 0 {

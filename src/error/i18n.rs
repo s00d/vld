@@ -265,6 +265,8 @@ const ENGLISH: &[(&str, &str)] = &[
     ("invalid_string.lowercase", "String must be lowercase"),
     ("invalid_string.uppercase", "String must be uppercase"),
     ("invalid_string.base64", "Invalid Base64 string"),
+    ("invalid_string.base64url", "Invalid Base64URL string"),
+    ("invalid_string.json", "Invalid JSON string"),
     (
         "invalid_string.iso_date",
         "Invalid ISO date (expected YYYY-MM-DD)",

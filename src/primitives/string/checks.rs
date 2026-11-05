@@ -122,6 +122,8 @@ string_formats! {
     Lowercase: lowercase / lowercase_msg, "invalid_lowercase", "lowercase", |s: &str| s == s.to_lowercase(), "Must already be lowercase.";
     Uppercase: uppercase / uppercase_msg, "invalid_uppercase", "uppercase", |s: &str| s == s.to_uppercase(), "Must already be uppercase.";
     Base64: base64 / base64_msg, "invalid_base64", "byte", is_valid_base64, "Must be a valid (padded) Base64 string.";
+    Base64Url: base64url / base64url_msg, "invalid_base64url", "base64url", is_valid_base64url, "Must be a valid Base64URL string (`-`/`_` alphabet, padding optional).";
+    Json: json / json_msg, "invalid_json", "json", is_valid_json, "Must be a string containing one valid JSON document.";
     IsoDate: iso_date / iso_date_msg, "invalid_iso_date", "date", is_valid_iso_date, "Must be a valid ISO 8601 calendar date (`YYYY-MM-DD`, real day of month).";
     IsoDatetime: iso_datetime / iso_datetime_msg, "invalid_iso_datetime", "date-time", is_valid_iso_datetime,
         "Must be a valid ISO 8601 datetime: `YYYY-MM-DDTHH:MM[:SS[.frac]]` with optional `Z` / `±HH:MM`.";
