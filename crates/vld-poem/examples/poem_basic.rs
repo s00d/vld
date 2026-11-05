@@ -5,7 +5,7 @@
 //! cargo run -p vld-poem --example poem_basic
 //! ```
 
-use poem::{handler, listener::TcpListener, post, Route, Server};
+use poem::{handler, listener::TcpListener, post, EndpointExt, Route, Server};
 use serde::Serialize;
 use vld_poem::prelude::*;
 
@@ -78,6 +78,56 @@ async fn search(q: VldQuery<SearchRequest>) -> poem::web::Json<SearchResponse> {
 }
 
 // ===========================================================================
+// GET /users/:id — VldPath, POST /login — VldForm,
+// GET /me — VldHeaders + VldCookie
+// ===========================================================================
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct UserPath {
+        pub id: i64 => vld::number().int().min(1),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct LoginForm {
+        pub username: String => vld::string().min(3),
+        pub password: String => vld::string().min(8),
+    }
+}
+
+vld::schema! {
+    /// `Authorization` → `authorization`.
+    #[derive(Debug, Clone)]
+    pub struct AuthHeaders {
+        pub authorization: String => vld::string().min(1),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct SessionCookies {
+        pub session_id: String => vld::string().min(1),
+    }
+}
+
+#[handler]
+async fn get_user(p: VldPath<UserPath>) -> String {
+    format!("user #{}", p.id)
+}
+
+#[handler]
+async fn login(form: VldForm<LoginForm>) -> String {
+    format!("Welcome, {}!", form.username)
+}
+
+#[handler]
+async fn me(h: VldHeaders<AuthHeaders>, c: VldCookie<SessionCookies>) -> String {
+    format!("auth={} session={}", h.authorization, c.session_id)
+}
+
+// ===========================================================================
 // GET /health
 // ===========================================================================
 
@@ -106,6 +156,9 @@ async fn main() -> Result<(), std::io::Error> {
     println!("Routes:");
     println!("  POST /users   — create user (JSON body)");
     println!("  GET  /search  — search (query params)");
+    println!("  GET  /users/:id — path params");
+    println!("  POST /login   — form body (body limit 64 KiB via VldBodyLimit)");
+    println!("  GET  /me      — headers + cookies");
     println!("  GET  /health  — health check");
     println!();
     println!("Example requests:");
@@ -127,6 +180,13 @@ async fn main() -> Result<(), std::io::Error> {
     println!("  # Search:");
     println!(r#"  curl -s "http://localhost:3000/search?q=hello&page=1&limit=10" | jq"#);
     println!();
+    println!("  # Path / form / headers + cookies:");
+    println!(r#"  curl -s http://localhost:3000/users/42"#);
+    println!(r#"  curl -s -d 'username=alice&password=secret123' http://localhost:3000/login"#);
+    println!(
+        r#"  curl -s -H 'Authorization: Bearer t' -b 'session_id=abc' http://localhost:3000/me"#
+    );
+    println!();
     println!("  # Health:");
     println!(r#"  curl -s http://localhost:3000/health | jq"#);
     println!();
@@ -134,6 +194,9 @@ async fn main() -> Result<(), std::io::Error> {
     let app = Route::new()
         .at("/users", post(create_user))
         .at("/search", poem::get(search))
+        .at("/users/:id", poem::get(get_user))
+        .at("/login", post(login).data(VldBodyLimit(64 * 1024)))
+        .at("/me", poem::get(me))
         .at("/health", poem::get(health));
 
     Server::new(TcpListener::bind("0.0.0.0:3000"))

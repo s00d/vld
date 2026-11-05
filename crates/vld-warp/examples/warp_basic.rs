@@ -131,6 +131,33 @@ vld::schema! {
 }
 
 // ===========================================================================
+// POST /login — vld_form, GET /me — vld_headers + vld_cookie
+// ===========================================================================
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct LoginForm {
+        pub username: String => vld::string().min(3),
+        pub password: String => vld::string().min(8),
+    }
+}
+
+vld::schema! {
+    /// `Authorization` → `authorization`.
+    #[derive(Debug, Clone)]
+    pub struct AuthHeaders {
+        pub authorization: String => vld::string().min(1),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct SessionCookies {
+        pub session_id: String => vld::string().min(1),
+    }
+}
+
+// ===========================================================================
 // Main
 // ===========================================================================
 
@@ -145,6 +172,8 @@ async fn main() {
     println!("  GET  /users/:id/posts/:pid/comments/:cid — mixed params (validate_path_params)");
     println!("  GET  /search?q=&page=&limit=             — query params (vld_query)");
     println!("  GET  /health                             — health check");
+    println!("  POST /login                              — form body (vld_form)");
+    println!("  GET  /me                                 — headers + cookies");
     println!();
     println!("Example requests:");
     println!();
@@ -176,6 +205,12 @@ async fn main() {
     println!();
     println!("  # Search:");
     println!(r#"  curl -s "http://localhost:3030/search?q=hello&page=1&limit=10" | jq"#);
+    println!();
+    println!("  # Form / headers + cookies:");
+    println!(r#"  curl -s -d 'username=alice&password=secret123' http://localhost:3030/login"#);
+    println!(
+        r#"  curl -s -H 'Authorization: Bearer t' -b 'session_id=abc' http://localhost:3030/me"#
+    );
     println!();
     println!("  # Health check:");
     println!(r#"  curl -s http://localhost:3030/health | jq"#);
@@ -277,12 +312,31 @@ async fn main() {
             })
         });
 
+    // POST /login — form body
+    let login = warp::post()
+        .and(warp::path("login"))
+        .and(warp::path::end())
+        .and(vld_form::<LoginForm>())
+        .map(|f: LoginForm| format!("Welcome, {}!", f.username));
+
+    // GET /me — headers + cookies
+    let me = warp::get()
+        .and(warp::path("me"))
+        .and(warp::path::end())
+        .and(vld_headers::<AuthHeaders>())
+        .and(vld_cookie::<SessionCookies>())
+        .map(|h: AuthHeaders, c: SessionCookies| {
+            format!("auth={} session={}", h.authorization, c.session_id)
+        });
+
     let routes = create_user
         .or(get_user)
         .or(get_post)
         .or(get_comment)
         .or(search)
         .or(health)
+        .or(login)
+        .or(me)
         .recover(handle_rejection);
 
     warp::serve(routes).run(([0, 0, 0, 0], 3030)).await;

@@ -126,6 +126,43 @@ async fn health(res: &mut Response) {
 }
 
 // ===========================================================================
+// POST /login — VldForm, GET /me — VldHeaders + VldCookie
+// ===========================================================================
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct LoginForm {
+        pub username: String => vld::string().min(3),
+        pub password: String => vld::string().min(8),
+    }
+}
+
+vld::schema! {
+    /// `Authorization` → `authorization`.
+    #[derive(Debug, Clone)]
+    pub struct AuthHeaders {
+        pub authorization: String => vld::string().min(1),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct SessionCookies {
+        pub session_id: String => vld::string().min(1),
+    }
+}
+
+#[handler]
+async fn login(form: VldForm<LoginForm>, res: &mut Response) {
+    res.render(format!("Welcome, {}!", form.username));
+}
+
+#[handler]
+async fn me(h: VldHeaders<AuthHeaders>, c: VldCookie<SessionCookies>, res: &mut Response) {
+    res.render(format!("auth={} session={}", h.authorization, c.session_id));
+}
+
+// ===========================================================================
 // Main
 // ===========================================================================
 
@@ -138,6 +175,8 @@ async fn main() {
     println!("  GET  /users/{{id}}   — get user by id (path param)");
     println!("  GET  /search       — search (query params)");
     println!("  GET  /health       — health check");
+    println!("  POST /login        — form body");
+    println!("  GET  /me           — headers + cookies");
     println!();
     println!("Example requests:");
     println!();
@@ -161,6 +200,12 @@ async fn main() {
     println!("  # Search:");
     println!(r#"  curl -s "http://localhost:5800/search?q=hello&page=1&limit=10" | jq"#);
     println!();
+    println!("  # Form / headers + cookies:");
+    println!(r#"  curl -s -d 'username=alice&password=secret123' http://localhost:5800/login"#);
+    println!(
+        r#"  curl -s -H 'Authorization: Bearer t' -b 'session_id=abc' http://localhost:5800/me"#
+    );
+    println!();
     println!("  # Health:");
     println!(r#"  curl -s http://localhost:5800/health | jq"#);
     println!();
@@ -169,7 +214,9 @@ async fn main() {
         .push(Router::with_path("users").post(create_user))
         .push(Router::with_path("users/{id}").get(get_user))
         .push(Router::with_path("search").get(search))
-        .push(Router::with_path("health").get(health));
+        .push(Router::with_path("health").get(health))
+        .push(Router::with_path("login").post(login))
+        .push(Router::with_path("me").get(me));
 
     let acceptor = TcpListener::new("0.0.0.0:5800").bind().await;
     Server::new(acceptor).serve(router).await;
