@@ -8,11 +8,15 @@ use crate::error::VldError;
 use crate::input::VldInput;
 use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
 
+/// A `(component_name, json_schema_fn)` pair describing a named nested schema.
+///
+/// Re-exported as `vld::json_schema::NestedSchemaEntry`.
+pub type NestedSchemaEntry = (&'static str, fn() -> serde_json::Value);
+
 /// Collector for transitive nested OpenAPI component schemas.
 ///
-/// Shared by `NestedSchema` and the `nested!` macro so the fn pointer type stays
-/// readable under clippy's `type_complexity` lint.
-pub type NestedSchemaCollectFn = fn(&mut Vec<(&'static str, fn() -> serde_json::Value)>);
+/// Shared by `NestedSchema` and the `nested!` macro.
+pub type NestedSchemaCollectFn = fn(&mut Vec<NestedSchemaEntry>);
 
 /// Core validation schema trait.
 ///

@@ -405,7 +405,7 @@ fn duration_and_path_basic() {
     let _ = fs::remove_dir_all(outside_dir);
 }
 
-#[cfg(feature = "net")]
+#[cfg(all(feature = "net", feature = "std"))]
 #[test]
 fn ip_network_socket_addr_json_value() {
     let net = vld::ip_network().ipv4_only();

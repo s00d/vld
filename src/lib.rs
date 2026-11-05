@@ -23,6 +23,13 @@
 //! assert_eq!(user.name, "Alex");
 //! assert_eq!(user.age, None);
 //! ```
+//!
+//! ## The `std` feature
+//!
+//! `vld` always links the Rust standard library; `std` (on by default) is
+//! **not** a `no_std` switch. It only gates the std-specific schemas
+//! (`duration()`, `path()`, `socket_addr()`) and file helpers
+//! (`ParseResult::save_to_file`, file-path input).
 
 pub mod collections;
 pub mod combinators;
@@ -39,6 +46,10 @@ pub mod modifiers;
 pub mod object;
 pub mod primitives;
 pub mod schema;
+
+#[doc(hidden)]
+#[path = "private.rs"]
+pub mod __private;
 
 // Re-export serde_json for use in macros
 #[doc(hidden)]
@@ -175,6 +186,9 @@ pub fn ip_network() -> primitives::ZIpNetwork {
 }
 
 /// Create a socket address schema (`std::net::SocketAddr`).
+///
+/// Requires the `std` feature.
+#[cfg(feature = "std")]
 pub fn socket_addr() -> primitives::ZSocketAddr {
     primitives::ZSocketAddr::new()
 }
@@ -228,6 +242,19 @@ where
     schema::NestedSchema::new(f)
 }
 
+/// Create a **named** nested schema. Usually called through [`nested!`].
+///
+/// - `name` — OpenAPI component name; the field's JSON Schema becomes
+///   `{"$ref": "#/components/schemas/{name}"}`. Must match `[A-Za-z0-9._-]+`.
+/// - `f` — parser for the nested value (e.g. `Address::parse_value`).
+/// - `json_schema_fn` — full JSON Schema of the nested type, registered as the
+///   component (`None` disables registration).
+/// - `collect_nested_fn` — collects the nested type's own nested schemas so
+///   grandchildren are registered too.
+///
+/// With `json_schema_fn` set, `to_openapi_document()` of the parent and the
+/// `vld-utoipa` / `vld-aide` / `vld-schemars` integrations register the
+/// component automatically.
 pub fn nested_named<T, F>(
     name: &'static str,
     f: F,
@@ -242,6 +269,10 @@ where
 
 /// Create a named nested schema with `$ref` generation and full JSON Schema.
 ///
+/// Works with types from [`schema!`] and `#[derive(Validate)]`. The component
+/// name is the type as written, sanitized to `[A-Za-z0-9._-]`
+/// (`Page<User>` → `Page_User_`).
+///
 /// ```ignore
 /// vld::schema! {
 ///     pub struct User {
@@ -253,7 +284,13 @@ where
 macro_rules! nested {
     ($ty:ty) => {
         $crate::nested_named(
-            stringify!($ty),
+            {
+                static __VLD_NAME: ::std::sync::OnceLock<::std::string::String> =
+                    ::std::sync::OnceLock::new();
+                __VLD_NAME
+                    .get_or_init(|| $crate::__private::component_name(stringify!($ty)))
+                    .as_str()
+            },
             <$ty>::parse_value,
             $crate::__vld_nested_schema_fn!($ty),
             $crate::__vld_nested_collect_fn!($ty),
@@ -425,12 +462,11 @@ pub mod prelude {
     #[cfg(feature = "file")]
     pub use crate::primitives::{FileStorage, ValidatedFile, ZFile};
     pub use crate::primitives::{
-        IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZJsonValue, ZLiteral, ZNumber,
-        ZSocketAddr, ZString,
+        IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZJsonValue, ZLiteral, ZNumber, ZString,
     };
     #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
     pub use crate::primitives::{ZDate, ZDateTime};
     #[cfg(feature = "std")]
-    pub use crate::primitives::{ZDuration, ZPath};
+    pub use crate::primitives::{ZDuration, ZPath, ZSocketAddr};
     pub use crate::schema::{VldParse, VldSchema};
 }

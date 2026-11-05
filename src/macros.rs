@@ -80,6 +80,8 @@ macro_rules! __vld_struct_attrs {
 ///
 /// # OpenAPI parameters
 ///
+/// Raw identifiers map to their bare name (`r#type` → JSON key `"type"`).
+///
 /// For query/path/header/cookie parameters, add utoipa's attribute on the struct
 /// (same as with `#[derive(Validate)]`), then call [`vld_utoipa::impl_to_schema`] once:
 ///
@@ -185,52 +187,25 @@ macro_rules! schema {
             pub fn parse_value(
                 __vld_json: &$crate::serde_json::Value,
             ) -> ::std::result::Result<$name, $crate::error::VldError> {
+                #[allow(unused_imports)]
                 use $crate::schema::VldSchema as _;
-
-                let __vld_obj = __vld_json.as_object().ok_or_else(|| {
-                    $crate::error::VldError::single(
-                        $crate::error::IssueCode::InvalidType {
-                            expected: ::std::string::String::from("object"),
-                            received: $crate::error::value_type_name(__vld_json),
-                        },
-                        ::std::format!(
-                            "Expected object, received {}",
-                            $crate::error::value_type_name(__vld_json)
-                        ),
-                    )
-                })?;
-
+                let __vld_obj = $crate::__private::expect_object(__vld_json)?;
                 let mut __vld_errors = $crate::error::VldError::new();
 
                 $(
                     #[allow(non_snake_case)]
-                    let $field_name: ::std::option::Option<$field_type> = {
-                        let __vld_field_schema = $schema;
-                        let __vld_key = $crate::__vld_resolve_key!(
-                            stringify!($field_name) $(, $rename)?
+                    let $field_name: ::std::option::Option<$field_type> =
+                        $crate::__private::parse_field(
+                            __vld_obj,
+                            $crate::__vld_resolve_key!(
+                                $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
+                            ),
+                            &$schema,
+                            &mut __vld_errors,
                         );
-                        let __vld_field_value = __vld_obj
-                            .get(__vld_key)
-                            .unwrap_or(&$crate::serde_json::Value::Null);
-                        match __vld_field_schema.parse_value(__vld_field_value) {
-                            ::std::result::Result::Ok(v) => ::std::option::Option::Some(v),
-                            ::std::result::Result::Err(e) => {
-                                __vld_errors = $crate::error::VldError::merge(
-                                    __vld_errors,
-                                    $crate::error::VldError::with_prefix(
-                                        e,
-                                        $crate::error::PathSegment::Field(
-                                            ::std::string::String::from(__vld_key),
-                                        ),
-                                    ),
-                                );
-                                ::std::option::Option::None
-                            }
-                        }
-                    };
                 )*
 
-                if !$crate::error::VldError::is_empty(&__vld_errors) {
+                if !__vld_errors.is_empty() {
                     return ::std::result::Result::Err(__vld_errors);
                 }
 
@@ -240,7 +215,6 @@ macro_rules! schema {
                     )*
                 })
             }
-
         }
 
         impl $crate::schema::VldParse for $name {
@@ -250,7 +224,6 @@ macro_rules! schema {
                 Self::parse_value(value)
             }
         }
-
 
         $crate::__vld_if_serialize! {
             impl $name {
@@ -264,14 +237,7 @@ macro_rules! schema {
                 pub fn validate<__VldT: $crate::serde::Serialize>(
                     instance: &__VldT,
                 ) -> ::std::result::Result<(), $crate::error::VldError> {
-                    let __vld_json = $crate::serde_json::to_value(instance).map_err(|e| {
-                        $crate::error::VldError::single(
-                            $crate::error::IssueCode::ParseError,
-                            ::std::format!("Serialization error: {}", e),
-                        )
-                    })?;
-                    let _ = Self::parse_value(&__vld_json)?;
-                    ::std::result::Result::Ok(())
+                    Self::parse_value(&$crate::__private::to_json(instance)?).map(|_| ())
                 }
 
                 /// Check if a value is valid against the schema.
@@ -291,44 +257,37 @@ macro_rules! schema {
                 ///
                 /// Requires the `openapi` feature.
                 pub fn json_schema() -> $crate::serde_json::Value {
-                    use $crate::json_schema::JsonSchema as _;
+                    #[allow(unused_imports)]
                     use $crate::schema::VldSchema as _;
-                    let mut __vld_properties = $crate::serde_json::Map::new();
-                    let mut __vld_required: ::std::vec::Vec<::std::string::String> =
-                        ::std::vec::Vec::new();
-
-                    $(
-                        {
-                            let __vld_field_schema = $schema;
-                            let __vld_key = $crate::__vld_resolve_key!(
-                                stringify!($field_name) $(, $rename)?
-                            );
-
-                            __vld_properties.insert(
-                                ::std::string::String::from(__vld_key),
-                                __vld_field_schema.json_schema(),
-                            );
-
-                            if __vld_field_schema.is_required() {
-                                __vld_required.push(
-                                    ::std::string::String::from(__vld_key),
-                                );
+                    #[allow(unused_imports)]
+                    use $crate::json_schema::JsonSchema as _;
+                    $crate::__private::object_schema(::std::vec![
+                        $(
+                            {
+                                let __vld_field_schema = $schema;
+                                (
+                                    $crate::__vld_resolve_key!(
+                                        $crate::__private::field_key(stringify!($field_name))
+                                        $(, $rename)?
+                                    ),
+                                    __vld_field_schema.json_schema(),
+                                    __vld_field_schema.is_required(),
+                                )
                             }
-                        }
-                    )*
-
-                    $crate::serde_json::json!({
-                        "type": "object",
-                        "required": __vld_required,
-                        "properties": $crate::serde_json::Value::Object(__vld_properties),
-                    })
+                        ),*
+                    ])
                 }
 
-                /// Wrap `json_schema()` in a minimal OpenAPI 3.1 document.
+                /// Minimal OpenAPI 3.1 document with this struct and every
+                /// nested schema it references under `components.schemas`.
                 ///
                 /// Requires the `openapi` feature.
                 pub fn to_openapi_document() -> $crate::serde_json::Value {
-                    $crate::json_schema::to_openapi_document(stringify!($name), &Self::json_schema())
+                    $crate::__private::openapi_document(
+                        stringify!($name),
+                        Self::json_schema(),
+                        Self::__vld_nested_schemas(),
+                    )
                 }
 
                 /// Collect `(name, json_schema_fn)` pairs for all nested schemas
@@ -340,14 +299,13 @@ macro_rules! schema {
                 pub fn __vld_collect_nested_schemas(
                     __vld_out: &mut ::std::vec::Vec<$crate::json_schema::NestedSchemaEntry>,
                 ) {
-                    use $crate::json_schema::CollectNestedSchemas as _;
+                    #[allow(unused_imports)]
                     use $crate::schema::VldSchema as _;
-
                     $(
-                        {
-                            let __vld_field_schema = $schema;
-                            __vld_field_schema.collect_nested_schemas(__vld_out);
-                        }
+                        $crate::json_schema::CollectNestedSchemas::collect_nested_schemas(
+                            &$schema,
+                            __vld_out,
+                        );
                     )*
                 }
 
@@ -377,25 +335,26 @@ macro_rules! schema {
         }
     };
 
-    // Parse `#[into_params(parameter_in = ...)]` for [`OpenApiParameterIn`].
+    // Parse `#[into_params(..., parameter_in = ..., ...)]` for [`OpenApiParameterIn`].
     (@param_in) => {
         None::<&'static str>
     };
-    (@param_in #[ into_params ( parameter_in = Query ) ] $(#[ $($rest:tt)* ])*) => {
-        Some("query")
-    };
-    (@param_in #[ into_params ( parameter_in = Path ) ] $(#[ $($rest:tt)* ])*) => {
-        Some("path")
-    };
-    (@param_in #[ into_params ( parameter_in = Header ) ] $(#[ $($rest:tt)* ])*) => {
-        Some("header")
-    };
-    (@param_in #[ into_params ( parameter_in = Cookie ) ] $(#[ $($rest:tt)* ])*) => {
-        Some("cookie")
+    (@param_in #[ into_params ( $($p:tt)* ) ] $(#[ $($rest:tt)* ])*) => {
+        match $crate::schema!(@param_in_args $($p)*) {
+            Some(__vld_in) => Some(__vld_in),
+            None => $crate::schema!(@param_in $(#[ $($rest)* ])*),
+        }
     };
     (@param_in #[ $($skip:tt)* ] $(#[ $($rest:tt)* ])*) => {
         $crate::schema!(@param_in $(#[ $($rest)* ])*)
     };
+    // Scan the `into_params(...)` argument list one token tree at a time.
+    (@param_in_args) => { None::<&'static str> };
+    (@param_in_args parameter_in = Query $($rest:tt)*) => { Some("query") };
+    (@param_in_args parameter_in = Path $($rest:tt)*) => { Some("path") };
+    (@param_in_args parameter_in = Header $($rest:tt)*) => { Some("header") };
+    (@param_in_args parameter_in = Cookie $($rest:tt)*) => { Some("cookie") };
+    (@param_in_args $skip:tt $($rest:tt)*) => { $crate::schema!(@param_in_args $($rest)*) };
 }
 
 /// Generate `validate_fields()` and `parse_lenient()` methods for a struct
@@ -460,48 +419,20 @@ macro_rules! impl_validate_fields {
                 ::std::vec::Vec<$crate::error::FieldResult>,
                 $crate::error::VldError,
             > {
+                #[allow(unused_imports)]
                 use $crate::schema::VldSchema as _;
-
-                let __vld_obj = __vld_json.as_object().ok_or_else(|| {
-                    $crate::error::VldError::single(
-                        $crate::error::IssueCode::InvalidType {
-                            expected: ::std::string::String::from("object"),
-                            received: $crate::error::value_type_name(__vld_json),
-                        },
-                        ::std::format!(
-                            "Expected object, received {}",
-                            $crate::error::value_type_name(__vld_json)
-                        ),
-                    )
-                })?;
-
-                let mut __vld_results: ::std::vec::Vec<$crate::error::FieldResult> =
-                    ::std::vec::Vec::new();
-
-                $(
-                    {
-                        let __vld_field_schema = $schema;
-                        let __vld_key = $crate::__vld_resolve_key!(
-                            stringify!($field_name) $(, $rename)?
-                        );
-                        let __vld_field_value = __vld_obj
-                            .get(__vld_key)
-                            .unwrap_or(&$crate::serde_json::Value::Null);
-
-                        let __vld_result = $crate::object::DynSchema::dyn_parse(
-                            &__vld_field_schema,
-                            __vld_field_value,
-                        );
-
-                        __vld_results.push($crate::error::FieldResult {
-                            name: ::std::string::String::from(__vld_key),
-                            input: __vld_field_value.clone(),
-                            result: __vld_result,
-                        });
-                    }
-                )*
-
-                ::std::result::Result::Ok(__vld_results)
+                let __vld_obj = $crate::__private::expect_object(__vld_json)?;
+                ::std::result::Result::Ok(::std::vec![
+                    $(
+                        $crate::__private::field_result(
+                            __vld_obj,
+                            $crate::__vld_resolve_key!(
+                                $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
+                            ),
+                            &$schema,
+                        )
+                    ),*
+                ])
             }
 
             /// Parse leniently: build the struct even when some fields fail.
@@ -529,65 +460,28 @@ macro_rules! impl_validate_fields {
                 $crate::error::ParseResult<$name>,
                 $crate::error::VldError,
             > {
+                #[allow(unused_imports)]
                 use $crate::schema::VldSchema as _;
-
-                let __vld_obj = __vld_json.as_object().ok_or_else(|| {
-                    $crate::error::VldError::single(
-                        $crate::error::IssueCode::InvalidType {
-                            expected: ::std::string::String::from("object"),
-                            received: $crate::error::value_type_name(__vld_json),
-                        },
-                        ::std::format!(
-                            "Expected object, received {}",
-                            $crate::error::value_type_name(__vld_json)
-                        ),
-                    )
-                })?;
-
+                let __vld_obj = $crate::__private::expect_object(__vld_json)?;
                 let mut __vld_results: ::std::vec::Vec<$crate::error::FieldResult> =
                     ::std::vec::Vec::new();
 
                 $(
                     #[allow(non_snake_case)]
-                    let $field_name: $field_type = {
-                        let __vld_field_schema = $schema;
-                        let __vld_key = $crate::__vld_resolve_key!(
-                            stringify!($field_name) $(, $rename)?
-                        );
-                        let __vld_field_value = __vld_obj
-                            .get(__vld_key)
-                            .unwrap_or(&$crate::serde_json::Value::Null);
-
-                        match __vld_field_schema.parse_value(__vld_field_value) {
-                            ::std::result::Result::Ok(v) => {
-                                let __json_repr = $crate::serde_json::to_value(&v)
-                                    .unwrap_or_else(|_| __vld_field_value.clone());
-                                __vld_results.push($crate::error::FieldResult {
-                                    name: ::std::string::String::from(__vld_key),
-                                    input: __vld_field_value.clone(),
-                                    result: ::std::result::Result::Ok(__json_repr),
-                                });
-                                v
-                            }
-                            ::std::result::Result::Err(e) => {
-                                __vld_results.push($crate::error::FieldResult {
-                                    name: ::std::string::String::from(__vld_key),
-                                    input: __vld_field_value.clone(),
-                                    result: ::std::result::Result::Err(e),
-                                });
-                                <$field_type as ::std::default::Default>::default()
-                            }
-                        }
-                    };
+                    let $field_name: $field_type = $crate::__private::lenient_field(
+                        __vld_obj,
+                        $crate::__vld_resolve_key!(
+                            $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
+                        ),
+                        &$schema,
+                        &mut __vld_results,
+                    );
                 )*
 
-                let __vld_struct = $name {
-                    $( $field_name, )*
-                };
-
-                ::std::result::Result::Ok(
-                    $crate::error::ParseResult::new(__vld_struct, __vld_results)
-                )
+                ::std::result::Result::Ok($crate::error::ParseResult::new(
+                    $name { $( $field_name, )* },
+                    __vld_results,
+                ))
             }
         }
     };
@@ -691,11 +585,14 @@ macro_rules! schema_validated {
 /// let err = bad.validate().unwrap_err();
 /// assert!(err.issues.len() >= 2);
 /// ```
+///
+/// Use `field as "wireName" => schema` to report errors under the JSON name
+/// (e.g. when the struct uses `#[serde(rename = ...)]`).
 #[macro_export]
 macro_rules! impl_rules {
     (
         $name:ident {
-            $( $field:ident => $schema:expr ),* $(,)?
+            $( $field:ident $(as $rename:literal)? => $schema:expr ),* $(,)?
         }
     ) => {
         impl $name {
@@ -704,49 +601,37 @@ macro_rules! impl_rules {
             /// Each field is serialized to JSON individually and checked
             /// against its schema. All errors are accumulated.
             pub fn validate(&self) -> ::std::result::Result<(), $crate::error::VldError> {
+                #[allow(unused_imports)]
                 use $crate::schema::VldSchema as _;
                 let mut __vld_errors = $crate::error::VldError::new();
 
                 $(
                     {
-                        let __vld_field_json = $crate::serde_json::to_value(&self.$field)
-                            .map_err(|e| {
+                        let __vld_key: &str = $crate::__vld_resolve_key!(
+                            $crate::__private::field_key(stringify!($field)) $(, $rename)?
+                        );
+                        let __vld_result = match $crate::serde_json::to_value(&self.$field) {
+                            ::std::result::Result::Ok(ref __vld_val) => {
+                                $crate::schema::VldSchema::parse_value(&$schema, __vld_val)
+                                    .map(|_| ())
+                            }
+                            ::std::result::Result::Err(e) => ::std::result::Result::Err(
                                 $crate::error::VldError::single(
                                     $crate::error::IssueCode::ParseError,
                                     ::std::format!(
                                         "Serialization error for field '{}': {}",
-                                        stringify!($field), e
+                                        __vld_key, e
                                     ),
-                                )
-                            });
-                        match __vld_field_json {
-                            ::std::result::Result::Ok(ref __vld_val) => {
-                                let __vld_field_schema = $schema;
-                                if let ::std::result::Result::Err(e) =
-                                    __vld_field_schema.parse_value(__vld_val)
-                                {
-                                    __vld_errors = $crate::error::VldError::merge(
-                                        __vld_errors,
-                                        $crate::error::VldError::with_prefix(
-                                            e,
-                                            $crate::error::PathSegment::Field(
-                                                ::std::string::String::from(stringify!($field)),
-                                            ),
-                                        ),
-                                    );
-                                }
-                            }
-                            ::std::result::Result::Err(e) => {
-                                __vld_errors = $crate::error::VldError::merge(
-                                    __vld_errors,
-                                    $crate::error::VldError::with_prefix(
-                                        e,
-                                        $crate::error::PathSegment::Field(
-                                            ::std::string::String::from(stringify!($field)),
-                                        ),
-                                    ),
-                                );
-                            }
+                                ),
+                            ),
+                        };
+                        if let ::std::result::Result::Err(e) = __vld_result {
+                            __vld_errors.issues.extend(
+                                e.with_prefix($crate::error::PathSegment::Field(
+                                    ::std::string::String::from(__vld_key),
+                                ))
+                                .issues,
+                            );
                         }
                     }
                 )*
@@ -768,8 +653,10 @@ macro_rules! impl_rules {
 
 /// Generate `impl Default` for a struct created by [`schema!`].
 ///
-/// Use this instead of `#[derive(Default)]` to automatically generate a
-/// `Default` implementation bounded on all field types implementing `Default`.
+/// Every listed field is set to **its type's** `Default::default()` — the same
+/// as `#[derive(Default)]`. Schema defaults (`.with_default(...)`) are **not**
+/// used; to get them, parse an empty object instead:
+/// `Config::parse_value(&serde_json::json!({}))`.
 ///
 /// # Example
 ///
@@ -788,9 +675,13 @@ macro_rules! impl_rules {
 /// vld::impl_default!(Config { host, port, tags });
 ///
 /// let cfg = Config::default();
-/// assert_eq!(cfg.host, "");       // String::default()
+/// assert_eq!(cfg.host, "");       // String::default(), NOT the schema default
 /// assert_eq!(cfg.port, None);     // Option::default()
 /// assert!(cfg.tags.is_empty());   // Vec::default()
+///
+/// // Schema defaults come from parsing:
+/// let parsed = Config::parse_value(&serde_json::json!({})).unwrap();
+/// assert_eq!(parsed.host, "localhost");
 /// ```
 #[macro_export]
 macro_rules! impl_default {
@@ -808,7 +699,8 @@ macro_rules! impl_default {
 /// Create a union schema from 2 or more schemas.
 ///
 /// Dispatches to `vld::union()` for 2 schemas and `vld::union3()` for 3.
-/// For 4+ schemas, unions are nested automatically.
+/// For 4+ schemas, unions are nested automatically (any number of schemas;
+/// order and first-match semantics are preserved).
 ///
 /// # Examples
 ///
@@ -845,5 +737,12 @@ macro_rules! union {
     // 6 schemas
     ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr $(,)?) => {
         $crate::union($crate::union3($a, $b, $c), $crate::union3($d, $e, $f))
+    };
+    // 7+ schemas — first six, then the rest recursively
+    ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $($rest:expr),+ $(,)?) => {
+        $crate::union(
+            $crate::union!($a, $b, $c, $d, $e, $f),
+            $crate::union!($($rest),+),
+        )
     };
 }

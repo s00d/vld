@@ -37,6 +37,7 @@ fn catchall_overrides_unknown_mode() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn deep_partial_same_as_partial() {
     let schema = vld::object()
         .field("name", vld::string().min(1))
