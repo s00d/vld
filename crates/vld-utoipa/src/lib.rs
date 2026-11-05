@@ -60,24 +60,30 @@ pub use utoipa6 as utoipa;
 use serde_json::Value;
 use utoipa::openapi::path::{Parameter, ParameterBuilder, ParameterIn};
 use utoipa::openapi::schema::{
-    AllOf, Array, Object, OneOf, Schema, SchemaFormat, SchemaType, Type,
+    AdditionalProperties, AllOf, AnyOf, Array, Object, OneOf, Schema, SchemaFormat, SchemaType,
+    Type,
 };
 use utoipa::openapi::{Ref, RefOr, Required};
+
+type Map = serde_json::Map<String, Value>;
 
 /// Convert a `serde_json::Value` (JSON Schema) produced by `vld` into a
 /// `utoipa::openapi::RefOr<Schema>`.
 ///
 /// This is the core conversion function. It handles:
 /// - Primitive types: `string`, `number`, `integer`, `boolean`, `null`
-/// - Objects with `properties` and `required`
-/// - Arrays with `items`
-/// - `oneOf`, `allOf` composites
-/// - `enum` values
+/// - Type arrays such as `["string", "null"]`; a missing `type` means "any value"
+/// - Objects with `properties`, `required`, `additionalProperties`,
+///   `minProperties`, `maxProperties`
+/// - Arrays with `items`, `minItems`, `maxItems`, `uniqueItems`
+/// - `oneOf`, `anyOf`, `allOf` composites
+/// - `enum` and `const` values
 /// - Numeric constraints: `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`
 /// - String constraints: `minLength`, `maxLength`, `pattern`
-/// - Array constraints: `minItems`, `maxItems`
-/// - `format`, `description`, `default`, `example`
-/// - `$ref` references
+/// - `format`, `title`, `description`, `default`, `example` — on every schema kind
+///   (`anyOf` has no `title` in utoipa)
+/// - `$ref` references: a sibling `description` stays on the ref; `title`,
+///   `default` or `example` wrap the ref in a single-item `allOf`
 ///
 /// # Example
 ///
@@ -87,196 +93,185 @@ use utoipa::openapi::{Ref, RefOr, Required};
 /// let schema = json_schema_to_schema(&serde_json::json!({"type": "string", "format": "email"}));
 /// ```
 pub fn json_schema_to_schema(value: &Value) -> RefOr<Schema> {
-    match value {
-        Value::Object(map) => {
-            // Handle $ref
-            if let Some(Value::String(ref_path)) = map.get("$ref") {
-                return RefOr::Ref(Ref::new(ref_path.clone()));
-            }
+    let Value::Object(map) = value else {
+        // `true` / non-object schemas: accept any value.
+        return RefOr::T(Schema::Object(Object::with_type(SchemaType::AnyValue)));
+    };
+    let title = str_of(map, "title");
+    let description = str_of(map, "description");
+    let default = map.get("default").cloned();
+    let example = map.get("example").cloned();
 
-            // Handle oneOf
-            if let Some(Value::Array(items)) = map.get("oneOf") {
-                let schemas: Vec<RefOr<Schema>> = items.iter().map(json_schema_to_schema).collect();
-                let mut one_of = OneOf::new();
-                one_of.items = schemas;
-                return RefOr::T(Schema::OneOf(one_of));
-            }
-
-            // Handle allOf
-            if let Some(Value::Array(items)) = map.get("allOf") {
-                let schemas: Vec<RefOr<Schema>> = items.iter().map(json_schema_to_schema).collect();
-                let mut all_of = AllOf::new();
-                all_of.items = schemas;
-                return RefOr::T(Schema::AllOf(all_of));
-            }
-
-            // Determine type
-            let type_str = map.get("type").and_then(|v| v.as_str()).unwrap_or("object");
-
-            match type_str {
-                "array" => {
-                    let items_schema = map
-                        .get("items")
-                        .map(json_schema_to_schema)
-                        .unwrap_or_else(|| RefOr::T(Schema::Object(Object::default())));
-
-                    let mut arr = Array::new(items_schema);
-
-                    if let Some(n) = map.get("minItems").and_then(|v| v.as_u64()) {
-                        arr.min_items = Some(n as usize);
-                    }
-                    if let Some(n) = map.get("maxItems").and_then(|v| v.as_u64()) {
-                        arr.max_items = Some(n as usize);
-                    }
-
-                    RefOr::T(Schema::Array(arr))
-                }
-                "object" => convert_object(map),
-                _ => convert_primitive(map, type_str),
-            }
-        }
-        // Bare true/false schema
-        Value::Bool(true) => RefOr::T(Schema::Object(Object::new())),
-        _ => RefOr::T(Schema::Object(Object::default())),
+    // Sets the shared annotation fields on any utoipa schema struct.
+    macro_rules! annotate {
+        ($target:expr $(, $title:ident)?) => {{
+            let mut t = $target;
+            $( t.$title = title.clone(); )?
+            t.description = description.clone();
+            t.default = default.clone();
+            t.example = example.clone();
+            t
+        }};
     }
-}
 
-fn convert_object(map: &serde_json::Map<String, Value>) -> RefOr<Schema> {
-    let mut obj = Object::with_type(SchemaType::Type(Type::Object));
+    if let Some(Value::String(path)) = map.get("$ref") {
+        let mut reference = Ref::new(path.clone());
+        if title.is_none() && default.is_none() && example.is_none() {
+            reference.description = description.unwrap_or_default();
+            return RefOr::Ref(reference);
+        }
+        let mut all_of = annotate!(AllOf::new(), title);
+        all_of.items = vec![RefOr::Ref(reference)];
+        return RefOr::T(Schema::AllOf(all_of));
+    }
 
-    // Properties
+    if let Some(items) = composite_items(map, "oneOf") {
+        let mut one_of = annotate!(OneOf::new(), title);
+        one_of.items = items;
+        return RefOr::T(Schema::OneOf(one_of));
+    }
+    if let Some(items) = composite_items(map, "anyOf") {
+        let mut any_of = annotate!(AnyOf::new());
+        any_of.items = items;
+        return RefOr::T(Schema::AnyOf(any_of));
+    }
+    if let Some(items) = composite_items(map, "allOf") {
+        let mut all_of = annotate!(AllOf::new(), title);
+        all_of.items = items;
+        return RefOr::T(Schema::AllOf(all_of));
+    }
+
+    let types: Vec<Type> = match map.get("type") {
+        Some(Value::String(t)) => type_of(t).into_iter().collect(),
+        Some(Value::Array(ts)) => ts
+            .iter()
+            .filter_map(|t| t.as_str().and_then(type_of))
+            .collect(),
+        _ => Vec::new(),
+    };
+    let schema_type = match types.as_slice() {
+        [] => SchemaType::AnyValue,
+        [t] => SchemaType::Type(t.clone()),
+        ts => SchemaType::Array(ts.to_vec()),
+    };
+
+    if types.contains(&Type::Array) {
+        let items = map
+            .get("items")
+            .map(json_schema_to_schema)
+            .unwrap_or_else(|| RefOr::T(Schema::Object(Object::with_type(SchemaType::AnyValue))));
+        let mut arr = annotate!(Array::new(items), title);
+        arr.schema_type = schema_type;
+        arr.min_items = usize_of(map, "minItems");
+        arr.max_items = usize_of(map, "maxItems");
+        arr.unique_items = map.get("uniqueItems") == Some(&Value::Bool(true));
+        return RefOr::T(Schema::Array(arr));
+    }
+
+    let mut obj = annotate!(Object::with_type(schema_type), title);
+    obj.format = str_of(map, "format").map(SchemaFormat::Custom);
+    obj.enum_values = match (map.get("enum"), map.get("const")) {
+        (Some(Value::Array(vals)), _) => Some(vals.clone()),
+        (_, Some(c)) => Some(vec![c.clone()]),
+        _ => None,
+    };
+    obj.pattern = str_of(map, "pattern");
+    obj.min_length = usize_of(map, "minLength");
+    obj.max_length = usize_of(map, "maxLength");
+    obj.minimum = num_of(map, "minimum");
+    obj.maximum = num_of(map, "maximum");
+    obj.exclusive_minimum = num_of(map, "exclusiveMinimum");
+    obj.exclusive_maximum = num_of(map, "exclusiveMaximum");
+    obj.multiple_of = num_of(map, "multipleOf");
     if let Some(Value::Object(props)) = map.get("properties") {
         for (key, val) in props {
             obj.properties
                 .insert(key.clone(), json_schema_to_schema(val));
         }
     }
-
-    // Required
     if let Some(Value::Array(req)) = map.get("required") {
         obj.required = req
             .iter()
             .filter_map(|v| v.as_str().map(String::from))
             .collect();
     }
-
-    // Description
-    if let Some(Value::String(desc)) = map.get("description") {
-        obj.description = Some(desc.clone());
-    }
-
-    // Title
-    if let Some(Value::String(title)) = map.get("title") {
-        obj.title = Some(title.clone());
-    }
-
-    // Default
-    if let Some(default) = map.get("default") {
-        obj.default = Some(default.clone());
-    }
-
-    // Example
-    if let Some(example) = map.get("example") {
-        obj.example = Some(example.clone());
-    }
-
-    RefOr::T(Schema::Object(obj))
-}
-
-fn to_number(n: f64) -> utoipa::Number {
-    if n.fract() == 0.0 {
-        utoipa::Number::Int(n as isize)
-    } else {
-        utoipa::Number::Float(n)
-    }
-}
-
-fn convert_primitive(map: &serde_json::Map<String, Value>, type_str: &str) -> RefOr<Schema> {
-    let schema_type = match type_str {
-        "string" => SchemaType::Type(Type::String),
-        "number" => SchemaType::Type(Type::Number),
-        "integer" => SchemaType::Type(Type::Integer),
-        "boolean" => SchemaType::Type(Type::Boolean),
-        "null" => SchemaType::Type(Type::Null),
-        _ => SchemaType::Type(Type::Object),
+    obj.additional_properties = match map.get("additionalProperties") {
+        Some(Value::Bool(b)) => Some(Box::new(AdditionalProperties::FreeForm(*b))),
+        Some(v @ Value::Object(_)) => Some(Box::new(AdditionalProperties::RefOr(
+            json_schema_to_schema(v),
+        ))),
+        _ => None,
     };
-
-    let mut obj = Object::with_type(schema_type);
-
-    // Format
-    if let Some(Value::String(fmt)) = map.get("format") {
-        obj.format = Some(SchemaFormat::Custom(fmt.clone()));
-    }
-
-    // Description
-    if let Some(Value::String(desc)) = map.get("description") {
-        obj.description = Some(desc.clone());
-    }
-
-    // Title
-    if let Some(Value::String(title)) = map.get("title") {
-        obj.title = Some(title.clone());
-    }
-
-    // Default
-    if let Some(default) = map.get("default") {
-        obj.default = Some(default.clone());
-    }
-
-    // Example
-    if let Some(example) = map.get("example") {
-        obj.example = Some(example.clone());
-    }
-
-    // Enum values
-    if let Some(Value::Array(vals)) = map.get("enum") {
-        obj.enum_values = Some(vals.clone());
-    }
-
-    // Pattern (string)
-    if let Some(Value::String(pat)) = map.get("pattern") {
-        obj.pattern = Some(pat.clone());
-    }
-
-    // String constraints
-    if let Some(n) = map.get("minLength").and_then(|v| v.as_u64()) {
-        obj.min_length = Some(n as usize);
-    }
-    if let Some(n) = map.get("maxLength").and_then(|v| v.as_u64()) {
-        obj.max_length = Some(n as usize);
-    }
-
-    // Numeric constraints
-    if let Some(n) = map.get("minimum").and_then(|v| v.as_f64()) {
-        obj.minimum = Some(to_number(n));
-    }
-    if let Some(n) = map.get("maximum").and_then(|v| v.as_f64()) {
-        obj.maximum = Some(to_number(n));
-    }
-    if let Some(n) = map.get("exclusiveMinimum").and_then(|v| v.as_f64()) {
-        obj.exclusive_minimum = Some(to_number(n));
-    }
-    if let Some(n) = map.get("exclusiveMaximum").and_then(|v| v.as_f64()) {
-        obj.exclusive_maximum = Some(to_number(n));
-    }
-    if let Some(n) = map.get("multipleOf").and_then(|v| v.as_f64()) {
-        obj.multiple_of = Some(to_number(n));
-    }
-
+    obj.min_properties = usize_of(map, "minProperties");
+    obj.max_properties = usize_of(map, "maxProperties");
     RefOr::T(Schema::Object(obj))
 }
 
-/// If `schema` is an optional/nullable `oneOf`, return the non-null branch.
-fn unwrap_nullable_schema(schema: &Value) -> &Value {
-    if let Some(items) = schema.get("oneOf").and_then(Value::as_array) {
-        if let Some(inner) = items
-            .iter()
-            .find(|item| item.get("type").and_then(Value::as_str) != Some("null"))
-        {
-            return inner;
+fn composite_items(map: &Map, key: &str) -> Option<Vec<RefOr<Schema>>> {
+    map.get(key)
+        .and_then(Value::as_array)
+        .map(|items| items.iter().map(json_schema_to_schema).collect())
+}
+
+fn type_of(t: &str) -> Option<Type> {
+    Some(match t {
+        "string" => Type::String,
+        "number" => Type::Number,
+        "integer" => Type::Integer,
+        "boolean" => Type::Boolean,
+        "null" => Type::Null,
+        "object" => Type::Object,
+        "array" => Type::Array,
+        _ => return None,
+    })
+}
+
+fn str_of(map: &Map, key: &str) -> Option<String> {
+    map.get(key).and_then(Value::as_str).map(str::to_owned)
+}
+
+fn usize_of(map: &Map, key: &str) -> Option<usize> {
+    map.get(key).and_then(Value::as_u64).map(|n| n as usize)
+}
+
+fn num_of(map: &Map, key: &str) -> Option<utoipa::Number> {
+    let n = map.get(key)?;
+    Some(match (n.as_i64(), n.as_f64()) {
+        (Some(i), _) if isize::try_from(i).is_ok() => utoipa::Number::Int(i as isize),
+        (_, Some(f)) if f.fract() == 0.0 && f.abs() < isize::MAX as f64 => {
+            utoipa::Number::Int(f as isize)
+        }
+        (_, Some(f)) => utoipa::Number::Float(f),
+        _ => return None,
+    })
+}
+
+/// If `schema` is an optional/nullable union (`oneOf`/`anyOf` of one schema plus
+/// `{"type": "null"}`), return the non-null branch with the union's own
+/// annotations (`description`, `default`, `title`, …) merged in.
+fn unwrap_nullable_schema(schema: &Value) -> Value {
+    let Some(map) = schema.as_object() else {
+        return schema.clone();
+    };
+    for key in ["oneOf", "anyOf"] {
+        let Some(items) = map.get(key).and_then(Value::as_array) else {
+            continue;
+        };
+        let is_null = |v: &&Value| v.get("type").and_then(Value::as_str) == Some("null");
+        let rest: Vec<&Value> = items.iter().filter(|v| !is_null(v)).collect();
+        if let [inner] = rest.as_slice() {
+            if rest.len() < items.len() {
+                let mut inner = (*inner).clone();
+                if let Some(obj) = inner.as_object_mut() {
+                    for (k, v) in map.iter().filter(|(k, _)| *k != key) {
+                        obj.entry(k.clone()).or_insert_with(|| v.clone());
+                    }
+                }
+                return inner;
+            }
         }
     }
-    schema
+    schema.clone()
 }
 
 /// Convert a vld object `json_schema()` into OpenAPI path/query parameters.
@@ -323,7 +318,7 @@ pub fn json_schema_to_params(value: &Value, parameter_in: ParameterIn) -> Vec<Pa
                 .parameter_in(parameter_in.clone())
                 .required(required)
                 .description(description)
-                .schema(Some(json_schema_to_schema(schema_value)))
+                .schema(Some(json_schema_to_schema(&schema_value)))
                 .build()
         })
         .collect()
@@ -360,38 +355,10 @@ pub fn resolve_parameter_in<T: vld::json_schema::OpenApiParameterIn>(
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __impl_to_schema {
-    ($ty:ty, name: None, param_in: None) => {
-        $crate::__impl_to_schema_body! {
-            $ty,
-            name: { },
-            param_in: { None::<$crate::utoipa::openapi::path::ParameterIn> },
-        }
-    };
-    ($ty:ty, name: Some($name:expr), param_in: None) => {
-        $crate::__impl_to_schema_body! {
-            $ty,
-            name: { fn name() -> ::std::borrow::Cow<'static, str> {
-                ::std::borrow::Cow::Borrowed($name)
-            } },
-            param_in: { None::<$crate::utoipa::openapi::path::ParameterIn> },
-        }
-    };
-    ($ty:ty, name: None, param_in: Some($param_in:expr)) => {
-        $crate::__impl_to_schema_body! {
-            $ty,
-            name: { },
-            param_in: { Some($param_in) },
-        }
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __impl_to_schema_body {
     (
         $ty:ty,
         name: { $($name_method:tt)* },
-        param_in: { $param_in_override:expr },
+        param_in: $param_in_override:expr $(,)?
     ) => {
         impl $crate::utoipa::PartialSchema for $ty {
             fn schema() -> $crate::utoipa::openapi::RefOr<$crate::utoipa::openapi::schema::Schema> {
@@ -408,6 +375,8 @@ macro_rules! __impl_to_schema_body {
                     $crate::utoipa::openapi::RefOr<$crate::utoipa::openapi::schema::Schema>,
                 )>,
             ) {
+                // Inherent `__vld_nested_schemas` (from `vld::schema!` / derive) wins
+                // over this trait fallback in `<T>::f()` path resolution.
                 #[allow(unused_imports)]
                 use $crate::__VldNestedSchemasFallback as _;
                 for (name, schema_fn) in <$ty>::__vld_nested_schemas() {
@@ -489,22 +458,30 @@ macro_rules! __impl_to_schema_body {
 #[macro_export]
 macro_rules! impl_to_schema {
     ($ty:ty) => {
-        $crate::__impl_to_schema!($ty, name: None, param_in: None);
+        $crate::__impl_to_schema!($ty, name: {}, param_in: None);
     };
     ($ty:ty, $name:literal) => {
-        $crate::__impl_to_schema!($ty, name: Some($name), param_in: None);
+        $crate::__impl_to_schema!(
+            $ty,
+            name: {
+                fn name() -> ::std::borrow::Cow<'static, str> {
+                    ::std::borrow::Cow::Borrowed($name)
+                }
+            },
+            param_in: None,
+        );
     };
     ($ty:ty, query) => {
-        $crate::__impl_to_schema_legacy_suffix_query!($ty);
+        $crate::__impl_to_schema_legacy!($ty, Query);
     };
     ($ty:ty, path) => {
-        $crate::__impl_to_schema_legacy_suffix_path!($ty);
+        $crate::__impl_to_schema_legacy!($ty, Path);
     };
     ($ty:ty, header) => {
-        $crate::__impl_to_schema_legacy_suffix_header!($ty);
+        $crate::__impl_to_schema_legacy!($ty, Header);
     };
     ($ty:ty, cookie) => {
-        $crate::__impl_to_schema_legacy_suffix_cookie!($ty);
+        $crate::__impl_to_schema_legacy!($ty, Cookie);
     };
 }
 
@@ -518,17 +495,8 @@ macro_rules! impl_into_params {
     ($ty:ty, $name:literal) => {
         $crate::impl_to_schema!($ty, $name);
     };
-    ($ty:ty, Query) => {
-        $crate::__impl_to_schema_legacy_query!($ty);
-    };
-    ($ty:ty, Path) => {
-        $crate::__impl_to_schema_legacy_path!($ty);
-    };
-    ($ty:ty, Header) => {
-        $crate::__impl_to_schema_legacy_header!($ty);
-    };
-    ($ty:ty, Cookie) => {
-        $crate::__impl_to_schema_legacy_cookie!($ty);
+    ($ty:ty, $loc:ident) => {
+        $crate::__impl_to_schema_legacy!($ty, $loc);
     };
 }
 
@@ -539,7 +507,7 @@ macro_rules! impl_into_params {
 )]
 macro_rules! impl_to_schema_query {
     ($ty:ty) => {
-        $crate::__impl_to_schema_legacy_query!($ty);
+        $crate::__impl_to_schema_legacy!($ty, Query);
     };
 }
 
@@ -548,98 +516,27 @@ macro_rules! impl_to_schema_query {
 #[deprecated(note = "use #[into_params(parameter_in = Path)] on the struct and impl_to_schema!(T)")]
 macro_rules! impl_to_schema_path {
     ($ty:ty) => {
-        $crate::__impl_to_schema_legacy_path!($ty);
+        $crate::__impl_to_schema_legacy!($ty, Path);
     };
 }
 
+/// Legacy explicit parameter location (`Query`, `Path`, `Header`, `Cookie`).
 #[doc(hidden)]
 #[macro_export]
-#[deprecated(
-    note = "use #[into_params(parameter_in = Query)] on the struct and impl_to_schema!(T)"
-)]
-macro_rules! __impl_to_schema_legacy_query {
-    ($ty:ty) => {
-        $crate::__impl_to_schema!($ty, name: None, param_in: Some($crate::utoipa::openapi::path::ParameterIn::Query));
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[deprecated(note = "use #[into_params(parameter_in = Path)] on the struct and impl_to_schema!(T)")]
-macro_rules! __impl_to_schema_legacy_path {
-    ($ty:ty) => {
-        $crate::__impl_to_schema!($ty, name: None, param_in: Some($crate::utoipa::openapi::path::ParameterIn::Path));
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[deprecated(
-    note = "use #[into_params(parameter_in = Header)] on the struct and impl_to_schema!(T)"
-)]
-macro_rules! __impl_to_schema_legacy_header {
-    ($ty:ty) => {
-        $crate::__impl_to_schema!($ty, name: None, param_in: Some($crate::utoipa::openapi::path::ParameterIn::Header));
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[deprecated(
-    note = "use #[into_params(parameter_in = Cookie)] on the struct and impl_to_schema!(T)"
-)]
-macro_rules! __impl_to_schema_legacy_cookie {
-    ($ty:ty) => {
-        $crate::__impl_to_schema!($ty, name: None, param_in: Some($crate::utoipa::openapi::path::ParameterIn::Cookie));
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[deprecated(
-    note = "use #[into_params(parameter_in = Query)] on the struct and impl_to_schema!(T)"
-)]
-macro_rules! __impl_to_schema_legacy_suffix_query {
-    ($ty:ty) => {
-        $crate::__impl_to_schema_legacy_query!($ty);
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[deprecated(note = "use #[into_params(parameter_in = Path)] on the struct and impl_to_schema!(T)")]
-macro_rules! __impl_to_schema_legacy_suffix_path {
-    ($ty:ty) => {
-        $crate::__impl_to_schema_legacy_path!($ty);
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[deprecated(
-    note = "use #[into_params(parameter_in = Header)] on the struct and impl_to_schema!(T)"
-)]
-macro_rules! __impl_to_schema_legacy_suffix_header {
-    ($ty:ty) => {
-        $crate::__impl_to_schema_legacy_header!($ty);
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[deprecated(
-    note = "use #[into_params(parameter_in = Cookie)] on the struct and impl_to_schema!(T)"
-)]
-macro_rules! __impl_to_schema_legacy_suffix_cookie {
-    ($ty:ty) => {
-        $crate::__impl_to_schema_legacy_cookie!($ty);
+#[deprecated(note = "use #[into_params(parameter_in = ...)] on the struct and impl_to_schema!(T)")]
+macro_rules! __impl_to_schema_legacy {
+    ($ty:ty, $loc:ident) => {
+        $crate::__impl_to_schema!(
+            $ty,
+            name: {},
+            param_in: Some($crate::utoipa::openapi::path::ParameterIn::$loc),
+        );
     };
 }
 
 #[doc(hidden)]
 pub trait __VldNestedSchemasFallback {
-    #[allow(clippy::type_complexity)]
-    fn __vld_nested_schemas() -> Vec<(&'static str, fn() -> serde_json::Value)> {
+    fn __vld_nested_schemas() -> Vec<vld::json_schema::NestedSchemaEntry> {
         Vec::new()
     }
 }

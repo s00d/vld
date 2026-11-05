@@ -215,14 +215,20 @@ let utoipa_schema = json_schema_to_schema(&json_schema);
 ## Supported JSON Schema Features
 
 - Primitive types: `string`, `number`, `integer`, `boolean`, `null`
-- Object with `properties` and `required`
-- Array with `items`, `minItems`, `maxItems`
-- `oneOf`, `allOf` composites
-- `enum` values
+- Type arrays (`["string", "null"]`); no `type` (e.g. `vld::any()`) stays type-less ("any value")
+- Object with `properties`, `required`, `additionalProperties` (bool or value
+  schema, e.g. `vld::record`), `minProperties`, `maxProperties`
+- Array with `items`, `minItems`, `maxItems`, `uniqueItems`
+- `oneOf`, `anyOf`, `allOf` composites
+- `enum` and `const` values
 - String: `minLength`, `maxLength`, `pattern`, `format`
 - Number: `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`
-- `$ref` references
-- `description`, `default`, `example`, `title`
+- `$ref` references (a sibling `description` stays on the ref; `title` / `default` /
+  `example` wrap it in a one-item `allOf`)
+- `description`, `default`, `example`, `title` on every schema kind (utoipa's
+  `anyOf` has no `title`)
+- Query/path parameters built from optional fields keep the field's own
+  `description` / `default`
 
 ## Migration from older APIs
 
