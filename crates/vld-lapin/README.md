@@ -24,7 +24,12 @@ Lapin (RabbitMQ) integration for [`vld`](https://crates.io/crates/vld).
 After rebinding, `channel` becomes a validating wrapper:
 
 - auto-conversion helpers: `publish`, `basic_get`, `decode_bytes`, `decode_delivery`, `decode_get`
-- ack helpers: `ack_decode`, `nack_decode`, `reject_decode`, `ack_decode_get`, `nack_decode_get`, `reject_decode_get`
+- settle helpers (`*_get` variants take a `basic_get` message):
+  - `ack_decode` / `ack_decode_get` — decode + validate, **ack when valid**; an invalid
+    message is left unsettled and the error is returned
+  - `nack_decode` / `nack_decode_get`, `reject_decode` / `reject_decode_get` — decode +
+    validate, **nack/reject when invalid** (then return the error), so poison messages
+    are not left unacked; a valid message is returned unsettled — ack it after processing
 - all other native `lapin::Channel` methods remain available through deref
 
 ## Installation
