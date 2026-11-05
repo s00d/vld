@@ -141,6 +141,44 @@ async fn extractor_body_over_limit_is_413() {
     }
 }
 
+/// `VldBodyLimit` in the request extensions sets the extractor limit.
+#[tokio::test]
+async fn extractor_body_limit_from_extension() {
+    use rama::layer::AddInputExtensionLayer;
+    let svc = AddInputExtensionLayer::new(vld_rama::VldBodyLimit(8)).into_layer(
+        WebService::default()
+            .with_post("/j", async |VldJson(u): VldJson<User>| u.name)
+            .with_post("/f", async |VldForm(u): VldForm<User>| u.name),
+    );
+    for (uri, body) in [
+        ("http://example.com/j", r#"{"name":"Alice"}"#),
+        ("http://example.com/f", "name=Alice"),
+    ] {
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("content-type", content_type(uri))
+            .body(Body::from(body))
+            .unwrap();
+        let resp = svc.serve(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE, "{uri}");
+    }
+}
+
+/// `VldForm` never reads the query string, also on GET.
+#[tokio::test]
+async fn form_on_get_ignores_query() {
+    let svc = WebService::default().with_get("/f", async |VldForm(u): VldForm<User>| u.name);
+    let req = Request::builder()
+        .uri("http://example.com/f?name=Alice")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::empty())
+        .unwrap();
+    let resp = svc.serve(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(text(resp).await.contains(r#""path":".name""#));
+}
+
 #[tokio::test]
 async fn extractor_deref() {
     let u = VldJson(User { name: "Al".into() });

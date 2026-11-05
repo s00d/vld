@@ -192,7 +192,10 @@ fn metadata_interceptor_valid() {
     let result = vld_tonic::metadata_interceptor::<AuthMeta>(req);
     assert!(result.is_ok());
     let req = result.unwrap();
-    let auth = req.extensions().get::<AuthMeta>().unwrap();
+    let auth = req
+        .extensions()
+        .get::<vld_tonic::Validated<AuthMeta>>()
+        .unwrap();
     assert_eq!(auth.authorization, "Bearer abc");
 }
 

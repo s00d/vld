@@ -13,9 +13,12 @@
 //!
 //! All extractors return **422 Unprocessable Entity** on validation failure
 //! or malformed input, and **413 Payload Too Large** when the body exceeds
-//! axum's `DefaultBodyLimit` (2 MiB unless configured). [`VldJson`] requires
-//! a JSON `Content-Type` (`application/json` or `application/*+json`) and
-//! answers **415 Unsupported Media Type** otherwise.
+//! axum's `DefaultBodyLimit` (2 MiB unless configured with
+//! `.layer(DefaultBodyLimit::max(n))`). [`VldJson`] requires a JSON
+//! `Content-Type` (`application/json` or `application/*+json`) and
+//! [`VldForm`] `application/x-www-form-urlencoded`; anything else is
+//! **415 Unsupported Media Type**. See the
+//! [error body format](vld_http_common#error-bodies).
 //!
 //! # Quick example
 //!
@@ -54,14 +57,18 @@
 //! }
 //! ```
 
-use axum::extract::{FromRequest, FromRequestParts, Request};
+use axum::extract::rejection::RawPathParamsRejection;
+use axum::extract::{
+    FromRequest, FromRequestParts, MatchedPath, OriginalUri, RawPathParams, Request,
+};
 use axum::response::{IntoResponse, Response};
 use http::request::Parts;
-use http::StatusCode;
+use http::{header, StatusCode};
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
-    query_string_to_json, require_json_content_type, VldHttpError,
+    cookie_headers_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
+    percent_decode, query_string_to_json, require_form_content_type, require_json_content_type,
+    VldHttpError,
 };
 
 // ============================= Rejection =====================================
@@ -80,6 +87,11 @@ impl VldJsonRejection {
     /// HTTP status of this rejection (422, 413 or 415).
     pub fn status(&self) -> StatusCode {
         StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
+    }
+
+    /// JSON response body.
+    pub fn body(&self) -> serde_json::Value {
+        self.0.body()
     }
 }
 
@@ -141,6 +153,42 @@ fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, VldJsonRejectio
     vld_http_common::parse_coerced(value).map_err(VldJsonRejection::from)
 }
 
+fn content_type(headers: &http::HeaderMap) -> Option<&str> {
+    headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+}
+
+/// Path params decoded lossily (`%FF` → `U+FFFD`), for when axum refuses
+/// them as invalid UTF-8: match the raw path against the route template.
+fn lossy_path_params(parts: &Parts) -> serde_json::Value {
+    let Some(matched) = parts.extensions.get::<MatchedPath>() else {
+        return serde_json::json!({});
+    };
+    // Nested routers see a stripped URI; the template is the full path.
+    let uri = parts
+        .extensions
+        .get::<OriginalUri>()
+        .map_or(&parts.uri, |o| &o.0);
+    let mut values = uri.path().split('/');
+    let mut params = Vec::new();
+    for pattern in matched.as_str().split('/') {
+        let value = values.next();
+        let Some(name) = pattern.strip_prefix('{').and_then(|p| p.strip_suffix('}')) else {
+            continue;
+        };
+        if let Some(name) = name.strip_prefix('*') {
+            let rest: Vec<&str> = value.into_iter().chain(values.by_ref()).collect();
+            params.push((name, percent_decode(&rest.join("/"))));
+            break;
+        }
+        if let Some(value) = value {
+            params.push((name, percent_decode(value)));
+        }
+    }
+    path_params_to_json(params.iter().map(|(k, v)| (*k, v.as_str())))
+}
+
 // ============================= VldJson =======================================
 
 /// Axum extractor that validates **JSON request bodies**.
@@ -156,11 +204,7 @@ where
     type Rejection = VldJsonRejection;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        require_json_content_type(
-            req.headers()
-                .get(http::header::CONTENT_TYPE)
-                .and_then(|v| v.to_str().ok()),
-        )?;
+        require_json_content_type(content_type(req.headers()))?;
         let body = read_body(req, state).await?;
         T::vld_parse_value(&parse_json_body(&body)?)
             .map(VldJson)
@@ -196,7 +240,9 @@ where
 ///
 /// Drop-in replacement for `axum::extract::Path<T>`.
 ///
-/// Path segment values are coerced the same way as query parameters.
+/// Path segment values are percent-decoded (invalid UTF-8 becomes `U+FFFD`)
+/// and coerced the same way as query parameters. On a route without
+/// parameters the input is an empty object.
 ///
 /// # Example
 ///
@@ -224,17 +270,12 @@ where
     type Rejection = VldJsonRejection;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let raw =
-            axum::extract::Path::<std::collections::HashMap<String, String>>::from_request_parts(
-                parts, state,
-            )
-            .await
-            .map_err(|e| VldHttpError::parse(format!("Path parameter error: {e}")))?;
-
-        validate(&path_params_to_json(
-            raw.0.iter().map(|(k, v)| (k.as_str(), v.as_str())),
-        ))
-        .map(VldPath)
+        let value = match RawPathParams::from_request_parts(parts, state).await {
+            Ok(params) => path_params_to_json(&params),
+            Err(RawPathParamsRejection::InvalidUtf8InPathParam(_)) => lossy_path_params(parts),
+            Err(_) => serde_json::json!({}),
+        };
+        validate(&value).map(VldPath)
     }
 }
 
@@ -272,6 +313,7 @@ where
     type Rejection = VldJsonRejection;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        require_form_content_type(content_type(req.headers()))?;
         let body = read_body(req, state).await?;
         validate(&parse_form_body(&body)?).map(VldForm)
     }
@@ -282,8 +324,9 @@ where
 /// Axum extractor that validates **HTTP headers**.
 ///
 /// See [`vld_http_common::headers_to_json`]: names become snake_case
-/// (`X-Request-Id` → `x_request_id`), repeated headers are joined with `", "`,
-/// non-UTF-8 bytes are replaced with `U+FFFD`.
+/// (`X-Request-Id` → `x_request_id`), names containing `_` are ignored,
+/// repeated headers are joined with `", "`, non-UTF-8 bytes are replaced
+/// with `U+FFFD`.
 ///
 /// # Example
 ///
@@ -322,7 +365,8 @@ where
 
 // ============================= VldCookie =====================================
 
-/// Axum extractor that validates **cookie values** from the `Cookie` header.
+/// Axum extractor that validates **cookie values** from the `Cookie`
+/// headers (all of them; the first occurrence of a name wins).
 ///
 /// Cookie names are used as-is for schema field matching.
 /// Values are unquoted, percent-decoded and coerced.
@@ -352,12 +396,14 @@ where
     type Rejection = VldJsonRejection;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let cookie_header = parts
-            .headers
-            .get(http::header::COOKIE)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        validate(&cookies_to_json(cookie_header)).map(VldCookie)
+        let value = cookie_headers_to_json(
+            parts
+                .headers
+                .get_all(header::COOKIE)
+                .iter()
+                .map(|v| v.as_bytes()),
+        );
+        validate(&value).map(VldCookie)
     }
 }
 

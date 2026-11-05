@@ -5,17 +5,19 @@
 //!
 //! | Route | Extractor | 200 body |
 //! |---|---|---|
-//! | `POST /json` | JSON [`User`] | `"{name}:{age}"` |
-//! | `POST /form` | form [`User`] | `"{name}:{age}"` |
-//! | `GET /query` | query [`Query`] | `"{tag joined by ,}\|{q}"` |
-//! | `GET /path/{id}` | path [`PathId`] | `"id={id}"` |
-//! | `GET /headers` | headers [`Headers`] | `"{x_tag}"` |
-//! | `GET /cookie` | cookies [`Cookies`] | `"{sid}"` |
+//! | `POST /json` | JSON `User` | `"{name}:{age}"` |
+//! | `POST /form` | form `User` | `"{name}:{age}"` |
+//! | `GET /query` | query `Query` | `"{tag joined by ,}\|{q}"` |
+//! | `GET /path/{id}` | path `PathId` | `"id={id}"` |
+//! | `GET /pstr/{s}` | path `PathStr` | `"{s}"` |
+//! | `GET /pnone` (no params) | path `PathNone` | `PathNone::reply` |
+//! | `GET /headers` | headers `Headers` | `"{x_tag}"` |
+//! | `GET /cookie` | cookies `Cookies` | `"{sid}"` |
 //!
 //! Body limits stay at the adapter/framework defaults; the oversized cases
-//! send [`OVERSIZED_LEN`] bytes, above every default.
+//! send [`OVERSIZED_LEN`](crate::conformance::OVERSIZED_LEN) bytes, above every default.
 //!
-//! Each case is a function in [`cases`]; adapters list the cases they support
+//! Each case is a function in [`cases`](crate::conformance::cases); adapters list the cases they support
 //! with [`conformance_suite!`](crate::conformance_suite), marking known
 //! failures with `#[ignore = "BUG: ..."]`.
 
@@ -48,6 +50,22 @@ vld::schema! {
     #[derive(Debug, Clone)]
     pub struct PathId {
         pub id: i64 => vld::number().int().min(1),
+    }
+}
+
+vld::schema! {
+    /// `GET /pstr/{s}` parameters.
+    #[derive(Debug, Clone)]
+    pub struct PathStr {
+        pub s: String => vld::string(),
+    }
+}
+
+vld::schema! {
+    /// `GET /pnone` (a route without parameters) — every field optional.
+    #[derive(Debug, Clone)]
+    pub struct PathNone {
+        pub id: Option<i64> => vld::number().int().optional(),
     }
 }
 
@@ -85,6 +103,14 @@ impl PathId {
     /// The 200 body for `/path/{id}`.
     pub fn reply(&self) -> String {
         format!("id={}", self.id)
+    }
+}
+
+impl PathNone {
+    /// The 200 body for `/pnone`: `"none"` or `"id={id}"`.
+    pub fn reply(&self) -> String {
+        self.id
+            .map_or_else(|| "none".into(), |id| format!("id={id}"))
     }
 }
 
@@ -127,6 +153,8 @@ pub enum Expect {
     Invalid(Vec<&'static str>),
     /// 413 `{"error":"Payload too large"}`.
     TooLarge,
+    /// 415 `{"error":"Unsupported Media Type","message":"..."}`.
+    Unsupported,
 }
 
 /// One conformance case.
@@ -182,6 +210,12 @@ impl Case {
                     serde_json::json!({"error": "Payload too large"}),
                     "[{name}]"
                 );
+            }
+            Expect::Unsupported => {
+                assert_eq!(resp.status, 415, "[{name}] body: {}", resp.text());
+                let body = resp.json();
+                assert_eq!(body["error"], "Unsupported Media Type", "[{name}] {body}");
+                assert!(body["message"].is_string(), "[{name}] {body}");
             }
         }
     }
@@ -244,6 +278,41 @@ pub mod cases {
     }
 
     /// Malformed JSON is a 422 with the validation shape (one root issue).
+    /// A bare parameter name is tolerated (only the media type matters).
+    pub fn json_content_type_bare_param() -> Case {
+        case(
+            "json_content_type_bare_param",
+            post(
+                "/json",
+                "application/json;charset",
+                r#"{"name":"Alice","age":25}"#,
+            ),
+            ok("Alice:25"),
+        )
+    }
+
+    /// An unterminated quoted parameter is tolerated too.
+    pub fn json_content_type_unterminated_quote() -> Case {
+        case(
+            "json_content_type_unterminated_quote",
+            post(
+                "/json",
+                "application/json; charset=\"utf-8",
+                r#"{"name":"Alice","age":25}"#,
+            ),
+            ok("Alice:25"),
+        )
+    }
+
+    /// `application/+json` has an empty subtype before `+json`: 415.
+    pub fn json_content_type_empty_suffix() -> Case {
+        case(
+            "json_content_type_empty_suffix",
+            post("/json", "application/+json", r#"{"name":"Alice","age":25}"#),
+            Expect::Unsupported,
+        )
+    }
+
     pub fn json_malformed() -> Case {
         case(
             "json_malformed",
@@ -278,6 +347,38 @@ pub mod cases {
             "form_valid",
             post("/form", FORM, "name=Al+ice&age=25"),
             ok("Al ice:25"),
+        )
+    }
+
+    /// The form media type is case-insensitive and may carry parameters.
+    pub fn form_content_type_params() -> Case {
+        case(
+            "form_content_type_params",
+            post(
+                "/form",
+                "Application/X-WWW-Form-Urlencoded; charset=UTF-8",
+                "name=Alice&age=25",
+            ),
+            ok("Alice:25"),
+        )
+    }
+
+    /// A form extractor requires `application/x-www-form-urlencoded`.
+    pub fn form_wrong_content_type() -> Case {
+        case(
+            "form_wrong_content_type",
+            post("/form", "application/json", "name=Alice&age=25"),
+            Expect::Unsupported,
+        )
+    }
+
+    /// More than `MAX_FORM_FIELDS` fields is a 422 parse error.
+    pub fn form_too_many_fields() -> Case {
+        let body = format!("name=Alice&age=25{}", "&a".repeat(crate::MAX_FORM_FIELDS));
+        case(
+            "form_too_many_fields",
+            post("/form", FORM, body),
+            Expect::Invalid(vec![""]),
         )
     }
 
@@ -345,11 +446,59 @@ pub mod cases {
         )
     }
 
+    /// Path values are percent-decoded exactly once, `%2F`/`%25`/`%2B`
+    /// included; `+` stays a plus.
+    pub fn path_percent_decoding() -> Case {
+        case(
+            "path_percent_decoding",
+            req("GET", "/pstr/a%2Fb%25c%2Bd%20e"),
+            ok("a/b%c+d e"),
+        )
+    }
+
+    /// `%2541` is `%41`, not `A`: decoded once only.
+    pub fn path_no_double_decoding() -> Case {
+        case(
+            "path_no_double_decoding",
+            req("GET", "/pstr/%2541"),
+            ok("%41"),
+        )
+    }
+
+    /// Invalid UTF-8 after decoding becomes `U+FFFD`.
+    pub fn path_invalid_utf8() -> Case {
+        case("path_invalid_utf8", req("GET", "/pstr/%FF"), ok("\u{FFFD}"))
+    }
+
+    /// A route without parameters is an empty object, not an error.
+    pub fn path_no_params_optional() -> Case {
+        case("path_no_params_optional", req("GET", "/pnone"), ok("none"))
+    }
+
     /// Header names map `x-tag` → `x_tag`; values may be non-ASCII UTF-8.
     pub fn headers_valid() -> Case {
         let mut r = req("GET", "/headers");
         r.headers.push(("x-tag", "café".as_bytes().to_vec()));
         case("headers_valid", r, ok("café"))
+    }
+
+    /// A name containing `_` is ignored: `x_tag` neither fills `x_tag` nor
+    /// merges with `x-tag`.
+    pub fn headers_underscore_ignored() -> Case {
+        let mut r = req("GET", "/headers");
+        r.headers.push(("x_tag", b"evil".to_vec()));
+        r.headers.push(("x-tag", b"good".to_vec()));
+        case("headers_underscore_ignored", r, ok("good"))
+    }
+
+    pub fn headers_underscore_only() -> Case {
+        let mut r = req("GET", "/headers");
+        r.headers.push(("x_tag", b"evil".to_vec()));
+        case(
+            "headers_underscore_only",
+            r,
+            Expect::Invalid(vec![".x_tag"]),
+        )
     }
 
     pub fn headers_missing() -> Case {
@@ -366,6 +515,28 @@ pub mod cases {
         r.headers
             .push(("cookie", b"other=1; sid=\"abc%20def\"".to_vec()));
         case("cookie_quoted_encoded", r, ok("abc def"))
+    }
+
+    /// Every `Cookie` header is read (HTTP/2 sends one per cookie).
+    pub fn cookie_multiple_headers() -> Case {
+        let mut r = req("GET", "/cookie");
+        r.headers.push(("cookie", b"other=1".to_vec()));
+        r.headers.push(("cookie", b"sid=abc".to_vec()));
+        case("cookie_multiple_headers", r, ok("abc"))
+    }
+
+    /// The first occurrence of a cookie name wins (no cookie tossing).
+    pub fn cookie_duplicate_first_wins() -> Case {
+        let mut r = req("GET", "/cookie");
+        r.headers.push(("cookie", b"sid=legit; sid=evil".to_vec()));
+        case("cookie_duplicate_first_wins", r, ok("legit"))
+    }
+
+    /// A raw UTF-8 value does not drop the whole header.
+    pub fn cookie_non_ascii() -> Case {
+        let mut r = req("GET", "/cookie");
+        r.headers.push(("cookie", "sid=café".as_bytes().to_vec()));
+        case("cookie_non_ascii", r, ok("café"))
     }
 
     pub fn cookie_missing() -> Case {

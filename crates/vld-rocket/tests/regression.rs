@@ -124,3 +124,56 @@ fn form_within_limit_is_ok() {
     assert_eq!(resp.status(), Status::Ok);
     assert_eq!(resp.into_string().unwrap(), "Al B");
 }
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct N {
+        pub n: i64 => vld::number().int().min(1),
+    }
+}
+
+#[rocket::post("/mixed", data = "<body>")]
+fn mixed(q: Option<VldQuery<N>>, body: rocket::serde::json::Json<serde_json::Value>) -> String {
+    let _ = (q, body);
+    "ok".into()
+}
+
+/// The catcher must not answer Rocket's own 400 (malformed `Json`) with the
+/// vld error an earlier optional guard stored for a 422.
+#[test]
+fn catcher_does_not_return_stale_vld_error() {
+    let rocket = rocket::build()
+        .mount("/", routes![mixed])
+        .register("/", vld_catchers());
+    let c = Client::tracked(rocket).expect("valid rocket");
+    let resp = c
+        .post("/mixed?n=0")
+        .header(ContentType::JSON)
+        .body("{bad")
+        .dispatch();
+    assert_eq!(resp.status(), Status::BadRequest);
+    assert_eq!(json_body(resp), serde_json::json!({"error": "Bad Request"}));
+}
+
+/// With Rocket's built-in limits (json 1 MiB, form 32 KiB) left alone, the
+/// shared 2 MiB default applies.
+#[test]
+fn default_limits_are_2_mib() {
+    let rocket = rocket::build()
+        .mount("/", routes![json, form])
+        .register("/", vld_catchers());
+    let c = Client::tracked(rocket).expect("valid rocket");
+    let name = "x".repeat(1536 * 1024);
+    let resp = c
+        .post("/json")
+        .header(ContentType::JSON)
+        .body(format!(r#"{{"name":"{name}"}}"#))
+        .dispatch();
+    assert_eq!(resp.status(), Status::Ok);
+    let resp = c
+        .post("/form")
+        .header(ContentType::Form)
+        .body(format!("name={name}"))
+        .dispatch();
+    assert_eq!(resp.status(), Status::Ok);
+}

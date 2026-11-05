@@ -7,25 +7,29 @@
 
 # vld-tower
 
-Universal [Tower](https://docs.rs/tower) middleware for validating HTTP JSON
-request bodies with [vld](https://crates.io/crates/vld). Works with **any**
-Tower-compatible framework: Axum, Hyper, Tonic, Warp, etc.
+[Tower](https://docs.rs/tower) middleware for validating HTTP JSON request bodies
+with [vld](https://crates.io/crates/vld), for Tower services over the `http` types — e.g. an
+Axum `Router` (see [`examples/tower_axum.rs`](examples/tower_axum.rs)) or a hyper service via
+`hyper-util`.
 
 ## Installation
 
 ```toml
 [dependencies]
-vld = "0.4"
-vld-tower = "0.4"
+vld = "0.5"
+vld-tower = "0.5"
 ```
 
 ## How it Works
 
 1. Intercepts incoming HTTP requests with `Content-Type: application/json`
 2. Reads the body and validates against a `vld` schema
-3. **Valid** — stores the parsed struct in request extensions, passes request to the inner service
-4. **Invalid** — returns `422 Unprocessable Entity` with JSON error details; inner service is never called
+3. **Valid** — stores the parsed struct as `Validated<T>` in request extensions, passes request to the inner service
+4. **Invalid** (or a body read error) — returns `422 Unprocessable Entity` with JSON error details; inner service is never called
 5. **Non-JSON** requests pass through untouched
+
+The layer never fails itself: its error type is the inner service's, and responses are
+`Response<ValidatedBody<ResBody>>` (the JSON error body or the inner service's body).
 
 ## Quick Start
 
@@ -68,50 +72,43 @@ defaults to 2 MiB; use `ValidateJsonLayer::with_limit(bytes)` to change it.
 
 ### With Axum
 
-```rust
-use axum::{Router, routing::post};
-use vld_tower::ValidateJsonLayer;
+From [`examples/tower_axum.rs`](examples/tower_axum.rs):
+
+```rust,ignore
+use axum::http::StatusCode;
+use axum::{routing::post, Extension, Router};
+use vld_tower::{ValidateJsonLayer, Validated};
+
+async fn create(
+    user: Option<Extension<Validated<CreateUser>>>,
+) -> Result<String, (StatusCode, &'static str)> {
+    // `None`: the request was not JSON, so the layer passed it through.
+    let Some(Extension(Validated(user))) = user else {
+        return Err((StatusCode::UNSUPPORTED_MEDIA_TYPE, "expected JSON"));
+    };
+    Ok(format!("created {}", user.name))
+}
 
 let app = Router::new()
-    .route("/users", post(create_user))
+    .route("/users", post(create))
     .layer(ValidateJsonLayer::<CreateUser>::new());
 ```
 
-## Error Responses
+## Errors and body limits
 
-### Validation Error (422)
+Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
 
-```json
-{
-  "error": "Validation failed",
-  "issues": [
-    { "path": ".name", "message": "String must be at least 2 characters" },
-    { "path": ".email", "message": "Invalid email address" }
-  ]
-}
-```
+| Body | Default limit | Configure |
+|---|---|---|
+| JSON (`ValidateJsonLayer`) | 2 MiB | `ValidateJsonLayer::with_limit(n)` |
 
-### Malformed JSON (422)
-
-```json
-{
-  "error": "Validation failed",
-  "issues": [
-    { "path": "", "message": "Invalid JSON: expected value at line 1 column 1" }
-  ]
-}
-```
-
-### Body over the limit (413)
-
-```json
-{ "error": "Payload too large" }
-```
+Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
 
 ## Running the Example
 
 ```bash
 cargo run -p vld-tower --example tower_basic
+cargo run -p vld-tower --example tower_axum
 ```
 
 ## OpenAPI (vld-utoipa)

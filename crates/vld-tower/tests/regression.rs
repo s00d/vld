@@ -95,3 +95,77 @@ async fn malformed_json_returns_422_validation_shape() {
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(json["error"], "Validation failed");
 }
+
+/// The layer composes with an Axum router (`Router::layer` needs an
+/// `Infallible` error and an `IntoResponse` body — see
+/// `examples/tower_axum.rs`).
+#[tokio::test]
+async fn works_as_axum_router_layer() {
+    use axum::{routing::post, Extension, Router};
+    async fn h(
+        Extension(vld_tower::Validated(u)): Extension<vld_tower::Validated<User>>,
+    ) -> String {
+        u.name
+    }
+    let app = Router::new()
+        .route("/u", post(h))
+        .layer(ValidateJsonLayer::<User>::new());
+    for (body, status, text) in [
+        (r#"{"name":"Alice"}"#, StatusCode::OK, "Alice"),
+        (r#"{"name":"A"}"#, StatusCode::UNPROCESSABLE_ENTITY, ""),
+    ] {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/u")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), status, "{body}");
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        if status == StatusCode::OK {
+            assert_eq!(bytes, text);
+        }
+    }
+}
+
+/// A body whose first frame is a (non-limit) read error.
+struct BrokenBody;
+
+impl http_body::Body for BrokenBody {
+    type Data = Bytes;
+    type Error = std::io::Error;
+
+    fn poll_frame(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Result<http_body::Frame<Bytes>, Self::Error>>> {
+        std::task::Poll::Ready(Some(Err(std::io::Error::other("connection reset"))))
+    }
+}
+
+/// A body read error is a 422 response (like vld-rama), not a service
+/// error; the value is stored as `Validated<T>`.
+#[tokio::test]
+async fn body_read_error_is_422_response() {
+    async fn inner(
+        req: Request<ValidatedBody<BrokenBody>>,
+    ) -> Result<Response<Full<Bytes>>, std::convert::Infallible> {
+        let _ = req.extensions().get::<vld_tower::Validated<User>>();
+        Ok(Response::new(Full::new(Bytes::new())))
+    }
+    let svc = ServiceBuilder::new()
+        .layer(ValidateJsonLayer::<User>::new())
+        .service_fn(inner);
+    let req = Request::builder()
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(BrokenBody)
+        .unwrap();
+    let resp: Result<_, std::convert::Infallible> = svc.oneshot(req).await;
+    let resp = resp.unwrap();
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["error"], "Validation failed");
+}

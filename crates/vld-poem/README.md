@@ -21,10 +21,12 @@
 | `VldCookie<T>` | Cookie header | Validates cookie values |
 
 All extractors return `422 Unprocessable Entity` with a JSON error body on validation failure
-or malformed input, and `413 Payload Too Large` (`{"error":"Payload too large"}`) for bodies over
-2 MiB. Errors are `VldPoemError` (exported from the prelude).
+or malformed input, and `413 Payload Too Large` (`{"error":"Payload too large"}`) for bodies over the
+limit. Errors are `VldPoemError` (exported from the prelude; `status()` / `body()`).
 
 JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
+Form extractors require `application/x-www-form-urlencoded` (**415** otherwise) and accept at most 1000 fields (**422** beyond). Header names containing `_` are ignored (only `-` maps to `_`, so `x_user: admin` cannot fill an `x_user` field past a proxy that strips `X-User`), and every `Cookie` header is read — the first occurrence of a cookie name wins.
 
 Query/form/path/header/cookie values are coerced losslessly: canonical numbers → number,
 `"true"`/`"false"` → boolean, anything else (`""`, `"null"`, `"01234"`) stays a string; repeated
@@ -34,8 +36,8 @@ keys and `key[]` become arrays.
 
 ```toml
 [dependencies]
-vld-poem = "0.4"
-vld = "0.4"
+vld-poem = "0.5"
+vld = "0.5"
 poem = "3"
 serde_json = "1"
 ```
@@ -93,6 +95,17 @@ curl -X POST http://localhost:3000/users \
 # Search (query params)
 curl "http://localhost:3000/search?q=hello&page=1&limit=10"
 ```
+
+## Errors and body limits
+
+Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
+
+| Body | Default limit | Configure |
+|---|---|---|
+| JSON (`VldJson`) | 2 MiB | `.data(VldBodyLimit(n))` on the endpoint / route |
+| Form (`VldForm`) | 2 MiB, max 1000 fields | `.data(VldBodyLimit(n))` on the endpoint / route |
+
+Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
 
 ## OpenAPI (vld-utoipa)
 

@@ -10147,6 +10147,7 @@ dependencies = [
 name = "vld-tower"
 version = "0.4.6"
 dependencies = [
+ "axum",
  "bytes",
  "http 1.5.0",
  "http-body",
@@ -10190,9 +10191,11 @@ version = "0.4.6"
 dependencies = [
  "bytes",
  "futures-util",
+ "http-body-util",
  "serde",
  "serde_json",
  "tokio",
+ "tower",
  "vld",
  "vld-http-common",
  "warp",

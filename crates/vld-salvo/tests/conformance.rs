@@ -3,7 +3,9 @@
 use salvo::http::{HeaderValue, Method};
 use salvo::prelude::*;
 use salvo::test::{RequestBuilder, ResponseExt};
-use vld_http_common::conformance::{self as conf, Cookies, Headers, PathId, Query, User};
+use vld_http_common::conformance::{
+    self as conf, Cookies, Headers, PathId, PathNone, PathStr, Query, User,
+};
 use vld_salvo::prelude::*;
 
 #[handler]
@@ -23,6 +25,14 @@ async fn path(p: VldPath<PathId>, res: &mut salvo::Response) {
     res.render(p.reply());
 }
 #[handler]
+async fn pstr(p: VldPath<PathStr>, res: &mut salvo::Response) {
+    res.render(p.s.clone());
+}
+#[handler]
+async fn pnone(p: VldPath<PathNone>, res: &mut salvo::Response) {
+    res.render(p.reply());
+}
+#[handler]
 async fn headers(h: VldHeaders<Headers>, res: &mut salvo::Response) {
     res.render(h.x_tag.clone());
 }
@@ -38,6 +48,8 @@ async fn send(r: conf::Request) -> conf::Response {
             .push(Router::with_path("form").post(form))
             .push(Router::with_path("query").get(query))
             .push(Router::with_path("path/{id}").get(path))
+            .push(Router::with_path("pstr/{s}").get(pstr))
+            .push(Router::with_path("pnone").get(pnone))
             .push(Router::with_path("headers").get(headers))
             .push(Router::with_path("cookie").get(cookie)),
     );
@@ -61,10 +73,16 @@ vld_http_common::conformance_suite! {
     cases = [
         json_valid,
         json_content_type_case_insensitive,
+        json_content_type_bare_param,
+        json_content_type_unterminated_quote,
+        json_content_type_empty_suffix,
         json_malformed,
         json_validation_error,
         json_oversized,
         form_valid,
+        form_content_type_params,
+        form_wrong_content_type,
+        form_too_many_fields,
         form_validation_error,
         form_non_utf8,
         form_oversized,
@@ -73,9 +91,18 @@ vld_http_common::conformance_suite! {
         query_missing_field,
         path_valid,
         path_invalid,
+        path_percent_decoding,
+        path_no_double_decoding,
+        path_invalid_utf8,
+        path_no_params_optional,
         headers_valid,
+        headers_underscore_ignored,
+        headers_underscore_only,
         headers_missing,
         cookie_quoted_encoded,
+        cookie_multiple_headers,
+        cookie_duplicate_first_wins,
+        cookie_non_ascii,
         cookie_missing,
     ],
 }

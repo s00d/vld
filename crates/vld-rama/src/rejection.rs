@@ -5,12 +5,14 @@ use rama::http::service::web::response::IntoResponse;
 use rama::http::{header, Response, StatusCode};
 use vld_http_common::VldHttpError;
 
-/// Rejection returned when validation (or body parsing) fails.
+/// Rejection returned when validation (or body parsing) fails; wraps
+/// [`VldHttpError`].
 ///
 /// Converts to a JSON response via [`vld_http_common`] helpers:
 /// - validation / parse → **422**
 /// - payload too large → **413**
-/// - non-JSON `Content-Type` on [`VldJson`](crate::VldJson) → **415**
+/// - wrong `Content-Type` on [`VldJson`](crate::VldJson) /
+///   [`VldForm`](crate::VldForm) → **415**
 #[derive(Debug)]
 pub struct VldRejection(VldHttpError);
 
@@ -57,6 +59,12 @@ impl VldRejection {
     pub fn status(&self) -> StatusCode {
         StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
     }
+
+    /// JSON response body.
+    #[must_use]
+    pub fn body(&self) -> serde_json::Value {
+        self.0.body()
+    }
 }
 
 impl From<VldHttpError> for VldRejection {
@@ -67,7 +75,7 @@ impl From<VldHttpError> for VldRejection {
 
 impl IntoResponse for VldRejection {
     fn into_response(self) -> Response {
-        json_response(self.status(), &self.0.body())
+        json_response(self.status(), &self.body())
     }
 }
 

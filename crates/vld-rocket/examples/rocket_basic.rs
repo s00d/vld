@@ -95,6 +95,59 @@ fn health() -> rocket::serde::json::Json<HealthResponse> {
 }
 
 // ===========================================================================
+// Mounted at /api/v1: GET users/<id> — VldPath, POST login — VldForm,
+// GET me — VldHeaders + VldCookie
+// ===========================================================================
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct UserPath {
+        pub id: i64 => vld::number().int().min(1),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct LoginForm {
+        pub username: String => vld::string().min(3),
+        pub password: String => vld::string().min(8),
+    }
+}
+
+vld::schema! {
+    /// `Authorization` → `authorization`.
+    #[derive(Debug, Clone)]
+    pub struct AuthHeaders {
+        pub authorization: String => vld::string().min(1),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct SessionCookies {
+        pub session_id: String => vld::string().min(1),
+    }
+}
+
+/// Rocket needs every `<param>` as an argument too; `VldPath` validates them
+/// (works under any mount point).
+#[rocket::get("/users/<id>")]
+fn get_user(id: &str, p: VldPath<UserPath>) -> String {
+    let _ = id;
+    format!("user #{}", p.id)
+}
+
+#[rocket::post("/login", data = "<form>")]
+fn login(form: VldForm<LoginForm>) -> String {
+    format!("Welcome, {}!", form.username)
+}
+
+#[rocket::get("/me")]
+fn me(h: VldHeaders<AuthHeaders>, c: VldCookie<SessionCookies>) -> String {
+    format!("auth={} session={}", h.authorization, c.session_id)
+}
+
+// ===========================================================================
 // Main
 // ===========================================================================
 
@@ -106,6 +159,9 @@ async fn main() -> Result<(), Box<rocket::Error>> {
     println!("  POST /users   — create user (JSON body)");
     println!("  GET  /search  — search (query params)");
     println!("  GET  /health  — health check");
+    println!("  GET  /api/v1/users/<id> — path params (non-root mount)");
+    println!("  POST /api/v1/login      — form body");
+    println!("  GET  /api/v1/me         — headers + cookies");
     println!();
     println!("Example requests:");
     println!();
@@ -126,16 +182,23 @@ async fn main() -> Result<(), Box<rocket::Error>> {
     println!("  # Search:");
     println!(r#"  curl -s "http://localhost:8000/search?q=hello&page=1&limit=10" | jq"#);
     println!();
+    println!("  # Path / form / headers + cookies:");
+    println!(r#"  curl -s http://localhost:8000/api/v1/users/42"#);
+    println!(
+        r#"  curl -s -d 'username=alice&password=secret123' http://localhost:8000/api/v1/login"#
+    );
+    println!(
+        r#"  curl -s -H 'Authorization: Bearer t' -b 'session_id=abc' http://localhost:8000/api/v1/me"#
+    );
+    println!();
     println!("  # Health:");
     println!(r#"  curl -s http://localhost:8000/health | jq"#);
     println!();
 
     let _rocket = rocket::build()
         .mount("/", rocket::routes![create_user, search, health])
-        .register(
-            "/",
-            rocket::catchers![vld_rocket::vld_422_catcher, vld_rocket::vld_400_catcher],
-        )
+        .mount("/api/v1", rocket::routes![get_user, login, me])
+        .register("/", vld_catchers())
         .launch()
         .await
         .map_err(Box::new)?;

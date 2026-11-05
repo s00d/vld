@@ -30,7 +30,10 @@ async fn echo_service(
     req: Request<In>,
 ) -> Result<Response<http_body_util::Full<Bytes>>, Box<dyn std::error::Error + Send + Sync>> {
     // Return the body as-is + extensions info
-    let has_validated = req.extensions().get::<CreateUser>().is_some();
+    let has_validated = req
+        .extensions()
+        .get::<vld_tower::Validated<CreateUser>>()
+        .is_some();
     let body_bytes = req.into_body().collect().await?.to_bytes();
 
     let resp_body = serde_json::json!({

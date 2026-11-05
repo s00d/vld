@@ -6,7 +6,9 @@ use rama::http::body::util::BodyExt;
 use rama::http::service::web::WebService;
 use rama::http::{Body, HeaderValue, Method};
 use rama::Service;
-use vld_http_common::conformance::{Cookies, Headers, PathId, Query, Request, Response, User};
+use vld_http_common::conformance::{
+    Cookies, Headers, PathId, PathNone, PathStr, Query, Request, Response, User,
+};
 use vld_rama::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 
 fn to_rama(r: Request) -> rama::http::Request {
@@ -42,6 +44,8 @@ mod extractors {
             .with_post("/form", async |VldForm(u): VldForm<User>| u.reply())
             .with_get("/query", async |VldQuery(q): VldQuery<Query>| q.reply())
             .with_get("/path/{id}", async |VldPath(p): VldPath<PathId>| p.reply())
+            .with_get("/pstr/{s}", async |VldPath(p): VldPath<PathStr>| p.s)
+            .with_get("/pnone", async |VldPath(p): VldPath<PathNone>| p.reply())
             .with_get("/headers", async |VldHeaders(h): VldHeaders<Headers>| {
                 h.x_tag
             })
@@ -55,10 +59,16 @@ mod extractors {
         cases = [
             json_valid,
             json_content_type_case_insensitive,
+            json_content_type_bare_param,
+            json_content_type_unterminated_quote,
+            json_content_type_empty_suffix,
             json_malformed,
             json_validation_error,
             json_oversized,
             form_valid,
+            form_content_type_params,
+            form_wrong_content_type,
+            form_too_many_fields,
             form_validation_error,
             form_non_utf8,
             form_oversized,
@@ -67,9 +77,18 @@ mod extractors {
             query_missing_field,
             path_valid,
             path_invalid,
+            path_percent_decoding,
+            path_no_double_decoding,
+            path_invalid_utf8,
+            path_no_params_optional,
             headers_valid,
+            headers_underscore_ignored,
+            headers_underscore_only,
             headers_missing,
             cookie_quoted_encoded,
+            cookie_multiple_headers,
+            cookie_duplicate_first_wins,
+            cookie_non_ascii,
             cookie_missing,
         ],
     }
@@ -105,6 +124,8 @@ mod layer {
         cases = [
             json_valid,
             json_content_type_case_insensitive,
+            json_content_type_bare_param,
+            json_content_type_unterminated_quote,
             json_malformed,
             json_validation_error,
             json_oversized,

@@ -26,12 +26,14 @@ On validation failure (and for malformed bodies) all extractors return **422 Unp
 
 JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
 
+Form extractors require `application/x-www-form-urlencoded` (**415** otherwise) and accept at most 1000 fields (**422** beyond). Header names containing `_` are ignored (only `-` maps to `_`, so `x_user: admin` cannot fill an `x_user` field past a proxy that strips `X-User`), and every `Cookie` header is read — the first occurrence of a cookie name wins.
+
 ## Installation
 
 ```toml
 [dependencies]
-vld = "0.4"
-vld-axum = "0.4"
+vld = "0.5"
+vld-axum = "0.5"
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 ```
@@ -232,16 +234,16 @@ curl -s -X POST "http://localhost:3000/orders?dry_run=true&currency=USD" \
   -d '{"product_id": 42, "quantity": 3}' | jq
 ```
 
-## Error response format
+## Errors and body limits
 
-```json
-{
-  "error": "Validation failed",
-  "issues": [
-    { "path": "name", "message": "String must contain at least 2 character(s)", "code": "too_small" }
-  ]
-}
-```
+Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
+
+| Body | Default limit | Configure |
+|---|---|---|
+| JSON (`VldJson`) | 2 MiB | `.layer(axum::extract::DefaultBodyLimit::max(n))` |
+| Form (`VldForm`) | 2 MiB, max 1000 fields | `.layer(axum::extract::DefaultBodyLimit::max(n))` |
+
+Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
 
 ## OpenAPI (vld-utoipa)
 
@@ -250,8 +252,8 @@ curl -s -X POST "http://localhost:3000/orders?dry_run=true&currency=USD" \
 [vld-utoipa](../vld-utoipa/README.md):
 
 ```toml
-vld = { version = "0.4", features = ["openapi"] }
-vld-utoipa = "0.4"
+vld = { version = "0.5", features = ["openapi"] }
+vld-utoipa = "0.5"
 utoipa = "5"
 ```
 

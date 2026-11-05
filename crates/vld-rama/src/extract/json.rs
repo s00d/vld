@@ -1,19 +1,18 @@
 use std::future::Future;
 
 use crate::rejection::VldRejection;
-use rama::http::body::util::BodyExt;
 use rama::http::service::web::extract::{FromRequest, FromRequestBody};
 use rama::http::{header, Body, Request};
 use vld::schema::VldParse;
-use vld_http_common::{parse_json_body, require_json_content_type, DEFAULT_BODY_LIMIT};
+use vld_http_common::{parse_json_body, require_json_content_type};
 
 /// Rama extractor that validates **JSON request bodies**.
 ///
 /// Drop-in alternative to `rama::http::service::web::extract::Json<T>` that
-/// uses `vld` instead of `serde::Deserialize`. Bodies larger than
-/// [`DEFAULT_BODY_LIMIT`] (2 MiB) are rejected with 413; a missing or
-/// non-JSON `Content-Type` (see [`vld_http_common::is_json_content_type`])
-/// with 415.
+/// uses `vld` instead of `serde::Deserialize`. Bodies larger than the
+/// [`VldBodyLimit`](crate::VldBodyLimit) extension (default 2 MiB) are
+/// rejected with 413; a missing or non-JSON `Content-Type` (see
+/// [`vld_http_common::is_json_content_type`]) with 415.
 pub struct VldJson<T>(pub T);
 
 impl<T> FromRequest for VldJson<T>
@@ -44,15 +43,10 @@ where
                 .get(header::CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok()),
         );
+        let limit = super::body_limit(parts);
         async move {
             content_type?;
-            let bytes = body
-                .limited(DEFAULT_BODY_LIMIT)
-                .collect()
-                .await
-                .map_err(|e| VldRejection::from_body_error(&e))?
-                .to_bytes();
-
+            let bytes = super::read_body(body, limit).await?;
             let value = parse_json_body(&bytes)?;
             let parsed = T::vld_parse_value(&value).map_err(VldRejection::from_vld)?;
             Ok(VldJson(parsed))

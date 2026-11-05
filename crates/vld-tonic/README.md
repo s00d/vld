@@ -9,18 +9,17 @@
 
 Validate protobuf messages and gRPC metadata using `vld` schemas.
 
-## Version features
+## Compatibility
 
-- `tonic-0_12` (default)
-- `tonic-0_13`
-- `tonic-0_14`
+Works with tonic **0.12, 0.13 and 0.14** (`tonic = ">=0.12, <0.15"`); there are no version
+features — use whichever `tonic` your app depends on.
 
 ## Installation
 
 ```toml
 [dependencies]
-vld = "0.4"
-vld-tonic = "0.4"
+vld = "0.5"
+vld-tonic = "0.5"
 tonic = "0.12"
 serde = { version = "1", features = ["derive"] }
 ```
@@ -99,7 +98,8 @@ async fn handler(request: Request<MyMessage>) -> Result<Response<()>, Status> {
 ```
 
 Metadata keys are converted from `kebab-case` to `snake_case`
-(`x-request-id` → `x_request_id`). Values are coerced losslessly (`"42"` → number,
+(`x-request-id` → `x_request_id`); keys that already contain `_` are ignored and binary
+(`-bin`) keys are skipped. Values are coerced losslessly (`"42"` → number,
 `"true"` → boolean, `"01234"` / `""` stay strings).
 
 ## Metadata Interceptor
@@ -118,7 +118,7 @@ Server::builder()
     .await?;
 ```
 
-Retrieve the validated metadata in handlers:
+The interceptor stores the value as `vld_tonic::Validated<T>`; retrieve it in handlers:
 
 ```rust
 async fn handler(request: Request<MyMessage>) -> Result<Response<()>, Status> {
