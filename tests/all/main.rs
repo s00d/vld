@@ -26,3 +26,4 @@ mod number;
 mod object;
 mod regressions;
 mod string;
+mod proptests;
