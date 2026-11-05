@@ -121,13 +121,13 @@ impl<T: VldSchema> ZArray<T> {
         &self.element
     }
 
-    /// Generate a JSON Schema (called by [`JsonSchema`](crate::json_schema::JsonSchema) trait impl).
+    /// Generate a JSON Schema (called by [`JsonSchema`](crate::openapi::JsonSchema) trait impl).
     ///
     /// Requires the `openapi` feature.
     #[cfg(feature = "openapi")]
     pub fn to_json_schema_inner(&self) -> serde_json::Value
     where
-        T: crate::json_schema::JsonSchema,
+        T: crate::openapi::JsonSchema,
     {
         let mut schema = serde_json::json!({
             "type": "array",

@@ -1,8 +1,16 @@
+//! Validation errors: [`VldError`], [`ValidationIssue`], [`IssueCode`].
+
 use std::fmt;
 
+mod builder;
+pub mod format;
+pub mod i18n;
+
+pub use crate::object::{FieldResult, ParseResult};
+pub use builder::IssueBuilder;
+
 /// A segment in a validation error path.
-#[derive(Debug, Clone)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum PathSegment {
     /// Object field name.
     Field(String),
@@ -20,8 +28,7 @@ impl fmt::Display for PathSegment {
 }
 
 /// Type of string validation that failed.
-#[derive(Debug, Clone)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum StringValidation {
     Email,
     Url,
@@ -69,8 +76,7 @@ pub enum StringValidation {
 }
 
 /// Validation issue code — describes what went wrong.
-#[derive(Debug, Clone)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum IssueCode {
     InvalidType { expected: String, received: String },
     TooSmall { minimum: f64, inclusive: bool },
@@ -86,8 +92,7 @@ pub enum IssueCode {
 }
 
 /// A single validation issue with path, message and received value.
-#[derive(Debug, Clone)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ValidationIssue {
     pub code: IssueCode,
     pub message: String,
@@ -99,8 +104,7 @@ pub struct ValidationIssue {
 /// Collection of validation errors.
 ///
 /// Errors are accumulated (not short-circuited), so all issues are reported at once.
-#[derive(Debug, Clone)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VldError {
     pub issues: Vec<ValidationIssue>,
 }
@@ -184,100 +188,6 @@ impl VldError {
     }
 }
 
-/// Fluent builder for constructing a single [`ValidationIssue`].
-///
-/// Obtained via [`VldError::issue()`]. Push it into a `VldError` with
-/// [`.finish()`](IssueBuilder::finish).
-///
-/// # Example
-/// ```
-/// use vld::prelude::*;
-///
-/// let mut errors = VldError::new();
-/// errors
-///     .issue(IssueCode::Custom { code: "password_weak".into() })
-///     .message("Password is too weak")
-///     .path_field("password")
-///     .received(&serde_json::json!("123"))
-///     .finish();
-/// assert_eq!(errors.issues.len(), 1);
-/// assert_eq!(errors.issues[0].message, "Password is too weak");
-/// ```
-pub struct IssueBuilder<'a> {
-    errors: &'a mut VldError,
-    code: IssueCode,
-    message: Option<String>,
-    path: Vec<PathSegment>,
-    received: Option<serde_json::Value>,
-}
-
-impl<'a> IssueBuilder<'a> {
-    /// Set the error message.
-    pub fn message(mut self, msg: impl Into<String>) -> Self {
-        self.message = Some(msg.into());
-        self
-    }
-
-    /// Add a field path segment.
-    pub fn path_field(mut self, name: impl Into<String>) -> Self {
-        self.path.push(PathSegment::Field(name.into()));
-        self
-    }
-
-    /// Add an index path segment.
-    pub fn path_index(mut self, idx: usize) -> Self {
-        self.path.push(PathSegment::Index(idx));
-        self
-    }
-
-    /// Attach the received value.
-    pub fn received(mut self, value: &serde_json::Value) -> Self {
-        self.received = Some(truncate_value(value));
-        self
-    }
-
-    /// Finish building and push the issue into the parent `VldError`.
-    pub fn finish(self) {
-        let msg = self
-            .message
-            .unwrap_or_else(|| format!("Validation error: {}", self.code.key()));
-        self.errors.issues.push(ValidationIssue {
-            code: self.code,
-            message: msg,
-            path: self.path,
-            received: self.received,
-        });
-    }
-}
-
-impl VldError {
-    /// Start building a new issue with the fluent API.
-    ///
-    /// Call `.message(...)`, `.path_field(...)`, `.received(...)` etc., then
-    /// `.finish()` to push the issue.
-    ///
-    /// # Example
-    /// ```
-    /// use vld::prelude::*;
-    ///
-    /// let mut errors = VldError::new();
-    /// errors
-    ///     .issue(IssueCode::Custom { code: "my_check".into() })
-    ///     .message("something went wrong")
-    ///     .path_field("field_name")
-    ///     .finish();
-    /// ```
-    pub fn issue(&mut self, code: IssueCode) -> IssueBuilder<'_> {
-        IssueBuilder {
-            errors: self,
-            code,
-            message: None,
-            path: vec![],
-            received: None,
-        }
-    }
-}
-
 impl Default for VldError {
     fn default() -> Self {
         Self::new()
@@ -355,8 +265,7 @@ impl IssueCode {
 }
 
 /// Returns the JSON type name for a value.
-#[doc(hidden)]
-pub fn value_type_name(value: &serde_json::Value) -> String {
+pub(crate) fn value_type_name(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Null => "null",
         serde_json::Value::Bool(_) => "boolean",
@@ -372,8 +281,7 @@ pub fn value_type_name(value: &serde_json::Value) -> String {
 /// ("Expected object, received ...").
 ///
 /// Shared by [`ZObject`](crate::object::ZObject), `schema!` and `#[derive(Validate)]`.
-#[doc(hidden)]
-pub fn expect_object(
+pub(crate) fn expect_object(
     value: &serde_json::Value,
 ) -> Result<&serde_json::Map<String, serde_json::Value>, VldError> {
     value.as_object().ok_or_else(|| {
@@ -389,7 +297,7 @@ pub fn expect_object(
 }
 
 /// Format a JSON value for display in errors (short form).
-pub fn format_value_short(value: &serde_json::Value) -> String {
+pub(crate) fn format_value_short(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Null => "null".to_string(),
         serde_json::Value::Bool(b) => b.to_string(),
@@ -408,176 +316,8 @@ pub fn format_value_short(value: &serde_json::Value) -> String {
     }
 }
 
-/// Result of validating a single field.
-///
-/// Returned by `validate_fields()` generated by the [`schema!`](crate::schema!) macro.
-#[derive(Debug, Clone)]
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct FieldResult {
-    /// Field name.
-    pub name: String,
-    /// Raw input value (before validation).
-    pub input: serde_json::Value,
-    /// `Ok(json_value)` if the field is valid (output serialized to JSON),
-    /// `Err(error)` if validation failed.
-    pub result: Result<serde_json::Value, VldError>,
-}
-
-impl FieldResult {
-    /// Whether this field passed validation.
-    pub fn is_ok(&self) -> bool {
-        self.result.is_ok()
-    }
-
-    /// Whether this field failed validation.
-    pub fn is_err(&self) -> bool {
-        self.result.is_err()
-    }
-}
-
-impl std::fmt::Display for FieldResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.result {
-            Ok(v) => write!(f, "✔ {}: {}", self.name, format_value_short(v)),
-            Err(e) => {
-                let received = format_value_short(&self.input);
-                for (i, issue) in e.issues.iter().enumerate() {
-                    if i > 0 {
-                        writeln!(f)?;
-                    }
-                    write!(
-                        f,
-                        "✖ {}: {} (received: {})",
-                        self.name, issue.message, received
-                    )?;
-                }
-                Ok(())
-            }
-        }
-    }
-}
-
-/// Result of lenient parsing: contains the (possibly partial) struct and
-/// per-field diagnostics.
-///
-/// Created by `parse_lenient()` / `parse_lenient_value()` generated by
-/// [`impl_validate_fields!`](crate::impl_validate_fields).
-///
-/// The struct is always constructed — invalid fields fall back to
-/// `Default::default()`. You can inspect which fields passed/failed via
-/// [`fields()`](Self::fields), and save the result to a file at any time
-/// via `save_to_file()`.
-#[derive(Debug)]
-pub struct ParseResult<T> {
-    /// The constructed struct (invalid fields use `Default`).
-    pub value: T,
-    /// Per-field validation diagnostics.
-    field_results: Vec<FieldResult>,
-}
-
-impl<T> ParseResult<T> {
-    /// Create a new parse result.
-    pub fn new(value: T, field_results: Vec<FieldResult>) -> Self {
-        Self {
-            value,
-            field_results,
-        }
-    }
-
-    /// All per-field results.
-    pub fn fields(&self) -> &[FieldResult] {
-        &self.field_results
-    }
-
-    /// Get a specific field's result by name.
-    ///
-    /// Returns `None` if no field with that name exists.
-    pub fn field(&self, name: &str) -> Option<&FieldResult> {
-        self.field_results.iter().find(|f| f.name == name)
-    }
-
-    /// Only the fields that passed validation.
-    pub fn valid_fields(&self) -> Vec<&FieldResult> {
-        self.field_results.iter().filter(|f| f.is_ok()).collect()
-    }
-
-    /// Only the fields that failed validation.
-    pub fn error_fields(&self) -> Vec<&FieldResult> {
-        self.field_results.iter().filter(|f| f.is_err()).collect()
-    }
-
-    /// Whether all fields passed validation.
-    pub fn is_valid(&self) -> bool {
-        self.field_results.iter().all(|f| f.is_ok())
-    }
-
-    /// Whether at least one field failed.
-    pub fn has_errors(&self) -> bool {
-        self.field_results.iter().any(|f| f.is_err())
-    }
-
-    /// Number of valid fields.
-    pub fn valid_count(&self) -> usize {
-        self.field_results.iter().filter(|f| f.is_ok()).count()
-    }
-
-    /// Number of invalid fields.
-    pub fn error_count(&self) -> usize {
-        self.field_results.iter().filter(|f| f.is_err()).count()
-    }
-
-    /// Consume and return the inner struct.
-    pub fn into_value(self) -> T {
-        self.value
-    }
-
-    /// Consume and return both the struct and field results.
-    pub fn into_parts(self) -> (T, Vec<FieldResult>) {
-        (self.value, self.field_results)
-    }
-}
-
-impl<T: serde::Serialize> ParseResult<T> {
-    /// Serialize the struct to a JSON file.
-    pub fn save_to_file(&self, path: &std::path::Path) -> std::io::Result<()> {
-        let json = serde_json::to_string_pretty(&self.value)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)?;
-            }
-        }
-        std::fs::write(path, json)
-    }
-
-    /// Serialize the struct to a JSON string.
-    pub fn to_json_string(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(&self.value)
-    }
-
-    /// Serialize the struct to a `serde_json::Value`.
-    pub fn to_json_value(&self) -> Result<serde_json::Value, serde_json::Error> {
-        serde_json::to_value(&self.value)
-    }
-}
-
-impl<T: std::fmt::Debug> std::fmt::Display for ParseResult<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "ParseResult ({} valid, {} errors):",
-            self.valid_count(),
-            self.error_count()
-        )?;
-        for field in &self.field_results {
-            writeln!(f, "  {}", field)?;
-        }
-        Ok(())
-    }
-}
-
 /// Truncate large values to avoid storing huge payloads in errors.
-fn truncate_value(value: &serde_json::Value) -> serde_json::Value {
+pub(crate) fn truncate_value(value: &serde_json::Value) -> serde_json::Value {
     match value {
         // Slice by chars, not bytes: a byte slice can split a multi-byte
         // UTF-8 sequence and panic on attacker-controlled input.

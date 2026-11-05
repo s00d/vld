@@ -719,7 +719,7 @@ fn main() {
     println!("{}", serde_json::to_string_pretty(&openapi_doc).unwrap());
 
     // Multi-schema OpenAPI document
-    let multi_doc = vld::json_schema::to_openapi_document_multi(&[
+    let multi_doc = vld::openapi::to_openapi_document_multi(&[
         ("User", User::json_schema()),
         ("Address", Address::json_schema()),
     ]);

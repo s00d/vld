@@ -112,7 +112,7 @@ pub fn vld_to_schemars(value: &Value) -> schemars::Schema {
 ///
 /// ```rust
 /// use vld::prelude::*;
-/// use vld::json_schema::JsonSchema;
+/// use vld::openapi::JsonSchema;
 ///
 /// let schema = vld_schemars::vld_schema_to_schemars(&vld::string().email().json_schema());
 /// assert_eq!(schema.get("type").unwrap(), "string");
@@ -457,7 +457,7 @@ pub fn get_property<'a>(schema: &'a Value, field: &str) -> Option<&'a Value> {
 ///
 /// ```rust
 /// use vld::prelude::*;
-/// use vld::json_schema::JsonSchema;
+/// use vld::openapi::JsonSchema;
 ///
 /// let a = vld::string().min(1).json_schema();
 /// let b = serde_json::json!({"type": "string", "minLength": 1});
@@ -617,7 +617,7 @@ macro_rules! impl_json_schema {
 pub fn __vld_json_schema(
     gen: &mut schemars::SchemaGenerator,
     mut root: Value,
-    nested: Vec<vld::json_schema::NestedSchemaEntry>,
+    nested: Vec<vld::openapi::NestedSchemaEntry>,
 ) -> schemars::Schema {
     let path = &gen.settings().definitions_path;
     let path = path.strip_prefix('#').unwrap_or(path);
@@ -659,7 +659,7 @@ fn rewrite_refs(value: &mut Value, prefix: &str) {
 
 #[doc(hidden)]
 pub trait __VldNestedSchemasFallback {
-    fn __vld_nested_schemas() -> Vec<vld::json_schema::NestedSchemaEntry> {
+    fn __vld_nested_schemas() -> Vec<vld::openapi::NestedSchemaEntry> {
         Vec::new()
     }
 }

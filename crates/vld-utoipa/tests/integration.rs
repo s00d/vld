@@ -337,7 +337,7 @@ fn derive_rename_all_required_uses_camel_case() {
 #[test]
 fn roundtrip_string_schema() {
     let vld_schema = vld::string().min(3).max(100).email();
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld_schema.json_schema();
 
     let utoipa_schema = json_schema_to_schema(&js);
@@ -352,7 +352,7 @@ fn roundtrip_string_schema() {
 #[test]
 fn roundtrip_number_schema() {
     let vld_schema = vld::number().min(0.0).max(100.0);
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld_schema.json_schema();
 
     let utoipa_schema = json_schema_to_schema(&js);
@@ -364,7 +364,7 @@ fn roundtrip_number_schema() {
 #[test]
 fn roundtrip_array_schema() {
     let vld_schema = vld::array(vld::string().non_empty()).min_len(1);
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld_schema.json_schema();
 
     let utoipa_schema = json_schema_to_schema(&js);
@@ -378,7 +378,7 @@ fn roundtrip_array_schema() {
 #[test]
 fn roundtrip_optional_schema() {
     let vld_schema = vld::string().email().optional();
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld_schema.json_schema();
 
     let utoipa_schema = json_schema_to_schema(&js);

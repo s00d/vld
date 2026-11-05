@@ -743,7 +743,7 @@ fn schema_macro_to_openapi_document() {
 
 #[test]
 fn to_openapi_document_single() {
-    use vld::json_schema::to_openapi_document;
+    use vld::openapi::to_openapi_document;
 
     let schema = vld::string().email().json_schema();
     let doc = to_openapi_document("Email", &schema);
@@ -753,7 +753,7 @@ fn to_openapi_document_single() {
 
 #[test]
 fn to_openapi_document_multi() {
-    use vld::json_schema::to_openapi_document_multi;
+    use vld::openapi::to_openapi_document_multi;
 
     let schemas = vec![
         ("Name", vld::string().min(1).json_schema()),

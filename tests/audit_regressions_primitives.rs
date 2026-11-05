@@ -164,7 +164,7 @@ fn array_contains_and_unique() {
 #[cfg(feature = "openapi")]
 #[test]
 fn array_contains_schema_uses_const() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld::array(vld::number()).contains(5).json_schema();
     assert_eq!(js["contains"], json!({"const": 5}));
     let js = vld::array(vld::number()).min_contains(2).json_schema();
@@ -213,7 +213,7 @@ fn bytes_bad_element_has_index_path() {
 #[cfg(feature = "openapi")]
 #[test]
 fn bytes_string_schema_uses_encoded_length() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld::bytes().base64().len(4).json_schema();
     assert_eq!(js["minLength"], 8);
     assert_eq!(js["maxLength"], 8);
@@ -347,7 +347,7 @@ fn new_type_error_and_coerce_builders() {
 #[cfg(feature = "openapi")]
 #[test]
 fn json_schema_emits_strictest_constraints() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
 
     let js = vld::number().min(5.0).min(0.0).json_schema();
     assert_eq!(js["minimum"], 5.0);
@@ -385,7 +385,7 @@ fn json_schema_emits_strictest_constraints() {
 #[cfg(all(feature = "openapi", feature = "decimal"))]
 #[test]
 fn decimal_schema_emits_sign_flags() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld::decimal().positive().json_schema();
     assert_eq!(js["x-exclusiveMinDecimal"], "0");
 }

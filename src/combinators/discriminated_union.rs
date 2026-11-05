@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
-use crate::object::DynSchema;
+use crate::schema::DynSchema;
 use crate::schema::VldSchema;
 
 /// Entry in a discriminated union: a discriminator value and its associated schema.

@@ -12,7 +12,7 @@
 //!
 //! ```
 //! use vld::prelude::*;
-//! use vld::json_schema::JsonSchema;
+//! use vld::openapi::JsonSchema;
 //!
 //! let schema = vld::string().min(2).max(50).email();
 //! let js = schema.json_schema();
@@ -24,6 +24,9 @@
 use serde_json::{json, Value};
 
 use crate::schema::VldSchema;
+
+#[cfg(feature = "diff")]
+pub mod diff;
 
 pub use crate::schema::NestedSchemaEntry;
 
@@ -535,7 +538,7 @@ impl CollectNestedSchemas for crate::object::ZObject {
 /// # Example
 ///
 /// ```
-/// use vld::json_schema::{JsonSchema, to_openapi_document};
+/// use vld::openapi::{JsonSchema, to_openapi_document};
 ///
 /// let schema = vld::string().email();
 /// let doc = to_openapi_document("Email", &schema.json_schema());
@@ -550,7 +553,7 @@ pub fn to_openapi_document(name: &str, schema: &Value) -> Value {
 /// # Example
 ///
 /// ```
-/// use vld::json_schema::{JsonSchema, to_openapi_document_multi};
+/// use vld::openapi::{JsonSchema, to_openapi_document_multi};
 ///
 /// let schemas = vec![
 ///     ("Name", vld::string().min(1).json_schema()),

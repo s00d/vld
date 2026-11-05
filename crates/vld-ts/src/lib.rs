@@ -60,7 +60,7 @@ use serde_json::Value;
 /// # Example
 ///
 /// ```
-/// use vld::json_schema::JsonSchema as _;
+/// use vld::openapi::JsonSchema as _;
 /// use vld_ts::to_zod;
 ///
 /// let schema = vld::string().min(2).email();
@@ -70,7 +70,7 @@ use serde_json::Value;
 /// ```
 pub fn to_zod<S>(schema: &S) -> String
 where
-    S: vld::json_schema::JsonSchema,
+    S: vld::openapi::JsonSchema,
 {
     convert(Zod, &schema.json_schema())
 }
@@ -89,7 +89,7 @@ where
 /// ```
 pub fn to_valibot<S>(schema: &S) -> String
 where
-    S: vld::json_schema::JsonSchema,
+    S: vld::openapi::JsonSchema,
 {
     convert(Valibot, &schema.json_schema())
 }
@@ -107,7 +107,7 @@ where
 /// ```
 pub fn to_openapi<S>(schema: &S) -> Value
 where
-    S: vld::json_schema::JsonSchema,
+    S: vld::openapi::JsonSchema,
 {
     schema.json_schema()
 }

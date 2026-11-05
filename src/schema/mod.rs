@@ -1,22 +1,18 @@
 use serde_json::Value;
-use std::marker::PhantomData;
 
 use crate::combinators::{
     ZCatch, ZDescribe, ZIntersection, ZPipe, ZRefine, ZSuperRefine, ZTransform, ZUnion2,
 };
 use crate::error::VldError;
-use crate::input::VldInput;
 use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
 
-/// A `(component_name, json_schema_fn)` pair describing a named nested schema.
-///
-/// Re-exported as `vld::json_schema::NestedSchemaEntry`.
-pub type NestedSchemaEntry = (&'static str, fn() -> serde_json::Value);
+mod dyn_schema;
+pub mod input;
+mod nested;
 
-/// Collector for transitive nested OpenAPI component schemas.
-///
-/// Shared by `NestedSchema` and the `nested!` macro.
-pub type NestedSchemaCollectFn = fn(&mut Vec<NestedSchemaEntry>);
+pub use dyn_schema::DynSchema;
+pub use input::VldInput;
+pub use nested::{NestedSchema, NestedSchemaCollectFn, NestedSchemaEntry};
 
 /// Core validation schema trait.
 ///
@@ -195,62 +191,4 @@ pub trait VldSchema: Sized {
 pub trait VldParse: Sized {
     /// Parse and validate a `serde_json::Value` into this type.
     fn vld_parse_value(value: &serde_json::Value) -> Result<Self, crate::error::VldError>;
-}
-
-/// Schema for parsing nested structures. Created via [`vld::nested()`](crate::nested)
-/// or the [`vld::nested!`](crate::nested!) macro.
-pub struct NestedSchema<T, F>
-where
-    F: Fn(&Value) -> Result<T, VldError>,
-{
-    parse_fn: F,
-    #[allow(dead_code)]
-    pub(crate) name: Option<&'static str>,
-    /// Returns the full JSON Schema of the nested type (for OpenAPI component registration).
-    #[allow(dead_code)]
-    pub(crate) json_schema_fn: Option<fn() -> serde_json::Value>,
-    /// Collects transitive nested schemas of the nested type into a shared buffer.
-    #[allow(dead_code)]
-    pub(crate) collect_nested_fn: Option<NestedSchemaCollectFn>,
-    _phantom: PhantomData<T>,
-}
-
-impl<T, F> NestedSchema<T, F>
-where
-    F: Fn(&Value) -> Result<T, VldError>,
-{
-    pub fn new(f: F) -> Self {
-        Self {
-            parse_fn: f,
-            name: None,
-            json_schema_fn: None,
-            collect_nested_fn: None,
-            _phantom: PhantomData,
-        }
-    }
-
-    pub fn new_named(
-        f: F,
-        name: &'static str,
-        json_schema_fn: Option<fn() -> serde_json::Value>,
-        collect_nested_fn: Option<NestedSchemaCollectFn>,
-    ) -> Self {
-        Self {
-            parse_fn: f,
-            name: Some(name),
-            json_schema_fn,
-            collect_nested_fn,
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<T, F> VldSchema for NestedSchema<T, F>
-where
-    F: Fn(&Value) -> Result<T, VldError>,
-{
-    type Output = T;
-    fn parse_value(&self, value: &Value) -> Result<T, VldError> {
-        (self.parse_fn)(value)
-    }
 }

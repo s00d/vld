@@ -3,10 +3,14 @@
 
 use serde_json::{Map, Value};
 
-use crate::error::{FieldResult, PathSegment, VldError};
+use crate::error::{PathSegment, VldError};
+use crate::object::FieldResult;
 use crate::schema::VldSchema;
 
-pub use crate::error::expect_object;
+/// Return the value as a JSON object, or an `invalid_type` error.
+pub fn expect_object(value: &Value) -> Result<&Map<String, Value>, VldError> {
+    crate::error::expect_object(value)
+}
 
 static NULL: Value = Value::Null;
 
@@ -47,7 +51,7 @@ where
     FieldResult {
         name: key.to_string(),
         input: input.clone(),
-        result: crate::object::DynSchema::dyn_parse(schema, input),
+        result: crate::schema::DynSchema::dyn_parse(schema, input),
     }
 }
 
@@ -139,5 +143,5 @@ pub fn openapi_document(
             all.push((n, f()));
         }
     }
-    crate::json_schema::to_openapi_document_multi(&all)
+    crate::openapi::to_openapi_document_multi(&all)
 }

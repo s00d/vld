@@ -1916,10 +1916,7 @@ macro_rules! __fake_schema {
 
 /// Embed `nested` schemas into `schema` under `$defs`.
 #[doc(hidden)]
-pub fn with_nested_defs(
-    mut schema: Value,
-    nested: Vec<vld::json_schema::NestedSchemaEntry>,
-) -> Value {
+pub fn with_nested_defs(mut schema: Value, nested: Vec<vld::openapi::NestedSchemaEntry>) -> Value {
     if let Some(obj) = schema.as_object_mut() {
         if !nested.is_empty() {
             let defs = nested
@@ -1937,7 +1934,7 @@ pub fn with_nested_defs(
 /// precedence over this trait method.
 #[doc(hidden)]
 pub trait __VldNestedSchemasFallback {
-    fn __vld_nested_schemas() -> Vec<vld::json_schema::NestedSchemaEntry> {
+    fn __vld_nested_schemas() -> Vec<vld::openapi::NestedSchemaEntry> {
         Vec::new()
     }
 }

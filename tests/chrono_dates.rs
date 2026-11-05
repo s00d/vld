@@ -221,7 +221,7 @@ fn date_with_default() {
 #[cfg(feature = "openapi")]
 #[test]
 fn date_json_schema() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
 
     let js = vld::date().json_schema();
     assert_eq!(js["type"], "string");
@@ -231,7 +231,7 @@ fn date_json_schema() {
 #[cfg(feature = "openapi")]
 #[test]
 fn datetime_json_schema() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
 
     let js = vld::datetime().json_schema();
     assert_eq!(js["type"], "string");

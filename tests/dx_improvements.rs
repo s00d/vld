@@ -518,7 +518,7 @@ mod wasm_std {
     #[test]
     fn path_input_available_with_std() {
         // The `std` feature is on by default, so Path should work.
-        use vld::input::VldInput;
+        use vld::schema::VldInput;
         let path = std::path::Path::new("nonexistent.json");
         let err = path.to_json_value();
         assert!(err.is_err()); // File doesn't exist, but the impl is there.

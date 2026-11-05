@@ -14,7 +14,7 @@ fn b64_value(b: u8) -> Option<u8> {
     }
 }
 
-pub(super) fn decode_base64(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn decode_base64(s: &str) -> Option<Vec<u8>> {
     let bytes = s.as_bytes();
     if bytes.is_empty() || bytes.len() % 4 != 0 {
         return None;

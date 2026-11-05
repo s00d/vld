@@ -220,13 +220,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         });
         quote! {
             /// Validate each field individually and return per-field results.
-            pub fn validate_fields<__VldInputT: ::vld::input::VldInput + ?Sized>(
+            pub fn validate_fields<__VldInputT: ::vld::schema::VldInput + ?Sized>(
                 input: &__VldInputT,
             ) -> ::std::result::Result<
-                ::std::vec::Vec<::vld::error::FieldResult>,
+                ::std::vec::Vec<::vld::object::FieldResult>,
                 ::vld::error::VldError,
             > {
-                let __vld_json = <__VldInputT as ::vld::input::VldInput>::to_json_value(input)?;
+                let __vld_json = <__VldInputT as ::vld::schema::VldInput>::to_json_value(input)?;
                 Self::validate_fields_value(&__vld_json)
             }
 
@@ -234,13 +234,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             pub fn validate_fields_value(
                 __vld_json: &::vld::serde_json::Value,
             ) -> ::std::result::Result<
-                ::std::vec::Vec<::vld::error::FieldResult>,
+                ::std::vec::Vec<::vld::object::FieldResult>,
                 ::vld::error::VldError,
             > {
                 #[allow(unused_imports)]
                 use ::vld::schema::VldSchema as _;
                 let __vld_obj = ::vld::__private::expect_object(__vld_json)?;
-                let mut __vld_results: ::std::vec::Vec<::vld::error::FieldResult> =
+                let mut __vld_results: ::std::vec::Vec<::vld::object::FieldResult> =
                     ::std::vec::Vec::new();
                 #( #result_pushes )*
                 ::std::result::Result::Ok(__vld_results)
@@ -248,24 +248,24 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
             /// Parse leniently: build the struct even when some fields fail.
             /// Invalid fields fall back to `Default::default()`.
-            pub fn parse_lenient<__VldInputT: ::vld::input::VldInput + ?Sized>(
+            pub fn parse_lenient<__VldInputT: ::vld::schema::VldInput + ?Sized>(
                 input: &__VldInputT,
-            ) -> ::std::result::Result<::vld::error::ParseResult<Self>, ::vld::error::VldError> {
-                let __vld_json = <__VldInputT as ::vld::input::VldInput>::to_json_value(input)?;
+            ) -> ::std::result::Result<::vld::object::ParseResult<Self>, ::vld::error::VldError> {
+                let __vld_json = <__VldInputT as ::vld::schema::VldInput>::to_json_value(input)?;
                 Self::parse_lenient_value(&__vld_json)
             }
 
             /// Parse leniently from a `serde_json::Value`.
             pub fn parse_lenient_value(
                 __vld_json: &::vld::serde_json::Value,
-            ) -> ::std::result::Result<::vld::error::ParseResult<Self>, ::vld::error::VldError> {
+            ) -> ::std::result::Result<::vld::object::ParseResult<Self>, ::vld::error::VldError> {
                 #[allow(unused_imports)]
                 use ::vld::schema::VldSchema as _;
                 let __vld_obj = ::vld::__private::expect_object(__vld_json)?;
-                let mut __vld_results: ::std::vec::Vec<::vld::error::FieldResult> =
+                let mut __vld_results: ::std::vec::Vec<::vld::object::FieldResult> =
                     ::std::vec::Vec::new();
                 #( #lenient_lets )*
-                ::std::result::Result::Ok(::vld::error::ParseResult::new(
+                ::std::result::Result::Ok(::vld::object::ParseResult::new(
                     Self { #( #field_idents, )* },
                     __vld_results,
                 ))
@@ -293,7 +293,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let collect_calls = infos.iter().filter_map(|f| {
         let schema = f.schema.as_ref()?;
         Some(quote! {
-            ::vld::json_schema::CollectNestedSchemas::collect_nested_schemas(&{ #schema }, __vld_out);
+            ::vld::openapi::CollectNestedSchemas::collect_nested_schemas(&{ #schema }, __vld_out);
         })
     });
 
@@ -303,10 +303,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             ///
             /// Named `vld_parse` to avoid conflicts with other derive macros
             /// (e.g. `clap::Parser::parse()`).
-            pub fn vld_parse<__VldInputT: ::vld::input::VldInput + ?Sized>(
+            pub fn vld_parse<__VldInputT: ::vld::schema::VldInput + ?Sized>(
                 input: &__VldInputT,
             ) -> ::std::result::Result<Self, ::vld::error::VldError> {
-                let __vld_json = <__VldInputT as ::vld::input::VldInput>::to_json_value(input)?;
+                let __vld_json = <__VldInputT as ::vld::schema::VldInput>::to_json_value(input)?;
                 Self::parse_value(&__vld_json)
             }
 
@@ -364,7 +364,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #[allow(unused_imports)]
                     use ::vld::schema::VldSchema as _;
                     #[allow(unused_imports)]
-                    use ::vld::json_schema::JsonSchema as _;
+                    use ::vld::openapi::JsonSchema as _;
                     ::vld::__private::object_schema(::std::vec![ #( #schema_entries ),* ])
                 }
 
@@ -382,7 +382,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
                 #[doc(hidden)]
                 pub fn __vld_collect_nested_schemas(
-                    __vld_out: &mut ::std::vec::Vec<::vld::json_schema::NestedSchemaEntry>,
+                    __vld_out: &mut ::std::vec::Vec<::vld::openapi::NestedSchemaEntry>,
                 ) {
                     #[allow(unused_imports)]
                     use ::vld::schema::VldSchema as _;
@@ -391,7 +391,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
                 #[doc(hidden)]
                 pub fn __vld_nested_schemas()
-                    -> ::std::vec::Vec<::vld::json_schema::NestedSchemaEntry>
+                    -> ::std::vec::Vec<::vld::openapi::NestedSchemaEntry>
                 {
                     let mut __vld_out = ::std::vec::Vec::new();
                     Self::__vld_collect_nested_schemas(&mut __vld_out);
@@ -399,7 +399,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 }
             }
 
-            impl #impl_generics ::vld::json_schema::OpenApiParameterIn for #name #ty_generics #where_clause {
+            impl #impl_generics ::vld::openapi::OpenApiParameterIn for #name #ty_generics #where_clause {
                 fn parameter_in() -> Option<&'static str> {
                     #parameter_in_expr
                 }

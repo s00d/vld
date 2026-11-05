@@ -49,7 +49,7 @@ impl<T: VldSchema> ZSet<T> {
         &self.element
     }
 
-    /// Generate a JSON Schema (called by [`JsonSchema`](crate::json_schema::JsonSchema) trait impl).
+    /// Generate a JSON Schema (called by [`JsonSchema`](crate::openapi::JsonSchema) trait impl).
     ///
     /// `min_size` becomes `minItems` (n unique items need at least n items);
     /// `max_size` is *not* emitted as `maxItems`, because duplicates in the
@@ -60,7 +60,7 @@ impl<T: VldSchema> ZSet<T> {
     #[cfg(feature = "openapi")]
     pub fn to_json_schema_inner(&self) -> serde_json::Value
     where
-        T: crate::json_schema::JsonSchema,
+        T: crate::openapi::JsonSchema,
     {
         let mut schema = serde_json::json!({
             "type": "array",

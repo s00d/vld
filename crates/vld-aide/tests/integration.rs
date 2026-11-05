@@ -245,7 +245,7 @@ fn derive_rename_all_camel_case_schema() {
 #[test]
 fn roundtrip_string_schema() {
     let vld_schema = vld::string().min(3).max(100).email();
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld_schema.json_schema();
 
     let schemars_schema = vld_to_schemars(&js);
@@ -258,7 +258,7 @@ fn roundtrip_string_schema() {
 #[test]
 fn roundtrip_number_schema() {
     let vld_schema = vld::number().min(0.0).max(100.0);
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld_schema.json_schema();
 
     let schemars_schema = vld_to_schemars(&js);

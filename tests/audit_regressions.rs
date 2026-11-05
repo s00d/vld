@@ -109,7 +109,7 @@ fn impl_rules_supports_rename() {
 #[cfg(feature = "openapi")]
 mod openapi {
     use super::*;
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
 
     vld::schema! {
         #[derive(Debug, serde::Serialize)]
@@ -150,7 +150,7 @@ mod openapi {
 
     #[test]
     fn zobject_collects_nested_schemas() {
-        use vld::json_schema::CollectNestedSchemas;
+        use vld::openapi::CollectNestedSchemas;
         let obj = vld::object().field_schema("home", vld::nested!(Address).optional());
         let mut out = Vec::new();
         obj.collect_nested_schemas(&mut out);
@@ -215,7 +215,7 @@ mod openapi {
 
     #[test]
     fn param_in_tolerates_extra_args() {
-        use vld::json_schema::OpenApiParameterIn;
+        use vld::openapi::OpenApiParameterIn;
         assert_eq!(QueryWithExtras::parameter_in(), Some("query"));
         assert_eq!(HeaderLast::parameter_in(), Some("header"));
     }
