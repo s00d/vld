@@ -70,7 +70,7 @@ macro_rules! impl_validate_fields {
                             $crate::__vld_resolve_key!(
                                 $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
                             ),
-                            &$schema,
+                            $crate::__vld_cached!($schema),
                         )
                     ),*
                 ])
@@ -114,7 +114,7 @@ macro_rules! impl_validate_fields {
                         $crate::__vld_resolve_key!(
                             $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
                         ),
-                        &$schema,
+                        $crate::__vld_cached!($schema),
                         &mut __vld_results,
                     );
                 )*
@@ -200,7 +200,7 @@ macro_rules! impl_rules {
                         );
                         let __vld_result = match $crate::serde_json::to_value(&self.$field) {
                             ::std::result::Result::Ok(ref __vld_val) => {
-                                $crate::schema::VldSchema::parse_value(&$schema, __vld_val)
+                                $crate::schema::VldSchema::parse_value($crate::__vld_cached!($schema), __vld_val)
                                     .map(|_| ())
                             }
                             ::std::result::Result::Err(e) => ::std::result::Result::Err(

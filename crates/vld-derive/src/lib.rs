@@ -165,6 +165,17 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let field_idents: Vec<_> = infos.iter().map(|f| &f.ident).collect();
 
+    // Non-generic structs build each field schema once (process-wide cache);
+    // in generic code a `static` would be shared between instantiations.
+    let generic = !input.generics.params.is_empty();
+    let schema_ref = |schema: &TokenStream2| {
+        if generic {
+            quote! { &{ #schema } }
+        } else {
+            quote! { ::vld::__vld_cached!(#schema) }
+        }
+    };
+
     // parse_value: one `let` per field
     let parse_lets = infos.iter().map(|f| {
         let FieldInfo { ident, ty, key, .. } = f;
@@ -174,8 +185,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     ::std::option::Option::Some(::std::default::Default::default());
             };
         };
+        let schema_ref = schema_ref(schema);
         let parse = quote! {
-            ::vld::__private::parse_field(__vld_obj, #key, &{ #schema }, &mut __vld_errors)
+            ::vld::__private::parse_field(__vld_obj, #key, #schema_ref, &mut __vld_errors)
         };
         let value = match &f.default {
             Some(d) => quote! {
@@ -192,9 +204,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let lenient_tokens = if lenient {
         let result_pushes = infos.iter().filter_map(|f| {
             let schema = f.schema.as_ref()?;
+            let schema_ref = schema_ref(schema);
             let key = &f.key;
             let push = quote! {
-                __vld_results.push(::vld::__private::field_result(__vld_obj, #key, &{ #schema }));
+                __vld_results.push(::vld::__private::field_result(__vld_obj, #key, #schema_ref));
             };
             Some(match f.default {
                 Some(_) => quote! { if __vld_obj.contains_key(#key) { #push } },
@@ -206,8 +219,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let Some(schema) = &f.schema else {
                 return quote! { let #ident: #ty = ::std::default::Default::default(); };
             };
+            let schema_ref = schema_ref(schema);
             let parse = quote! {
-                ::vld::__private::lenient_field(__vld_obj, #key, &{ #schema }, &mut __vld_results)
+                ::vld::__private::lenient_field(__vld_obj, #key, #schema_ref, &mut __vld_results)
             };
             let value = match &f.default {
                 Some(d) => quote! { if __vld_obj.contains_key(#key) { #parse } else { #d } },
@@ -297,6 +311,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         })
     });
 
+    let object_schema = quote! {
+        ::vld::__private::object_schema(::std::vec![ #( #schema_entries ),* ])
+    };
+    let json_schema_body = if generic {
+        object_schema
+    } else {
+        quote! {
+            static __VLD_JSON_SCHEMA: ::vld::__private::JsonSchemaCell =
+                ::vld::__private::JsonSchemaCell::new();
+            __VLD_JSON_SCHEMA.get_or_init(|| #object_schema).clone()
+        }
+    };
+
     Ok(quote! {
         impl #impl_generics #name #ty_generics #where_clause {
             /// Parse and validate input data into this struct.
@@ -365,7 +392,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     use ::vld::schema::VldSchema as _;
                     #[allow(unused_imports)]
                     use ::vld::openapi::JsonSchema as _;
-                    ::vld::__private::object_schema(::std::vec![ #( #schema_entries ),* ])
+                    #json_schema_body
                 }
 
                 /// Minimal OpenAPI 3.1 document with this struct and every

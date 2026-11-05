@@ -9,7 +9,7 @@ use crate::schema::DynSchema;
 ///
 /// On null/missing the inner schema still runs first so defaults and
 /// `.catch()` fallbacks apply; only if it rejects null is `Value::Null` returned.
-pub(crate) struct OptionalDynSchema(pub(crate) Box<dyn DynSchema>);
+pub(crate) struct OptionalDynSchema(pub(crate) Box<dyn DynSchema + Send + Sync>);
 
 impl DynSchema for OptionalDynSchema {
     fn dyn_parse(&self, value: &Value) -> Result<Value, VldError> {
@@ -36,7 +36,7 @@ impl DynSchema for OptionalDynSchema {
 }
 
 /// Internal wrapper that rejects null values.
-pub(crate) struct RequiredDynSchema(pub(crate) Box<dyn DynSchema>);
+pub(crate) struct RequiredDynSchema(pub(crate) Box<dyn DynSchema + Send + Sync>);
 
 impl DynSchema for RequiredDynSchema {
     fn dyn_parse(&self, value: &Value) -> Result<Value, VldError> {

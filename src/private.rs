@@ -2,10 +2,38 @@
 //! `#[derive(Validate)]`. Not public API: may change in any release.
 
 use serde_json::{Map, Value};
+use std::any::Any;
+use std::sync::OnceLock;
 
 use crate::error::{PathSegment, VldError};
 use crate::object::FieldResult;
 use crate::schema::VldSchema;
+
+/// Lazily built, process-wide schema used by `schema!` / `#[derive(Validate)]`
+/// so field schemas (and their regexes) are built once, not on every parse.
+///
+/// One cell per schema expression (a `static` inside the generated code);
+/// never used in generic code, where a `static` would be shared between
+/// instantiations.
+pub struct SchemaCell(OnceLock<Box<dyn Any + Send + Sync>>);
+
+impl SchemaCell {
+    #[allow(clippy::new_without_default)]
+    pub const fn new() -> Self {
+        Self(OnceLock::new())
+    }
+
+    /// The cached schema, built by `init` on first use.
+    pub fn get<T: Any + Send + Sync>(&'static self, init: impl FnOnce() -> T) -> &'static T {
+        self.0
+            .get_or_init(|| Box::new(init()))
+            .downcast_ref::<T>()
+            .expect("vld: one SchemaCell per schema expression")
+    }
+}
+
+/// Lazily computed JSON Schema of a non-generic `schema!` / derive struct.
+pub type JsonSchemaCell = OnceLock<Value>;
 
 /// Return the value as a JSON object, or an `invalid_type` error.
 pub fn expect_object(value: &Value) -> Result<&Map<String, Value>, VldError> {

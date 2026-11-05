@@ -7,7 +7,7 @@ use super::field::{OptionalDynSchema, RequiredDynSchema};
 
 struct ObjectField {
     name: String,
-    schema: Box<dyn DynSchema>,
+    schema: Box<dyn DynSchema + Send + Sync>,
 }
 
 /// How to handle unknown fields not declared in the schema.
@@ -27,7 +27,7 @@ struct ConditionalRule {
     condition_field: String,
     condition_value: serde_json::Value,
     target_field: String,
-    schema: Box<dyn DynSchema>,
+    schema: Box<dyn DynSchema + Send + Sync>,
 }
 
 /// Dynamic object schema with runtime-defined fields.
@@ -51,7 +51,7 @@ struct ConditionalRule {
 pub struct ZObject {
     fields: Vec<ObjectField>,
     unknown_mode: UnknownFieldMode,
-    catchall_schema: Option<Box<dyn DynSchema>>,
+    catchall_schema: Option<Box<dyn DynSchema + Send + Sync>>,
     conditional_rules: Vec<ConditionalRule>,
     min_keys: Option<usize>,
     max_keys: Option<usize>,
@@ -74,7 +74,11 @@ impl ZObject {
     /// With the `openapi` feature the field keeps its JSON Schema, its
     /// `required` status (`.optional()` / `.nullish()` / `.with_default(...)`
     /// / `.nullable()` are not required) and its named nested schemas.
-    pub fn field<S: DynSchema + 'static>(mut self, name: impl Into<String>, schema: S) -> Self {
+    pub fn field<S: DynSchema + Send + Sync + 'static>(
+        mut self,
+        name: impl Into<String>,
+        schema: S,
+    ) -> Self {
         self.fields.push(ObjectField {
             name: name.into(),
             schema: Box::new(schema),
@@ -85,7 +89,11 @@ impl ZObject {
     /// Same as [`field()`](Self::field), which now keeps the JSON Schema too.
     #[cfg(feature = "openapi")]
     #[deprecated(since = "0.5.0", note = "use `field()`: it keeps the JSON Schema now")]
-    pub fn field_schema<S: DynSchema + 'static>(self, name: impl Into<String>, schema: S) -> Self {
+    pub fn field_schema<S: DynSchema + Send + Sync + 'static>(
+        self,
+        name: impl Into<String>,
+        schema: S,
+    ) -> Self {
         self.field(name, schema)
     }
 
@@ -107,7 +115,7 @@ impl ZObject {
     /// let result = schema.parse(r#"{"name": "Alice"}"#).unwrap();
     /// assert_eq!(result.get("nickname").unwrap(), &serde_json::Value::Null);
     /// ```
-    pub fn field_optional<S: DynSchema + 'static>(
+    pub fn field_optional<S: DynSchema + Send + Sync + 'static>(
         mut self,
         name: impl Into<String>,
         schema: S,
@@ -201,7 +209,7 @@ impl ZObject {
     ///
     /// When set, unknown fields are parsed through the catchall schema
     /// regardless of the unknown field mode.
-    pub fn catchall<S: DynSchema + 'static>(mut self, schema: S) -> Self {
+    pub fn catchall<S: DynSchema + Send + Sync + 'static>(mut self, schema: S) -> Self {
         self.catchall_schema = Some(Box::new(schema));
         self
     }
@@ -228,7 +236,7 @@ impl ZObject {
     /// let err = schema.parse(r#"{"role": "admin", "admin_key": "short"}"#);
     /// assert!(err.is_err());
     /// ```
-    pub fn when<S: DynSchema + 'static>(
+    pub fn when<S: DynSchema + Send + Sync + 'static>(
         mut self,
         condition_field: impl Into<String>,
         condition_value: impl Into<serde_json::Value>,

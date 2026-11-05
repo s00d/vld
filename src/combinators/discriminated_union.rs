@@ -7,7 +7,7 @@ use crate::schema::VldSchema;
 /// Entry in a discriminated union: a discriminator value and its associated schema.
 struct Variant {
     discriminator_value: Value,
-    schema: Box<dyn DynSchema>,
+    schema: Box<dyn DynSchema + Send + Sync>,
 }
 
 /// Discriminated union: chooses a schema based on a discriminator field value.
@@ -37,7 +37,11 @@ impl ZDiscriminatedUnion {
     }
 
     /// Add a variant: when the discriminator field equals `value`, use `schema`.
-    pub fn variant<S: DynSchema + 'static>(mut self, value: impl Into<Value>, schema: S) -> Self {
+    pub fn variant<S: DynSchema + Send + Sync + 'static>(
+        mut self,
+        value: impl Into<Value>,
+        schema: S,
+    ) -> Self {
         self.variants.push(Variant {
             discriminator_value: value.into(),
             schema: Box::new(schema),
@@ -54,11 +58,11 @@ impl ZDiscriminatedUnion {
     pub fn variants(&self) -> impl Iterator<Item = (&Value, &dyn DynSchema)> {
         self.variants
             .iter()
-            .map(|v| (&v.discriminator_value, v.schema.as_ref()))
+            .map(|v| (&v.discriminator_value, v.schema.as_ref() as &dyn DynSchema))
     }
 
     /// Add a string variant (convenience).
-    pub fn variant_str<S: DynSchema + 'static>(self, value: &str, schema: S) -> Self {
+    pub fn variant_str<S: DynSchema + Send + Sync + 'static>(self, value: &str, schema: S) -> Self {
         self.variant(Value::String(value.to_string()), schema)
     }
 }

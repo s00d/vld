@@ -200,7 +200,7 @@ macro_rules! schema {
                             $crate::__vld_resolve_key!(
                                 $crate::__private::field_key(stringify!($field_name)) $(, $rename)?
                             ),
-                            &$schema,
+                            $crate::__vld_cached!($schema),
                             &mut __vld_errors,
                         );
                 )*
@@ -255,7 +255,9 @@ macro_rules! schema {
                     use $crate::schema::VldSchema as _;
                     #[allow(unused_imports)]
                     use $crate::openapi::JsonSchema as _;
-                    $crate::__private::object_schema(::std::vec![
+                    static __VLD_JSON_SCHEMA: $crate::__private::JsonSchemaCell =
+                        $crate::__private::JsonSchemaCell::new();
+                    __VLD_JSON_SCHEMA.get_or_init(|| $crate::__private::object_schema(::std::vec![
                         $(
                             {
                                 let __vld_field_schema = $schema;
@@ -269,7 +271,7 @@ macro_rules! schema {
                                 )
                             }
                         ),*
-                    ])
+                    ])).clone()
                 }
 
                 /// Minimal OpenAPI 3.1 document with this struct and every
