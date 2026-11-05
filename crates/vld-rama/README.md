@@ -18,6 +18,15 @@ Provides HTTP extractors and a `Layer` that validate request data with `vld` sch
 
 All extractors return **422 Unprocessable Entity** with a JSON issues body on failure.
 
+## Installation
+
+```toml
+[dependencies]
+vld = "0.5"
+vld-rama = "0.5"
+rama = { version = "0.4", features = ["http"] }
+```
+
 ## Requires
 
 - Rust **1.96+** (Rama's MSRV)
@@ -75,6 +84,20 @@ Validated values are stored as `Validated<T>` in Rama `Extensions`. Non-JSON req
 `validated` returns `None` for them. JSON bodies over the limit (default 2 MiB) get `413`.
 
 JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
+Form extractors require `application/x-www-form-urlencoded` (**415** otherwise) and accept at most 1000 fields (**422** beyond). Header names containing `_` are ignored (only `-` maps to `_`, so `x_user: admin` cannot fill an `x_user` field past a proxy that strips `X-User`), and every `Cookie` header is read — the first occurrence of a cookie name wins. `VldForm` reads only the body, never the query string. `VldPath` on a route without parameters sees an empty object.
+
+## Errors and body limits
+
+Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
+
+| Body | Default limit | Configure |
+|---|---|---|
+| JSON (`VldJson`) | 2 MiB | `VldBodyLimit(n)` request extension, e.g. `rama::layer::AddInputExtensionLayer::new(VldBodyLimit(n))` |
+| Form (`VldForm`) | 2 MiB, max 1000 fields | `VldBodyLimit(n)` request extension, e.g. `rama::layer::AddInputExtensionLayer::new(VldBodyLimit(n))` |
+| `ValidateJsonLayer` | 2 MiB | `ValidateJsonLayer::with_limit(n)` |
+
+Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
 
 ## Extractors vs Layer
 

@@ -22,9 +22,11 @@
 
 All extractors return `422 Unprocessable Entity` with a JSON error body on validation failure
 or malformed input (invalid JSON, non-UTF-8 form), and `413 Payload Too Large` when the body
-exceeds Rocket's `limits.json` / `limits.form` (`form` falls back to 2 MiB if unset).
+exceeds the limit (see [Errors and body limits](#errors-and-body-limits)).
 
 JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
+Form extractors require `application/x-www-form-urlencoded` (**415** otherwise) and accept at most 1000 fields (**422** beyond). Header names containing `_` are ignored (only `-` maps to `_`, so `x_user: admin` cannot fill an `x_user` field past a proxy that strips `X-User`), and every `Cookie` header is read — the first occurrence of a cookie name wins.
 
 Rocket requires every `<param>` to be a handler argument as well, so declare them next to
 `VldPath<T>` (e.g. `fn get(id: &str, p: VldPath<UserPath>)`).
@@ -33,8 +35,8 @@ Rocket requires every `<param>` to be a handler argument as well, so declare the
 
 ```toml
 [dependencies]
-vld-rocket = "0.4"
-vld = "0.4"
+vld-rocket = "0.5"
+vld = "0.5"
 rocket = { version = "0.5", features = ["json"] }
 serde_json = "1"
 ```
@@ -86,6 +88,19 @@ Register the built-in catchers to get JSON error responses:
     vld_rocket::vld_400_catcher,
 ])
 ```
+
+## Errors and body limits
+
+Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
+
+| Body | Default limit | Configure |
+|---|---|---|
+| JSON (`VldJson`) | 2 MiB | `limits.json` in `Rocket.toml` / `ROCKET_LIMITS` |
+| Form (`VldForm`) | 2 MiB, max 1000 fields | `limits.form` in `Rocket.toml` / `ROCKET_LIMITS` |
+
+While a limit is left at Rocket's built-in default (1 MiB json / 32 KiB form) the shared 2 MiB applies, so setting exactly the built-in value counts as unset. The catchers return the stored vld error only for the status it was stored with.
+
+Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
 
 ## Running Examples
 

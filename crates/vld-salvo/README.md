@@ -32,16 +32,19 @@ All extractors implement `Deref<Target = T>` so you access fields
 directly (e.g. `body.name` instead of `body.0.name`).
 
 `VldSalvoError` implements Salvo's `Writer` trait — validation
-failures render as `422 Unprocessable Entity` with a JSON error body (`413` when the body exceeds Salvo's `secure_max_size`, 64 KiB by default).
+failures render as `422 Unprocessable Entity` with a JSON error body (`413` above the
+body limit, `415` for a wrong `Content-Type`); it exposes `error()`, `status()` and `body()`.
 
 JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
+Form extractors require `application/x-www-form-urlencoded` (**415** otherwise) and accept at most 1000 fields (**422** beyond). Header names containing `_` are ignored (only `-` maps to `_`, so `x_user: admin` cannot fill an `x_user` field past a proxy that strips `X-User`), and every `Cookie` header is read — the first occurrence of a cookie name wins.
 
 ## Installation
 
 ```toml
 [dependencies]
-vld-salvo = "0.4"
-vld = "0.4"
+vld-salvo = "0.5"
+vld = "0.5"
 salvo = "1"
 serde_json = "1"
 ```
@@ -112,16 +115,18 @@ async fn handler(
 }
 ```
 
-## Error Response Format
+## Errors and body limits
 
-```json
-{
-  "error": "Validation failed",
-  "issues": [
-    { "path": ".name", "message": "String must be at least 2 characters" }
-  ]
-}
-```
+Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
+
+| Body | Default limit | Configure |
+|---|---|---|
+| JSON (`VldJson`) | 2 MiB | `SecureMaxSize` middleware, `Request::set_secure_max_size` or `set_global_secure_max_size` |
+| Form (`VldForm`) | 2 MiB, max 1000 fields | `SecureMaxSize` middleware, `Request::set_secure_max_size` or `set_global_secure_max_size` |
+
+Salvo's built-in 64 KiB `secure_max_size` counts as unset (the shared 2 MiB applies), so setting exactly 64 KiB does too.
+
+Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
 
 ## Running Examples
 

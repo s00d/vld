@@ -9,10 +9,12 @@
 
 [Warp](https://docs.rs/warp) integration for the **vld** validation library.
 
-## Version features
+## Compatibility
 
-- `warp-0_3` (default)
-- `warp-0_4`
+Works with warp **0.3 and 0.4** (`warp = ">=0.3, <0.5"`); there are no version features —
+use whichever `warp` your app depends on. The test suite runs on warp 0.4 (dev-dependency);
+to check 0.3, change that dev-dependency to `"0.3"` and run
+`cargo check -p vld-warp --lib`.
 
 ## Features
 
@@ -28,17 +30,19 @@
 | `vld_cookie::<T>()` | Cookie header | Validates cookie values |
 | `handle_rejection` | — | Converts vld rejections into JSON responses |
 
-Validation failures and malformed bodies are returned as `422 Unprocessable Entity` with a JSON error body. Bodies are read as a stream (chunked uploads work) and limited to 2 MiB (`vld_json_limit` / `vld_form_limit`), otherwise `413`. `handle_rejection` also maps warp's own rejections (404, 405, 400, 411, 415) and answers `500` for unknown ones. Path params are percent-decoded.
+Every filter rejects with `VldRejection` (`status()` / `body()`); validation failures and malformed bodies become `422 Unprocessable Entity` with a JSON error body. Bodies are read as a stream (chunked uploads work) and limited to 2 MiB (`vld_json_limit` / `vld_form_limit`), otherwise `413`. `handle_rejection` also maps warp's own rejections (404, 405, 400, 411, 415) and answers `500` for unknown ones. Path params are percent-decoded.
 
 JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
+Form extractors require `application/x-www-form-urlencoded` (**415** otherwise) and accept at most 1000 fields (**422** beyond). Header names containing `_` are ignored (only `-` maps to `_`, so `x_user: admin` cannot fill an `x_user` field past a proxy that strips `X-User`), and every `Cookie` header is read — the first occurrence of a cookie name wins.
 
 ## Installation
 
 ```toml
 [dependencies]
-vld-warp = "0.4"
-vld = "0.4"
-warp = "0.3"
+vld-warp = "0.5"
+vld = "0.5"
+warp = "0.4"
 serde_json = "1"
 ```
 
@@ -166,16 +170,17 @@ Always add `.recover(handle_rejection)` to convert vld rejections into structure
 let routes = create.or(search).recover(handle_rejection);
 ```
 
-Error response format:
 
-```json
-{
-  "error": "Validation failed",
-  "issues": [
-    { "path": ".name", "message": "String must be at least 2 characters" }
-  ]
-}
-```
+## Errors and body limits
+
+Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
+
+| Body | Default limit | Configure |
+|---|---|---|
+| JSON (`vld_json`) | 2 MiB | `vld_json_limit::<T>(n)` |
+| Form (`vld_form`) | 2 MiB, max 1000 fields | `vld_form_limit::<T>(n)` |
+
+Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
 
 ## Running Examples
 

@@ -26,6 +26,8 @@ On validation failure (and for malformed bodies) all extractors return **422 Unp
 
 JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
 
+Form extractors require `application/x-www-form-urlencoded` (**415** otherwise) and accept at most 1000 fields (**422** beyond). Header names containing `_` are ignored (only `-` maps to `_`, so `x_user: admin` cannot fill an `x_user` field past a proxy that strips `X-User`), and every `Cookie` header is read — the first occurrence of a cookie name wins.
+
 ## Installation
 
 ```toml
@@ -51,9 +53,9 @@ Rust 1.97 (required by ntex 4).
 vld-ntex = { version = "0.5", default-features = false, features = ["ntex-3"] }
 ```
 
-Extractors, error type and status codes are identical on both versions. Body-limit
-configs are registered with `App::state(cfg)` on ntex 3 and
-`App::with_config(WebAppConfig::new().set_state(cfg))` on ntex 4.
+Extractors, error type and status codes are identical on both versions. The body limit
+(`VldBodyLimit`) is registered with `App::state(..)` on ntex 3 and
+`App::with_config(WebAppConfig::new().set_state(..))` on ntex 4.
 
 ## VldJson — JSON body
 
@@ -232,16 +234,16 @@ curl -s http://localhost:8080/users/42
 curl -s "http://localhost:8080/search?q=rust&page=1"
 ```
 
-## Error response format
+## Errors and body limits
 
-```json
-{
-  "error": "Validation failed",
-  "issues": [
-    { "path": "name", "message": "String must contain at least 2 character(s)", "code": "too_small" }
-  ]
-}
-```
+Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
+
+| Body | Default limit | Configure |
+|---|---|---|
+| JSON (`VldJson`) | 2 MiB | app state `VldBodyLimit(n)` (ntex's `JsonConfig` / `PayloadConfig` do not apply; compressed request bodies are not decoded) |
+| Form (`VldForm`) | 2 MiB, max 1000 fields | app state `VldBodyLimit(n)` (ntex's `JsonConfig` / `PayloadConfig` do not apply; compressed request bodies are not decoded) |
+
+Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
 
 ## OpenAPI (vld-utoipa)
 
