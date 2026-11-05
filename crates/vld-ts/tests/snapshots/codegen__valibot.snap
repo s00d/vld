@@ -1,0 +1,25 @@
+---
+source: crates/vld-ts/tests/codegen.rs
+expression: valibot
+---
+v.object({
+  id: v.pipe(v.string(), v.minLength(1)),
+  shipping: v.lazy(() => TsAddressSchema)
+})
+
+v.object({
+  firstName: v.pipe(v.string(), v.minLength(1)),
+  isActive: v.boolean()
+})
+
+v.object({
+  name: v.pipe(v.string(), v.minLength(1))
+})
+
+export const RequestBodySchema = v.object({
+  name: v.pipe(v.string(), v.minLength(1))
+});
+export type RequestBody = v.InferOutput<typeof RequestBodySchema>;
+
+
+v.pipe(v.string(), v.minLength(2), v.email())

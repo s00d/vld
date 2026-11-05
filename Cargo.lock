@@ -9871,6 +9871,7 @@ dependencies = [
 name = "vld-aide"
 version = "0.4.6"
 dependencies = [
+ "insta",
  "serde",
  "serde_json",
  "vld",
@@ -10166,6 +10167,7 @@ dependencies = [
 name = "vld-ts"
 version = "0.4.6"
 dependencies = [
+ "insta",
  "serde_json",
  "vld",
 ]
@@ -10174,6 +10176,7 @@ dependencies = [
 name = "vld-utoipa"
 version = "0.4.6"
 dependencies = [
+ "insta",
  "serde",
  "serde_json",
  "utoipa 5.5.0",

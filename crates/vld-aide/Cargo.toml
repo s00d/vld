@@ -26,6 +26,7 @@ vld-schemars = { path = "../vld-schemars", version = "0.4.6", default-features =
 serde_json = { workspace = true }
 serde = { workspace = true }
 vld = { workspace = true, features = ["openapi", "derive"] }
+insta = { version = "1.49.0", features = ["json"] }
 
 [[example]]
 name = "aide_basic"

@@ -1,0 +1,126 @@
+---
+source: crates/vld-aide/tests/integration.rs
+expression: "json!({\"create_ticket\": generated, \"derive_patch\": derive})"
+---
+{
+  "create_ticket": {
+    "properties": {
+      "body": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "due_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "ISO date"
+      },
+      "labels": {
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "meta": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "freeform"
+      },
+      "priority": {
+        "default": "normal",
+        "type": "string"
+      },
+      "reporter": {
+        "anyOf": [
+          {
+            "format": "email",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "reporter email"
+      },
+      "title": {
+        "description": "ticket title",
+        "maxLength": 120,
+        "minLength": 3,
+        "type": "string"
+      }
+    },
+    "required": [
+      "title",
+      "body"
+    ],
+    "type": "object"
+  },
+  "derive_patch": {
+    "properties": {
+      "assignee": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "body": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "body"
+      },
+      "cursor": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "cursor"
+      },
+      "priority": {
+        "default": "normal",
+        "type": "string"
+      },
+      "title": {
+        "description": "title",
+        "minLength": 3,
+        "type": "string"
+      }
+    },
+    "required": [
+      "title"
+    ],
+    "type": "object"
+  }
+}

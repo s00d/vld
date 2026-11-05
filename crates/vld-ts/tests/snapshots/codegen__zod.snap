@@ -1,0 +1,32 @@
+---
+source: crates/vld-ts/tests/codegen.rs
+expression: zod
+---
+z.object({
+  id: z.string().min(1),
+  shipping: z.lazy(() => TsAddressSchema)
+})
+
+z.object({
+  firstName: z.string().min(1),
+  isActive: z.boolean()
+})
+
+z.object({
+  name: z.string().min(1)
+})
+
+export const TsOrderSchema = z.object({
+  id: z.string().min(1),
+  shipping: z.lazy(() => TsAddressSchema)
+});
+export type TsOrder = z.infer<typeof TsOrderSchema>;
+
+
+export const RequestBodySchema = z.object({
+  name: z.string().min(1)
+});
+export type RequestBody = z.infer<typeof RequestBodySchema>;
+
+
+z.array(z.string().min(1)).max(10).describe("Tags")

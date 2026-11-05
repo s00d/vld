@@ -25,6 +25,7 @@ utoipa6 = { package = "utoipa", version = "6", optional = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+insta = { version = "1.49.0", features = ["json"] }
 serde = { workspace = true }
 vld = { workspace = true, features = ["openapi", "derive"] }
 

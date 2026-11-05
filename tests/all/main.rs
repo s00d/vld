@@ -24,6 +24,6 @@ mod macros;
 mod modifiers;
 mod number;
 mod object;
+mod proptests;
 mod regressions;
 mod string;
-mod proptests;

@@ -1,0 +1,225 @@
+---
+source: crates/vld-utoipa/tests/integration.rs
+expression: value
+---
+{
+  "create_ticket": {
+    "properties": {
+      "body": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "due_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "ISO date"
+      },
+      "labels": {
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "meta": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "freeform"
+      },
+      "priority": {
+        "default": "normal",
+        "type": "string"
+      },
+      "reporter": {
+        "anyOf": [
+          {
+            "format": "email",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "reporter email"
+      },
+      "title": {
+        "description": "ticket title",
+        "maxLength": 120,
+        "minLength": 3,
+        "type": "string"
+      }
+    },
+    "required": [
+      "title",
+      "body"
+    ],
+    "type": "object"
+  },
+  "derive_patch_ticket": {
+    "properties": {
+      "assignee": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "body": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "body"
+      },
+      "cursor": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "cursor"
+      },
+      "priority": {
+        "default": "normal",
+        "type": "string"
+      },
+      "title": {
+        "description": "title",
+        "minLength": 3,
+        "type": "string"
+      }
+    },
+    "required": [
+      "title"
+    ],
+    "type": "object"
+  },
+  "derive_renamed_request": {
+    "properties": {
+      "emailAddress": {
+        "format": "email",
+        "type": "string"
+      },
+      "firstName": {
+        "maxLength": 255,
+        "minLength": 1,
+        "type": "string"
+      },
+      "isActive": {
+        "type": "boolean"
+      },
+      "streetNumber": {
+        "maximum": 9999,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "streetNumberAddition": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "firstName",
+      "emailAddress",
+      "streetNumber",
+      "isActive"
+    ],
+    "type": "object"
+  },
+  "ticket_filter_params": [
+    {
+      "description": "assignee email",
+      "in": "query",
+      "name": "assignee",
+      "required": false,
+      "schema": {
+        "description": "assignee email",
+        "format": "email",
+        "type": "string"
+      }
+    },
+    {
+      "description": "opaque cursor",
+      "in": "query",
+      "name": "cursor",
+      "required": false,
+      "schema": {
+        "description": "opaque cursor",
+        "type": "string"
+      }
+    },
+    {
+      "in": "query",
+      "name": "include_closed",
+      "required": false,
+      "schema": {
+        "type": "boolean"
+      }
+    },
+    {
+      "in": "query",
+      "name": "page",
+      "required": false,
+      "schema": {
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    {
+      "description": "search text",
+      "in": "query",
+      "name": "q",
+      "required": true,
+      "schema": {
+        "description": "search text",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+        "default": "open",
+        "type": "string"
+      }
+    }
+  ]
+}

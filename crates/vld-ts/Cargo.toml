@@ -20,3 +20,6 @@ vld = { workspace = true, features = ["openapi"] }
 [[example]]
 name = "generate_zod"
 path = "examples/generate_zod.rs"
+
+[dev-dependencies]
+insta = { version = "1.49.0", features = ["json"] }
