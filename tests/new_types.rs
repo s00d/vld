@@ -4,7 +4,9 @@
 
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
-use vld::error::{DateKind, IssueCode, SizeOrigin, StringValidation};
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
+use vld::error::DateKind;
+use vld::error::{IssueCode, SizeOrigin, StringValidation};
 use vld::prelude::*;
 
 fn code<T: std::fmt::Debug>(r: Result<T, VldError>) -> IssueCode {
