@@ -1,6 +1,7 @@
 //! [`IssueCode`] and the small enums it carries.
 
 use serde_json::Value;
+use std::borrow::Cow;
 
 /// What a size / range bound (`TooSmall`, `TooBig`, `InvalidLength`) was
 /// measured on. Selects the message template (`too_small.<origin>`).
@@ -414,6 +415,41 @@ impl IssueCode {
         }
     }
 
+    /// Template key parts: the generic key and, when the code has one, the
+    /// specific sub-key (`("too_small", Some("string"))`).
+    fn template_key(&self) -> (&str, Option<&'static str>) {
+        use IssueCode::*;
+        match self {
+            TooSmall {
+                origin, inclusive, ..
+            } => (
+                if *inclusive {
+                    "too_small"
+                } else {
+                    "too_small_exclusive"
+                },
+                Some(origin.key()),
+            ),
+            TooBig {
+                origin, inclusive, ..
+            } => (
+                if *inclusive {
+                    "too_big"
+                } else {
+                    "too_big_exclusive"
+                },
+                Some(origin.key()),
+            ),
+            InvalidLength { origin, .. } => ("invalid_length", Some(origin.key())),
+            InvalidString { validation } => ("invalid_string", Some(validation.key())),
+            InvalidFormat { format } => ("invalid_format", Some(format.key())),
+            InvalidDate { kind } => ("invalid_date", Some(kind.key())),
+            NotInPast { kind } => ("not_in_past", Some(kind.key())),
+            NotInFuture { kind } => ("not_in_future", Some(kind.key())),
+            other => (other.key(), None),
+        }
+    }
+
     /// Message-template keys, most specific first.
     ///
     /// E.g. `["too_small.string", "too_small"]`; exclusive bounds use
@@ -421,131 +457,138 @@ impl IssueCode {
     /// to `"custom"`. Resolvers ([`MessageResolver`](super::i18n::MessageResolver))
     /// are asked in this order.
     pub fn message_keys(&self) -> Vec<String> {
+        let (base, sub) = self.template_key();
+        let mut keys = Vec::with_capacity(2);
+        if let Some(sub) = sub {
+            keys.push(format!("{}.{}", base, sub));
+        }
+        keys.push(base.to_string());
+        if let IssueCode::Custom { .. } = self {
+            keys.push("custom".to_string());
+        }
+        keys
+    }
+
+    /// One template parameter by name (`"minimum"`, `"expected"`, …).
+    fn param(&self, name: &str) -> Option<Cow<'_, str>> {
         use IssueCode::*;
-        let with = |base: &str, sub: &str| vec![format!("{}.{}", base, sub), base.to_string()];
-        match self {
-            TooSmall {
-                origin, inclusive, ..
-            } => with(
-                if *inclusive {
-                    "too_small"
-                } else {
-                    "too_small_exclusive"
-                },
-                origin.key(),
-            ),
-            TooBig {
-                origin, inclusive, ..
-            } => with(
-                if *inclusive {
-                    "too_big"
-                } else {
-                    "too_big_exclusive"
-                },
-                origin.key(),
-            ),
-            InvalidLength { origin, .. } => with("invalid_length", origin.key()),
-            InvalidString { validation } => with("invalid_string", validation.key()),
-            InvalidFormat { format } => with("invalid_format", format.key()),
-            InvalidDate { kind } => with("invalid_date", kind.key()),
-            NotInPast { kind } => with("not_in_past", kind.key()),
-            NotInFuture { kind } => with("not_in_future", kind.key()),
-            Custom { code } => vec![code.clone(), "custom".to_string()],
-            other => vec![other.key().to_string()],
+        let b = |v: &'static str| Some(Cow::Borrowed(v));
+        match (self, name) {
+            (InvalidType { expected, .. }, "expected") => Some(Cow::Borrowed(expected)),
+            (InvalidType { received, .. }, "received") => Some(Cow::Borrowed(received)),
+            (TooSmall { origin, .. }, "origin")
+            | (TooBig { origin, .. }, "origin")
+            | (InvalidLength { origin, .. }, "origin") => b(origin.key()),
+            (TooSmall { minimum, .. }, "minimum") => Some(Cow::Owned(display_value(minimum))),
+            (TooBig { maximum, .. }, "maximum") => Some(Cow::Owned(display_value(maximum))),
+            (TooSmall { inclusive, .. }, "inclusive") | (TooBig { inclusive, .. }, "inclusive") => {
+                b(if *inclusive { "true" } else { "false" })
+            }
+            (InvalidLength { expected, .. }, "expected") => Some(Cow::Owned(expected.to_string())),
+            (InvalidString { validation }, "validation") => b(validation.key()),
+            (InvalidString { validation }, _) => match (validation, name) {
+                (StringValidation::StartsWith { prefix }, "prefix") => Some(Cow::Borrowed(prefix)),
+                (StringValidation::EndsWith { suffix }, "suffix") => Some(Cow::Borrowed(suffix)),
+                (StringValidation::Contains { substring }, "substring") => {
+                    Some(Cow::Borrowed(substring))
+                }
+                _ => None,
+            },
+            (InvalidFormat { format }, "format") => b(format.key()),
+            (InvalidDate { kind }, "kind")
+            | (NotInPast { kind }, "kind")
+            | (NotInFuture { kind }, "kind") => b(kind.key()),
+            (InvalidTimezoneOffset { expected }, "expected") => Some(Cow::Borrowed(expected)),
+            (NotMultipleOf { divisor }, "divisor") => Some(Cow::Owned(display_value(divisor))),
+            (InvalidLiteral { expected }, "expected") => Some(Cow::Owned(expected.to_string())),
+            (InvalidEnumValue { options }, "options") => {
+                Some(Cow::Owned(join(options, |o| format!("\"{}\"", o))))
+            }
+            (InvalidDiscriminator { options }, "options") => {
+                Some(Cow::Owned(join(options, |o| o.to_string())))
+            }
+            (PathOutsideBase { base }, "base") => Some(Cow::Borrowed(base)),
+            (JsonTooDeep { max_depth }, "max_depth") => Some(Cow::Owned(max_depth.to_string())),
+            (FileTypeNotAllowed { kind, .. }, "kind")
+            | (FileTypeDenied { kind, .. }, "kind")
+            | (FileTypeUnknown { kind }, "kind") => b(kind.label()),
+            (FileTypeNotAllowed { actual, .. }, "actual")
+            | (FileTypeDenied { actual, .. }, "actual") => Some(Cow::Borrowed(actual)),
+            (FileTypeNotAllowed { allowed, .. }, "allowed") => Some(Cow::Owned(allowed.join(", "))),
+            (ChecksumMismatch { algorithm }, "algorithm") => Some(Cow::Borrowed(algorithm)),
+            (SerializeError { detail }, "detail") => Some(Cow::Borrowed(detail)),
+            (Custom { code }, "code") => Some(Cow::Borrowed(code)),
+            _ => None,
         }
     }
 
     /// Key-value parameters for message templates (`{minimum}`, `{expected}`, …).
     pub fn params(&self) -> Vec<(&'static str, String)> {
-        use IssueCode::*;
-        match self {
-            InvalidType { expected, received } => {
-                vec![
-                    ("expected", expected.clone()),
-                    ("received", received.clone()),
-                ]
+        PARAM_NAMES
+            .iter()
+            .filter_map(|name| self.param(name).map(|v| (*name, v.into_owned())))
+            .collect()
+    }
+
+    /// Fill the `{name}` placeholders of `template` from this code's
+    /// parameters (unknown placeholders are kept as is).
+    pub(crate) fn render(&self, template: &str) -> String {
+        let mut out = String::with_capacity(template.len() + 16);
+        let mut rest = template;
+        while let Some(open) = rest.find('{') {
+            out.push_str(&rest[..open]);
+            let after = &rest[open + 1..];
+            let Some(close) = after.find('}') else {
+                out.push_str(&rest[open..]);
+                return out;
+            };
+            let name = &after[..close];
+            match self.param(name) {
+                Some(v) => out.push_str(&v),
+                None => out.push_str(&rest[open..open + close + 2]),
             }
-            TooSmall {
-                origin,
-                minimum,
-                inclusive,
-            } => vec![
-                ("origin", origin.key().to_string()),
-                ("minimum", display_value(minimum)),
-                ("inclusive", inclusive.to_string()),
-            ],
-            TooBig {
-                origin,
-                maximum,
-                inclusive,
-            } => vec![
-                ("origin", origin.key().to_string()),
-                ("maximum", display_value(maximum)),
-                ("inclusive", inclusive.to_string()),
-            ],
-            InvalidLength { origin, expected } => vec![
-                ("origin", origin.key().to_string()),
-                ("expected", expected.to_string()),
-            ],
-            InvalidString { validation } => {
-                let mut p = vec![("validation", validation.key().to_string())];
-                match validation {
-                    StringValidation::StartsWith { prefix } => p.push(("prefix", prefix.clone())),
-                    StringValidation::EndsWith { suffix } => p.push(("suffix", suffix.clone())),
-                    StringValidation::Contains { substring } => {
-                        p.push(("substring", substring.clone()))
-                    }
-                    _ => {}
-                }
-                p
-            }
-            InvalidFormat { format } => vec![("format", format.key().to_string())],
-            InvalidDate { kind } | NotInPast { kind } | NotInFuture { kind } => {
-                vec![("kind", kind.key().to_string())]
-            }
-            InvalidTimezoneOffset { expected } => vec![("expected", expected.clone())],
-            NotMultipleOf { divisor } => vec![("divisor", display_value(divisor))],
-            InvalidLiteral { expected } => vec![("expected", expected.to_string())],
-            InvalidEnumValue { options } => {
-                vec![("options", join(options, |o| format!("\"{}\"", o)))]
-            }
-            InvalidDiscriminator { options } => {
-                vec![("options", join(options, |o| o.to_string()))]
-            }
-            PathOutsideBase { base } => vec![("base", base.clone())],
-            JsonTooDeep { max_depth } => vec![("max_depth", max_depth.to_string())],
-            FileTypeNotAllowed {
-                kind,
-                actual,
-                allowed,
-            } => vec![
-                ("kind", kind.label().to_string()),
-                ("actual", actual.clone()),
-                ("allowed", allowed.join(", ")),
-            ],
-            FileTypeDenied { kind, actual } => vec![
-                ("kind", kind.label().to_string()),
-                ("actual", actual.clone()),
-            ],
-            FileTypeUnknown { kind } => vec![("kind", kind.label().to_string())],
-            ChecksumMismatch { algorithm } => vec![("algorithm", algorithm.clone())],
-            SerializeError { detail } => vec![("detail", detail.clone())],
-            Custom { code } => vec![("code", code.clone())],
-            _ => vec![],
+            rest = &after[close + 1..];
         }
+        out.push_str(rest);
+        out
     }
 
     /// Default English message, rendered from the
     /// [`english()`](super::i18n::english) template table and [`params()`](Self::params).
     pub fn default_message(&self) -> String {
-        let keys = self.message_keys();
-        let template = keys
-            .iter()
-            .find_map(|k| super::i18n::english_template(k))
-            .unwrap_or("Validation error: {code}");
-        super::i18n::apply_params(template, &self.params())
+        let (base, sub) = match self {
+            IssueCode::Custom { .. } => ("custom", None),
+            other => other.template_key(),
+        };
+        let template = super::i18n::english_template_for(base, sub).unwrap_or("{code}");
+        self.render(template)
     }
 }
+
+/// Every parameter name a built-in code can provide (order of [`IssueCode::params`]).
+const PARAM_NAMES: &[&str] = &[
+    "expected",
+    "received",
+    "origin",
+    "minimum",
+    "maximum",
+    "inclusive",
+    "validation",
+    "prefix",
+    "suffix",
+    "substring",
+    "format",
+    "kind",
+    "divisor",
+    "options",
+    "base",
+    "max_depth",
+    "actual",
+    "allowed",
+    "algorithm",
+    "detail",
+    "code",
+];
 
 #[cfg(test)]
 mod tests {
@@ -702,7 +745,7 @@ mod tests {
         for code in samples() {
             for key in code.message_keys() {
                 if let Some(t) = crate::error::i18n::english_template(&key) {
-                    let filled = crate::error::i18n::apply_params(t, &code.params());
+                    let filled = code.render(t);
                     assert!(!filled.contains('{'), "{}: {}", key, filled);
                 }
             }

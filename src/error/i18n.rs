@@ -97,17 +97,6 @@ impl<F: Fn(&str) -> Option<String>> MessageResolver for FnResolver<F> {
     }
 }
 
-/// Apply parameter substitution to a template string.
-///
-/// Replaces `{param_name}` placeholders with values from `params`.
-pub(crate) fn apply_params(template: &str, params: &[(&str, String)]) -> String {
-    let mut result = template.to_string();
-    for (key, value) in params {
-        result = result.replace(&format!("{{{}}}", key), value);
-    }
-    result
-}
-
 /// Translate a single issue using the resolver.
 ///
 /// The resolver is asked for every key of [`IssueCode::message_keys()`],
@@ -124,7 +113,7 @@ pub fn translate_issue(issue: &ValidationIssue, resolver: &dyn MessageResolver) 
         .message_keys()
         .iter()
         .find_map(|k| resolver.resolve(k))
-        .map(|template| apply_params(&template, &issue.code.params()))
+        .map(|template| issue.code.render(&template))
         .unwrap_or_else(|| issue.message.clone());
     ValidationIssue {
         code: issue.code.clone(),
@@ -361,13 +350,40 @@ const ENGLISH: &[(&str, &str)] = &[
     ("custom", "Validation error: {code}"),
 ];
 
-/// Default English template for one key (see [`english()`]).
+type TemplateMap =
+    HashMap<&'static str, (Option<&'static str>, HashMap<&'static str, &'static str>)>;
+
+/// [`ENGLISH`] indexed as `generic key -> (generic template, sub-key -> template)`,
+/// so lookups need no key formatting.
+fn english_map() -> &'static TemplateMap {
+    static MAP: std::sync::OnceLock<TemplateMap> = std::sync::OnceLock::new();
+    MAP.get_or_init(|| {
+        let mut map: TemplateMap = HashMap::new();
+        for (key, template) in ENGLISH {
+            match key.split_once('.') {
+                Some((base, sub)) => {
+                    map.entry(base).or_default().1.insert(sub, template);
+                }
+                None => map.entry(key).or_default().0 = Some(template),
+            }
+        }
+        map
+    })
+}
+
+/// Default English template for `base.sub`, falling back to `base`.
+pub(crate) fn english_template_for(base: &str, sub: Option<&str>) -> Option<&'static str> {
+    let (generic, subs) = english_map().get(base)?;
+    sub.and_then(|s| subs.get(s).copied()).or(*generic)
+}
+
+/// Default English template for one exact key (`"too_small.string"`).
+#[cfg(test)]
 pub(crate) fn english_template(key: &str) -> Option<&'static str> {
-    static MAP: std::sync::OnceLock<HashMap<&'static str, &'static str>> =
-        std::sync::OnceLock::new();
-    MAP.get_or_init(|| ENGLISH.iter().copied().collect())
-        .get(key)
-        .copied()
+    match key.split_once('.') {
+        Some((base, sub)) => english_map().get(base)?.1.get(sub).copied(),
+        None => english_map().get(key)?.0,
+    }
 }
 
 /// Create a [`MapResolver`] with the English (default) messages.
