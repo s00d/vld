@@ -28,8 +28,17 @@ perfect for unit tests, property-based testing, seed scripts, and demos.
 
 - **Types**: `string`, `integer`, `number`, `boolean`, `array`, `object`, `null`, type arrays (`["string", "null"]`)
 - **String formats** (every format `vld` emits): `email`, `uuid`, `uuid-v1`/`-v4`/`-v7`, `url`/`uri`/`url-strict`, `ip`, `ipv4`, `ipv6`, `cidr`, `socket-addr`, `hostname`, `date`, `time`, `date-time`, `base64`, `byte`/`byte-hex`/`byte-base64url`, `cuid2`, `ulid`, `nanoid`, `emoji`, `phone`, `phone-e164`, `credit-card`, `mac`, `color`, `hex`, `jwt`, `semver`, `semver-full`, `slug`, `currency-code`, `country-code`, `locale`, `cron`, `alpha`, `alphanumeric`, `lowercase`, `uppercase`, `ascii`, `decimal`, `path`
-- **Constraints**: `pattern` (random string matching the regex), `minLength`/`maxLength` (counted in characters), `minimum`/`maximum`, `exclusiveMinimum`/`exclusiveMaximum`, `multipleOf` (integers and floats), `minItems`/`maxItems`, `uniqueItems`
-- **Combinators**: `enum`, `const`, `oneOf`, `anyOf`, `allOf`, `prefixItems` (tuples)
+- **Constraints**: `pattern` (random string matching the regex), `minLength`/`maxLength` (counted in characters), `minimum`/`maximum`, `exclusiveMinimum`/`exclusiveMaximum`, `multipleOf` (integers and floats), `minItems`/`maxItems`, `uniqueItems`, `contains`/`minContains`/`maxContains`, `minProperties`/`maxProperties`/`propertyNames`
+- **Dates**: `formatMinimum`/`formatMaximum` and vld's `x-past`/`x-future` for `date`, `date-time` and `time` (past / future values keep a two-day margin from "now")
+- **Sets and maps**: `x-minUniqueItems`/`x-maxUniqueItems` (vld sets) count distinct items; map entries (`[key, value]` tuples) get distinct keys
+- **Combinators**: `enum`, `const`, `oneOf`, `anyOf`, `prefixItems` (tuples), `allOf` — merged into one schema: the strictest numeric / length / count / date bound, the least common multiple of `multipleOf`s, every `pattern` and `format`, the union of `required`, the intersection of `enum`s, per-property `allOf` for shared properties
+
+Strings with a `format` are generated and **tested with vld's own checks** against every
+format, pattern (`starts_with` / `ends_with` / `contains` literals are overlaid on the
+format value), length and date bound, trying each format in turn and length-fitted
+variants (`url().max(15)`, `ipv4().max(9)`, `slug().min(40)`, …). A combination that
+cannot be satisfied (`uuid().max(10)`, `hex().uuid()`) ends in a best-effort value that
+will fail validation.
 - **References**: `$ref` to `#/components/schemas/X`, `#/$defs/X` or `#/definitions/X`, resolved against the root schema's `$defs` / `definitions` / `components.schemas`. `impl_fake!` embeds a type's nested schemas (`vld::nested!(T)`) automatically.
 - **Objects**: `properties`, `required`, `additionalProperties`
 
@@ -95,8 +104,8 @@ The crate ships with built-in dictionaries (~2000 entries total):
 
 ```toml
 [dependencies]
-vld = { version = "0.4", features = ["openapi"] }
-vld-fake = "0.4"
+vld = { version = "0.5", features = ["openapi"] }
+vld-fake = "0.5"
 ```
 
 ## Quick Start

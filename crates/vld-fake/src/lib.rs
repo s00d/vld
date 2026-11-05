@@ -51,6 +51,7 @@
 //! // value is a random serde_json::Value
 //! ```
 
+mod constraints;
 mod dict;
 mod regex_gen;
 
@@ -263,6 +264,30 @@ impl<R: Rng> FakeGen<R> {
             };
         }
 
+        // ---- allOf ----
+        // Flatten into one schema (strictest bounds, LCM of `multipleOf`,
+        // extra patterns / formats as fragments) and generate from that.
+        let merged;
+        let obj = match obj.get("allOf").and_then(Value::as_array) {
+            Some(all) if all.iter().any(|s| !is_fragment(s)) || !obj.contains_key("type") => {
+                let mut rest = obj.clone();
+                rest.remove("allOf");
+                let mut parts = vec![Value::Object(rest)];
+                for s in all {
+                    let resolved = s
+                        .get("$ref")
+                        .and_then(Value::as_str)
+                        .and_then(|r| self.resolve_ref(r));
+                    parts.push(resolved.unwrap_or_else(|| s.clone()));
+                }
+                merged = constraints::merge(&parts);
+                &merged
+            }
+            // Only `pattern` / `format` fragments next to `type`: already
+            // the flat form the generators read.
+            _ => obj,
+        };
+
         // ---- const / enum ----
         if let Some(c) = obj.get("const") {
             return c.clone();
@@ -293,22 +318,23 @@ impl<R: Rng> FakeGen<R> {
             }
             if !concrete.is_empty() {
                 let idx = self.rng.gen_range(0..concrete.len());
-                return self.value_with_hint(concrete[idx], hint);
+                // Sibling keywords (`type`, `formatMinimum`, `x-past`, … next to
+                // e.g. a naive-datetime `anyOf`) apply to every branch.
+                let mut rest = obj.clone();
+                for k in ["oneOf", "anyOf", "description", "default", "title"] {
+                    rest.remove(k);
+                }
+                if rest.is_empty() {
+                    return self.value_with_hint(concrete[idx], hint);
+                }
+                let merged = constraints::merge(&[Value::Object(rest), concrete[idx].clone()]);
+                return self.value_with_hint(&Value::Object(merged), hint);
             }
             if !variants.is_empty() {
                 let idx = self.rng.gen_range(0..variants.len());
                 return self.value_with_hint(&variants[idx], hint);
             }
             return Value::Null;
-        }
-
-        // ---- allOf ----
-        // With a sibling `type` the allOf only adds constraints (e.g. extra
-        // string patterns), handled by the type's generator.
-        if let Some(all) = obj.get("allOf").and_then(Value::as_array) {
-            if !obj.contains_key("type") {
-                return self.merge_all_of(all);
-            }
         }
 
         // ---- type-based dispatch ----
@@ -355,15 +381,21 @@ impl<R: Rng> FakeGen<R> {
             )
             .filter_map(Value::as_str)
             .collect();
+        // 1) Formats (`format` plus further ones in `allOf`): generate and
+        //    test against every constraint with vld's own checks.
+        let mut formats = constraints::all_of_values(obj, "format");
+        if formats.is_empty() {
+            // Date bounds on a pattern-only string (vld's naive datetime branch).
+            formats = constraints::temporal_formats(obj);
+        }
+        if !formats.is_empty() {
+            return Value::String(self.gen_formatted(obj, &formats, &patterns));
+        }
+
         if !patterns.is_empty() {
             if let Some(s) = self.gen_patterned(&patterns, min, max) {
                 return Value::String(s);
             }
-        }
-
-        // 1) Explicit JSON Schema format
-        if let Some(fmt) = obj.get("format").and_then(Value::as_str) {
-            return Value::String(self.gen_string_format(fmt, obj));
         }
 
         // 2) Heuristic: infer content from field name
@@ -375,6 +407,254 @@ impl<R: Rng> FakeGen<R> {
 
         // 3) Fallback: readable word-based text
         self.gen_readable_string(obj)
+    }
+
+    /// A string valid for every format, pattern, length and date bound of
+    /// `obj`: candidates come from each format's generator (in turn), from a
+    /// length-fitted variant, and from the patterns; literal prefixes /
+    /// suffixes / substrings are overlaid. Best effort (the last candidate)
+    /// when nothing fits within the attempts, e.g. `uuid().max(10)`.
+    fn gen_formatted(
+        &mut self,
+        obj: &Map<String, Value>,
+        formats: &[String],
+        patterns: &[&str],
+    ) -> String {
+        let check = constraints::StrCheck::new(obj);
+        let (min, max) = len_bounds(obj);
+        let (mut head, mut tail, mut mids) = (String::new(), String::new(), Vec::new());
+        let mut free = Vec::new();
+        for p in patterns {
+            match regex_gen::literal(p) {
+                Some(regex_gen::Literal::Prefix(h)) if h.len() > head.len() => head = h,
+                Some(regex_gen::Literal::Suffix(t)) if t.len() > tail.len() => tail = t,
+                Some(regex_gen::Literal::Contains(c)) => mids.push(c),
+                Some(_) => {}
+                None => free.push(*p),
+            }
+        }
+        let fixed = head.chars().count()
+            + tail.chars().count()
+            + mids.iter().map(|m| m.chars().count()).sum::<usize>();
+        let mut last = String::new();
+        // ponytail: generate-and-test; unsatisfiable combinations end in a
+        // best-effort value after the attempts.
+        for i in 0..90 {
+            let fmt = formats[i % formats.len()].as_str();
+            let mut bases = Vec::new();
+            let base = self.gen_string_format(fmt, obj);
+            bases.push(base);
+            if min.is_some() || max.is_some() || fixed > 0 {
+                let n = self.pick_len(min, max, 4, 40);
+                for target in [n, n.saturating_sub(fixed)] {
+                    if let Some(s) = self.fit_format(fmt, target) {
+                        bases.push(s);
+                    }
+                }
+            }
+            if !free.is_empty() {
+                if let Some(s) = self.gen_patterned(patterns, min, max) {
+                    bases.push(s);
+                }
+            }
+            for b in bases {
+                for c in self.overlays(&b, &head, &tail, &mids) {
+                    if check.ok(&c) {
+                        return c;
+                    }
+                    last = c;
+                }
+            }
+        }
+        last
+    }
+
+    /// `s` itself plus variants carrying the literal prefix / suffix /
+    /// substrings, both overwriting and inserting (a naive datetime also
+    /// without its `Z`).
+    fn overlays(&mut self, s: &str, head: &str, tail: &str, mids: &[String]) -> Vec<String> {
+        let mut out = vec![s.to_string()];
+        if let Some(naive) = s.strip_suffix('Z') {
+            out.push(naive.to_string());
+        }
+        if head.is_empty() && tail.is_empty() && mids.is_empty() {
+            return out;
+        }
+        let chars: Vec<char> = s.chars().collect();
+        let (h, t) = (head.chars().count(), tail.chars().count());
+        let mid_of = |from: usize, to: usize| -> String {
+            chars
+                .get(from.min(chars.len())..to.max(from).min(chars.len()))
+                .map(|c| c.iter().collect())
+                .unwrap_or_default()
+        };
+        let with_mids = |body: String, rng: &mut R| -> String {
+            let mut body: Vec<char> = body.chars().collect();
+            for m in mids {
+                let at = rng.gen_range(0..=body.len());
+                body.splice(at..at, m.chars());
+            }
+            body.into_iter().collect()
+        };
+        let inserted = with_mids(s.to_string(), &mut self.rng);
+        out.push(format!("{head}{inserted}{tail}"));
+        let body = mid_of(h, chars.len().saturating_sub(t));
+        let overwritten = with_mids(body.clone(), &mut self.rng);
+        out.push(format!("{head}{overwritten}{tail}"));
+        // Substrings written over the body: keeps the length (fixed-size formats).
+        let mut body: Vec<char> = body.chars().collect();
+        for m in mids {
+            let m: Vec<char> = m.chars().collect();
+            if m.len() <= body.len() {
+                let at = self.rng.gen_range(0..=body.len() - m.len());
+                body.splice(at..at + m.len(), m);
+            }
+        }
+        out.push(format!(
+            "{head}{}{tail}",
+            body.into_iter().collect::<String>()
+        ));
+        // Inside an email / URL the local part / path takes literals best.
+        if let Some((local, domain)) = s.split_once('@') {
+            out.push(format!("{head}{local}{}@{domain}", mids.concat()));
+        }
+        out
+    }
+
+    /// A value of `fmt` with exactly `n` characters, for formats whose
+    /// length can vary freely; `None` otherwise (or when `n` cannot fit).
+    fn fit_format(&mut self, fmt: &str, n: usize) -> Option<String> {
+        let letters = |g: &mut Self, k: usize| g.gen_chars(LOWER_ALPHA, k);
+        Some(match fmt {
+            "uri" | "url" | "url-strict" if n >= 12 => {
+                // `https://` + host + `.io`
+                format!("https://{}.io", letters(self, n - 11))
+            }
+            "uri" | "url" if n >= 8 => format!("http://{}", letters(self, n - 7)),
+            "ipv4" if (7..=15).contains(&n) => {
+                // Split `n - 3` digits over four octets of 1..=3 digits.
+                let mut widths = [1usize; 4];
+                let mut left = n - 7;
+                while left > 0 {
+                    let i = self.rng.gen_range(0..4);
+                    if widths[i] < 3 {
+                        widths[i] += 1;
+                        left -= 1;
+                    }
+                }
+                widths
+                    .iter()
+                    .map(|&w| match w {
+                        1 => self.rng.gen_range(1u16..=9).to_string(),
+                        2 => self.rng.gen_range(10u16..=99).to_string(),
+                        _ => self.rng.gen_range(100u16..=255).to_string(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(".")
+            }
+            "slug" if n >= 1 => {
+                let mut s = letters(self, n);
+                if n >= 3 {
+                    let at = self.rng.gen_range(1..n - 1);
+                    s.replace_range(at..at + 1, "-");
+                }
+                s
+            }
+            "hostname" if (1..=253).contains(&n) => {
+                // Labels of at most 63 chars joined by dots.
+                let mut parts = Vec::new();
+                let mut left = n;
+                while left > 0 {
+                    let take = left.min(63);
+                    let take = if left - take == 1 { take - 1 } else { take };
+                    parts.push(letters(self, take));
+                    left -= take;
+                    left = left.saturating_sub(1);
+                }
+                parts.join(".")
+            }
+            "email" if n >= 6 => format!("{}@ex.io", letters(self, n - 6)),
+            "nanoid" if n >= 1 => self.gen_chars(NANOID_ALPHA, n),
+            "cuid2" if (2..=32).contains(&n) => {
+                format!("{}{}", letters(self, 1), self.gen_chars(LOWER_DIGIT, n - 1))
+            }
+            "semver" | "semver-full" if n >= 5 => {
+                let v = format!(
+                    "{}.{}.{}",
+                    self.rng.gen_range(0..10),
+                    self.rng.gen_range(0..10),
+                    self.rng.gen_range(0..10)
+                );
+                match n - 5 {
+                    0 => v,
+                    1 => format!("{v}0"),
+                    k => format!("{v}-{}", letters(self, k - 1)),
+                }
+            }
+            "json" if n >= 2 => format!("\"{}\"", letters(self, n - 2)),
+            "emoji" if n >= 1 => "😀".repeat(n),
+            "phone" | "phone-e164" if (9..=16).contains(&n) => {
+                format!("+1{}", self.gen_chars(b"0123456789", n - 2))
+            }
+            "byte" if n >= 4 && n % 4 == 0 => {
+                let bytes: Vec<u8> = (0..n / 4 * 3).map(|_| self.rng.gen()).collect();
+                base64_encode(&bytes)
+            }
+            _ => return None,
+        })
+    }
+
+    /// A `date` / `date-time` / `time` within `formatMinimum` /
+    /// `formatMaximum` and `x-past` / `x-future`.
+    fn gen_temporal(&mut self, fmt: &str, obj: &Map<String, Value>) -> String {
+        use constraints::DAY;
+        let (lo, hi) = constraints::temporal_bounds(fmt, obj);
+        // Round inward: a bound with a fraction of a second.
+        let lo = lo.map(|(s, n)| s + i64::from(n > 0));
+        let hi = hi.map(|(s, _)| s);
+        let span = if fmt == "time" {
+            DAY - 1
+        } else {
+            30 * 365 * DAY
+        };
+        let (dlo, dhi) = if fmt == "time" {
+            (0, DAY - 1)
+        } else {
+            // 2000-01-01 .. 2030-12-31
+            (10_957 * DAY, 22_279 * DAY)
+        };
+        let (lo, hi) = match (lo, hi) {
+            (Some(l), Some(h)) => (l, h),
+            (Some(l), None) => (l, if fmt == "time" { DAY - 1 } else { l + span }),
+            (None, Some(h)) => (if fmt == "time" { 0 } else { h - span }, h),
+            (None, None) => (dlo, dhi),
+        };
+        let t = if lo <= hi {
+            self.rng.gen_range(lo..=hi)
+        } else {
+            lo
+        };
+        match fmt {
+            "time" => constraints::hms(t.clamp(0, DAY - 1)),
+            "date" => {
+                // A whole day inside the bounds.
+                let (dl, dh) = (
+                    lo.div_euclid(DAY) + i64::from(lo.rem_euclid(DAY) > 0),
+                    hi.div_euclid(DAY),
+                );
+                let d = if dl <= dh {
+                    self.rng.gen_range(dl..=dh)
+                } else {
+                    dl
+                };
+                constraints::civil(d)
+            }
+            _ => format!(
+                "{}T{}Z",
+                constraints::civil(t.div_euclid(DAY)),
+                constraints::hms(t.rem_euclid(DAY))
+            ),
+        }
     }
 
     /// A string matching every pattern within the length bounds (best
@@ -715,6 +995,10 @@ impl<R: Rng> FakeGen<R> {
             return self.gen_decimal(obj);
         }
 
+        if matches!(fmt, "date" | "date-time" | "time") {
+            return self.gen_temporal(fmt, obj);
+        }
+
         // Unpadded Base64URL text: `n` chars encode `3n/4` bytes, `n % 4 != 1`.
         if fmt == "base64url" {
             let mut n = self.pick_len(min, max, 8, 32);
@@ -1027,9 +1311,13 @@ impl<R: Rng> FakeGen<R> {
         format!("{first}{rest}")
     }
 
+    /// 26 Crockford chars; the first is `0`-`7` (a ULID is 128 bits).
     fn gen_ulid(&mut self) -> String {
         (0..26)
-            .map(|_| CROCKFORD[self.rng.gen_range(0..CROCKFORD.len())] as char)
+            .map(|i| {
+                let n = if i == 0 { 8 } else { CROCKFORD.len() };
+                CROCKFORD[self.rng.gen_range(0..n)] as char
+            })
             .collect()
     }
 
@@ -1386,14 +1674,18 @@ impl<R: Rng> FakeGen<R> {
     // ═══════════════════════════════════════════════════════════════════════
 
     fn gen_array(&mut self, obj: &Map<String, Value>, _hint: Option<&str>) -> Value {
-        let min_items = obj.get("minItems").and_then(Value::as_u64).unwrap_or(0) as usize;
-        let max_items = obj
-            .get("maxItems")
-            .and_then(Value::as_u64)
-            .unwrap_or(min_items.max(1) as u64 + 3) as usize;
-        let max_items = max_items.max(min_items);
+        let n = |k: &str| obj.get(k).and_then(Value::as_u64).map(|v| v as usize);
+        // Sets: `x-minUniqueItems` / `x-maxUniqueItems` count distinct items.
+        let (umin, umax) = (n("x-minUniqueItems"), n("x-maxUniqueItems"));
+        let min_items = n("minItems").unwrap_or(0).max(umin.unwrap_or(0));
+        let max_items = n("maxItems")
+            .into_iter()
+            .chain(umax)
+            .min()
+            .unwrap_or(min_items.max(1) + 3)
+            .max(min_items);
 
-        let count = if min_items == max_items {
+        let mut count = if min_items == max_items {
             min_items
         } else {
             self.rng.gen_range(min_items..=max_items)
@@ -1403,7 +1695,7 @@ impl<R: Rng> FakeGen<R> {
         if let Some(prefix) = obj.get("prefixItems").and_then(Value::as_array) {
             let mut arr: Vec<Value> = prefix.iter().map(|s| self.value(s)).collect();
             if count > arr.len() {
-                if let Some(items) = obj.get("items") {
+                if let Some(items) = obj.get("items").filter(|i| i.is_object()) {
                     for _ in arr.len()..count {
                         arr.push(self.value(items));
                     }
@@ -1412,32 +1704,81 @@ impl<R: Rng> FakeGen<R> {
             return Value::Array(arr);
         }
 
-        // uniqueItems
-        let unique = obj
-            .get("uniqueItems")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-
         let items_schema = obj
             .get("items")
             .cloned()
             .unwrap_or(json!({"type": "string"}));
 
-        if unique {
-            let mut arr = Vec::new();
-            let mut attempts = 0;
-            while arr.len() < count && attempts < count * 10 {
-                let v = self.value(&items_schema);
-                if !arr.contains(&v) {
-                    arr.push(v);
-                }
-                attempts += 1;
-            }
-            Value::Array(arr)
-        } else {
-            let arr: Vec<Value> = (0..count).map(|_| self.value(&items_schema)).collect();
-            Value::Array(arr)
+        // `contains` (+ `minContains` default 1 / `maxContains`): place that
+        // many matching items; other items must not match a `const`.
+        let contains = obj.get("contains");
+        let contains_const = contains.and_then(|c| c.get("const"));
+        let need = contains.map(|_| {
+            let lo = n("minContains").unwrap_or(1);
+            let hi = n("maxContains").unwrap_or(lo.max(1) + 1).max(lo);
+            let hi = hi.min(max_items.max(lo));
+            self.rng.gen_range(lo..=hi.max(lo))
+        });
+        if let Some(need) = need {
+            count = count.max(need).min(max_items.max(need));
         }
+
+        // Distinct items: `uniqueItems`, sets, and map entries (`[key, value]`
+        // tuples, compared by key).
+        let unique = obj.get("uniqueItems").and_then(Value::as_bool) == Some(true)
+            || umin.is_some()
+            || umax.is_some();
+        let pair_keys = items_schema
+            .get("prefixItems")
+            .and_then(Value::as_array)
+            .is_some_and(|p| p.len() == 2);
+        let key_of = |v: &Value| -> Value {
+            if pair_keys {
+                v.get(0).cloned().unwrap_or(Value::Null)
+            } else {
+                v.clone()
+            }
+        };
+        let distinct = unique || pair_keys;
+
+        let mut arr: Vec<Value> = Vec::new();
+        if let (Some(need), Some(c)) = (need, contains) {
+            for _ in 0..need {
+                let v = match contains_const {
+                    Some(k) => k.clone(),
+                    None => self.value(c),
+                };
+                arr.push(v);
+            }
+            if distinct && arr.len() > 1 {
+                // A repeated const cannot be unique: keep one.
+                arr.truncate(1);
+            }
+        }
+        let mut attempts = 0;
+        while arr.len() < count && attempts < count * 20 + 20 {
+            attempts += 1;
+            let v = self.value(&items_schema);
+            if contains_const.is_some_and(|k| constraints::json_eq(k, &v)) {
+                continue;
+            }
+            if distinct
+                && arr
+                    .iter()
+                    .any(|a| constraints::json_eq(&key_of(a), &key_of(&v)))
+            {
+                continue;
+            }
+            arr.push(v);
+        }
+        // Spread the `contains` items.
+        if need.is_some() {
+            for i in (1..arr.len()).rev() {
+                let j = self.rng.gen_range(0..=i);
+                arr.swap(i, j);
+            }
+        }
+        Value::Array(arr)
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1799,56 +2140,6 @@ impl<R: Rng> FakeGen<R> {
             "unit": unit,
         })
     }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    //  allOf merge
-    // ═══════════════════════════════════════════════════════════════════════
-
-    fn merge_all_of(&mut self, schemas: &[Value]) -> Value {
-        let mut merged = Map::new();
-        let mut required: Vec<String> = Vec::new();
-
-        for s in schemas {
-            let resolved = s
-                .get("$ref")
-                .and_then(Value::as_str)
-                .and_then(|r| self.resolve_ref(r));
-            let s = resolved.as_ref().unwrap_or(s);
-            if let Some(obj) = s.as_object() {
-                if let Some(props) = obj.get("properties").and_then(Value::as_object) {
-                    for (k, v) in props {
-                        merged
-                            .entry("properties")
-                            .or_insert_with(|| json!({}))
-                            .as_object_mut()
-                            .unwrap()
-                            .insert(k.clone(), v.clone());
-                    }
-                }
-                if let Some(req) = obj.get("required").and_then(Value::as_array) {
-                    for r in req {
-                        if let Some(s) = r.as_str() {
-                            if !required.contains(&s.to_string()) {
-                                required.push(s.to_string());
-                            }
-                        }
-                    }
-                }
-                if let Some(ty) = obj.get("type") {
-                    merged.insert("type".into(), ty.clone());
-                }
-            }
-        }
-
-        if !required.is_empty() {
-            merged.insert(
-                "required".into(),
-                Value::Array(required.into_iter().map(Value::String).collect()),
-            );
-        }
-
-        self.value(&Value::Object(merged))
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1897,6 +2188,14 @@ fn int_json(v: i128) -> Value {
         .map(Value::from)
         .or_else(|_| u64::try_from(v).map(Value::from))
         .unwrap_or_else(|_| json!(v as f64))
+}
+
+/// An `allOf` member that only adds a `pattern` / `format` (what vld emits
+/// next to `type` for a second regex or format).
+fn is_fragment(schema: &Value) -> bool {
+    schema
+        .as_object()
+        .is_some_and(|o| o.keys().all(|k| k == "pattern" || k == "format"))
 }
 
 /// `{"type":"string"}` without any constraint that shapes the value.

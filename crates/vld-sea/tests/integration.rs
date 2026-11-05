@@ -1,3 +1,6 @@
+// Entity macros: this file runs on sea-orm 1 (`tests/sea_orm2.rs` on 2).
+#![cfg(feature = "sea-orm-1")]
+
 use vld_sea::prelude::*;
 
 // ---------------------------------------------------------------------------

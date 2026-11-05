@@ -82,6 +82,25 @@ impl VldServerError {
     pub fn from_json(s: &str) -> Option<Self> {
         serde_json::from_str(s).ok()
     }
+
+    /// Parse a `VldServerError` out of a server-function error message.
+    ///
+    /// Leptos / Dioxus `ServerFnError`'s `Display` prefixes the message
+    /// (`"error running server function: {...}"`), so [`from_json`](Self::from_json)
+    /// on `e.to_string()` never matches; this reads the JSON object from the
+    /// first `{` to the last `}`.
+    ///
+    /// ```
+    /// use vld_integration_common::form::{FieldError, VldServerError};
+    /// let e = VldServerError::validation(vec![FieldError { field: "name".into(), message: "too short".into() }]);
+    /// let shown = format!("error running server function: {e}");
+    /// let back = VldServerError::from_server_message(&shown).unwrap();
+    /// assert_eq!(back.field_error("name"), Some("too short"));
+    /// ```
+    pub fn from_server_message(s: &str) -> Option<Self> {
+        let (start, end) = (s.find('{')?, s.rfind('}')?);
+        Self::from_json(s.get(start..=end)?)
+    }
 }
 
 impl fmt::Display for VldServerError {

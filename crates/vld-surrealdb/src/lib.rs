@@ -122,9 +122,12 @@ where
     __vld_validate::<S, T>(value).map(|_| ())
 }
 
-/// Validate raw JSON value against schema `S`.
+/// Validate raw JSON value against schema **type** `S` (a `vld::schema!` /
+/// `#[derive(Validate)]` type).
 ///
-/// Useful for validating SurrealQL query results or raw JSON payloads.
+/// Useful for validating SurrealQL query results or raw JSON payloads. To check
+/// a value against a schema **instance** (`vld::string().min(1)`), use
+/// [`validate_value`].
 ///
 /// ```
 /// use vld::prelude::*;
@@ -149,7 +152,11 @@ where
 
 /// Validate a record loaded from SurrealDB against schema `S`.
 ///
-/// Use after `db.select("table")` to enforce invariants on stored data.
+/// Identical to [`validate_content`] (use it, or [`validate_records`] for a batch).
+#[deprecated(
+    since = "0.5.0",
+    note = "identical to `validate_content`; use it instead"
+)]
 pub fn validate_record<S, T>(value: &T) -> Result<(), VldSurrealError>
 where
     S: vld::schema::VldParse,
@@ -187,12 +194,13 @@ where
     T: serde::Serialize,
 {
     for (i, row) in rows.iter().enumerate() {
-        validate_record::<S, T>(row).map_err(|e| (i, e))?;
+        validate_content::<S, T>(row).map_err(|e| (i, e))?;
     }
     Ok(())
 }
 
-/// Validate a single field value against a vld schema instance.
+/// Validate a single field value against a vld schema **instance**
+/// (`vld::string().min(1)`, …); [`validate_json`] takes a schema **type**.
 ///
 /// Useful for validating individual fields in SurrealDB `MERGE` operations.
 ///
@@ -309,6 +317,7 @@ macro_rules! validate_fields {
 // ========================= Prelude ===========================================
 
 pub mod prelude {
+    #[allow(deprecated)]
     pub use crate::{
         validate_content, validate_fields, validate_json, validate_record, validate_records,
         validate_value, FieldError, Validated, VldBool, VldFloat, VldInt, VldSurrealError,

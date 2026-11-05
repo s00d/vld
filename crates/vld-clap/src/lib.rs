@@ -117,15 +117,17 @@ impl std::error::Error for VldClapError {
 /// `user.email` -> `--user.email`).
 fn issue_line(i: &vld::error::ValidationIssue, cmd: Option<&clap::Command>) -> String {
     use vld::error::PathSegment;
-    let arg = match (i.path.first(), cmd) {
-        (Some(PathSegment::Field(id)), Some(cmd)) => {
-            cmd.get_arguments().find(|a| a.get_id() == id.as_str())
-        }
-        _ => None,
-    };
+    // The outermost path field that names an argument of the command, a
+    // flattened group (already merged into the command) or a subcommand.
+    let arg = cmd.and_then(|cmd| {
+        i.path.iter().enumerate().find_map(|(n, seg)| match seg {
+            PathSegment::Field(id) => find_arg(cmd, id).map(|a| (n, a)),
+            _ => None,
+        })
+    });
     let field = match arg {
-        Some(arg) => {
-            let rest = vld_integration_common::format_path(&i.path[1..]);
+        Some((n, arg)) => {
+            let rest = vld_integration_common::format_path(&i.path[n + 1..]);
             let name = if let Some(long) = arg.get_long() {
                 format!("--{long}")
             } else if let Some(short) = arg.get_short() {
@@ -138,14 +140,13 @@ fn issue_line(i: &vld::error::ValidationIssue, cmd: Option<&clap::Command>) -> S
                     .unwrap_or_else(|| arg.get_id().as_str().to_uppercase());
                 format!("<{value}>")
             };
-            format!(
-                "{name}{}",
-                if rest.is_empty() {
-                    String::new()
-                } else {
-                    format!(".{rest}")
-                }
-            )
+            // `<FILES>[0]`, `--tag[0]`, `--db.url`
+            let sep = if rest.is_empty() || rest.starts_with('[') {
+                ""
+            } else {
+                "."
+            };
+            format!("{name}{sep}{rest}")
         }
         None => {
             let field = vld_integration_common::format_path(&i.path).replace('_', "-");
@@ -156,6 +157,13 @@ fn issue_line(i: &vld::error::ValidationIssue, cmd: Option<&clap::Command>) -> S
         }
     };
     format!("{}: {}", field, i.message)
+}
+
+/// Argument `id` of `cmd` or of any (nested) subcommand.
+fn find_arg<'a>(cmd: &'a clap::Command, id: &str) -> Option<&'a clap::Arg> {
+    cmd.get_arguments()
+        .find(|a| a.get_id() == id)
+        .or_else(|| cmd.get_subcommands().find_map(|s| find_arg(s, id)))
 }
 
 fn make_error(e: vld::error::VldError) -> VldClapError {

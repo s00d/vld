@@ -320,3 +320,19 @@ fn shared_schema_client_side() {
     assert!(check_field(&"a@b.com".to_string(), &email_schema()).is_none());
     assert!(check_field(&"bad".to_string(), &email_schema()).is_some());
 }
+
+/// `ServerFnError`'s `Display` prefixes the JSON: `from_json(&e.to_string())`
+/// never matched, `from_server_message` does.
+#[test]
+fn server_error_round_trips_through_server_fn_message() {
+    let err = vld_dioxus::VldServerError::from(
+        vld::schema::VldSchema::parse_value(&vld::string().min(5), &serde_json::json!("ab"))
+            .unwrap_err(),
+    );
+    let shown = format!("error running server function: {err}");
+    assert!(vld_dioxus::VldServerError::from_json(&shown).is_none());
+    let back = vld_dioxus::VldServerError::from_server_message(&shown).unwrap();
+    assert_eq!(back.message, err.message);
+    assert_eq!(back.fields.len(), 1);
+    assert!(vld_dioxus::VldServerError::from_server_message("no json here").is_none());
+}

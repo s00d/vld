@@ -75,9 +75,11 @@ impl From<VldSeaError> for crate::sea_orm::DbErr {
 /// Only fields with `Set` or `Unchanged` values are included.
 /// Fields that are `NotSet` are omitted from the resulting object.
 ///
-/// This function handles common SQL types (bool, integers, floats, strings,
-/// chars). Feature-gated types (chrono, uuid, etc.) are mapped to
-/// `serde_json::Value::Null`.
+/// Common SQL types (bool, integers, floats, strings, chars, bytes) are always
+/// mapped; JSON, chrono, time, uuid, decimals and Postgres arrays need the
+/// matching vld-sea feature (`with-json`, `with-chrono`, `with-time`,
+/// `with-uuid`, `with-rust_decimal`, `with-bigdecimal`, `postgres-array`) and
+/// are `null` without it.
 pub fn active_model_to_json<A>(model: &A) -> serde_json::Value
 where
     A: crate::sea_orm::ActiveModelTrait,
@@ -106,6 +108,10 @@ where
 ///   `YYYY-MM-DDTHH:MM:SS[.f]`, zoned datetimes RFC 3339
 /// - `with-uuid`: hyphenated string; `with-rust_decimal` / `with-bigdecimal`: string
 ///
+/// - `with-time`: the same ISO shapes as chrono (`±HH:MM` offsets)
+/// - `postgres-array`: a JSON array of the mapped items
+/// - `Float` (`f32`) through its decimal form (`0.1f32` → `0.1`)
+///
 /// Variants whose vld-sea feature is not enabled (and `None`s) become `null`.
 #[allow(unreachable_patterns)]
 fn sea_value_to_json(v: crate::sea_orm::Value) -> serde_json::Value {
@@ -128,7 +134,8 @@ fn sea_value_to_json(v: crate::sea_orm::Value) -> serde_json::Value {
         SV::SmallUnsigned(Some(n)) => (n as u64).into(),
         SV::Unsigned(Some(n)) => (n as u64).into(),
         SV::BigUnsigned(Some(n)) => n.into(),
-        SV::Float(Some(n)) => float(n as f64),
+        // Through the decimal form: `0.1f32` maps to 0.1, not 0.10000000149.
+        SV::Float(Some(n)) => float(n.to_string().parse().unwrap_or(f64::from(n))),
         SV::Double(Some(n)) => float(n),
         SV::String(Some(s)) => J::String(s.to_string()),
         SV::Char(Some(c)) => J::String(c.to_string()),
@@ -153,14 +160,70 @@ fn sea_value_to_json(v: crate::sea_orm::Value) -> serde_json::Value {
         SV::ChronoDateTimeLocal(Some(dt)) => J::String(dt.to_rfc3339()),
         #[cfg(feature = "with-chrono")]
         SV::ChronoDateTimeWithTimeZone(Some(dt)) => J::String(dt.to_rfc3339()),
+        #[cfg(feature = "with-time")]
+        SV::TimeDate(Some(d)) => J::String(time_fmt::date(&d)),
+        #[cfg(feature = "with-time")]
+        SV::TimeTime(Some(t)) => J::String(time_fmt::time(&t)),
+        #[cfg(feature = "with-time")]
+        SV::TimeDateTime(Some(dt)) => J::String(time_fmt::datetime(&dt)),
+        #[cfg(feature = "with-time")]
+        SV::TimeDateTimeWithTimeZone(Some(dt)) => J::String(time_fmt::offset_datetime(&dt)),
+        #[cfg(feature = "postgres-array")]
+        SV::Array(_, Some(items)) => {
+            J::Array((*items).into_iter().map(sea_value_to_json).collect())
+        }
         #[cfg(feature = "with-uuid")]
         SV::Uuid(Some(u)) => J::String(u.to_string()),
         #[cfg(feature = "with-rust_decimal")]
         SV::Decimal(Some(d)) => J::String(d.to_string()),
         #[cfg(feature = "with-bigdecimal")]
         SV::BigDecimal(Some(d)) => J::String(d.to_string()),
-        // None variants and types without a vld-sea feature (time, arrays, ...)
+        // None variants and types without a vld-sea feature
         _ => J::Null,
+    }
+}
+
+/// ISO 8601 strings for `time` values (the same shapes as the chrono ones).
+#[cfg(feature = "with-time")]
+mod time_fmt {
+    use crate::sea_orm::prelude::{TimeDate, TimeDateTime, TimeDateTimeWithTimeZone, TimeTime};
+    use std::borrow::Borrow;
+
+    pub(crate) fn date(d: &impl Borrow<TimeDate>) -> String {
+        let d = d.borrow();
+        format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())
+    }
+
+    /// `HH:MM:SS[.f]` (fraction without trailing zeros, like chrono).
+    pub(crate) fn time(t: &impl Borrow<TimeTime>) -> String {
+        let t = t.borrow();
+        let mut s = format!("{:02}:{:02}:{:02}", t.hour(), t.minute(), t.second());
+        if t.nanosecond() != 0 {
+            let frac = format!("{:09}", t.nanosecond());
+            s.push('.');
+            s.push_str(frac.trim_end_matches('0'));
+        }
+        s
+    }
+
+    pub(crate) fn datetime(dt: &impl Borrow<TimeDateTime>) -> String {
+        let dt = dt.borrow();
+        format!("{}T{}", date(&dt.date()), time(&dt.time()))
+    }
+
+    /// RFC 3339 with a `±HH:MM` offset.
+    pub(crate) fn offset_datetime(dt: &impl Borrow<TimeDateTimeWithTimeZone>) -> String {
+        let dt = dt.borrow();
+        let off = dt.offset();
+        let secs = off.whole_seconds();
+        let (sign, secs) = if secs < 0 { ('-', -secs) } else { ('+', secs) };
+        format!(
+            "{}T{}{sign}{:02}:{:02}",
+            date(&dt.date()),
+            time(&dt.time()),
+            secs / 3600,
+            secs / 60 % 60
+        )
     }
 }
 
@@ -175,6 +238,43 @@ mod sea_value_tests {
     fn bytes_map_to_u8_array() {
         let v = SV::Bytes(Some(vec![1u8, 2, 255].into()));
         assert_eq!(sea_value_to_json(v), json!([1, 2, 255]));
+    }
+
+    #[test]
+    fn f32_maps_through_its_decimal_form() {
+        assert_eq!(sea_value_to_json(SV::Float(Some(0.1))), json!(0.1));
+    }
+
+    #[cfg(feature = "with-time")]
+    #[test]
+    fn time_types_map_like_chrono() {
+        use crate::sea_orm::prelude::{TimeDate, TimeTime};
+        let d = TimeDate::from_calendar_date(2024, time::Month::February, 29).unwrap();
+        let t = TimeTime::from_hms_nano(12, 30, 5, 500_000_000).unwrap();
+        let dt = d.with_time(t);
+        let off = dt.assume_offset(time::UtcOffset::from_hms(-5, -30, 0).unwrap());
+        assert_eq!(sea_value_to_json(d.into()), json!("2024-02-29"));
+        assert_eq!(sea_value_to_json(t.into()), json!("12:30:05.5"));
+        assert_eq!(sea_value_to_json(dt.into()), json!("2024-02-29T12:30:05.5"));
+        assert_eq!(
+            sea_value_to_json(off.into()),
+            json!("2024-02-29T12:30:05.5-05:30")
+        );
+    }
+
+    #[cfg(feature = "postgres-array")]
+    #[test]
+    fn arrays_map_recursively() {
+        use crate::sea_orm::sea_query::ArrayType;
+        let v = SV::Array(
+            ArrayType::Int,
+            Some(Box::new(vec![
+                SV::Int(Some(1)),
+                SV::Int(Some(2)),
+                SV::Int(None),
+            ])),
+        );
+        assert_eq!(sea_value_to_json(v), json!([1, 2, null]));
     }
 
     #[cfg(all(
@@ -327,24 +427,16 @@ vld_integration_common::__vld_db_validated!(VldSeaError);
 /// ```rust,ignore
 /// // In your entity module:
 /// vld_sea::impl_vld_before_save!(ActiveModel, UserInput);
+/// // Different schemas for insert and update:
+/// vld_sea::impl_vld_before_save!(ActiveModel, insert: NewUser, update: UserPatch);
 /// ```
 ///
 /// This expands to an `ActiveModelBehavior` impl that calls
-/// [`validate_active`] before every insert/update.
+/// [`validate_active`] before every insert/update (SeaORM 1 and 2).
 #[macro_export]
 macro_rules! impl_vld_before_save {
     ($active_model:ty, $schema:ty) => {
-        #[$crate::sea_orm::prelude::async_trait::async_trait]
-        impl $crate::sea_orm::ActiveModelBehavior for $active_model {
-            async fn before_save<C: $crate::sea_orm::ConnectionTrait>(
-                self,
-                _db: &C,
-                _insert: bool,
-            ) -> Result<Self, $crate::sea_orm::DbErr> {
-                $crate::before_save::<$schema, _>(&self)?;
-                Ok(self)
-            }
-        }
+        $crate::impl_vld_before_save!($active_model, insert: $schema, update: $schema);
     };
     ($active_model:ty, insert: $ins_schema:ty, update: $upd_schema:ty) => {
         #[$crate::sea_orm::prelude::async_trait::async_trait]

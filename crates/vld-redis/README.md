@@ -13,15 +13,16 @@ Redis integration for [`vld`](https://crates.io/crates/vld).
 
 - `redis-0` (default, redis 0.32+)
 - `redis-1`
-- `aio` — async wrapper `AsyncRedisConn` / `impl_to_redis_async!` over `redis::aio::ConnectionLike` (enables redis `tokio-comp`)
+- `aio` — async wrapper `AsyncRedisConn` over `redis::aio::ConnectionLike` (no runtime chosen: enable redis' `tokio-comp` / `smol-comp` yourself)
+- `aio-tokio` — `aio` plus redis `tokio-comp` (what `aio` enabled before 0.5)
 
 ## Overview
 
-`vld-redis` keeps one entrypoint:
+Wrap a connection: `let mut conn = RedisConn::new(conn);` (async:
+`AsyncRedisConn::new(conn)`). `impl_to_redis!(conn)` / `impl_to_redis_async!(conn)`
+only did that rebinding and are deprecated since 0.5.
 
-- `impl_to_redis!(conn)`
-
-After rebinding, `conn` becomes a validating wrapper:
+The wrapper validates:
 
 - built-in auto-conversion methods: `set/get`, `mset/mget`, `hset/hget`, `lpush/rpush/lpop/rpop`, `sadd/smembers`, `zadd/zrange`, `publish`
 - all other native Redis methods remain available through deref to inner connection
@@ -39,13 +40,12 @@ The selected `redis` crate is re-exported as `vld_redis::redis`.
 
 ## Async
 
-With the `aio` feature, `impl_to_redis_async!(conn)` wraps any
-`redis::aio::ConnectionLike` (e.g. `MultiplexedConnection`) into
-`AsyncRedisConn`, with the same methods as `async fn`s:
+With the `aio` feature, `AsyncRedisConn::new(conn)` wraps any
+`redis::aio::ConnectionLike` (e.g. `MultiplexedConnection`), with the same
+methods as `async fn`s:
 
 ```rust
-let conn = client.get_multiplexed_async_connection().await?;
-impl_to_redis_async!(conn);
+let mut conn = AsyncRedisConn::new(client.get_multiplexed_async_connection().await?);
 conn.set("user:1", &user).await?;
 let loaded: Option<UserSchema> = conn.get("user:1").await?;
 ```
@@ -54,8 +54,8 @@ let loaded: Option<UserSchema> = conn.get("user:1").await?;
 
 ```toml
 [dependencies]
-vld = { version = "0.2", features = ["serialize"] }
-vld-redis = "0.2"
+vld = "0.5"
+vld-redis = "0.5"   # async: features = ["aio-tokio"]
 redis = "0.32"
 serde = { version = "1", features = ["derive"] }
 ```
@@ -80,8 +80,7 @@ let user = UserSchema {
 };
 
 let client = Client::open("redis://127.0.0.1/")?;
-let conn = client.get_connection()?;
-impl_to_redis!(conn);
+let mut conn = RedisConn::new(client.get_connection()?);
 
 conn.set("user:1", &user)?;
 let loaded: Option<UserSchema> = conn.get("user:1")?;

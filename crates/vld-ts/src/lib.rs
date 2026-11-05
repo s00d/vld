@@ -347,30 +347,253 @@ enum Target {
 
 use Target::{Valibot, Zod};
 
-/// `(format, zod action, valibot action)` — the one format table for both targets.
-const FORMATS: &[(&str, &str, &str)] = &[
-    ("email", "email()", "email()"),
-    ("uri", "url()", "url()"),
-    ("url", "url()", "url()"),
-    ("url-strict", "url()", "url()"),
-    ("uuid", "uuid()", "uuid()"),
-    ("uuid-v1", "uuid()", "uuid()"),
-    ("uuid-v4", "uuid()", "uuid()"),
-    ("uuid-v7", "uuid()", "uuid()"),
-    ("ipv4", "ip({ version: \"v4\" })", "ipv4()"),
-    ("ipv6", "ip({ version: \"v6\" })", "ipv6()"),
-    ("ip", "ip()", "ip()"),
-    ("date", "date()", "isoDate()"),
-    ("date-time", "datetime()", "isoDateTime()"),
-    ("time", "time()", "isoTime()"),
-    ("country-code", "length(2)", "length(2)"),
-    ("currency-code", "length(3)", "length(3)"),
-    (
-        "phone-e164",
-        "regex(/^\\+[1-9]\\d{1,14}$/)",
-        "regex(/^\\+[1-9]\\d{1,14}$/)",
-    ),
-];
+/// One generated validation step.
+///
+/// `Check`s become `.refine(...)` (Zod) / `v.check(...)` (Valibot) and are
+/// always attached last: a Zod refinement returns `ZodEffects`, which has no
+/// `.min()` / `.regex()` etc.
+enum Act {
+    Plain(String),
+    /// `(fn, message)`.
+    Check(String, String),
+    /// A `/* … */` note on the base expression (something not expressible in JS).
+    Note(String),
+}
+
+fn plain(s: impl Into<String>) -> Act {
+    Act::Plain(s.into())
+}
+
+fn check(f: &str, msg: &str) -> Act {
+    Act::Check(f.to_string(), msg.to_string())
+}
+
+/// `^…$` shape of an ISO time `HH:MM[:SS[.frac]]` (vld's `iso_time`).
+const TIME_RE: &str = r"([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?";
+
+/// The date part (first 10 chars) is a real calendar day.
+const CALENDAR_FN: &str = "(s) => { const d = new Date(s.slice(0, 10) + \"T00:00:00Z\"); return !isNaN(d) && d.toISOString().slice(0, 10) === s.slice(0, 10); }";
+
+const LUHN_FN: &str = "(s) => { if (!/^[\\d -]*$/.test(s)) return false; const d = s.replace(/\\D/g, \"\"); if (d.length < 12 || d.length > 19) return false; let sum = 0; for (let i = 0; i < d.length; i++) { let n = +d[d.length - 1 - i]; if (i % 2) { n *= 2; if (n > 9) n -= 9; } sum += n; } return sum % 10 === 0; }";
+
+const JSON_FN: &str = "(s) => { try { JSON.parse(s); return true; } catch { return false; } }";
+
+/// Hostname labels: 1-63 alphanumerics/`-`, no leading/trailing `-`.
+const LABEL_RE: &str = "[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
+
+/// Actions for a `format` keyword, mirroring vld's own predicate as closely as
+/// Zod 3 / Valibot 1 allow. Unknown formats (`decimal`, `int32`, `path`, …)
+/// add nothing.
+fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
+    let both = |zod: &str, valibot: &str| match t {
+        Zod => plain(zod),
+        Valibot => plain(valibot),
+    };
+    let re = |r: String| plain(format!("regex({})", r));
+    let host = format!("(?=.{{1,253}}$){0}(\\.{0})*", LABEL_RE);
+    let http = || re("/^https?:\\/\\/\\S+$/".to_string());
+    let uuid_v = |n: u8| {
+        vec![
+            both("uuid()", "uuid()"),
+            re(format!("/^[0-9a-fA-F]{{8}}-[0-9a-fA-F]{{4}}-{}/", n)),
+        ]
+    };
+    let is_ip = |n: u8| match t {
+        Zod => format!(
+            "z.string().ip({{ version: \"v{}\" }}).safeParse(a).success",
+            n
+        ),
+        Valibot => format!("v.safeParse(v.pipe(v.string(), v.ipv{}()), a).success", n),
+    };
+    match fmt {
+        // Zod/Valibot `email()` are stricter than vld (they need a dot in the domain).
+        "email" => vec![both("email()", "email()")],
+        // vld `url()` accepts http/https only; `uri()` (string-advanced) shares
+        // the `uri` format and is generated as an http(s) URL too.
+        "uri" | "url" | "url-strict" => vec![both("url()", "url()"), http()],
+        "uuid" => vec![both("uuid()", "uuid()")],
+        "uuid-v1" => uuid_v(1),
+        "uuid-v4" => uuid_v(4),
+        "uuid-v7" => uuid_v(7),
+        "ipv4" => vec![both("ip({ version: \"v4\" })", "ipv4()")],
+        "ipv6" => vec![both("ip({ version: \"v6\" })", "ipv6()")],
+        "ip" => vec![both("ip()", "ip()")],
+        "cidr" => vec![check(
+            &format!(
+                "(s) => {{ const i = s.indexOf(\"/\"); if (i < 0) return false; const a = s.slice(0, i), p = s.slice(i + 1); if (!/^(0|[1-9]\\d{{0,2}})$/.test(p)) return false; return {} ? +p <= 32 : {} && +p <= 128; }}",
+                is_ip(4),
+                is_ip(6)
+            ),
+            "Invalid CIDR",
+        )],
+        "date" => vec![
+            re("/^\\d{4}-\\d{2}-\\d{2}$/".to_string()),
+            check(CALENDAR_FN, "Invalid date"),
+        ],
+        "date-time" => vec![
+            re(format!(
+                "/^\\d{{4}}-\\d{{2}}-\\d{{2}}T{}([Zz]|[+-]([01]\\d|2[0-3]):[0-5]\\d)?$/",
+                TIME_RE
+            )),
+            check(CALENDAR_FN, "Invalid datetime"),
+        ],
+        "time" => vec![re(format!("/^{}$/", TIME_RE))],
+        "hostname" => vec![re(format!("/^{}$/", host))],
+        "mac" => vec![re("/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/".to_string())],
+        "hex" => vec![re("/^[0-9A-Fa-f]+$/".to_string())],
+        "slug" => vec![re("/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/".to_string())],
+        "semver" => vec![re(
+            "/^\\s*v?\\d+\\.\\d+\\.\\d+(?:[-+][\\s\\S]*|\\s*)$/".to_string(),
+        )],
+        "jwt" => vec![re(
+            "/^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/".to_string(),
+        )],
+        "ascii" => vec![re("/^[\\x00-\\x7F]*$/".to_string())],
+        "alpha" => vec![re("/^[A-Za-z]*$/".to_string())],
+        "alphanumeric" => vec![re("/^[A-Za-z0-9]*$/".to_string())],
+        "lowercase" => vec![check("(s) => s === s.toLowerCase()", "Must be lowercase")],
+        "uppercase" => vec![check("(s) => s === s.toUpperCase()", "Must be uppercase")],
+        "locale" => vec![re("/^[a-z]{2}(-[A-Z]{2})?$/".to_string())],
+        "country-code" => vec![re("/^[A-Z]{2}$/".to_string())],
+        "currency-code" => vec![re("/^[A-Z]{3}$/".to_string())],
+        "cron" => vec![re(
+            "/^\\s*[\\d*\\/,?-]+(\\s+[\\d*\\/,?-]+){4,5}\\s*$/".to_string(),
+        )],
+        "credit-card" => vec![check(LUHN_FN, "Invalid credit card")],
+        "phone" => vec![re(
+            "/^\\+(?=(?:\\D*\\d){8,15}\\D*$)[\\d ()-]*$/".to_string(),
+        )],
+        // Shape only: vld's strict E.164 check uses libphonenumber metadata.
+        "phone-e164" => vec![re("/^\\+[1-9]\\d{1,14}$/".to_string())],
+        "color" => {
+            let n8 = "\\s*\\+?0*(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\s*";
+            let pct = "\\s*\\+?0*(?:100|[1-9]?\\d)%\\s*";
+            let hue = "\\s*\\+?0*(?:360|3[0-5]\\d|[12]?\\d?\\d)\\s*";
+            vec![re(format!(
+                "/^(?:#(?:[0-9a-f]{{6}}|[0-9a-f]{{8}})|rgb\\({0},{0},{0}\\)|hsl\\({1},{2},{2}\\))$/i",
+                n8, hue, pct
+            ))]
+        }
+        "byte" => vec![re(
+            "/^(?:[A-Za-z0-9+\\/]{4})*(?:[A-Za-z0-9+\\/]{4}|[A-Za-z0-9+\\/]{2}==|[A-Za-z0-9+\\/]{3}=)$/"
+                .to_string(),
+        )],
+        "base64url" => vec![re(
+            "/^(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{4}|[A-Za-z0-9_-]{2}(?:==?)?|[A-Za-z0-9_-]{3}=?)$/"
+                .to_string(),
+        )],
+        "json" => vec![check(JSON_FN, "Invalid JSON")],
+        "cuid2" => vec![re("/^[a-z][a-z0-9]{1,31}$/".to_string())],
+        "ulid" => vec![re("/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i".to_string())],
+        "nanoid" => vec![re("/^[A-Za-z0-9_-]+$/".to_string())],
+        "emoji" => vec![re(
+            "/^[\\u{1F600}-\\u{1F64F}\\u{1F300}-\\u{1F5FF}\\u{1F680}-\\u{1F6FF}\\u{1F1E0}-\\u{1F1FF}\\u{2702}-\\u{27B0}\\u{2600}-\\u{26FF}\\u{FE00}-\\u{FE0F}\\u{1F900}-\\u{1F9FF}\\u{1FA00}-\\u{1FAFF}\\u{231A}-\\u{231B}\\u{23E9}-\\u{23F3}\\u{23F8}-\\u{23FA}\\u{E0020}-\\u{E007F}\\u{20E3}\\u{200D}\\u{2B50}]+$/u"
+                .to_string(),
+        )],
+        _ => vec![],
+    }
+}
+
+/// Translate a Rust (`regex`/`regex-lite`) pattern into `new RegExp(source, flags)`
+/// arguments.
+///
+/// Leading inline flags `(?i)`, `(?m)`, `(?s)` become RegExp flags, `\A` / `\z`
+/// become `^` / `$` and `(?P<name>…)` becomes `(?<name>…)`. Constructs JS has no
+/// equivalent for (mid-pattern / scoped flags, nested classes and class set
+/// operations, `\p{…}`, `\<`, `\b{start}`, `\x{…}`, a leading `]` in a class, …)
+/// return `None`.
+fn js_regex(p: &str) -> Option<(String, String)> {
+    let mut flags = String::new();
+    let mut rest = p;
+    while let Some(r) = rest.strip_prefix("(?") {
+        let Some(end) = r.find(')') else { break };
+        let f = &r[..end];
+        if f.is_empty() || !f.chars().all(|c| matches!(c, 'i' | 'm' | 's')) {
+            break;
+        }
+        for c in f.chars() {
+            if !flags.contains(c) {
+                flags.push(c);
+            }
+        }
+        rest = &r[end + 1..];
+    }
+
+    let mut out = String::with_capacity(rest.len());
+    let mut chars = rest.chars().peekable();
+    let mut in_class = false;
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                let n = chars.next()?;
+                match n {
+                    'A' if !in_class => out.push('^'),
+                    'z' if !in_class => out.push('$'),
+                    'b' | 'x' | 'u' if chars.peek() == Some(&'{') => return None,
+                    'd' | 'D' | 'w' | 'W' | 's' | 'S' | 'b' | 'B' | 'n' | 't' | 'r' | 'f' | 'v'
+                    | 'x' | 'u' => {
+                        out.push('\\');
+                        out.push(n);
+                    }
+                    n if n.is_ascii_alphanumeric() || n == '<' || n == '>' => return None,
+                    n => {
+                        out.push('\\');
+                        out.push(n);
+                    }
+                }
+            }
+            '[' if in_class => return None,
+            '[' => {
+                in_class = true;
+                out.push('[');
+                if chars.peek() == Some(&'^') {
+                    out.push(chars.next()?);
+                }
+                // Rust reads a leading `]` as a literal; JS `[]` is an empty class.
+                if chars.peek() == Some(&']') {
+                    return None;
+                }
+            }
+            ']' if in_class => {
+                in_class = false;
+                out.push(']');
+            }
+            '&' | '-' | '~' if in_class && chars.peek() == Some(&c) => return None,
+            '(' if !in_class && chars.peek() == Some(&'?') => {
+                chars.next();
+                match chars.next()? {
+                    ':' => out.push_str("(?:"),
+                    'P' if chars.peek() == Some(&'<') => {
+                        chars.next();
+                        out.push_str("(?<");
+                    }
+                    '<' => out.push_str("(?<"),
+                    _ => return None,
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    (!in_class).then_some((out, flags))
+}
+
+/// `regex(new RegExp(…))` for a portable pattern, a note otherwise.
+fn pattern_act(p: &str) -> Act {
+    match js_regex(p) {
+        Some((src, flags)) if flags.is_empty() => {
+            plain(format!("regex(new RegExp({}))", js_str(&src)))
+        }
+        Some((src, flags)) => plain(format!(
+            "regex(new RegExp({}, {}))",
+            js_str(&src),
+            js_str(&flags)
+        )),
+        None => Act::Note(format!(
+            "pattern not portable to JS, not checked: {}",
+            js_str(p)
+        )),
+    }
+}
 
 impl Target {
     /// Library namespace: `z` or `v`.
@@ -382,15 +605,31 @@ impl Target {
     }
 
     /// A validation/metadata action call, e.g. `min(2)` (Zod) / `minLength(2)` (Valibot).
-    fn act(self, zod: &str, valibot: &str, arg: impl std::fmt::Display) -> String {
+    fn act(self, zod: &str, valibot: &str, arg: impl std::fmt::Display) -> Act {
         match self {
-            Zod => format!("{}({})", zod, arg),
-            Valibot => format!("{}({})", valibot, arg),
+            Zod => plain(format!("{}({})", zod, arg)),
+            Valibot => plain(format!("{}({})", valibot, arg)),
         }
     }
 
     /// Attach actions to a base schema: method chain (Zod) or `v.pipe` (Valibot).
-    fn pipe(self, base: String, actions: Vec<String>) -> String {
+    /// Plain actions keep their order; checks go last, notes onto the base.
+    fn pipe(self, mut base: String, acts: Vec<Act>) -> String {
+        let mut actions = Vec::new();
+        let mut checks = Vec::new();
+        for a in acts {
+            match a {
+                Act::Plain(s) => actions.push(s),
+                Act::Check(f, msg) => checks.push(match self {
+                    Zod => format!("refine({}, {})", f, js_str(&msg)),
+                    Valibot => format!("check({}, {})", f, js_str(&msg)),
+                }),
+                Act::Note(n) => {
+                    base.push_str(&format!(" /* {} */", n.replace("*/", "*\\/")));
+                }
+            }
+        }
+        actions.extend(checks);
         if actions.is_empty() {
             return base;
         }
@@ -433,6 +672,17 @@ impl Target {
             return variants.remove(0);
         }
         format!("{}.union([{}])", self.ns(), variants.join(", "))
+    }
+
+    fn intersection(self, mut parts: Vec<String>) -> String {
+        match (self, parts.len()) {
+            (_, 0) => format!("{}.unknown()", self.ns()),
+            (_, 1) => parts.remove(0),
+            (Zod, _) => parts[1..].iter().fold(parts[0].clone(), |acc, p| {
+                format!("z.intersection({}, {})", acc, p)
+            }),
+            (Valibot, _) => format!("v.intersect([{}])", parts.join(", ")),
+        }
     }
 
     fn literal(self, v: &Value) -> String {
@@ -491,9 +741,30 @@ fn convert(t: Target, schema: &Value) -> String {
     }
 }
 
+/// Keywords that make a schema more than a bag of constraints.
+const STRUCTURAL: &[&str] = &[
+    "type",
+    "$ref",
+    "allOf",
+    "anyOf",
+    "oneOf",
+    "not",
+    "properties",
+    "items",
+    "prefixItems",
+    "enum",
+    "const",
+];
+
 /// Base expression plus the actions to attach to it (no description/default).
-fn convert_core(t: Target, schema: &Value) -> (String, Vec<String>) {
+fn convert_core(t: Target, schema: &Value) -> (String, Vec<Act>) {
     let ns = t.ns();
+
+    match schema {
+        Value::Bool(true) => return (format!("{}.unknown()", ns), vec![]),
+        Value::Bool(false) => return (format!("{}.never()", ns), vec![]),
+        _ => {}
+    }
 
     if let Some(name) = schema
         .get("$ref")
@@ -503,31 +774,76 @@ fn convert_core(t: Target, schema: &Value) -> (String, Vec<String>) {
         return (format!("{}.lazy(() => {}Schema)", ns, name), vec![]);
     }
 
+    // `{"not": {}}` / `{"not": true}`: nothing is valid (`vld::never()`).
+    if matches!(schema.get("not"), Some(Value::Bool(true)))
+        || schema
+            .get("not")
+            .and_then(Value::as_object)
+            .is_some_and(|o| o.is_empty())
+    {
+        return (format!("{}.never()", ns), vec![]);
+    }
+
+    if let Some(all_of) = schema.get("allOf").and_then(Value::as_array) {
+        let mut rest = schema.clone();
+        if let Some(o) = rest.as_object_mut() {
+            o.remove("allOf");
+            o.remove("description");
+            o.remove("default");
+        }
+        // A plain `{"allOf": [a, b]}` is an intersection.
+        if !rest.as_object().is_some_and(|o| !o.is_empty()) {
+            return (
+                t.intersection(all_of.iter().map(|v| convert(t, v)).collect()),
+                vec![],
+            );
+        }
+        // Core puts extra patterns / formats / multipleOf into `allOf` next to
+        // `type`: keep the typed base and add those as further checks.
+        let (base, mut acts) = convert_core(t, &rest);
+        let ty = rest.get("type").and_then(Value::as_str);
+        let mut others = Vec::new();
+        for part in all_of {
+            let fragment = part
+                .as_object()
+                .is_some_and(|o| !STRUCTURAL.iter().any(|k| o.contains_key(*k)));
+            match ty {
+                Some(ty) if fragment => acts.extend(constraint_acts(t, ty, part)),
+                _ => others.push(convert(t, part)),
+            }
+        }
+        if others.is_empty() {
+            return (base, acts);
+        }
+        others.insert(0, t.pipe(base, acts));
+        return (t.intersection(others), vec![]);
+    }
+
     // Core may emit unions/nullables as either `oneOf` or `anyOf`.
     for key in ["oneOf", "anyOf"] {
         if let Some(variants) = schema.get(key).and_then(Value::as_array) {
             let is_null = |v: &Value| v.get("type").and_then(Value::as_str) == Some("null");
+            // Sibling keywords (`type`, `x-past`, … next to e.g. vld's
+            // naive-datetime `anyOf`) apply to every branch.
+            let mut siblings = schema.as_object().cloned().unwrap_or_default();
+            for k in [key, "description", "default", "title"] {
+                siblings.remove(k);
+            }
             let rest: Vec<String> = variants
                 .iter()
                 .filter(|v| !is_null(v))
-                .map(|v| convert(t, v))
+                .map(|v| match v.as_object() {
+                    Some(o) if !siblings.is_empty() => {
+                        let mut m = siblings.clone();
+                        m.extend(o.clone());
+                        convert(t, &Value::Object(m))
+                    }
+                    _ => convert(t, v),
+                })
                 .collect();
             let has_null = variants.iter().any(is_null);
             return (union_nullable(t, rest, has_null), vec![]);
         }
-    }
-
-    if let Some(all_of) = schema.get("allOf").and_then(Value::as_array) {
-        let parts: Vec<String> = all_of.iter().map(|v| convert(t, v)).collect();
-        let e = match (t, parts.len()) {
-            (_, 0) => format!("{}.unknown()", ns),
-            (_, 1) => parts[0].clone(),
-            (Zod, _) => parts[1..].iter().fold(parts[0].clone(), |acc, p| {
-                format!("z.intersection({}, {})", acc, p)
-            }),
-            (Valibot, _) => format!("v.intersect([{}])", parts.join(", ")),
-        };
-        return (e, vec![]);
     }
 
     if let Some(c) = schema.get("const") {
@@ -570,36 +886,113 @@ fn union_nullable(t: Target, variants: Vec<String>, nullable: bool) -> String {
     }
 }
 
-fn convert_typed(t: Target, ty: &str, schema: &Value) -> (String, Vec<String>) {
+fn convert_typed(t: Target, ty: &str, schema: &Value) -> (String, Vec<Act>) {
     let ns = t.ns();
-    let u64_of = |k: &str| schema.get(k).and_then(Value::as_u64);
-    let mut actions = Vec::new();
+    let mut acts = Vec::new();
+    let base = match ty {
+        "string" => format!("{}.string()", ns),
+        "number" => format!("{}.number()", ns),
+        "integer" => {
+            acts.push(t.act("int", "integer", ""));
+            format!("{}.number()", ns)
+        }
+        "boolean" => format!("{}.boolean()", ns),
+        "null" => format!("{}.null()", ns),
+        "array" => match schema.get("prefixItems").and_then(Value::as_array) {
+            Some(prefix) => convert_tuple(t, prefix, schema.get("items")),
+            None => {
+                let items = schema
+                    .get("items")
+                    .map(|i| convert(t, i))
+                    .unwrap_or_else(|| format!("{}.unknown()", ns));
+                format!("{}.array({})", ns, items)
+            }
+        },
+        "object" => convert_object(t, schema),
+        _ => return (format!("{}.unknown()", ns), acts),
+    };
+    acts.extend(constraint_acts(t, ty, schema));
+    (base, acts)
+}
 
+/// `z.tuple([...])` / `v.strictTuple([...])`, with a rest schema unless
+/// `items: false`.
+fn convert_tuple(t: Target, prefix: &[Value], items: Option<&Value>) -> String {
+    let parts = prefix
+        .iter()
+        .map(|p| convert(t, p))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let rest = match items {
+        Some(Value::Bool(false)) => None,
+        Some(i @ Value::Object(_)) => Some(convert(t, i)),
+        _ => Some(format!("{}.unknown()", t.ns())),
+    };
+    match (t, rest) {
+        (Zod, None) => format!("z.tuple([{}])", parts),
+        (Zod, Some(r)) => format!("z.tuple([{}]).rest({})", parts, r),
+        (Valibot, None) => format!("v.strictTuple([{}])", parts),
+        (Valibot, Some(r)) => format!("v.tupleWithRest([{}], {})", parts, r),
+    }
+}
+
+/// JS predicate "`x` equals the JSON value `c`" (deep for arrays/objects).
+fn js_eq(c: &Value) -> String {
+    match c {
+        Value::Object(_) | Value::Array(_) => {
+            format!("JSON.stringify(x) === {}", js_str(&c.to_string()))
+        }
+        _ => format!("x === {}", c),
+    }
+}
+
+/// Distinct-item count of array `a` (JSON identity).
+const DISTINCT: &str = "new Set(a.map((x) => JSON.stringify(x))).size";
+
+/// Constraint keywords of a `ty`-typed schema (or an `allOf` fragment of one).
+fn constraint_acts(t: Target, ty: &str, schema: &Value) -> Vec<Act> {
+    let u64_of = |k: &str| schema.get(k).and_then(Value::as_u64);
+    let mut acts = Vec::new();
     match ty {
         "string" => {
             if let Some(n) = u64_of("minLength") {
-                actions.push(t.act("min", "minLength", n));
+                acts.push(t.act("min", "minLength", n));
             }
             if let Some(n) = u64_of("maxLength") {
-                actions.push(t.act("max", "maxLength", n));
+                acts.push(t.act("max", "maxLength", n));
             }
             if let Some(fmt) = schema.get("format").and_then(Value::as_str) {
-                if let Some((_, zod, valibot)) = FORMATS.iter().find(|(f, _, _)| *f == fmt) {
-                    actions.push(match t {
-                        Zod => zod.to_string(),
-                        Valibot => valibot.to_string(),
+                acts.extend(format_acts(t, fmt));
+            }
+            if let Some(p) = schema.get("pattern").and_then(Value::as_str) {
+                acts.push(pattern_act(p));
+            }
+            let fmt = schema.get("format").and_then(Value::as_str);
+            for (key, op) in [("formatMinimum", ">="), ("formatMaximum", "<=")] {
+                if let Some(b) = schema.get(key).and_then(Value::as_str) {
+                    acts.push(match fmt {
+                        // Offsets make lexical order wrong for date-times.
+                        Some("date-time") => check(
+                            &format!("(s) => Date.parse(s) {} Date.parse({})", op, js_str(b)),
+                            &format!("Must be {} {}", op, b),
+                        ),
+                        _ => check(
+                            &format!("(s) => s {} {}", op, js_str(b)),
+                            &format!("Must be {} {}", op, b),
+                        ),
                     });
                 }
             }
-            if let Some(p) = schema.get("pattern").and_then(Value::as_str) {
-                actions.push(format!("regex(new RegExp({}))", js_str(p)));
+            for (key, op, word) in [("x-past", "<", "past"), ("x-future", ">", "future")] {
+                if schema.get(key).and_then(Value::as_bool) == Some(true) {
+                    acts.push(check(
+                        &format!("(s) => Date.parse(s) {} Date.now()", op),
+                        &format!("Must be in the {}", word),
+                    ));
+                }
             }
-            (format!("{}.string()", ns), actions)
         }
         "number" | "integer" => {
-            if ty == "integer" {
-                actions.push(t.act("int", "integer", ""));
-            }
             for (key, zod, valibot) in [
                 ("minimum", "min", "minValue"),
                 ("maximum", "max", "maxValue"),
@@ -608,34 +1001,71 @@ fn convert_typed(t: Target, ty: &str, schema: &Value) -> (String, Vec<String>) {
                 ("multipleOf", "multipleOf", "multipleOf"),
             ] {
                 if let Some(n) = schema.get(key).and_then(Value::as_f64) {
-                    actions.push(t.act(zod, valibot, format_number(n)));
+                    acts.push(t.act(zod, valibot, format_number(n)));
                 }
             }
-            (format!("{}.number()", ns), actions)
         }
-        "boolean" => (format!("{}.boolean()", ns), actions),
-        "null" => (format!("{}.null()", ns), actions),
         "array" => {
-            let items = schema
-                .get("items")
-                .map(|i| convert(t, i))
-                .unwrap_or_else(|| format!("{}.unknown()", ns));
-            let mut base = format!("{}.array({})", ns, items);
+            // A tuple's length is fixed by its items; Zod tuples have no `.min()`.
+            if schema.get("prefixItems").is_none() {
+                // Valibot: `minLength`/`maxLength` apply to arrays (`minSize` is for Set/Map/Blob).
+                if let Some(n) = u64_of("minItems") {
+                    acts.push(t.act("min", "minLength", n));
+                }
+                if let Some(n) = u64_of("maxItems") {
+                    acts.push(t.act("max", "maxLength", n));
+                }
+            }
             if schema.get("uniqueItems").and_then(Value::as_bool) == Some(true) {
-                base.push_str(" /* uniqueItems */");
+                acts.push(check(
+                    &format!("(a) => {} === a.length", DISTINCT),
+                    "Items must be unique",
+                ));
             }
-            // Valibot: `minLength`/`maxLength` apply to arrays (`minSize` is for Set/Map/Blob).
-            if let Some(n) = u64_of("minItems") {
-                actions.push(t.act("min", "minLength", n));
+            if let Some(n) = u64_of("x-minUniqueItems") {
+                acts.push(check(
+                    &format!("(a) => {} >= {}", DISTINCT, n),
+                    &format!("At least {} unique items", n),
+                ));
             }
-            if let Some(n) = u64_of("maxItems") {
-                actions.push(t.act("max", "maxLength", n));
+            if let Some(n) = u64_of("x-maxUniqueItems") {
+                acts.push(check(
+                    &format!("(a) => {} <= {}", DISTINCT, n),
+                    &format!("At most {} unique items", n),
+                ));
             }
-            (base, actions)
+            if let Some(c) = schema.get("contains").and_then(|c| c.get("const")) {
+                let min = u64_of("minContains").unwrap_or(1);
+                let count = format!("a.filter((x) => {}).length", js_eq(c));
+                let mut cond = format!("{} >= {}", count, min);
+                if let Some(max) = u64_of("maxContains") {
+                    cond = format!("(n => n >= {} && n <= {})({})", min, max, count);
+                }
+                acts.push(check(
+                    &format!("(a) => {}", cond),
+                    &format!("Must contain {}", c),
+                ));
+            }
         }
-        "object" => (convert_object(t, schema), actions),
-        _ => (format!("{}.unknown()", ns), actions),
+        "object" => {
+            for (key, op, valibot) in [
+                ("minProperties", ">=", "minEntries"),
+                ("maxProperties", "<=", "maxEntries"),
+            ] {
+                if let Some(n) = u64_of(key) {
+                    acts.push(match t {
+                        Zod => check(
+                            &format!("(o) => Object.keys(o).length {} {}", op, n),
+                            &format!("Must have {} {} keys", op, n),
+                        ),
+                        Valibot => plain(format!("{}({})", valibot, n)),
+                    });
+                }
+            }
+        }
+        _ => {}
     }
+    acts
 }
 
 fn convert_object(t: Target, schema: &Value) -> String {
@@ -650,15 +1080,30 @@ fn convert_object(t: Target, schema: &Value) -> String {
         Some(p) => p,
         // Record-like / free-form object.
         None => {
+            let names = schema.get("propertyNames");
+            if names.is_some() || matches!(additional, Some(Value::Object(_))) {
+                // `propertyNames` validates the keys (it is a string schema).
+                let key = match names {
+                    Some(n @ Value::Object(o)) if !o.contains_key("type") => {
+                        let mut n = n.clone();
+                        n["type"] = Value::from("string");
+                        convert(t, &n)
+                    }
+                    Some(n) => convert(t, n),
+                    None => format!("{}.string()", t.ns()),
+                };
+                let value = match additional {
+                    Some(a @ Value::Object(_)) => convert(t, a),
+                    _ => format!("{}.unknown()", t.ns()),
+                };
+                return format!("{}.record({}, {})", t.ns(), key, value);
+            }
             return match (t, additional) {
-                (_, Some(a @ Value::Object(_))) => {
-                    format!("{0}.record({0}.string(), {1})", t.ns(), convert(t, a))
-                }
                 (Zod, Some(Value::Bool(false))) => "z.object({}).strict()".to_string(),
                 (Valibot, Some(Value::Bool(false))) => "v.strictObject({})".to_string(),
                 (Zod, _) => "z.object({}).passthrough()".to_string(),
                 (Valibot, _) => "v.objectWithRest({}, v.unknown())".to_string(),
-            }
+            };
         }
     };
 

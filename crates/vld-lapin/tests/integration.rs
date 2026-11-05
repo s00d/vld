@@ -202,6 +202,38 @@ async fn reject_decode_drops_malformed_json() {
     assert!(get(&ch, &q).await.is_none(), "rejected without requeue");
 }
 
+/// `ack_or_nack_decode` settles both ways: valid acked, invalid nacked.
+#[tokio::test(flavor = "multi_thread")]
+async fn ack_or_nack_decode_settles_every_delivery() {
+    let Some(conn) = connect().await else { return };
+    let (ch, q) = channel(&conn, None).await;
+    let drop_it = BasicNackOptions {
+        requeue: false,
+        ..Default::default()
+    };
+
+    publish_raw(&ch, &q, INVALID).await;
+    let msg = get(&ch, &q).await.expect("message");
+    let err = ch
+        .ack_or_nack_decode::<EventSchema>(&msg, BasicAckOptions::default(), drop_it)
+        .await
+        .unwrap_err();
+    assert_eq!(issue_paths(&err), [".event", ".retries"]);
+
+    publish_raw(&ch, &q, br#"{"event":"ok","retries":1}"#).await;
+    let msg = get(&ch, &q).await.expect("message");
+    let got: EventSchema = ch
+        .ack_or_nack_decode(&msg, BasicAckOptions::default(), drop_it)
+        .await
+        .unwrap();
+    assert_eq!(got.retries, 1);
+
+    // Both settled: closing the channel redelivers nothing.
+    ch.close(200, "bye".into()).await.unwrap();
+    let (ch2, _) = channel(&conn, Some(&q)).await;
+    assert!(get(&ch2, &q).await.is_none());
+}
+
 /// `ack_decode` only acks valid messages: an invalid one stays unacked and is
 /// redelivered once its channel closes.
 #[tokio::test(flavor = "multi_thread")]

@@ -10,8 +10,8 @@ No direct dependency on `dioxus` — works with any Dioxus version (0.5, 0.6, 0.
 
 ```toml
 [dependencies]
-vld = "0.4"
-vld-dioxus = "0.4"
+vld = "0.5"
+vld-dioxus = "0.5"
 dioxus = "0.7"  # or your version
 ```
 
@@ -121,7 +121,7 @@ fn CreateUserForm() -> Element {
     let server_errors = use_memo(move || {
         create.value()
             .and_then(|r| r.as_ref().err())
-            .and_then(|e| vld_dioxus::VldServerError::from_json(&e.to_string()))
+            .and_then(|e| vld_dioxus::VldServerError::from_server_message(&e.to_string()))
     });
 
     rsx! {
@@ -159,7 +159,8 @@ fn CreateUserForm() -> Element {
 | `field_errors(name)` | `Vec<&str>` | All error messages for a field |
 | `has_field_error(name)` | `bool` | Check if a field has errors |
 | `error_fields()` | `Vec<&str>` | All field names with errors |
-| `from_json(s)` | `Option<Self>` | Parse from JSON string |
+| `from_json(s)` | `Option<Self>` | Parse from a bare JSON string |
+| `from_server_message(s)` | `Option<Self>` | Parse from a `ServerFnError` message (`e.to_string()` adds a prefix before the JSON) |
 | `to_string()` | `String` | Serialize to JSON (via `Display`) |
 
 ### Validation Functions

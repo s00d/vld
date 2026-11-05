@@ -142,3 +142,70 @@ fn optional_ref_any_of_keeps_ref_and_is_not_object() {
         "#/components/schemas/Address"
     );
 }
+
+fn of<S: vld::openapi::JsonSchema>(s: &S) -> Value {
+    conv(s.json_schema())
+}
+
+#[test]
+fn all_of_next_to_type_keeps_the_typed_base() {
+    let out = of(&vld::string().min(3).starts_with("a").ends_with("z"));
+    assert_eq!(out["allOf"][0]["type"], "string", "{out}");
+    assert_eq!(out["allOf"][0]["minLength"], 3, "{out}");
+    assert_eq!(out["allOf"][0]["pattern"], "^a", "{out}");
+    assert_eq!(out["allOf"][1]["pattern"], "z$", "{out}");
+    let n = of(&vld::number().multiple_of(3.).multiple_of(5.));
+    assert_eq!(n["allOf"][0]["type"], "number", "{n}");
+    assert_eq!(n["allOf"][0]["multipleOf"], 3, "{n}");
+    assert_eq!(n["allOf"][1]["multipleOf"], 5, "{n}");
+    // Plain intersections are unchanged.
+    let i = conv(json!({"allOf": [{"type": "string"}, {"minLength": 1}], "description": "d"}));
+    assert_eq!(i["allOf"].as_array().unwrap().len(), 2, "{i}");
+    assert_eq!(i["description"], "d");
+}
+
+#[test]
+fn never_rejects_everything() {
+    assert_eq!(of(&vld::never()), json!({"not": {}}));
+    assert_eq!(conv(json!(false)), json!({"not": {}}));
+}
+
+#[test]
+fn unsupported_keywords_and_extensions_survive() {
+    let arr = of(&vld::array(vld::number())
+        .contains(3)
+        .min_contains(2)
+        .max_contains(3));
+    assert_eq!(arr["contains"], json!({"const": 3}), "{arr}");
+    assert_eq!(arr["minContains"], 2);
+    assert_eq!(arr["maxContains"], 3);
+    let set = of(&vld::set(vld::boolean()).max_size(2));
+    assert_eq!(set["x-maxUniqueItems"], 2, "{set}");
+    let rec = of(&vld::record_with_keys(vld::string().min(2), vld::number()));
+    assert_eq!(rec["propertyNames"]["minLength"], 2, "{rec}");
+    let d = conv(
+        json!({"type": "string", "format": "date", "formatMinimum": "2020-01-01", "x-past": true}),
+    );
+    assert_eq!(d["formatMinimum"], "2020-01-01", "{d}");
+    assert_eq!(d["x-past"], true, "{d}");
+}
+
+/// vld's naive-allowed datetime: `{type: string, anyOf: [{format}, {pattern}]}`.
+#[test]
+fn any_of_siblings_go_into_the_branches() {
+    let out = conv(json!({
+        "type": "string",
+        "anyOf": [{"format": "date-time"}, {"pattern": "^a$"}],
+        "description": "when",
+        "x-past": true
+    }));
+    assert_eq!(out["anyOf"][0]["type"], "string", "{out}");
+    assert_eq!(out["anyOf"][0]["format"], "date-time", "{out}");
+    assert_eq!(out["anyOf"][1]["type"], "string", "{out}");
+    assert_eq!(out["anyOf"][1]["pattern"], "^a$", "{out}");
+    assert_eq!(out["description"], "when");
+    assert_eq!(out["x-past"], true, "{out}");
+    // Nullable unions are unchanged.
+    let n = conv(json!({"anyOf": [{"type": "string"}, {"type": "null"}]}));
+    assert_eq!(n["anyOf"][1]["type"], "null", "{n}");
+}

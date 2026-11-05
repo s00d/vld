@@ -19,15 +19,23 @@ Validate data **before** inserting into the database. Provides:
 | `Validated<Schema, T>` | Wrapper that guarantees `T` passes `Schema` |
 | `VldText<S>` | Validated `String` column — SQLx `Type`/`Encode`/`Decode` |
 | `VldInt<S>` | Validated `i64` column — SQLx `Type`/`Encode`/`Decode`; also decodes INT4/INT2 (SMALLINT, INTEGER) columns |
-| `VldFloat<S>` | Validated `f64` column — SQLx `Type`/`Encode`/`Decode` |
+| `VldFloat<S>` | Validated `f64` column — SQLx `Type`/`Encode`/`Decode`; also decodes FLOAT4 / REAL columns (through the `f32`'s decimal form) |
 | `VldBool<S>` | Validated `bool` column — SQLx `Type`/`Encode`/`Decode` |
+
+> `Validated::new` validates `T` but stores the **original** value: defaults,
+> transforms and coercions of the schema (`with_default`, `trim()`, `coerce()`, …)
+> are not applied to what gets stored. `VldFloat::new(f64::NAN)` / `±inf` is
+> rejected (`not_finite`) instead of being checked as `null`.
+
+`VldSqlxError` converts into `sqlx::Error::Encode` (it is raised before a value
+is written), so `?` works inside functions returning `sqlx::Error`.
 
 ## Installation
 
 ```toml
 [dependencies]
-vld-sqlx = "0.4"
-vld = { version = "0.4", features = ["serialize"] }
+vld-sqlx = "0.5"
+vld = "0.5"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 ```
 

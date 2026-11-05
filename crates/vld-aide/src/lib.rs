@@ -8,8 +8,9 @@
 //! `vld::schema!`, you define validation rules once and get `schemars` compatibility
 //! for free.
 //!
-//! The conversion itself lives in [`vld_schemars`]; this crate re-exports it
-//! under the aide-oriented name.
+//! **An alias of [`vld_schemars`] for aide users**: it re-exports
+//! `impl_json_schema!`, `vld_to_schemars` and `schemars` and has no `aide`
+//! dependency of its own. Use `vld-schemars` directly for its full API.
 //!
 //! # Quick Start
 //!

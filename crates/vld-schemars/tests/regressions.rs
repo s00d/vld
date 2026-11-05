@@ -138,3 +138,131 @@ fn validator_self_ref_does_not_overflow() {
     let dangling = json!({"$ref": "#/$defs/Missing"});
     assert!(validate_with_schema(&dangling, &json!(1)).is_err());
 }
+
+// ---------------------------------------------------------------------------
+// 0.5.0 re-audit
+// ---------------------------------------------------------------------------
+
+#[test]
+fn openapi3_exclusive_bounds_are_booleans() {
+    let mut s = json!({"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 10});
+    to_openapi3(&mut s);
+    assert_eq!(
+        s,
+        json!({"type": "number", "minimum": 0, "exclusiveMinimum": true, "maximum": 10, "exclusiveMaximum": true})
+    );
+    // A stricter inclusive bound wins; a looser one is replaced.
+    let mut s = json!({"type": "integer", "minimum": 5, "exclusiveMinimum": 0, "maximum": 20, "exclusiveMaximum": 10});
+    to_openapi3(&mut s);
+    assert_eq!(s["minimum"], 5);
+    assert!(s.get("exclusiveMinimum").is_none(), "{s}");
+    assert_eq!(s["maximum"], 10);
+    assert_eq!(s["exclusiveMaximum"], true);
+    // From a real vld schema.
+    let mut n = vld::openapi::JsonSchema::json_schema(&vld::number().gt(1.5));
+    to_openapi3(&mut n);
+    assert_eq!(n["minimum"], 1.5, "{n}");
+    assert_eq!(n["exclusiveMinimum"], true, "{n}");
+}
+
+#[test]
+fn openapi3_null_has_a_type() {
+    let mut s = vld::openapi::JsonSchema::json_schema(&vld::null());
+    to_openapi3(&mut s);
+    assert_eq!(
+        s,
+        json!({"type": "string", "nullable": true, "enum": [null]})
+    );
+    // Idempotent.
+    let before = s.clone();
+    to_openapi3(&mut s);
+    assert_eq!(s, before);
+}
+
+#[test]
+fn invalid_schema_value_fails_closed() {
+    assert!(try_vld_to_schemars(&json!(42)).is_err());
+    assert_eq!(vld_to_schemars(&json!("x")).as_bool(), Some(false));
+    assert_eq!(
+        vld_to_schemars(&json!({"type": "string"}))
+            .get("type")
+            .unwrap(),
+        "string"
+    );
+}
+
+#[test]
+fn validator_contains_counts() {
+    let schema = vld::openapi::JsonSchema::json_schema(
+        &vld::array(vld::number())
+            .contains(3)
+            .min_contains(2)
+            .max_contains(3),
+    );
+    for (v, ok) in [
+        (json!([3, 3]), true),
+        (json!([3, 3, 3, 1]), true),
+        (json!([3]), false),
+        (json!([3, 3, 3, 3]), false),
+    ] {
+        assert_eq!(validate_with_schema(&schema, &v).is_ok(), ok, "{v}");
+    }
+    // Default minContains is 1.
+    let s = json!({"contains": {"const": "x"}});
+    assert!(validate_with_schema(&s, &json!(["x"])).is_ok());
+    assert!(validate_with_schema(&s, &json!([])).is_err());
+}
+
+#[test]
+fn validator_property_names() {
+    let schema = vld::openapi::JsonSchema::json_schema(&vld::record_with_keys(
+        vld::string().min(2),
+        vld::number(),
+    ));
+    assert!(validate_with_schema(&schema, &json!({"ab": 1})).is_ok());
+    let err = validate_with_schema(&schema, &json!({"a": 1})).unwrap_err();
+    assert_eq!(
+        err.issues[0].path,
+        vec![vld::error::PathSegment::Field("a".into())]
+    );
+}
+
+#[test]
+fn validator_format_bounds() {
+    let d = json!({"type": "string", "format": "date", "formatMinimum": "2020-01-01", "formatMaximum": "2020-12-31"});
+    assert!(validate_with_schema(&d, &json!("2020-06-01")).is_ok());
+    assert!(validate_with_schema(&d, &json!("2019-12-31")).is_err());
+    assert!(validate_with_schema(&d, &json!("2021-01-01")).is_err());
+    let dt =
+        json!({"type": "string", "format": "date-time", "formatMinimum": "2020-01-01T10:00:00Z"});
+    // 12:00+03:00 is 09:00Z: too early, although lexically larger.
+    assert!(validate_with_schema(&dt, &json!("2020-01-01T12:00:00+03:00")).is_err());
+    assert!(validate_with_schema(&dt, &json!("2020-01-01T10:00:00Z")).is_ok());
+    assert!(validate_with_schema(&dt, &json!("2020-01-01T08:00:00-03:00")).is_ok());
+    let t = json!({"type": "string", "format": "time", "formatMaximum": "10:00:00"});
+    assert!(validate_with_schema(&t, &json!("10:00")).is_ok());
+    assert!(validate_with_schema(&t, &json!("10:00:00.5")).is_err());
+}
+
+#[test]
+fn validator_compares_large_integers_exactly() {
+    let s = json!({"type": "integer", "maximum": 9007199254740992u64});
+    // 2^53 + 1 rounds to 2^53 as f64.
+    assert!(validate_with_schema(&s, &json!(9007199254740993u64)).is_err());
+    let s = json!({"type": "integer", "minimum": u64::MAX});
+    assert!(validate_with_schema(&s, &json!(u64::MAX - 1)).is_err());
+    assert!(validate_with_schema(&s, &json!(u64::MAX)).is_ok());
+    let m = json!({"multipleOf": 3});
+    // 2^53 + 3 rounds to 2^53 + 4 (a multiple of 3) as f64.
+    assert!(validate_with_schema(&m, &json!(9007199254740995u64)).is_err());
+    assert!(validate_with_schema(&m, &json!(9007199254740993u64)).is_ok());
+}
+
+#[test]
+fn validator_email_matches_vld() {
+    let s = json!({"type": "string", "format": "email"});
+    assert!(vld::schema::VldSchema::parse_value(&vld::string().email(), &json!("a@b")).is_ok());
+    assert!(validate_with_schema(&s, &json!("a@b")).is_ok());
+    assert!(validate_with_schema(&s, &json!("ab")).is_err());
+    assert!(validate_with_schema(&s, &json!("@b")).is_err());
+}

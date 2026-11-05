@@ -279,7 +279,10 @@ fn validate_string(
 
     if let Some(format) = schema.get("format").and_then(|v| v.as_str()) {
         let valid = match format {
-            "email" => s.contains('@') && s.contains('.'),
+            // Same shape rule as vld: `local@domain`, no dot required (`a@b`).
+            "email" => {
+                matches!(s.rsplit_once('@'), Some((l, d)) if !l.is_empty() && !d.is_empty() && !s.contains(char::is_whitespace))
+            }
             "uri" => is_uri(s),
             "url" => s.starts_with("http://") || s.starts_with("https://"),
             "url-strict" => s.starts_with("http://") || s.starts_with("https://"),
@@ -310,7 +313,111 @@ fn validate_string(
                 Some(value),
             ));
         }
+
+        // formatMinimum / formatMaximum (inclusive) for date, date-time and time.
+        for (key, too_small) in [("formatMinimum", true), ("formatMaximum", false)] {
+            let Some(bound) = schema.get(key).and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(order) = cmp_temporal(format, s, bound) else {
+                continue;
+            };
+            let bad = if too_small {
+                order == std::cmp::Ordering::Less
+            } else {
+                order == std::cmp::Ordering::Greater
+            };
+            if bad {
+                errors.issues.push(make_issue(
+                    path,
+                    IssueCode::Custom {
+                        code: if too_small { "too_small" } else { "too_big" }.into(),
+                    },
+                    format!(
+                        "Value must be {} {}",
+                        if too_small { ">=" } else { "<=" },
+                        bound
+                    ),
+                    Some(value),
+                ));
+            }
+        }
     }
+}
+
+/// Order of two `date` / `date-time` / `time` strings; `None` if either does
+/// not parse (or for other formats). A date-time without an offset is taken
+/// as UTC.
+fn cmp_temporal(format: &str, a: &str, b: &str) -> Option<std::cmp::Ordering> {
+    let key = |s: &str| -> Option<(i64, u32)> {
+        match format {
+            "date" => Some((days(s)? * 86_400, 0)),
+            "time" => time_of_day(s),
+            "date-time" => {
+                let (date, rest) = s.split_at_checked(10)?;
+                let rest = rest.strip_prefix(['T', 't', ' '])?;
+                let (time, offset) = match rest.strip_suffix(['Z', 'z']) {
+                    Some(t) => (t, 0),
+                    None => match rest
+                        .len()
+                        .checked_sub(6)
+                        .and_then(|i| rest.split_at_checked(i))
+                    {
+                        Some((t, o))
+                            if o.is_ascii()
+                                && o.starts_with(['+', '-'])
+                                && o.as_bytes()[3] == b':' =>
+                        {
+                            let h: i64 = o[1..3].parse().ok()?;
+                            let m: i64 = o[4..].parse().ok()?;
+                            let sign = if o.starts_with('-') { -1 } else { 1 };
+                            (t, sign * (h * 3600 + m * 60))
+                        }
+                        _ => (rest, 0),
+                    },
+                };
+                let (secs, nanos) = time_of_day(time)?;
+                Some((days(date)? * 86_400 + secs - offset, nanos))
+            }
+            _ => None,
+        }
+    };
+    Some(key(a)?.cmp(&key(b)?))
+}
+
+/// Days since 1970-01-01 of a `YYYY-MM-DD` date.
+fn days(s: &str) -> Option<i64> {
+    let b = s.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' || !s.is_ascii() {
+        return None;
+    }
+    let y: i64 = s[..4].parse().ok()?;
+    let m: i64 = s[5..7].parse().ok()?;
+    let d: i64 = s[8..].parse().ok()?;
+    // Howard Hinnant's days_from_civil.
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Some(era * 146_097 + doe - 719_468)
+}
+
+/// `HH:MM[:SS[.frac]]` → (seconds of day, nanoseconds).
+fn time_of_day(s: &str) -> Option<(i64, u32)> {
+    let mut parts = s.splitn(3, ':');
+    let h: i64 = parts.next()?.parse().ok()?;
+    let m: i64 = parts.next()?.parse().ok()?;
+    let (sec, nanos) = match parts.next() {
+        None => (0, 0),
+        Some(rest) => {
+            let (sec, frac) = rest.split_once('.').unwrap_or((rest, ""));
+            let digits: String = frac.chars().chain(std::iter::repeat('0')).take(9).collect();
+            (sec.parse().ok()?, digits.parse().ok()?)
+        }
+    };
+    Some((h * 3600 + m * 60 + sec, nanos))
 }
 
 fn validate_number(
@@ -319,73 +426,67 @@ fn validate_number(
     path: &[PathSegment],
     errors: &mut VldError,
 ) {
-    let n = match value.as_f64() {
-        Some(n) => n,
-        None => return,
-    };
-
-    if let Some(min) = schema.get("minimum").and_then(|v| v.as_f64()) {
-        if n < min {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooSmall {
-                    origin: vld::error::SizeOrigin::Number,
-                    minimum: min.into(),
-                    inclusive: true,
-                },
-                format!("Value must be >= {}", min),
-                Some(value),
-            ));
+    use std::cmp::Ordering::{Greater, Less};
+    if !value.is_number() {
+        return;
+    }
+    // (keyword, failing orderings of value vs bound, too small?, inclusive, op)
+    let checks: [(&str, &[std::cmp::Ordering], bool, bool, &str); 4] = [
+        ("minimum", &[Less], true, true, ">="),
+        ("maximum", &[Greater], false, true, "<="),
+        (
+            "exclusiveMinimum",
+            &[Less, std::cmp::Ordering::Equal],
+            true,
+            false,
+            ">",
+        ),
+        (
+            "exclusiveMaximum",
+            &[Greater, std::cmp::Ordering::Equal],
+            false,
+            false,
+            "<",
+        ),
+    ];
+    for (key, fails, small, inclusive, op) in checks {
+        let Some(bound) = schema.get(key).filter(|b| b.is_number()) else {
+            continue;
+        };
+        if !cmp_numbers(value, bound).is_some_and(|o| fails.contains(&o)) {
+            continue;
         }
+        let b = bound.as_f64().unwrap_or_default();
+        let code = if small {
+            IssueCode::TooSmall {
+                origin: vld::error::SizeOrigin::Number,
+                minimum: b.into(),
+                inclusive,
+            }
+        } else {
+            IssueCode::TooBig {
+                origin: vld::error::SizeOrigin::Number,
+                maximum: b.into(),
+                inclusive,
+            }
+        };
+        errors.issues.push(make_issue(
+            path,
+            code,
+            format!("Value must be {} {}", op, bound),
+            Some(value),
+        ));
     }
 
-    if let Some(max) = schema.get("maximum").and_then(|v| v.as_f64()) {
-        if n > max {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooBig {
-                    origin: vld::error::SizeOrigin::Number,
-                    maximum: max.into(),
-                    inclusive: true,
-                },
-                format!("Value must be <= {}", max),
-                Some(value),
-            ));
-        }
-    }
-
-    if let Some(ex_min) = schema.get("exclusiveMinimum").and_then(|v| v.as_f64()) {
-        if n <= ex_min {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooSmall {
-                    origin: vld::error::SizeOrigin::Number,
-                    minimum: ex_min.into(),
-                    inclusive: false,
-                },
-                format!("Value must be > {}", ex_min),
-                Some(value),
-            ));
-        }
-    }
-
-    if let Some(ex_max) = schema.get("exclusiveMaximum").and_then(|v| v.as_f64()) {
-        if n >= ex_max {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooBig {
-                    origin: vld::error::SizeOrigin::Number,
-                    maximum: ex_max.into(),
-                    inclusive: false,
-                },
-                format!("Value must be < {}", ex_max),
-                Some(value),
-            ));
-        }
-    }
-
-    if let Some(multiple) = schema.get("multipleOf").and_then(|v| v.as_f64()) {
-        if multiple > 0.0 && !is_multiple_of(n, multiple) {
+    if let Some(multiple) = schema.get("multipleOf").filter(|m| m.is_number()) {
+        let ok = match (as_int(value), as_int(multiple)) {
+            (Some(n), Some(m)) if m > 0 => n % m == 0,
+            _ => match (value.as_f64(), multiple.as_f64()) {
+                (Some(n), Some(m)) if m > 0.0 => is_multiple_of(n, m),
+                _ => true,
+            },
+        };
+        if !ok {
             errors.issues.push(make_issue(
                 path,
                 IssueCode::Custom {
@@ -395,6 +496,21 @@ fn validate_number(
                 Some(value),
             ));
         }
+    }
+}
+
+/// An integer JSON number, exactly (`i64` / `u64` range).
+fn as_int(v: &Value) -> Option<i128> {
+    v.as_i64()
+        .map(i128::from)
+        .or_else(|| v.as_u64().map(i128::from))
+}
+
+/// Exact for two integers (no `f64` rounding of large `u64` / `i64`), `f64` otherwise.
+fn cmp_numbers(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
+    match (as_int(a), as_int(b)) {
+        (Some(x), Some(y)) => Some(x.cmp(&y)),
+        _ => a.as_f64()?.partial_cmp(&b.as_f64()?),
     }
 }
 
@@ -472,6 +588,36 @@ fn validate_array(
             seen.push(item);
         }
     }
+
+    // contains / minContains (default 1) / maxContains
+    if let Some(contains) = schema.get("contains") {
+        let count = arr
+            .iter()
+            .filter(|item| validate_value_against_schema(contains, item, path, cx).is_ok())
+            .count() as u64;
+        let min = schema
+            .get("minContains")
+            .and_then(Value::as_u64)
+            .unwrap_or(1);
+        let max = schema.get("maxContains").and_then(Value::as_u64);
+        if count < min || max.is_some_and(|m| count > m) {
+            errors.issues.push(make_issue(
+                path,
+                IssueCode::Custom {
+                    code: "contains".into(),
+                },
+                match max {
+                    Some(m) => format!(
+                        "Array must contain {min}..={m} items matching {contains} (found {count})"
+                    ),
+                    None => format!(
+                        "Array must contain at least {min} items matching {contains} (found {count})"
+                    ),
+                },
+                None,
+            ));
+        }
+    }
 }
 
 fn validate_object(
@@ -541,6 +687,18 @@ fn validate_object(
         }
         for sub in subs {
             if let Err(e) = validate_value_against_schema(sub, prop_value, &prop_path, cx) {
+                *errors = std::mem::take(errors).merge(e);
+            }
+        }
+    }
+
+    // propertyNames: every key is a string valid against the schema.
+    if let Some(names) = schema.get("propertyNames") {
+        for key in obj.keys() {
+            let mut key_path = path.to_vec();
+            key_path.push(PathSegment::Field(key.clone()));
+            let k = Value::String(key.clone());
+            if let Err(e) = validate_value_against_schema(names, &k, &key_path, cx) {
                 *errors = std::mem::take(errors).merge(e);
             }
         }

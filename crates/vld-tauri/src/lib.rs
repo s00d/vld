@@ -13,10 +13,7 @@
 //! |------|----------|
 //! | [`validate`] | General-purpose JSON validation |
 //! | [`validate_args`] | Validate a raw JSON string |
-//! | [`validate_event`] | Validate incoming event payloads |
-//! | [`validate_state`] | Validate app state / config at init |
-//! | [`validate_channel_message`] | Validate outgoing channel messages |
-//! | [`validate_plugin_config`] | Validate plugin JSON config |
+//! | `validate_event` / `validate_state` / `validate_channel_message` / `validate_plugin_config` | Deprecated aliases of [`validate`] |
 //! | [`VldTauriError`] | Serializable error for `#[tauri::command]` results |
 //! | [`VldPayload<T>`] | Auto-validating `Deserialize` wrapper |
 //! | [`VldEvent<T>`] | Auto-validating `Deserialize` wrapper for events |
@@ -291,7 +288,7 @@ pub fn validate_args<T: VldParse>(json_str: &str) -> Result<T, VldTauriError> {
 /// Validate an **event payload** received from the frontend via
 /// `Emitter::emit()` / `Listener::listen()`.
 ///
-/// Functionally identical to [`validate`], but conveys intent.
+/// Identical to [`validate`] (deprecated alias).
 ///
 /// # Example
 ///
@@ -301,6 +298,7 @@ pub fn validate_args<T: VldParse>(json_str: &str) -> Result<T, VldTauriError> {
 ///     let update = validate_event::<UserUpdate>(payload).unwrap();
 /// });
 /// ```
+#[deprecated(since = "0.5.0", note = "identical to `validate`; use `validate`")]
 pub fn validate_event<T: VldParse>(payload: serde_json::Value) -> Result<T, VldTauriError> {
     validate(payload)
 }
@@ -312,6 +310,7 @@ pub fn validate_event<T: VldParse>(payload: serde_json::Value) -> Result<T, VldT
 /// # Example
 ///
 /// ```rust
+/// # #![allow(deprecated)]
 /// use vld_tauri::validate_state;
 ///
 /// vld::schema! {
@@ -326,6 +325,7 @@ pub fn validate_event<T: VldParse>(payload: serde_json::Value) -> Result<T, VldT
 /// let config = validate_state::<AppConfig>(cfg).unwrap();
 /// assert_eq!(config.max_connections, 10);
 /// ```
+#[deprecated(since = "0.5.0", note = "identical to `validate`; use `validate`")]
 pub fn validate_state<T: VldParse>(value: serde_json::Value) -> Result<T, VldTauriError> {
     validate(value)
 }
@@ -335,6 +335,7 @@ pub fn validate_state<T: VldParse>(value: serde_json::Value) -> Result<T, VldTau
 /// # Example
 ///
 /// ```rust
+/// # #![allow(deprecated)]
 /// use vld_tauri::validate_plugin_config;
 ///
 /// vld::schema! {
@@ -349,6 +350,7 @@ pub fn validate_state<T: VldParse>(value: serde_json::Value) -> Result<T, VldTau
 /// let c = validate_plugin_config::<MyPluginConfig>(cfg).unwrap();
 /// assert_eq!(c.api_key, "abc123");
 /// ```
+#[deprecated(since = "0.5.0", note = "identical to `validate`; use `validate`")]
 pub fn validate_plugin_config<T: VldParse>(config: serde_json::Value) -> Result<T, VldTauriError> {
     validate(config)
 }
@@ -361,6 +363,7 @@ pub fn validate_plugin_config<T: VldParse>(config: serde_json::Value) -> Result<
 /// # Example
 ///
 /// ```rust
+/// # #![allow(deprecated)]
 /// use vld_tauri::validate_channel_message;
 ///
 /// vld::schema! {
@@ -375,6 +378,7 @@ pub fn validate_plugin_config<T: VldParse>(config: serde_json::Value) -> Result<
 /// let p = validate_channel_message::<Progress>(msg).unwrap();
 /// assert_eq!(p.percent, 42);
 /// ```
+#[deprecated(since = "0.5.0", note = "identical to `validate`; use `validate`")]
 pub fn validate_channel_message<T: VldParse>(
     message: serde_json::Value,
 ) -> Result<T, VldTauriError> {
@@ -446,10 +450,10 @@ impl<'de, T: VldParse> Deserialize<'de> for VldPayload<T> {
 // VldEvent<T> — auto-validating wrapper for event payloads
 // ---------------------------------------------------------------------------
 
-/// Auto-validating wrapper for Tauri **event payloads**.
+/// Auto-validating wrapper for Tauri **event payloads** — the same type as
+/// [`VldPayload<T>`], named for data received via `Listener::listen()`.
 ///
-/// Works the same as [`VldPayload<T>`] but is semantically intended for
-/// data received via `Listener::listen()`.
+/// Since 0.5 this is a type alias: construct / match it as `VldPayload(x)`.
 ///
 /// # Example
 ///
@@ -460,45 +464,7 @@ impl<'de, T: VldParse> Deserialize<'de> for VldPayload<T> {
 ///     }
 /// });
 /// ```
-pub struct VldEvent<T>(pub T);
-
-impl<T> std::ops::Deref for VldEvent<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldEvent<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
-impl<T: std::fmt::Debug> std::fmt::Debug for VldEvent<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("VldEvent").field(&self.0).finish()
-    }
-}
-
-impl<T: Clone> Clone for VldEvent<T> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-
-impl<'de, T: VldParse> Deserialize<'de> for VldEvent<T> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        T::vld_parse_value(&value).map(VldEvent).map_err(|e| {
-            let msg = format_vld_error_inline(&e);
-            serde::de::Error::custom(msg)
-        })
-    }
-}
+pub type VldEvent<T> = VldPayload<T>;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -507,7 +473,13 @@ impl<'de, T: VldParse> Deserialize<'de> for VldEvent<T> {
 fn format_vld_error_inline(e: &vld::error::VldError) -> String {
     let issues: Vec<String> = vld_integration_common::flatten_issues(e)
         .into_iter()
-        .map(|(path, message)| format!("{path}: {message}"))
+        .map(|(path, message)| {
+            if path.is_empty() {
+                message
+            } else {
+                format!("{path}: {message}")
+            }
+        })
         .collect();
     format!("Validation failed: {}", issues.join("; "))
 }
@@ -518,6 +490,7 @@ fn format_vld_error_inline(e: &vld::error::VldError) -> String {
 
 /// Prelude — import everything you need.
 pub mod prelude {
+    #[allow(deprecated)]
     pub use crate::{
         validate, validate_args, validate_channel_message, validate_event, validate_plugin_config,
         validate_state, TauriIssue, VldEvent, VldPayload, VldTauriError,

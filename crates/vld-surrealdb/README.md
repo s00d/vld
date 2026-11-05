@@ -5,6 +5,9 @@
 
 # vld-surrealdb
 
+> **SDK-agnostic: no `surrealdb` dependency** — validation works on the JSON /
+> `serde` values you pass to any SurrealDB SDK.
+
 [SurrealDB](https://surrealdb.com/) integration for the [vld](https://crates.io/crates/vld) validation library.
 
 ## Overview
@@ -20,7 +23,7 @@ making `vld` validation a perfect fit.
 
 - **`validate_content`** — validate a struct before `db.create()` / `db.insert()` / `db.update()`
 - **`validate_json`** — validate raw `serde_json::Value` from SurrealQL query results
-- **`validate_record` / `validate_records`** — validate data after `db.select()`
+- **`validate_records`** — validate a batch after `db.select()` (`validate_record` is a deprecated alias of `validate_content`)
 - **`validate_value`** — validate individual field values against a schema
 - **`validate_fields!`** — inline macro for multi-field validation
 - **`Validated<S, T>`** — wrapper that proves the inner value has been validated
@@ -31,8 +34,8 @@ making `vld` validation a perfect fit.
 
 ```toml
 [dependencies]
-vld = "0.4"
-vld-surrealdb = "0.4"
+vld = "0.5"
+vld-surrealdb = "0.5"
 surrealdb = "2"   # or "3" — vld-surrealdb works with any version
 ```
 
@@ -133,7 +136,7 @@ match validate_content::<PersonSchema, _>(&bad_data) {
 |---|---|
 | `validate_content::<S, T>(&value)` | Validate struct before create/insert/update |
 | `validate_json::<S>(&json)` | Validate raw JSON value |
-| `validate_record::<S, T>(&value)` | Validate struct after select |
+| `validate_record::<S, T>(&value)` | Deprecated: identical to `validate_content` |
 | `validate_records::<S, T>(&[values])` | Validate batch, returns `(index, error)` on failure |
 | `validate_value(&schema, &json)` | Validate single field value |
 | `validate_fields!{ field => schema, ... }` | Inline multi-field validation |

@@ -24,6 +24,8 @@ with-chrono = ["sea-orm?/with-chrono", "sea-orm2?/with-chrono"]
 with-uuid = ["sea-orm?/with-uuid", "sea-orm2?/with-uuid"]
 with-rust_decimal = ["sea-orm?/with-rust_decimal", "sea-orm2?/with-rust_decimal"]
 with-bigdecimal = ["sea-orm?/with-bigdecimal", "sea-orm2?/with-bigdecimal"]
+with-time = ["sea-orm?/with-time", "sea-orm2?/with-time"]
+postgres-array = ["sea-orm?/postgres-array", "sea-orm2?/postgres-array"]
 
 [dependencies]
 vld = { workspace = true }
@@ -35,10 +37,12 @@ vld-integration-common = { workspace = true }
 
 [dev-dependencies]
 vld = { workspace = true }
-# Entity derive macros hard-code the `sea_orm` crate name — integration tests
-# therefore run against sea-orm 1.x only. sea-orm 2 is covered by `cargo check`.
+# Entity derive macros emit `sea_orm::` paths: tests/integration.rs runs on
+# sea-orm 1, tests/sea_orm2.rs aliases `sea_orm2 as sea_orm`.
 sea-orm = { version = "1", default-features = false, features = ["macros"] }
+sea-orm2 = { package = "sea-orm", version = "2", default-features = false, features = ["macros"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+time = "0.3"
 
 [[example]]
 name = "sea_basic"

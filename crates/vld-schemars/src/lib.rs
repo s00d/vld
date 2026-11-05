@@ -95,15 +95,32 @@ impl From<vld::error::VldError> for VldSchemarsError {
 /// Convert a `serde_json::Value` (JSON Schema produced by `vld`) into a
 /// `schemars::Schema`.
 ///
+/// A value that is not a JSON Schema (neither an object nor a boolean) fails
+/// closed: it becomes the `false` schema, which rejects everything. Use
+/// [`try_vld_to_schemars`] to get an error instead.
+///
 /// ```rust
 /// let schema = vld_schemars::vld_to_schemars(&serde_json::json!({"type": "string"}));
 /// assert_eq!(schema.get("type").unwrap(), "string");
+/// assert_eq!(vld_schemars::vld_to_schemars(&serde_json::json!(42)).as_bool(), Some(false));
 /// ```
 pub fn vld_to_schemars(value: &Value) -> schemars::Schema {
-    value
-        .clone()
-        .try_into()
-        .unwrap_or_else(|_| schemars::Schema::default())
+    try_vld_to_schemars(value).unwrap_or_else(|_| schemars::Schema::from(false))
+}
+
+/// Like [`vld_to_schemars`], but a value that is not a JSON Schema (neither an
+/// object nor a boolean) is an error.
+///
+/// ```rust
+/// assert!(vld_schemars::try_vld_to_schemars(&serde_json::json!({"type": "string"})).is_ok());
+/// assert!(vld_schemars::try_vld_to_schemars(&serde_json::json!("string")).is_err());
+/// ```
+pub fn try_vld_to_schemars(value: &Value) -> Result<schemars::Schema, VldSchemarsError> {
+    value.clone().try_into().map_err(|_| {
+        VldSchemarsError::Deserialization(format!(
+            "not a JSON Schema (expected an object or a boolean): {value}"
+        ))
+    })
 }
 
 /// Generate a `schemars::Schema` from a vld type that has a `json_schema()` method.
@@ -172,10 +189,18 @@ mod validator;
 ///
 /// Performs structural validation: type checks, required fields,
 /// string constraints (minLength, maxLength, pattern, format),
-/// number constraints (minimum, maximum, exclusiveMinimum, exclusiveMaximum),
-/// array constraints (minItems, maxItems), enum values, and recursive
-/// validation of `properties`, `patternProperties`, `additionalProperties`,
-/// `items` / `prefixItems`, and local `$ref`s (resolved against `schema`).
+/// number constraints (minimum, maximum, exclusiveMinimum, exclusiveMaximum,
+/// multipleOf — exact for integers), array constraints (minItems, maxItems,
+/// uniqueItems, contains / minContains / maxContains), `propertyNames`,
+/// minProperties / maxProperties, `formatMinimum` / `formatMaximum` for
+/// `date` / `date-time` / `time`, enum values, `oneOf` / `anyOf` / `allOf` /
+/// `not`, and recursive validation of `properties`, `patternProperties`,
+/// `additionalProperties`, `items` / `prefixItems`, and local `$ref`s
+/// (resolved against `schema`).
+///
+/// Not checked: vendor `x-*` keywords (vld's `x-past` / `x-future`,
+/// `x-minUniqueItems` / `x-maxUniqueItems`, `x-minDecimal`, …), and most
+/// `format`s beyond a basic shape check (unknown formats pass).
 ///
 /// ```rust
 /// let schema = serde_json::json!({
@@ -651,7 +676,12 @@ pub fn __vld_json_schema(
 ///   with the existing `minItems` / `maxItems`;
 /// - `null` branches of `anyOf` / `oneOf` and `"null"` in a `type` array
 ///   become `nullable: true` (a lone remaining `$ref` is wrapped in `allOf`);
-/// - a schema that only allows `null` becomes `{"nullable": true}`.
+/// - numeric `exclusiveMinimum` / `exclusiveMaximum` (2020-12) become
+///   `minimum` / `maximum` plus the boolean 3.0 `exclusiveMinimum: true` /
+///   `exclusiveMaximum: true`;
+/// - a schema that only allows `null` becomes
+///   `{"type": "string", "nullable": true, "enum": [null]}` (3.0 ignores
+///   `nullable` without a `type`, and has no `null` type).
 ///
 /// Doing it here keeps schemars' own OpenAPI 3.0 transforms from producing
 /// `additionalItems` or `{"enum": [null], "nullable": true}`.
@@ -709,9 +739,37 @@ pub fn to_openapi3(value: &mut Value) {
                 }
             }
 
+            // 2020-12 numeric `exclusiveMinimum: n` → 3.0 `minimum: n, exclusiveMinimum: true`
+            // (an inclusive bound that is already stricter wins).
+            for (ex, inc, stricter) in [
+                ("exclusiveMinimum", "minimum", std::cmp::Ordering::Greater),
+                ("exclusiveMaximum", "maximum", std::cmp::Ordering::Less),
+            ] {
+                let Some(n) = map.get(ex).and_then(Value::as_f64) else {
+                    continue;
+                };
+                let n_value = map.remove(ex).unwrap_or_default();
+                let inclusive_wins = map
+                    .get(inc)
+                    .and_then(Value::as_f64)
+                    .and_then(|m| m.partial_cmp(&n))
+                    .is_some_and(|o| o == stricter);
+                if !inclusive_wins {
+                    map.insert(inc.into(), n_value);
+                    map.insert(ex.into(), Value::Bool(true));
+                }
+            }
+
+            // `nullable` needs a `type` in 3.0: a null-only schema becomes a
+            // nullable string whose only allowed value is `null`.
             if is_null_schema(&Value::Object(map.clone())) {
-                map.clear();
+                for k in ["type", "const", "enum", "nullable"] {
+                    map.remove(k);
+                }
+                map.insert("type".into(), "string".into());
                 map.insert("nullable".into(), Value::Bool(true));
+                map.insert("enum".into(), serde_json::json!([null]));
+                return;
             }
             // Children last: null branches must still look like `null` above.
             map.values_mut().for_each(to_openapi3);
@@ -768,8 +826,9 @@ pub mod prelude {
     pub use crate::{
         generate_from_schemars, generate_schemars, get_property, is_required, list_properties,
         list_properties_schemars, merge_schemas, overlay_constraints, schema_type,
-        schemars_to_json, schemas_equal, validate_with_schema, validate_with_schemars,
-        vld_schema_to_schemars, vld_to_schemars, PropertyInfo, SchemarsValidate, VldSchemarsError,
+        schemars_to_json, schemas_equal, try_vld_to_schemars, validate_with_schema,
+        validate_with_schemars, vld_schema_to_schemars, vld_to_schemars, PropertyInfo,
+        SchemarsValidate, VldSchemarsError,
     };
     pub use vld::prelude::*;
 }

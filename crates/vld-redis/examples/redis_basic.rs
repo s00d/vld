@@ -1,4 +1,4 @@
-//! Real Redis example for `impl_to_redis!`.
+//! Real Redis example for `RedisConn`.
 //!
 //! Run:
 //! cargo run -p vld-redis --example redis_basic
@@ -29,10 +29,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         age: -5,
     };
 
-    println!("1) real Redis connection (only impl_to_redis API):");
+    println!("1) real Redis connection (RedisConn API):");
     let client = redis::Client::open("redis://127.0.0.1/")?;
-    let conn = client.get_connection()?;
-    impl_to_redis!(conn);
+    let mut conn = RedisConn::new(client.get_connection()?);
 
     conn.set("vld:user:1", &good)?;
     let loaded: Option<UserSchema> = conn.get("vld:user:1")?;

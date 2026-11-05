@@ -25,25 +25,26 @@ Validate `ActiveModel` fields **before** `insert()` / `update()` hits the databa
 
 ```toml
 [dependencies]
-vld-sea = "0.4"          # default: sea-orm 1.x
-vld = "0.4"
+vld-sea = "0.5"          # default: sea-orm 1.x
+vld = "0.5"
 sea-orm = "1"
 ```
 
 SeaORM 2.x (library API; enable exactly one feature):
 
 ```toml
-vld-sea = { version = "0.4", default-features = false, features = ["sea-orm-2"] }
+vld-sea = { version = "0.5", default-features = false, features = ["sea-orm-2"] }
 sea-orm = "2"
 ```
 
 ## Compatibility
 
-- Default `sea-orm-1`: crate MSRV follows workspace (**1.70**); SeaORM 1.x itself needs a newer toolchain.
-- Feature `sea-orm-2`: requires Rust **1.94+** (SeaORM 2 MSRV).
-- Integration tests/examples use SeaORM entity derive macros, which require the
-  crate to be named `sea_orm`, so they run on `sea-orm-1`. `sea-orm-2` is covered
-  by lib unit tests (`Value::Enum` conversion) + `cargo check`.
+- Default `sea-orm-1`: crate MSRV follows the workspace (**1.85**); SeaORM 1.x itself may need a newer toolchain.
+- Feature `sea-orm-2`: requires the SeaORM 2 MSRV.
+- `validate_active`, `before_save` and `impl_vld_before_save!` work on both
+  versions (tests: `tests/integration.rs` on sea-orm 1, `tests/sea_orm2.rs` on
+  sea-orm 2 — entity derive macros emit `sea_orm::` paths, so that file imports
+  `sea_orm2 as sea_orm`).
 
 ## Quick Start
 
@@ -124,8 +125,9 @@ vld_sea::validate_model::<UserInput, _>(&input)?;
 
 `active_model_to_json` converts an ActiveModel to a JSON object. Only `Set` and `Unchanged` fields are included; `NotSet` fields are omitted.
 
-Always supported: `bool`, `i8`–`i64`, `u8`–`u64`, `f32`, `f64`, `String`, `char`,
-bytes (array of `u8`), ActiveEnum (sea-orm 2, as string).
+Always supported: `bool`, `i8`–`i64`, `u8`–`u64`, `f32` (through its decimal
+form: `0.1f32` → `0.1`), `f64`, `String`, `char`, bytes (array of `u8`),
+ActiveEnum (sea-orm 2, as string).
 
 Feature-gated column types need the matching **vld-sea** feature (it also enables
 the SeaORM feature); values mirror what `serde_json` produces for the Rust type:
@@ -134,6 +136,8 @@ the SeaORM feature); values mirror what `serde_json` produces for the Rust type:
 |---|---|
 | `with-json` | the JSON value as-is |
 | `with-chrono` | `"2024-02-29"`, `"12:30:00"`, `"2024-02-29T12:30:00"`, RFC 3339 for zoned datetimes |
+| `with-time` | the same shapes for `time` values (`±HH:MM` offsets) |
+| `postgres-array` | a JSON array of the mapped items |
 | `with-uuid` | hyphenated string |
 | `with-rust_decimal`, `with-bigdecimal` | decimal string, e.g. `"12.50"` |
 
@@ -141,7 +145,7 @@ the SeaORM feature); values mirror what `serde_json` produces for the Rust type:
 vld-sea = { version = "0.5", features = ["with-chrono", "with-uuid"] }
 ```
 
-Without the feature (and for `time`/array/other types) the value becomes `null`.
+Without the matching feature (and for other types) the value becomes `null`.
 
 ## Running Examples
 

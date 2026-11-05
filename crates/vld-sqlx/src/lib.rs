@@ -48,9 +48,11 @@ vld_integration_common::__vld_db_error!(
     VldSqlxError
 );
 
+/// A validation failure happens before a value is written: it becomes
+/// [`sqlx::Error::Encode`] (not `Protocol`, which means a broken connection).
 impl From<VldSqlxError> for sqlx::Error {
     fn from(e: VldSqlxError) -> Self {
-        sqlx::Error::Protocol(e.to_string())
+        sqlx::Error::Encode(Box::new(e))
     }
 }
 
@@ -180,8 +182,56 @@ macro_rules! sqlx_delegate {
 }
 
 sqlx_delegate!(VldText, String);
-sqlx_delegate!(VldFloat, f64);
 sqlx_delegate!(VldBool, bool);
+
+// VldFloat: accepts DOUBLE and REAL / FLOAT4 columns, encodes as f64. A REAL
+// is widened through its decimal form, so `0.1f32` reads back as `0.1`.
+impl<S, DB: sqlx::Database> sqlx::Type<DB> for VldFloat<S>
+where
+    f64: sqlx::Type<DB>,
+    f32: sqlx::Type<DB>,
+{
+    fn type_info() -> DB::TypeInfo {
+        <f64 as sqlx::Type<DB>>::type_info()
+    }
+    fn compatible(ty: &DB::TypeInfo) -> bool {
+        <f64 as sqlx::Type<DB>>::compatible(ty) || <f32 as sqlx::Type<DB>>::compatible(ty)
+    }
+}
+
+impl<'q, S, DB: sqlx::Database> sqlx::Encode<'q, DB> for VldFloat<S>
+where
+    f64: sqlx::Encode<'q, DB>,
+{
+    fn encode_by_ref(
+        &self,
+        buf: &mut SqlxArgBuf<'q, DB>,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        self.value.encode_by_ref(buf)
+    }
+}
+
+impl<'r, S, DB: sqlx::Database> sqlx::Decode<'r, DB> for VldFloat<S>
+where
+    f64: sqlx::Decode<'r, DB> + sqlx::Type<DB>,
+    f32: sqlx::Decode<'r, DB> + sqlx::Type<DB>,
+{
+    fn decode(
+        value: <DB as sqlx::Database>::ValueRef<'r>,
+    ) -> Result<Self, sqlx::error::BoxDynError> {
+        use sqlx::ValueRef as _;
+        let ty = value.type_info().into_owned();
+        let v = if !<f64 as sqlx::Type<DB>>::compatible(&ty)
+            && <f32 as sqlx::Type<DB>>::compatible(&ty)
+        {
+            let f = <f32 as sqlx::Decode<'r, DB>>::decode(value)?;
+            f.to_string().parse().unwrap_or(f64::from(f))
+        } else {
+            <f64 as sqlx::Decode<'r, DB>>::decode(value)?
+        };
+        Ok(Self::new_unchecked(v))
+    }
+}
 
 // VldInt: accepts BIGINT, INTEGER and SMALLINT columns (Postgres INT8/INT4/INT2
 // are distinct types), encodes as i64.
@@ -244,6 +294,16 @@ mod pg_tests {
     use sqlx::Type;
 
     struct AnySchema;
+
+    #[test]
+    fn vld_float_compatible_with_float4() {
+        for ty in [
+            <f32 as Type<Postgres>>::type_info(),
+            <f64 as Type<Postgres>>::type_info(),
+        ] {
+            assert!(<VldFloat<AnySchema> as Type<Postgres>>::compatible(&ty));
+        }
+    }
 
     #[test]
     fn vld_int_compatible_with_int4_and_int2() {

@@ -21,10 +21,10 @@ Validate configuration files (TOML, YAML, JSON, ENV) at load time using
 
 ```toml
 [dependencies]
-vld = "0.4"
-vld-config = "0.4"                    # config-rs backend (default)
-# vld-config = { version = "0.4", features = ["figment"] }  # figment backend
-# vld-config = { version = "0.4", features = ["config-rs", "figment"] }  # both
+vld = "0.5"
+vld-config = "0.5"                    # config-rs backend (default)
+# vld-config = { version = "0.5", features = ["figment"] }  # figment backend
+# vld-config = { version = "0.5", features = ["config-rs", "figment"] }  # both
 ```
 
 ## Features
@@ -89,7 +89,8 @@ let settings: AppSettings = from_figment(&figment).unwrap();
 | `from_config(&Config)` | config-rs | Validate a built `Config` |
 | `from_builder(ConfigBuilder)` | config-rs | Build and validate in one step |
 | `from_figment(&Figment)` | figment | Validate a `Figment` |
-| `from_value(&Value)` | — | Validate raw `serde_json::Value` |
+| `from_value(&Value)` | — | Validate a raw `serde_json::Value` **strictly** (no coercion) |
+| `from_value_coerced(&Value)` | — | Validate a raw `serde_json::Value` with the backends' coercion (`12345` → `"12345"` for a string field, a single value → array) |
 
 All functions return `Result<T, VldConfigError>` where `T: VldParse` (implemented by `vld::schema!`).
 
