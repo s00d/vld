@@ -1,13 +1,18 @@
 use serde_json::Value;
 use std::fs;
 use std::fs::File;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use crate::error::{value_type_name, IssueCode, VldError};
+use crate::primitives::path::{outside_base_error, resolve_within};
 use crate::schema::VldSchema;
+#[cfg(feature = "file-advanced")]
 use md5::{Digest as _, Md5};
+#[cfg(feature = "file-advanced")]
 use sha2::Sha256;
 
+#[cfg(feature = "file-advanced")]
 fn digest_to_hex(output: impl AsRef<[u8]>) -> String {
     output
         .as_ref()
@@ -103,6 +108,7 @@ pub struct ZFile {
     min_height: Option<u32>,
     max_height: Option<u32>,
     require_exif: bool,
+    within_base: Option<PathBuf>,
     storage: FileStorage,
     custom_type_error: Option<String>,
 }
@@ -125,6 +131,7 @@ impl ZFile {
             min_height: None,
             max_height: None,
             require_exif: false,
+            within_base: None,
             storage: FileStorage::InMemory,
             custom_type_error: None,
         }
@@ -198,38 +205,57 @@ impl ZFile {
         self
     }
 
+    #[cfg(feature = "file-advanced")]
     pub fn sha256(mut self, hex: impl Into<String>) -> Self {
         self.sha256_hex = Some(hex.into().to_ascii_lowercase());
         self
     }
 
+    #[cfg(feature = "file-advanced")]
     pub fn md5(mut self, hex: impl Into<String>) -> Self {
         self.md5_hex = Some(hex.into().to_ascii_lowercase());
         self
     }
 
+    #[cfg(feature = "file-advanced")]
     pub fn min_width(mut self, w: u32) -> Self {
         self.min_width = Some(w);
         self
     }
 
+    #[cfg(feature = "file-advanced")]
     pub fn max_width(mut self, w: u32) -> Self {
         self.max_width = Some(w);
         self
     }
 
+    #[cfg(feature = "file-advanced")]
     pub fn min_height(mut self, h: u32) -> Self {
         self.min_height = Some(h);
         self
     }
 
+    #[cfg(feature = "file-advanced")]
     pub fn max_height(mut self, h: u32) -> Self {
         self.max_height = Some(h);
         self
     }
 
+    #[cfg(feature = "file-advanced")]
     pub fn require_exif(mut self) -> Self {
         self.require_exif = true;
+        self
+    }
+
+    /// Require the file to live inside `base` (same rules as
+    /// [`ZPath::within`](crate::primitives::ZPath::within)): relative inputs are
+    /// resolved against `base`, `..` and symlinks cannot escape it, and the
+    /// returned [`ValidatedFile::path`] is the joined path.
+    ///
+    /// **Use this whenever the path comes from untrusted input** — without it
+    /// any readable file (e.g. `{"path": "/etc/passwd"}`) is accepted.
+    pub fn within(mut self, base: impl Into<PathBuf>) -> Self {
+        self.within_base = Some(base.into());
         self
     }
 
@@ -310,144 +336,206 @@ fn extract_path(value: &Value) -> Result<&str, VldError> {
     }
 }
 
+fn file_err(code: &str, msg: impl Into<String>, value: &Value) -> VldError {
+    VldError::single_with_value(
+        IssueCode::Custom {
+            code: code.to_string(),
+        },
+        msg,
+        value,
+    )
+}
+
+fn io_err(msg: impl Into<String>, value: &Value) -> VldError {
+    VldError::single_with_value(IssueCode::IoError, msg, value)
+}
+
+impl ZFile {
+    /// Checks that need the file content (hashes, image dimensions, EXIF).
+    fn needs_content_checks(&self) -> bool {
+        self.sha256_hex.is_some()
+            || self.md5_hex.is_some()
+            || self.needs_dimensions()
+            || self.require_exif
+    }
+
+    fn needs_dimensions(&self) -> bool {
+        self.min_width.is_some()
+            || self.max_width.is_some()
+            || self.min_height.is_some()
+            || self.max_height.is_some()
+    }
+
+    fn needs_bytes(&self) -> bool {
+        self.storage == FileStorage::InMemory
+            || !self.allowed_media_types.is_empty()
+            || !self.denied_media_types.is_empty()
+            || !self.allowed_magic_types.is_empty()
+            || !self.denied_magic_types.is_empty()
+            || self.needs_content_checks()
+    }
+
+    fn check_size(&self, size: u64, value: &Value) -> Result<(), VldError> {
+        if let Some(min) = self.min_size.filter(|&m| size < m) {
+            return Err(VldError::single_with_value(
+                IssueCode::TooSmall {
+                    minimum: min as f64,
+                    inclusive: true,
+                },
+                format!("File size must be at least {} bytes", min),
+                value,
+            ));
+        }
+        if let Some(max) = self.max_size.filter(|&m| size > m) {
+            return Err(VldError::single_with_value(
+                IssueCode::TooBig {
+                    maximum: max as f64,
+                    inclusive: true,
+                },
+                format!("File size must be at most {} bytes", max),
+                value,
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "file-advanced")]
+    fn check_dimensions(&self, bytes: &[u8], value: &Value) -> Result<(), VldError> {
+        // Reads only the image header; the pixels are never decoded.
+        let (w, h) = image::ImageReader::new(std::io::Cursor::new(bytes))
+            .with_guessed_format()
+            .ok()
+            .and_then(|r| r.into_dimensions().ok())
+            .ok_or_else(|| {
+                file_err(
+                    "invalid_image",
+                    "Unable to decode image for dimension checks",
+                    value,
+                )
+            })?;
+        let checks = [
+            (
+                self.min_width.filter(|&m| w < m),
+                "image_width_too_small",
+                "width",
+                ">=",
+            ),
+            (
+                self.max_width.filter(|&m| w > m),
+                "image_width_too_big",
+                "width",
+                "<=",
+            ),
+            (
+                self.min_height.filter(|&m| h < m),
+                "image_height_too_small",
+                "height",
+                ">=",
+            ),
+            (
+                self.max_height.filter(|&m| h > m),
+                "image_height_too_big",
+                "height",
+                "<=",
+            ),
+        ];
+        for (failed, code, dim, op) in checks {
+            if let Some(bound) = failed {
+                return Err(file_err(
+                    code,
+                    format!("Image {} must be {} {}", dim, op, bound),
+                    value,
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 impl VldSchema for ZFile {
     type Output = ValidatedFile;
 
     fn parse_value(&self, value: &Value) -> Result<ValidatedFile, VldError> {
         let path_str = extract_path(value).map_err(|e| {
-            if let Some(msg) = &self.custom_type_error {
-                VldError::single_with_value(
-                    IssueCode::InvalidType {
-                        expected: "file path".to_string(),
-                        received: value_type_name(value),
-                    },
-                    msg.clone(),
-                    value,
-                )
+            if self.custom_type_error.is_some() {
+                super::type_error(&self.custom_type_error, "file path", "file path", value)
             } else {
                 e
             }
         })?;
-        let path = PathBuf::from(path_str);
+        let mut path = PathBuf::from(path_str);
+        if let Some(base) = &self.within_base {
+            path = resolve_within(base, &path).ok_or_else(|| outside_base_error(base, value))?;
+        }
 
         if !path.exists() {
-            return Err(VldError::single_with_value(
-                IssueCode::IoError,
+            return Err(io_err(
                 format!("File does not exist: {}", path.display()),
                 value,
             ));
         }
         if !path.is_file() {
-            return Err(VldError::single_with_value(
-                IssueCode::IoError,
+            return Err(io_err(
                 format!("Path is not a file: {}", path.display()),
                 value,
             ));
         }
 
-        let metadata = fs::metadata(&path).map_err(|e| {
-            VldError::single_with_value(
-                IssueCode::IoError,
-                format!("Failed to read file metadata: {}", e),
-                value,
-            )
-        })?;
-        let size = metadata.len();
-
-        if let Some(min) = self.min_size {
-            if size < min {
-                return Err(VldError::single_with_value(
-                    IssueCode::TooSmall {
-                        minimum: min as f64,
-                        inclusive: true,
-                    },
-                    format!("File size must be at least {} bytes", min),
-                    value,
-                ));
-            }
-        }
-        if let Some(max) = self.max_size {
-            if size > max {
-                return Err(VldError::single_with_value(
-                    IssueCode::TooBig {
-                        maximum: max as f64,
-                        inclusive: true,
-                    },
-                    format!("File size must be at most {} bytes", max),
-                    value,
-                ));
-            }
-        }
-
         let extension = path
             .extension()
             .map(|e| e.to_string_lossy().to_ascii_lowercase());
-        if !self.allowed_extensions.is_empty() {
-            let ext = extension.as_deref().unwrap_or_default();
-            if !self.allowed_extensions.iter().any(|allowed| allowed == ext) {
-                return Err(VldError::single_with_value(
-                    IssueCode::Custom {
-                        code: "invalid_file_extension".to_string(),
-                    },
-                    format!(
-                        "File extension must be one of: {}",
-                        self.allowed_extensions.join(", ")
-                    ),
-                    value,
-                ));
-            }
+        let ext = extension.as_deref().unwrap_or_default();
+        if !self.allowed_extensions.is_empty()
+            && !self.allowed_extensions.iter().any(|allowed| allowed == ext)
+        {
+            return Err(file_err(
+                "invalid_file_extension",
+                format!(
+                    "File extension must be one of: {}",
+                    self.allowed_extensions.join(", ")
+                ),
+                value,
+            ));
         }
-        if !self.denied_extensions.is_empty() {
-            let ext = extension.as_deref().unwrap_or_default();
-            if self.denied_extensions.iter().any(|deny| deny == ext) {
-                return Err(VldError::single_with_value(
-                    IssueCode::Custom {
-                        code: "denied_file_extension".to_string(),
-                    },
-                    format!("File extension `{}` is denied", ext),
-                    value,
-                ));
-            }
+        if self.denied_extensions.iter().any(|deny| deny == ext) {
+            return Err(file_err(
+                "denied_file_extension",
+                format!("File extension `{}` is denied", ext),
+                value,
+            ));
         }
 
-        let needs_bytes = self.storage == FileStorage::InMemory
-            || !self.allowed_media_types.is_empty()
-            || !self.denied_media_types.is_empty()
-            || !self.allowed_magic_types.is_empty()
-            || !self.denied_magic_types.is_empty()
-            || self.sha256_hex.is_some()
-            || self.md5_hex.is_some()
-            || self.min_width.is_some()
-            || self.max_width.is_some()
-            || self.min_height.is_some()
-            || self.max_height.is_some()
-            || self.require_exif;
-        let loaded_bytes = if needs_bytes {
-            Some(fs::read(&path).map_err(|e| {
-                VldError::single_with_value(
-                    IssueCode::IoError,
-                    format!("Failed to read file: {}", e),
-                    value,
-                )
-            })?)
+        // Size and content come from the same open handle (no stat/read race),
+        // and reading never goes past `max_size + 1` bytes.
+        let file =
+            File::open(&path).map_err(|e| io_err(format!("Failed to open file: {}", e), value))?;
+        let mut size = file
+            .metadata()
+            .map_err(|e| io_err(format!("Failed to read file metadata: {}", e), value))?
+            .len();
+        self.check_size(size, value)?;
+
+        let loaded_bytes = if self.needs_bytes() {
+            let mut buf = Vec::new();
+            let limit = self.max_size.map_or(u64::MAX, |m| m.saturating_add(1));
+            file.take(limit)
+                .read_to_end(&mut buf)
+                .map_err(|e| io_err(format!("Failed to read file: {}", e), value))?;
+            size = buf.len() as u64;
+            self.check_size(size, value)?;
+            Some(buf)
         } else {
             None
         };
 
-        let media_type = loaded_bytes
-            .as_deref()
-            .and_then(infer::get)
-            .map(|k| k.mime_type().to_ascii_lowercase());
-        let magic_type = loaded_bytes
-            .as_deref()
-            .and_then(infer::get)
-            .map(|k| k.extension().to_ascii_lowercase());
+        let kind = loaded_bytes.as_deref().and_then(infer::get);
+        let media_type = kind.map(|k| k.mime_type().to_ascii_lowercase());
+        let magic_type = kind.map(|k| k.extension().to_ascii_lowercase());
+
         if !self.allowed_media_types.is_empty() {
             let mt = media_type.as_deref().ok_or_else(|| {
-                VldError::single_with_value(
-                    IssueCode::Custom {
-                        code: "unknown_media_type".to_string(),
-                    },
+                file_err(
+                    "unknown_media_type",
                     "Unable to detect file media type",
                     value,
                 )
@@ -457,10 +545,8 @@ impl VldSchema for ZFile {
                 .iter()
                 .any(|allowed| media_matches(mt, allowed))
             {
-                return Err(VldError::single_with_value(
-                    IssueCode::Custom {
-                        code: "invalid_media_type".to_string(),
-                    },
+                return Err(file_err(
+                    "invalid_media_type",
                     format!(
                         "File media type `{}` is not allowed (expected one of: {})",
                         mt,
@@ -470,38 +556,30 @@ impl VldSchema for ZFile {
                 ));
             }
         }
-        if !self.denied_media_types.is_empty() {
-            if let Some(mt) = media_type.as_deref() {
-                if self
-                    .denied_media_types
-                    .iter()
-                    .any(|deny| media_matches(mt, deny))
-                {
-                    return Err(VldError::single_with_value(
-                        IssueCode::Custom {
-                            code: "denied_media_type".to_string(),
-                        },
-                        format!("File media type `{}` is denied", mt),
-                        value,
-                    ));
-                }
+        if let Some(mt) = media_type.as_deref() {
+            if self
+                .denied_media_types
+                .iter()
+                .any(|deny| media_matches(mt, deny))
+            {
+                return Err(file_err(
+                    "denied_media_type",
+                    format!("File media type `{}` is denied", mt),
+                    value,
+                ));
             }
         }
         if !self.allowed_magic_types.is_empty() {
             let kind = magic_type.as_deref().ok_or_else(|| {
-                VldError::single_with_value(
-                    IssueCode::Custom {
-                        code: "unknown_magic_type".to_string(),
-                    },
+                file_err(
+                    "unknown_magic_type",
                     "Unable to detect file magic type",
                     value,
                 )
             })?;
             if !self.allowed_magic_types.iter().any(|a| a == kind) {
-                return Err(VldError::single_with_value(
-                    IssueCode::Custom {
-                        code: "invalid_magic_type".to_string(),
-                    },
+                return Err(file_err(
+                    "invalid_magic_type",
                     format!(
                         "File magic type `{}` is not allowed (expected one of: {})",
                         kind,
@@ -511,136 +589,41 @@ impl VldSchema for ZFile {
                 ));
             }
         }
-        if !self.denied_magic_types.is_empty() {
-            if let Some(kind) = magic_type.as_deref() {
-                if self.denied_magic_types.iter().any(|d| d == kind) {
-                    return Err(VldError::single_with_value(
-                        IssueCode::Custom {
-                            code: "denied_magic_type".to_string(),
-                        },
-                        format!("File magic type `{}` is denied", kind),
-                        value,
-                    ));
-                }
+        if let Some(kind) = magic_type.as_deref() {
+            if self.denied_magic_types.iter().any(|d| d == kind) {
+                return Err(file_err(
+                    "denied_magic_type",
+                    format!("File magic type `{}` is denied", kind),
+                    value,
+                ));
             }
         }
 
-        if self.sha256_hex.is_some()
-            || self.md5_hex.is_some()
-            || self.min_width.is_some()
-            || self.max_width.is_some()
-            || self.min_height.is_some()
-            || self.max_height.is_some()
-            || self.require_exif
-        {
-            let bytes = if let Some(b) = loaded_bytes.as_ref() {
-                b
-            } else {
-                return Err(VldError::single_with_value(
-                    IssueCode::IoError,
-                    "Failed to load file bytes",
-                    value,
-                ));
-            };
+        #[cfg(feature = "file-advanced")]
+        if let (true, Some(bytes)) = (self.needs_content_checks(), loaded_bytes.as_deref()) {
             if let Some(expected) = &self.sha256_hex {
-                let got = digest_to_hex(Sha256::digest(bytes));
-                if &got != expected {
-                    return Err(VldError::single_with_value(
-                        IssueCode::Custom {
-                            code: "sha256_mismatch".to_string(),
-                        },
+                if &digest_to_hex(Sha256::digest(bytes)) != expected {
+                    return Err(file_err(
+                        "sha256_mismatch",
                         "SHA-256 checksum mismatch",
                         value,
                     ));
                 }
             }
             if let Some(expected) = &self.md5_hex {
-                let got = digest_to_hex(Md5::digest(bytes));
-                if &got != expected {
-                    return Err(VldError::single_with_value(
-                        IssueCode::Custom {
-                            code: "md5_mismatch".to_string(),
-                        },
-                        "MD5 checksum mismatch",
-                        value,
-                    ));
+                if &digest_to_hex(Md5::digest(bytes)) != expected {
+                    return Err(file_err("md5_mismatch", "MD5 checksum mismatch", value));
                 }
             }
-
-            if self.min_width.is_some()
-                || self.max_width.is_some()
-                || self.min_height.is_some()
-                || self.max_height.is_some()
-            {
-                let img = image::load_from_memory(bytes).map_err(|_| {
-                    VldError::single_with_value(
-                        IssueCode::Custom {
-                            code: "invalid_image".to_string(),
-                        },
-                        "Unable to decode image for dimension checks",
-                        value,
-                    )
-                })?;
-                let w = img.width();
-                let h = img.height();
-                if let Some(min_w) = self.min_width {
-                    if w < min_w {
-                        return Err(VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "image_width_too_small".to_string(),
-                            },
-                            format!("Image width must be >= {}", min_w),
-                            value,
-                        ));
-                    }
-                }
-                if let Some(max_w) = self.max_width {
-                    if w > max_w {
-                        return Err(VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "image_width_too_big".to_string(),
-                            },
-                            format!("Image width must be <= {}", max_w),
-                            value,
-                        ));
-                    }
-                }
-                if let Some(min_h) = self.min_height {
-                    if h < min_h {
-                        return Err(VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "image_height_too_small".to_string(),
-                            },
-                            format!("Image height must be >= {}", min_h),
-                            value,
-                        ));
-                    }
-                }
-                if let Some(max_h) = self.max_height {
-                    if h > max_h {
-                        return Err(VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "image_height_too_big".to_string(),
-                            },
-                            format!("Image height must be <= {}", max_h),
-                            value,
-                        ));
-                    }
-                }
+            if self.needs_dimensions() {
+                self.check_dimensions(bytes, value)?;
             }
-
             if self.require_exif {
-                let mut cur = std::io::Cursor::new(bytes);
-                let exif_reader = exif::Reader::new();
-                exif_reader.read_from_container(&mut cur).map_err(|_| {
-                    VldError::single_with_value(
-                        IssueCode::Custom {
-                            code: "missing_exif".to_string(),
-                        },
-                        "Image must contain EXIF metadata",
-                        value,
-                    )
-                })?;
+                exif::Reader::new()
+                    .read_from_container(&mut std::io::Cursor::new(bytes))
+                    .map_err(|_| {
+                        file_err("missing_exif", "Image must contain EXIF metadata", value)
+                    })?;
             }
         }
 

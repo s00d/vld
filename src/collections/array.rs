@@ -3,6 +3,32 @@ use serde_json::Value;
 use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
 use crate::schema::VldSchema;
 
+/// Canonical text form for duplicate detection: object keys sorted, integral
+/// numbers written as integers (so `1` and `1.0` collide).
+fn canonical(v: &Value) -> String {
+    match v {
+        Value::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
+            (Some(i), ..) => i.to_string(),
+            (_, Some(u), _) => u.to_string(),
+            (_, _, Some(f)) if f.fract() == 0.0 && f.abs() < 9.2e18 => (f as i64).to_string(),
+            _ => n.to_string(),
+        },
+        Value::Array(a) => {
+            let items: Vec<String> = a.iter().map(canonical).collect();
+            format!("[{}]", items.join(","))
+        }
+        Value::Object(o) => {
+            let mut items: Vec<String> = o
+                .iter()
+                .map(|(k, v)| format!("{}:{}", Value::String(k.clone()), canonical(v)))
+                .collect();
+            items.sort();
+            format!("{{{}}}", items.join(","))
+        }
+        other => other.to_string(),
+    }
+}
+
 /// Schema for array validation. Created via [`vld::array()`](crate::array).
 ///
 /// Validates each element using the provided element schema.
@@ -61,25 +87,30 @@ impl<T: VldSchema> ZArray<T> {
         self.min_len(1)
     }
 
-    /// Require the array to contain this JSON value.
+    /// Require the array to contain this JSON value (numbers compare by value,
+    /// so `1` matches `1.0`). Emitted in JSON Schema as `"contains": {"const": value}`.
     pub fn contains(mut self, value: impl Into<serde_json::Value>) -> Self {
         self.contains = Some(value.into());
         self
     }
 
-    /// Require at least this many matches of the `contains(...)` value.
+    /// Require at least this many matches of the `contains(...)` value
+    /// (default `1`; `0` makes the value optional). Has no effect without `contains`.
     pub fn min_contains(mut self, n: usize) -> Self {
         self.min_contains = Some(n);
         self
     }
 
     /// Require at most this many matches of the `contains(...)` value.
+    /// Has no effect without `contains`.
     pub fn max_contains(mut self, n: usize) -> Self {
         self.max_contains = Some(n);
         self
     }
 
-    /// Require all array items to be unique (by raw JSON equality).
+    /// Require all array items to be unique (JSON equality, numbers compared by
+    /// value: `1` and `1.0` are duplicates). Each repeated item is reported once,
+    /// at its own index.
     pub fn unique(mut self) -> Self {
         self.unique = true;
         self
@@ -102,24 +133,20 @@ impl<T: VldSchema> ZArray<T> {
             "type": "array",
             "items": self.element.json_schema(),
         });
-        if let Some(min) = self.min_len {
-            schema["minItems"] = serde_json::json!(min);
-        }
-        if let Some(max) = self.max_len {
-            schema["maxItems"] = serde_json::json!(max);
-        }
-        if let Some(exact) = self.exact_len {
-            schema["minItems"] = serde_json::json!(exact);
-            schema["maxItems"] = serde_json::json!(exact);
-        }
+        crate::primitives::length_schema(
+            &mut schema,
+            ("minItems", "maxItems"),
+            [self.min_len, self.exact_len].into_iter().flatten(),
+            [self.max_len, self.exact_len].into_iter().flatten(),
+        );
         if let Some(ref contains) = self.contains {
-            schema["contains"] = contains.clone();
-        }
-        if let Some(min_contains) = self.min_contains {
-            schema["minContains"] = serde_json::json!(min_contains);
-        }
-        if let Some(max_contains) = self.max_contains {
-            schema["maxContains"] = serde_json::json!(max_contains);
+            schema["contains"] = serde_json::json!({ "const": contains });
+            if let Some(min_contains) = self.min_contains {
+                schema["minContains"] = serde_json::json!(min_contains);
+            }
+            if let Some(max_contains) = self.max_contains {
+                schema["maxContains"] = serde_json::json!(max_contains);
+            }
         }
         if self.unique {
             schema["uniqueItems"] = serde_json::json!(true);
@@ -181,44 +208,46 @@ impl<T: VldSchema> VldSchema for ZArray<T> {
         }
 
         if self.unique {
-            for i in 0..arr.len() {
-                for j in (i + 1)..arr.len() {
-                    if arr[i] == arr[j] {
-                        errors.push(
+            let mut seen = std::collections::HashSet::new();
+            for (i, item) in arr.iter().enumerate() {
+                if !seen.insert(canonical(item)) {
+                    errors = errors.merge(
+                        VldError::single_with_value(
                             IssueCode::Custom {
                                 code: "not_unique".to_string(),
                             },
                             "Array items must be unique",
-                        );
-                        break;
-                    }
+                            item,
+                        )
+                        .with_prefix(PathSegment::Index(i)),
+                    );
                 }
             }
         }
 
         if let Some(ref contains) = self.contains {
-            let count = arr.iter().filter(|v| *v == contains).count();
-            if count == 0 {
-                errors.push(
+            let count = arr
+                .iter()
+                .filter(|v| crate::primitives::json_eq(v, contains))
+                .count();
+            match self.min_contains {
+                None if count == 0 => errors.push(
                     IssueCode::Custom {
                         code: "missing_contains".to_string(),
                     },
                     "Array must contain required value",
-                );
-            }
-            if let Some(min_contains) = self.min_contains {
-                if count < min_contains {
-                    errors.push(
-                        IssueCode::TooSmall {
-                            minimum: min_contains as f64,
-                            inclusive: true,
-                        },
-                        format!(
-                            "Array must contain required value at least {} time(s)",
-                            min_contains
-                        ),
-                    );
-                }
+                ),
+                Some(min_contains) if count < min_contains => errors.push(
+                    IssueCode::TooSmall {
+                        minimum: min_contains as f64,
+                        inclusive: true,
+                    },
+                    format!(
+                        "Array must contain required value at least {} time(s)",
+                        min_contains
+                    ),
+                ),
+                _ => {}
             }
             if let Some(max_contains) = self.max_contains {
                 if count > max_contains {

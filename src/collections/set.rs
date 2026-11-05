@@ -8,7 +8,8 @@ use crate::schema::VldSchema;
 ///
 /// Created via [`vld::set()`](crate::set).
 ///
-/// Duplicates (after validation) are silently merged.
+/// Duplicates (after validation) are silently merged, so the generated JSON
+/// Schema does **not** declare `uniqueItems` (duplicate input is valid).
 ///
 /// # Example
 /// ```ignore
@@ -50,6 +51,11 @@ impl<T: VldSchema> ZSet<T> {
 
     /// Generate a JSON Schema (called by [`JsonSchema`](crate::json_schema::JsonSchema) trait impl).
     ///
+    /// `min_size` becomes `minItems` (n unique items need at least n items);
+    /// `max_size` is *not* emitted as `maxItems`, because duplicates in the
+    /// input are allowed and do not count towards the limit. The bound is
+    /// exposed as `x-maxUniqueItems` instead.
+    ///
     /// Requires the `openapi` feature.
     #[cfg(feature = "openapi")]
     pub fn to_json_schema_inner(&self) -> serde_json::Value
@@ -58,14 +64,13 @@ impl<T: VldSchema> ZSet<T> {
     {
         let mut schema = serde_json::json!({
             "type": "array",
-            "uniqueItems": true,
             "items": self.element.json_schema(),
         });
         if let Some(min) = self.min_size {
             schema["minItems"] = serde_json::json!(min);
         }
         if let Some(max) = self.max_size {
-            schema["maxItems"] = serde_json::json!(max);
+            schema["x-maxUniqueItems"] = serde_json::json!(max);
         }
         schema
     }

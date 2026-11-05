@@ -1,55 +1,187 @@
 use serde_json::Value;
+use std::cmp::Ordering;
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{IssueCode, VldError};
 use crate::schema::VldSchema;
 
-#[derive(Clone)]
-enum NumberCheck {
-    Min(f64, String),
-    Max(f64, String),
-    Gt(f64, String),
-    Lt(f64, String),
-    Positive(String),
-    Negative(String),
-    NonNegative(String),
-    NonPositive(String),
-    Finite(String),
-    MultipleOf(f64, String),
-    Safe(String),
+const MAX_SAFE: i64 = 9_007_199_254_740_991;
+
+/// A numeric value or bound: floats for [`ZNumber`], exact integers for [`ZInt`].
+#[derive(Clone, Copy, Debug)]
+enum Num {
+    F(f64),
+    I(i64),
 }
 
-impl NumberCheck {
-    /// Stable key identifying the check category.
-    fn key(&self) -> &str {
+impl Num {
+    fn as_f64(self) -> f64 {
         match self {
-            NumberCheck::Min(..) => "too_small",
-            NumberCheck::Max(..) => "too_big",
-            NumberCheck::Gt(..) => "too_small",
-            NumberCheck::Lt(..) => "too_big",
-            NumberCheck::Positive(..) => "not_positive",
-            NumberCheck::Negative(..) => "not_negative",
-            NumberCheck::NonNegative(..) => "not_non_negative",
-            NumberCheck::NonPositive(..) => "not_non_positive",
-            NumberCheck::Finite(..) => "not_finite",
-            NumberCheck::MultipleOf(..) => "not_multiple_of",
-            NumberCheck::Safe(..) => "not_safe",
+            Num::F(f) => f,
+            Num::I(i) => i as f64,
         }
     }
 
-    /// Replace the error message stored in this check.
-    fn set_message(&mut self, msg: String) {
+    /// `None` when either side is NaN — every bound check fails then.
+    fn cmp(self, other: Num) -> Option<Ordering> {
+        match (self, other) {
+            (Num::I(a), Num::I(b)) => Some(a.cmp(&b)),
+            (a, b) => a.as_f64().partial_cmp(&b.as_f64()),
+        }
+    }
+
+    #[cfg(feature = "openapi")]
+    fn json(self) -> Value {
         match self {
-            NumberCheck::Min(_, ref mut m)
-            | NumberCheck::Max(_, ref mut m)
-            | NumberCheck::Gt(_, ref mut m)
-            | NumberCheck::Lt(_, ref mut m)
-            | NumberCheck::Positive(ref mut m)
-            | NumberCheck::Negative(ref mut m)
-            | NumberCheck::NonNegative(ref mut m)
-            | NumberCheck::NonPositive(ref mut m)
-            | NumberCheck::Finite(ref mut m)
-            | NumberCheck::MultipleOf(_, ref mut m)
-            | NumberCheck::Safe(ref mut m) => *m = msg,
+            Num::F(f) => serde_json::json!(f),
+            Num::I(i) => serde_json::json!(i),
+        }
+    }
+}
+
+impl std::fmt::Display for Num {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Num::F(v) => write!(f, "{}", v),
+            Num::I(v) => write!(f, "{}", v),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Kind {
+    Min(Num),
+    Max(Num),
+    Gt(Num),
+    Lt(Num),
+    Positive,
+    Negative,
+    NonNegative,
+    NonPositive,
+    Finite,
+    MultipleOf(Num),
+    Safe,
+}
+
+#[derive(Clone)]
+struct NumberCheck {
+    kind: Kind,
+    msg: String,
+}
+
+impl Kind {
+    /// Stable key identifying the check category.
+    fn key(self) -> &'static str {
+        match self {
+            Kind::Min(_) | Kind::Gt(_) => "too_small",
+            Kind::Max(_) | Kind::Lt(_) => "too_big",
+            Kind::Positive => "not_positive",
+            Kind::Negative => "not_negative",
+            Kind::NonNegative => "not_non_negative",
+            Kind::NonPositive => "not_non_positive",
+            Kind::Finite => "not_finite",
+            Kind::MultipleOf(_) => "not_multiple_of",
+            Kind::Safe => "not_safe",
+        }
+    }
+
+    /// Lower bound `(value, exclusive)` this check implies, if any.
+    fn lower(self) -> Option<(Num, bool)> {
+        match self {
+            Kind::Min(v) => Some((v, false)),
+            Kind::Gt(v) => Some((v, true)),
+            Kind::Positive => Some((Num::I(0), true)),
+            Kind::NonNegative => Some((Num::I(0), false)),
+            Kind::Safe => Some((Num::I(-MAX_SAFE), false)),
+            _ => None,
+        }
+    }
+
+    /// Upper bound `(value, exclusive)` this check implies, if any.
+    fn upper(self) -> Option<(Num, bool)> {
+        match self {
+            Kind::Max(v) => Some((v, false)),
+            Kind::Lt(v) => Some((v, true)),
+            Kind::Negative => Some((Num::I(0), true)),
+            Kind::NonPositive => Some((Num::I(0), false)),
+            Kind::Safe => Some((Num::I(MAX_SAFE), false)),
+            _ => None,
+        }
+    }
+
+    /// `None` when `n` passes, otherwise the issue code.
+    fn failure(self, n: Num) -> Option<IssueCode> {
+        let custom = |code: &str| {
+            Some(IssueCode::Custom {
+                code: code.to_string(),
+            })
+        };
+        match self {
+            Kind::Finite => match n {
+                Num::F(f) if !f.is_finite() => Some(IssueCode::NotFinite),
+                _ => None,
+            },
+            Kind::MultipleOf(v) => {
+                if is_multiple_of(n, v) {
+                    None
+                } else {
+                    custom("not_multiple_of")
+                }
+            }
+            Kind::Safe => {
+                let ok = match n {
+                    Num::I(i) => (-MAX_SAFE..=MAX_SAFE).contains(&i),
+                    Num::F(f) => (-(MAX_SAFE as f64)..=MAX_SAFE as f64).contains(&f),
+                };
+                if ok {
+                    None
+                } else {
+                    custom("not_safe")
+                }
+            }
+            _ => {
+                if let Some((b, excl)) = self.lower() {
+                    let ok = matches!(
+                        (n.cmp(b), excl),
+                        (Some(Ordering::Greater), _) | (Some(Ordering::Equal), false)
+                    );
+                    if !ok {
+                        return Some(IssueCode::TooSmall {
+                            minimum: b.as_f64(),
+                            inclusive: !excl,
+                        });
+                    }
+                }
+                if let Some((b, excl)) = self.upper() {
+                    let ok = matches!(
+                        (n.cmp(b), excl),
+                        (Some(Ordering::Less), _) | (Some(Ordering::Equal), false)
+                    );
+                    if !ok {
+                        return Some(IssueCode::TooBig {
+                            maximum: b.as_f64(),
+                            inclusive: !excl,
+                        });
+                    }
+                }
+                None
+            }
+        }
+    }
+}
+
+/// `n` is a multiple of `v`. A zero divisor never matches; floats use a
+/// relative tolerance so that e.g. `0.3` is a multiple of `0.1`.
+fn is_multiple_of(n: Num, v: Num) -> bool {
+    match (n, v) {
+        (_, Num::I(0)) => false,
+        (Num::I(a), Num::I(b)) => a % b == 0,
+        (n, v) => {
+            let (n, v) = (n.as_f64(), v.as_f64());
+            if v == 0.0 || !n.is_finite() || !v.is_finite() {
+                return false;
+            }
+            let q = n / v;
+            (q - q.round()).abs() <= 1e-9 * q.abs().max(1.0)
         }
     }
 }
@@ -57,6 +189,9 @@ impl NumberCheck {
 /// Schema for number validation (`f64`). Created via [`vld::number()`](crate::number).
 ///
 /// Use `.int()` to convert to integer validation (`i64`).
+///
+/// `NaN` never satisfies a bound check, and `.coerce()` rejects strings that
+/// parse to `NaN` or infinity.
 ///
 /// # Example
 /// ```
@@ -79,6 +214,14 @@ impl ZNumber {
             coerce: false,
             custom_type_error: None,
         }
+    }
+
+    fn push(mut self, kind: Kind, msg: impl Into<String>) -> Self {
+        self.checks.push(NumberCheck {
+            kind,
+            msg: msg.into(),
+        });
+        self
     }
 
     /// Set a custom error message for type mismatch (when the input is not a number).
@@ -116,38 +259,49 @@ impl ZNumber {
         F: Fn(&str) -> Option<String>,
     {
         for check in &mut self.checks {
-            if let Some(msg) = f(check.key()) {
-                check.set_message(msg);
+            if let Some(msg) = f(check.kind.key()) {
+                check.msg = msg;
             }
         }
         self
     }
 
+    fn min_n(self, v: Num) -> Self {
+        self.push(Kind::Min(v), format!("Number must be at least {}", v))
+    }
+
+    fn max_n(self, v: Num) -> Self {
+        self.push(Kind::Max(v), format!("Number must be at most {}", v))
+    }
+
+    fn gt_n(self, v: Num) -> Self {
+        self.push(Kind::Gt(v), format!("Number must be greater than {}", v))
+    }
+
+    fn lt_n(self, v: Num) -> Self {
+        self.push(Kind::Lt(v), format!("Number must be less than {}", v))
+    }
+
+    fn multiple_of_n(self, v: Num) -> Self {
+        self.push(
+            Kind::MultipleOf(v),
+            format!("Number must be a multiple of {}", v),
+        )
+    }
+
     /// Minimum value (inclusive). Alias: `gte`.
-    pub fn min(mut self, val: f64) -> Self {
-        self.checks.push(NumberCheck::Min(
-            val,
-            format!("Number must be at least {}", val),
-        ));
-        self
+    pub fn min(self, val: f64) -> Self {
+        self.min_n(Num::F(val))
     }
 
     /// Maximum value (inclusive). Alias: `lte`.
-    pub fn max(mut self, val: f64) -> Self {
-        self.checks.push(NumberCheck::Max(
-            val,
-            format!("Number must be at most {}", val),
-        ));
-        self
+    pub fn max(self, val: f64) -> Self {
+        self.max_n(Num::F(val))
     }
 
     /// Greater than (exclusive).
-    pub fn gt(mut self, val: f64) -> Self {
-        self.checks.push(NumberCheck::Gt(
-            val,
-            format!("Number must be greater than {}", val),
-        ));
-        self
+    pub fn gt(self, val: f64) -> Self {
+        self.gt_n(Num::F(val))
     }
 
     /// Greater than or equal (inclusive). Same as `min`.
@@ -156,12 +310,8 @@ impl ZNumber {
     }
 
     /// Less than (exclusive).
-    pub fn lt(mut self, val: f64) -> Self {
-        self.checks.push(NumberCheck::Lt(
-            val,
-            format!("Number must be less than {}", val),
-        ));
-        self
+    pub fn lt(self, val: f64) -> Self {
+        self.lt_n(Num::F(val))
     }
 
     /// Less than or equal (inclusive). Same as `max`.
@@ -170,57 +320,44 @@ impl ZNumber {
     }
 
     /// Must be positive (> 0).
-    pub fn positive(mut self) -> Self {
-        self.checks
-            .push(NumberCheck::Positive("Number must be positive".to_string()));
-        self
+    pub fn positive(self) -> Self {
+        self.push(Kind::Positive, "Number must be positive")
     }
 
     /// Must be negative (< 0).
-    pub fn negative(mut self) -> Self {
-        self.checks
-            .push(NumberCheck::Negative("Number must be negative".to_string()));
-        self
+    pub fn negative(self) -> Self {
+        self.push(Kind::Negative, "Number must be negative")
     }
 
     /// Must be non-negative (>= 0).
-    pub fn non_negative(mut self) -> Self {
-        self.checks.push(NumberCheck::NonNegative(
-            "Number must be non-negative".to_string(),
-        ));
-        self
+    pub fn non_negative(self) -> Self {
+        self.push(Kind::NonNegative, "Number must be non-negative")
     }
 
     /// Must be non-positive (<= 0).
-    pub fn non_positive(mut self) -> Self {
-        self.checks.push(NumberCheck::NonPositive(
-            "Number must be non-positive".to_string(),
-        ));
-        self
+    pub fn non_positive(self) -> Self {
+        self.push(Kind::NonPositive, "Number must be non-positive")
     }
 
     /// Must be finite (not NaN or infinity).
-    pub fn finite(mut self) -> Self {
-        self.checks
-            .push(NumberCheck::Finite("Number must be finite".to_string()));
-        self
+    pub fn finite(self) -> Self {
+        self.push(Kind::Finite, "Number must be finite")
     }
 
     /// Must be a multiple of the given value.
-    pub fn multiple_of(mut self, val: f64) -> Self {
-        self.checks.push(NumberCheck::MultipleOf(
-            val,
-            format!("Number must be a multiple of {}", val),
-        ));
-        self
+    ///
+    /// Uses a relative tolerance of `1e-9` so decimal steps like `0.1` work.
+    /// A divisor of `0` never matches (every value is rejected).
+    pub fn multiple_of(self, val: f64) -> Self {
+        self.multiple_of_n(Num::F(val))
     }
 
     /// Must be within JavaScript's safe integer range (`-(2^53 - 1)` to `2^53 - 1`).
-    pub fn safe(mut self) -> Self {
-        self.checks.push(NumberCheck::Safe(
-            "Number must be a safe integer (-(2^53-1) to 2^53-1)".to_string(),
-        ));
-        self
+    pub fn safe(self) -> Self {
+        self.push(
+            Kind::Safe,
+            "Number must be a safe integer (-(2^53-1) to 2^53-1)",
+        )
     }
 
     /// Convert to integer validation. Returns `ZInt` with `Output = i64`.
@@ -232,190 +369,108 @@ impl ZNumber {
     }
 
     /// Coerce strings and booleans to numbers.
+    ///
+    /// Strings that parse to `NaN` or infinity are rejected.
     pub fn coerce(mut self) -> Self {
         self.coerce = true;
         self
     }
 
-    fn extract_number(&self, value: &Value) -> Result<f64, VldError> {
-        let type_err = |value: &Value| -> VldError {
-            let msg = self
-                .custom_type_error
-                .clone()
-                .unwrap_or_else(|| format!("Expected number, received {}", value_type_name(value)));
-            VldError::single_with_value(
-                IssueCode::InvalidType {
-                    expected: "number".to_string(),
-                    received: value_type_name(value),
-                },
-                msg,
-                value,
-            )
-        };
+    fn type_err(&self, value: &Value) -> VldError {
+        super::type_error(&self.custom_type_error, "number", "number", value)
+    }
 
-        if let Some(n) = value.as_f64() {
-            Ok(n)
-        } else if self.coerce {
-            match value {
-                Value::String(s) => s.parse::<f64>().map_err(|_| {
-                    let msg = self
-                        .custom_type_error
-                        .clone()
-                        .unwrap_or_else(|| format!("Cannot coerce \"{}\" to number", s));
-                    VldError::single_with_value(
-                        IssueCode::InvalidType {
-                            expected: "number".to_string(),
-                            received: "string".to_string(),
-                        },
-                        msg,
-                        value,
-                    )
-                }),
-                Value::Bool(b) => Ok(if *b { 1.0 } else { 0.0 }),
-                _ => Err(type_err(value)),
-            }
-        } else {
-            Err(type_err(value))
+    fn coerce_err(&self, s: &str, value: &Value) -> VldError {
+        let msg = self
+            .custom_type_error
+            .clone()
+            .unwrap_or_else(|| format!("Cannot coerce \"{}\" to number", s));
+        VldError::single_with_value(
+            IssueCode::InvalidType {
+                expected: "number".to_string(),
+                received: "string".to_string(),
+            },
+            msg,
+            value,
+        )
+    }
+
+    fn extract_number(&self, value: &Value) -> Result<f64, VldError> {
+        match value {
+            Value::Number(n) => n.as_f64().ok_or_else(|| self.type_err(value)),
+            Value::String(s) if self.coerce => s
+                .parse::<f64>()
+                .ok()
+                .filter(|f| f.is_finite())
+                .ok_or_else(|| self.coerce_err(s, value)),
+            Value::Bool(b) if self.coerce => Ok(if *b { 1.0 } else { 0.0 }),
+            _ => Err(self.type_err(value)),
         }
     }
 
-    fn validate_number(&self, n: f64, value: &Value) -> Result<f64, VldError> {
+    fn validate(&self, n: Num, value: &Value) -> Result<(), VldError> {
         let mut errors = VldError::new();
-
         for check in &self.checks {
-            match check {
-                NumberCheck::Min(min, msg) => {
-                    if n < *min {
-                        errors.push_with_value(
-                            IssueCode::TooSmall {
-                                minimum: *min,
-                                inclusive: true,
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
-                NumberCheck::Max(max, msg) => {
-                    if n > *max {
-                        errors.push_with_value(
-                            IssueCode::TooBig {
-                                maximum: *max,
-                                inclusive: true,
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
-                NumberCheck::Gt(val, msg) => {
-                    if n <= *val {
-                        errors.push_with_value(
-                            IssueCode::TooSmall {
-                                minimum: *val,
-                                inclusive: false,
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
-                NumberCheck::Lt(val, msg) => {
-                    if n >= *val {
-                        errors.push_with_value(
-                            IssueCode::TooBig {
-                                maximum: *val,
-                                inclusive: false,
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
-                NumberCheck::Positive(msg) => {
-                    if n <= 0.0 {
-                        errors.push_with_value(
-                            IssueCode::TooSmall {
-                                minimum: 0.0,
-                                inclusive: false,
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
-                NumberCheck::Negative(msg) => {
-                    if n >= 0.0 {
-                        errors.push_with_value(
-                            IssueCode::TooBig {
-                                maximum: 0.0,
-                                inclusive: false,
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
-                NumberCheck::NonNegative(msg) => {
-                    if n < 0.0 {
-                        errors.push_with_value(
-                            IssueCode::TooSmall {
-                                minimum: 0.0,
-                                inclusive: true,
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
-                NumberCheck::NonPositive(msg) => {
-                    if n > 0.0 {
-                        errors.push_with_value(
-                            IssueCode::TooBig {
-                                maximum: 0.0,
-                                inclusive: true,
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
-                NumberCheck::Finite(msg) => {
-                    if !n.is_finite() {
-                        errors.push_with_value(IssueCode::NotFinite, msg.clone(), value);
-                    }
-                }
-                NumberCheck::MultipleOf(val, msg) => {
-                    if (n % val).abs() > f64::EPSILON {
-                        errors.push_with_value(
-                            IssueCode::Custom {
-                                code: "not_multiple_of".to_string(),
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
-                NumberCheck::Safe(msg) => {
-                    const MAX_SAFE: f64 = 9007199254740991.0;
-                    if !(-MAX_SAFE..=MAX_SAFE).contains(&n) {
-                        errors.push_with_value(
-                            IssueCode::Custom {
-                                code: "not_safe".to_string(),
-                            },
-                            msg.clone(),
-                            value,
-                        );
-                    }
-                }
+            if let Some(code) = check.kind.failure(n) {
+                errors.push_with_value(code, check.msg.clone(), value);
             }
         }
-
         if errors.is_empty() {
-            Ok(n)
+            Ok(())
         } else {
             Err(errors)
         }
+    }
+
+    /// Generate a JSON Schema representation of this number schema.
+    ///
+    /// The strictest lower/upper bound (from `min`/`gt`/`positive`/
+    /// `non_negative`/`safe`, …) is emitted as `minimum` or `exclusiveMinimum`
+    /// (likewise for the maximum). The first `multiple_of` goes into
+    /// `multipleOf`, further ones into `allOf`.
+    ///
+    /// Requires the `openapi` feature.
+    #[cfg(feature = "openapi")]
+    pub fn to_json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({"type": "number"});
+        // Strictest bound: larger lower bound wins, exclusive wins ties.
+        let pick = |a: (Num, bool), b: (Num, bool), want: Ordering| match b.0.cmp(a.0) {
+            Some(o) if o == want => b,
+            Some(Ordering::Equal) if b.1 => b,
+            _ => a,
+        };
+        let lower = self
+            .checks
+            .iter()
+            .filter_map(|c| c.kind.lower())
+            .reduce(|a, b| pick(a, b, Ordering::Greater));
+        let upper = self
+            .checks
+            .iter()
+            .filter_map(|c| c.kind.upper())
+            .reduce(|a, b| pick(a, b, Ordering::Less));
+        if let Some((v, excl)) = lower {
+            let key = if excl { "exclusiveMinimum" } else { "minimum" };
+            schema[key] = v.json();
+        }
+        if let Some((v, excl)) = upper {
+            let key = if excl { "exclusiveMaximum" } else { "maximum" };
+            schema[key] = v.json();
+        }
+        let mut multiples = self.checks.iter().filter_map(|c| match c.kind {
+            Kind::MultipleOf(v) => Some(v.json()),
+            _ => None,
+        });
+        if let Some(m) = multiples.next() {
+            schema["multipleOf"] = m;
+        }
+        let rest: Vec<Value> = multiples
+            .map(|m| serde_json::json!({ "multipleOf": m }))
+            .collect();
+        if !rest.is_empty() {
+            schema["allOf"] = Value::Array(rest);
+        }
+        schema
     }
 }
 
@@ -425,43 +480,13 @@ impl Default for ZNumber {
     }
 }
 
-impl ZNumber {
-    /// Generate a JSON Schema representation of this number schema.
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({"type": "number"});
-        for check in &self.checks {
-            match check {
-                NumberCheck::Min(n, _) => {
-                    schema["minimum"] = serde_json::json!(*n);
-                }
-                NumberCheck::Max(n, _) => {
-                    schema["maximum"] = serde_json::json!(*n);
-                }
-                NumberCheck::Gt(n, _) => {
-                    schema["exclusiveMinimum"] = serde_json::json!(*n);
-                }
-                NumberCheck::Lt(n, _) => {
-                    schema["exclusiveMaximum"] = serde_json::json!(*n);
-                }
-                NumberCheck::MultipleOf(n, _) => {
-                    schema["multipleOf"] = serde_json::json!(*n);
-                }
-                _ => {}
-            }
-        }
-        schema
-    }
-}
-
 impl VldSchema for ZNumber {
     type Output = f64;
 
     fn parse_value(&self, value: &Value) -> Result<f64, VldError> {
         let n = self.extract_number(value)?;
-        self.validate_number(n, value)
+        self.validate(Num::F(n), value)?;
+        Ok(n)
     }
 }
 
@@ -470,6 +495,9 @@ impl VldSchema for ZNumber {
 // ---------------------------------------------------------------------------
 
 /// Schema for integer validation (`i64`). Created via `vld::number().int()`.
+///
+/// Integers are read exactly (no `f64` round-trip), so values above `2^53`
+/// keep their precision; inputs outside the `i64` range are rejected.
 #[derive(Clone)]
 pub struct ZInt {
     inner: ZNumber,
@@ -512,30 +540,27 @@ impl ZInt {
         self
     }
 
+    /// Coerce strings (`"42"`) and booleans to integers.
+    pub fn coerce(mut self) -> Self {
+        self.inner.coerce = true;
+        self
+    }
+
     /// Minimum value (inclusive).
     pub fn min(mut self, val: i64) -> Self {
-        self.inner.checks.push(NumberCheck::Min(
-            val as f64,
-            format!("Number must be at least {}", val),
-        ));
+        self.inner = self.inner.min_n(Num::I(val));
         self
     }
 
     /// Maximum value (inclusive).
     pub fn max(mut self, val: i64) -> Self {
-        self.inner.checks.push(NumberCheck::Max(
-            val as f64,
-            format!("Number must be at most {}", val),
-        ));
+        self.inner = self.inner.max_n(Num::I(val));
         self
     }
 
     /// Greater than (exclusive).
     pub fn gt(mut self, val: i64) -> Self {
-        self.inner.checks.push(NumberCheck::Gt(
-            val as f64,
-            format!("Number must be greater than {}", val),
-        ));
+        self.inner = self.inner.gt_n(Num::I(val));
         self
     }
 
@@ -546,10 +571,7 @@ impl ZInt {
 
     /// Less than (exclusive).
     pub fn lt(mut self, val: i64) -> Self {
-        self.inner.checks.push(NumberCheck::Lt(
-            val as f64,
-            format!("Number must be less than {}", val),
-        ));
+        self.inner = self.inner.lt_n(Num::I(val));
         self
     }
 
@@ -588,17 +610,12 @@ impl ZInt {
         self
     }
 
-    /// Must be a multiple of the given value.
+    /// Must be a multiple of the given value (`0` never matches).
     pub fn multiple_of(mut self, val: i64) -> Self {
-        self.inner.checks.push(NumberCheck::MultipleOf(
-            val as f64,
-            format!("Number must be a multiple of {}", val),
-        ));
+        self.inner = self.inner.multiple_of_n(Num::I(val));
         self
     }
-}
 
-impl ZInt {
     /// Generate a JSON Schema representation of this integer schema.
     ///
     /// Requires the `openapi` feature.
@@ -608,26 +625,70 @@ impl ZInt {
         schema["type"] = serde_json::json!("integer");
         schema
     }
+
+    fn not_int(&self, value: &Value) -> VldError {
+        let msg = self
+            .custom_int_error
+            .clone()
+            .unwrap_or_else(|| "Expected integer, received float".to_string());
+        VldError::single_with_value(IssueCode::NotInt, msg, value)
+    }
+
+    fn int_from_f64(&self, f: f64, value: &Value) -> Result<i64, VldError> {
+        if f.fract() != 0.0 {
+            return Err(self.not_int(value));
+        }
+        // `i64::MAX as f64` rounds up to 2^63, which is itself out of range.
+        if f < i64::MIN as f64 || f >= i64::MAX as f64 {
+            return Err(out_of_range(f < 0.0, value));
+        }
+        Ok(f as i64)
+    }
+
+    fn extract_int(&self, value: &Value) -> Result<i64, VldError> {
+        match value {
+            Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Ok(i)
+                } else if n.as_u64().is_some() {
+                    Err(out_of_range(false, value))
+                } else {
+                    self.int_from_f64(n.as_f64().unwrap_or(f64::NAN), value)
+                }
+            }
+            Value::String(s) if self.inner.coerce => match s.parse::<i64>() {
+                Ok(i) => Ok(i),
+                Err(_) => {
+                    let f = self.inner.extract_number(value)?;
+                    self.int_from_f64(f, value)
+                }
+            },
+            _ => self.inner.extract_number(value).map(|f| f as i64),
+        }
+    }
+}
+
+fn out_of_range(negative: bool, value: &Value) -> VldError {
+    let code = if negative {
+        IssueCode::TooSmall {
+            minimum: i64::MIN as f64,
+            inclusive: true,
+        }
+    } else {
+        IssueCode::TooBig {
+            maximum: i64::MAX as f64,
+            inclusive: true,
+        }
+    };
+    VldError::single_with_value(code, "Integer is out of the i64 range", value)
 }
 
 impl VldSchema for ZInt {
     type Output = i64;
 
     fn parse_value(&self, value: &Value) -> Result<i64, VldError> {
-        let n = self.inner.extract_number(value)?;
-
-        // Check integer
-        if n.fract() != 0.0 {
-            let msg = self
-                .custom_int_error
-                .clone()
-                .unwrap_or_else(|| "Expected integer, received float".to_string());
-            return Err(VldError::single_with_value(IssueCode::NotInt, msg, value));
-        }
-
-        // Run other number checks
-        self.inner.validate_number(n, value)?;
-
-        Ok(n as i64)
+        let n = self.extract_int(value)?;
+        self.inner.validate(Num::I(n), value)?;
+        Ok(n)
     }
 }

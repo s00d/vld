@@ -1,9 +1,11 @@
 use serde_json::Value;
 use std::net::SocketAddr;
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{IssueCode, VldError};
 use crate::schema::VldSchema;
 
+/// Schema for socket addresses (`ipv4:port` / `[ipv6]:port`; hostnames are
+/// rejected). Created via [`vld::socket_addr()`](crate::socket_addr).
 #[derive(Clone)]
 pub struct ZSocketAddr {
     min_port: Option<u16>,
@@ -55,18 +57,10 @@ impl VldSchema for ZSocketAddr {
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            let msg = self.custom_type_error.clone().unwrap_or_else(|| {
-                format!(
-                    "Expected socket address string, received {}",
-                    value_type_name(value)
-                )
-            });
-            VldError::single_with_value(
-                IssueCode::InvalidType {
-                    expected: "string (socket address)".to_string(),
-                    received: value_type_name(value),
-                },
-                msg,
+            super::type_error(
+                &self.custom_type_error,
+                "string (socket address)",
+                "socket address string",
                 value,
             )
         })?;
@@ -75,7 +69,7 @@ impl VldSchema for ZSocketAddr {
                 IssueCode::Custom {
                     code: "invalid_socket_addr".to_string(),
                 },
-                "Invalid socket address (expected `host:port` or `[ipv6]:port`)",
+                "Invalid socket address (expected `ipv4:port` or `[ipv6]:port`; hostnames are not resolved)",
                 value,
             )
         })?;

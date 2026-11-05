@@ -57,10 +57,17 @@ impl<V: VldSchema> ZRecord<V> {
     where
         V: crate::json_schema::JsonSchema,
     {
-        serde_json::json!({
+        let mut schema = serde_json::json!({
             "type": "object",
             "additionalProperties": self.value_schema.json_schema(),
-        })
+        });
+        crate::primitives::length_schema(
+            &mut schema,
+            ("minProperties", "maxProperties"),
+            self.min_keys,
+            self.max_keys,
+        );
+        schema
     }
 }
 

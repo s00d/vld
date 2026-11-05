@@ -1,4 +1,5 @@
 use serde_json::Value;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
@@ -7,6 +8,9 @@ use crate::schema::VldSchema;
 /// Schema for validating a JSON array of `[key, value]` pairs into a `HashMap`.
 ///
 /// Created via [`vld::map()`](crate::map).
+///
+/// A key that appears twice (after validation) is an error
+/// (`duplicate_map_key`, reported at the later entry's index).
 ///
 /// # Example
 /// ```ignore
@@ -25,6 +29,16 @@ impl<K: VldSchema, V: VldSchema> ZMap<K, V> {
             key_schema,
             value_schema,
         }
+    }
+
+    /// Access the key schema.
+    pub fn key_schema(&self) -> &K {
+        &self.key_schema
+    }
+
+    /// Access the value schema.
+    pub fn value_schema(&self) -> &V {
+        &self.value_schema
     }
 }
 
@@ -72,7 +86,23 @@ where
                         }
                     };
                     if let (Some(k), Some(v)) = (k, v) {
-                        result.insert(k, v);
+                        match result.entry(k) {
+                            Entry::Occupied(_) => {
+                                errors = errors.merge(
+                                    VldError::single_with_value(
+                                        IssueCode::Custom {
+                                            code: "duplicate_map_key".to_string(),
+                                        },
+                                        "Duplicate map key",
+                                        &pair[0],
+                                    )
+                                    .with_prefix(PathSegment::Index(i)),
+                                );
+                            }
+                            Entry::Vacant(e) => {
+                                e.insert(v);
+                            }
+                        }
                     }
                 }
                 None => {

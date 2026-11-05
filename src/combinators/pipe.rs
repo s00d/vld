@@ -11,8 +11,11 @@ use crate::schema::VldSchema;
 /// ```
 /// use vld::prelude::*;
 ///
-/// // Parse string, then pipe to number validation
-/// let schema = vld::string().coerce().pipe(vld::number().min(0.0));
+/// // Trim a string, then validate it as a non-negative number.
+/// // The second schema receives a JSON *string*, so it needs `.coerce()`.
+/// let schema = vld::string().trim().pipe(vld::number().coerce().min(0.0));
+/// assert_eq!(schema.parse(r#"" 5 ""#).unwrap(), 5.0);
+/// assert!(schema.parse(r#""-1""#).is_err());
 /// ```
 pub struct ZPipe<A, B>
 where
@@ -32,6 +35,16 @@ where
 {
     pub fn new(first: A, second: B) -> Self {
         Self { first, second }
+    }
+
+    /// Access the first (input) stage.
+    pub fn first_schema(&self) -> &A {
+        &self.first
+    }
+
+    /// Access the second (output) stage.
+    pub fn second_schema(&self) -> &B {
+        &self.second
     }
 }
 

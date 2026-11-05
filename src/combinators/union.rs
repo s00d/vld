@@ -3,6 +3,26 @@ use serde_json::Value;
 use crate::error::{IssueCode, VldError};
 use crate::schema::VldSchema;
 
+/// Error for a union where every variant failed: one `invalid_union` issue
+/// (with the received value) followed by each variant's own issues, their
+/// messages prefixed with `[variant N]` (paths are kept).
+fn union_error(value: &Value, variants: Vec<VldError>) -> VldError {
+    let mut err = VldError::single_with_value(
+        IssueCode::Custom {
+            code: "invalid_union".to_string(),
+        },
+        "Input did not match any variant of the union",
+        value,
+    );
+    for (i, e) in variants.into_iter().enumerate() {
+        for mut issue in e.issues {
+            issue.message = format!("[variant {}] {}", i + 1, issue.message);
+            err.issues.push(issue);
+        }
+    }
+    err
+}
+
 /// A value that can be one of two types.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize))]
@@ -35,6 +55,9 @@ impl<A, B> Either<A, B> {
 
 /// Union of two schemas. Tries the first, then the second.
 ///
+/// When both fail, the error starts with an `invalid_union` issue carrying the
+/// received value, followed by every variant's issues (`[variant N] ...`).
+///
 /// Created via [`vld::union()`](crate::union()).
 pub struct ZUnion2<A: VldSchema, B: VldSchema> {
     first: A,
@@ -60,18 +83,15 @@ impl<A: VldSchema, B: VldSchema> VldSchema for ZUnion2<A, B> {
     type Output = Either<A::Output, B::Output>;
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
-        if let Ok(v) = self.first.parse_value(value) {
-            return Ok(Either::Left(v));
-        }
-        if let Ok(v) = self.second.parse_value(value) {
-            return Ok(Either::Right(v));
-        }
-        Err(VldError::single(
-            IssueCode::Custom {
-                code: "invalid_union".to_string(),
-            },
-            "Input did not match any variant of the union",
-        ))
+        let e1 = match self.first.parse_value(value) {
+            Ok(v) => return Ok(Either::Left(v)),
+            Err(e) => e,
+        };
+        let e2 = match self.second.parse_value(value) {
+            Ok(v) => return Ok(Either::Right(v)),
+            Err(e) => e,
+        };
+        Err(union_error(value, vec![e1, e2]))
     }
 }
 
@@ -121,20 +141,18 @@ impl<A: VldSchema, B: VldSchema, C: VldSchema> VldSchema for ZUnion3<A, B, C> {
     type Output = Either3<A::Output, B::Output, C::Output>;
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
-        if let Ok(v) = self.first.parse_value(value) {
-            return Ok(Either3::First(v));
-        }
-        if let Ok(v) = self.second.parse_value(value) {
-            return Ok(Either3::Second(v));
-        }
-        if let Ok(v) = self.third.parse_value(value) {
-            return Ok(Either3::Third(v));
-        }
-        Err(VldError::single(
-            IssueCode::Custom {
-                code: "invalid_union".to_string(),
-            },
-            "Input did not match any variant of the union",
-        ))
+        let e1 = match self.first.parse_value(value) {
+            Ok(v) => return Ok(Either3::First(v)),
+            Err(e) => e,
+        };
+        let e2 = match self.second.parse_value(value) {
+            Ok(v) => return Ok(Either3::Second(v)),
+            Err(e) => e,
+        };
+        let e3 = match self.third.parse_value(value) {
+            Ok(v) => return Ok(Either3::Third(v)),
+            Err(e) => e,
+        };
+        Err(union_error(value, vec![e1, e2, e3]))
     }
 }

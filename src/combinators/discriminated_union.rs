@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
 use crate::object::DynSchema;
 use crate::schema::VldSchema;
 
@@ -45,6 +45,18 @@ impl ZDiscriminatedUnion {
         self
     }
 
+    /// Name of the discriminator field.
+    pub fn discriminator(&self) -> &str {
+        &self.discriminator
+    }
+
+    /// Variants as `(discriminator value, schema)` pairs, in insertion order.
+    pub fn variants(&self) -> impl Iterator<Item = (&Value, &dyn DynSchema)> {
+        self.variants
+            .iter()
+            .map(|v| (&v.discriminator_value, v.schema.as_ref()))
+    }
+
     /// Add a string variant (convenience).
     pub fn variant_str<S: DynSchema + 'static>(self, value: &str, schema: S) -> Self {
         self.variant(Value::String(value.to_string()), schema)
@@ -56,20 +68,22 @@ impl VldSchema for ZDiscriminatedUnion {
 
     fn parse_value(&self, value: &Value) -> Result<Value, VldError> {
         let obj = value.as_object().ok_or_else(|| {
-            VldError::single(
+            VldError::single_with_value(
                 IssueCode::InvalidType {
                     expected: "object".to_string(),
                     received: value_type_name(value),
                 },
                 format!("Expected object, received {}", value_type_name(value)),
+                value,
             )
         })?;
+        let at_disc = |e: VldError| e.with_prefix(PathSegment::Field(self.discriminator.clone()));
 
         let disc_value = obj.get(&self.discriminator).ok_or_else(|| {
-            VldError::single(
+            at_disc(VldError::single(
                 IssueCode::MissingField,
                 format!("Missing discriminator field \"{}\"", self.discriminator),
-            )
+            ))
         })?;
 
         for variant in &self.variants {
@@ -84,7 +98,7 @@ impl VldSchema for ZDiscriminatedUnion {
             .map(|v| format!("{}", v.discriminator_value))
             .collect();
 
-        Err(VldError::single(
+        Err(at_disc(VldError::single_with_value(
             IssueCode::Custom {
                 code: "invalid_discriminator".to_string(),
             },
@@ -93,6 +107,7 @@ impl VldSchema for ZDiscriminatedUnion {
                 disc_value,
                 known.join(", ")
             ),
-        ))
+            disc_value,
+        )))
     }
 }

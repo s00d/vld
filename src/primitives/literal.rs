@@ -43,7 +43,13 @@ impl IntoLiteral for i64 {
         Value::Number((*self).into())
     }
     fn extract(value: &Value) -> Option<i64> {
-        value.as_i64()
+        // Accept integral floats (`5.0`) as well as integers.
+        value.as_i64().or_else(|| {
+            value
+                .as_f64()
+                .filter(|f| f.fract() == 0.0 && *f >= i64::MIN as f64 && *f < i64::MAX as f64)
+                .map(|f| f as i64)
+        })
     }
     fn display(&self) -> String {
         self.to_string()
@@ -79,6 +85,8 @@ impl IntoLiteral for bool {
 }
 
 /// Schema for exact value matching. Created via [`vld::literal()`](crate::literal).
+///
+/// Numbers compare by value: `literal(1.0)` accepts `1`, `literal(5i64)` accepts `5.0`.
 pub struct ZLiteral<T: IntoLiteral> {
     expected_value: Value,
     display: String,
@@ -95,13 +103,18 @@ impl<T: IntoLiteral> ZLiteral<T> {
             _phantom: std::marker::PhantomData,
         }
     }
+
+    /// The literal as a JSON value (for JSON Schema `const`).
+    pub fn expected_value(&self) -> &Value {
+        &self.expected_value
+    }
 }
 
 impl<T: IntoLiteral> VldSchema for ZLiteral<T> {
     type Output = T::Output;
 
     fn parse_value(&self, value: &Value) -> Result<T::Output, VldError> {
-        if *value == self.expected_value {
+        if super::json_eq(value, &self.expected_value) {
             T::extract(value).ok_or_else(|| {
                 VldError::single(
                     IssueCode::Custom {

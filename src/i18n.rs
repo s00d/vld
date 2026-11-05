@@ -24,7 +24,7 @@
 //! assert!(translated.issues[0].message.contains("5"));
 //! ```
 
-use crate::error::{ValidationIssue, VldError};
+use crate::error::{IssueCode, ValidationIssue, VldError};
 use std::collections::HashMap;
 
 /// Trait for resolving validation messages by error code key.
@@ -111,9 +111,24 @@ fn apply_params(template: &str, params: &[(&str, String)]) -> String {
 /// If the resolver returns a template for the issue's code key, the message
 /// is replaced with the interpolated template. Otherwise the original message
 /// is kept.
+///
+/// Exclusive bounds (`TooSmall`/`TooBig` with `inclusive: false`, e.g. from
+/// `gt()`, `lt()`, `positive()`, `negative()`) are looked up under
+/// `"too_small_exclusive"` / `"too_big_exclusive"`; if the resolver has no such
+/// template the original message is kept, so an inclusive "at least" template
+/// is never applied to a "greater than" check.
 pub fn translate_issue(issue: &ValidationIssue, resolver: &dyn MessageResolver) -> ValidationIssue {
     let params = issue.code.params();
-    let message = match resolver.resolve(issue.code.key()) {
+    let key = match &issue.code {
+        IssueCode::TooSmall {
+            inclusive: false, ..
+        } => "too_small_exclusive",
+        IssueCode::TooBig {
+            inclusive: false, ..
+        } => "too_big_exclusive",
+        code => code.key(),
+    };
+    let message = match resolver.resolve(key) {
         Some(template) => apply_params(&template, &params),
         None => issue.message.clone(),
     };
@@ -172,6 +187,14 @@ pub fn english() -> MapResolver {
         "Value must be at least {minimum}".into(),
     );
     m.insert("too_big".into(), "Value must be at most {maximum}".into());
+    m.insert(
+        "too_small_exclusive".into(),
+        "Value must be greater than {minimum}".into(),
+    );
+    m.insert(
+        "too_big_exclusive".into(),
+        "Value must be less than {maximum}".into(),
+    );
     m.insert("invalid_string".into(), "Invalid {validation}".into());
     m.insert("not_int".into(), "Expected integer, received float".into());
     m.insert("not_finite".into(), "Number must be finite".into());
@@ -195,6 +218,14 @@ pub fn russian() -> MapResolver {
     m.insert(
         "too_big".into(),
         "Значение должно быть не более {maximum}".into(),
+    );
+    m.insert(
+        "too_small_exclusive".into(),
+        "Значение должно быть больше {minimum}".into(),
+    );
+    m.insert(
+        "too_big_exclusive".into(),
+        "Значение должно быть меньше {maximum}".into(),
     );
     m.insert(
         "invalid_string".into(),
@@ -227,6 +258,14 @@ pub fn german() -> MapResolver {
         "Wert darf höchstens {maximum} sein".into(),
     );
     m.insert(
+        "too_small_exclusive".into(),
+        "Wert muss größer als {minimum} sein".into(),
+    );
+    m.insert(
+        "too_big_exclusive".into(),
+        "Wert muss kleiner als {maximum} sein".into(),
+    );
+    m.insert(
         "invalid_string".into(),
         "Ungültiger Wert ({validation})".into(),
     );
@@ -255,6 +294,14 @@ pub fn spanish() -> MapResolver {
     m.insert(
         "too_big".into(),
         "El valor debe ser como máximo {maximum}".into(),
+    );
+    m.insert(
+        "too_small_exclusive".into(),
+        "El valor debe ser mayor que {minimum}".into(),
+    );
+    m.insert(
+        "too_big_exclusive".into(),
+        "El valor debe ser menor que {maximum}".into(),
     );
     m.insert(
         "invalid_string".into(),

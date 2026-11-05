@@ -1,9 +1,83 @@
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{IssueCode, VldError};
 use crate::schema::VldSchema;
 
+/// Resolve `.` and `..` without touching the filesystem. `..` never climbs
+/// above the root (or above the start of a relative path).
+fn lexical_normalize(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !matches!(
+                    out.components().next_back(),
+                    None | Some(Component::RootDir | Component::Prefix(_))
+                ) {
+                    out.pop();
+                }
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Best-effort real path: canonicalize the deepest existing ancestor (so
+/// symlinks there are followed) and append the remaining, lexically
+/// normalized components.
+fn real_path(p: &Path) -> PathBuf {
+    if let Ok(c) = p.canonicalize() {
+        return c;
+    }
+    let norm = lexical_normalize(p);
+    let mut existing = norm.as_path();
+    let mut rest = vec![];
+    loop {
+        if let Ok(c) = existing.canonicalize() {
+            return rest
+                .iter()
+                .rev()
+                .fold(c, |acc: PathBuf, part| acc.join(part));
+        }
+        match (existing.file_name(), existing.parent()) {
+            (Some(name), Some(parent)) => {
+                rest.push(name.to_os_string());
+                existing = parent;
+            }
+            _ => return norm,
+        }
+    }
+}
+
+/// Join `p` onto `base` (absolute `p` is kept as is) and check that the result
+/// stays inside `base` after resolving `..`, `.` and existing symlinks.
+///
+/// Returns the joined path (`base.join(p)`, not canonicalized) on success.
+pub(crate) fn resolve_within(base: &Path, p: &Path) -> Option<PathBuf> {
+    let joined = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        base.join(p)
+    };
+    real_path(&joined)
+        .starts_with(real_path(base))
+        .then_some(joined)
+}
+
+pub(crate) fn outside_base_error(base: &Path, value: &Value) -> VldError {
+    VldError::single_with_value(
+        IssueCode::Custom {
+            code: "path_outside_base".to_string(),
+        },
+        format!("Path must be within base directory: {}", base.display()),
+        value,
+    )
+}
+
+/// Schema for filesystem paths. Created via [`vld::path()`](crate::path).
 #[derive(Clone)]
 pub struct ZPath {
     must_exist: bool,
@@ -60,6 +134,13 @@ impl ZPath {
         self
     }
 
+    /// Require the path to stay inside `base`.
+    ///
+    /// Relative inputs are resolved against `base` (not the current directory)
+    /// and the **joined** path `base.join(input)` is returned, so later file
+    /// operations hit the checked location. `..`/`.` are resolved and existing
+    /// symlinks followed before the containment check, so `"../etc/x"` or
+    /// `"/base/../etc/x"` are rejected even when they do not exist.
     pub fn within(mut self, base: impl Into<PathBuf>) -> Self {
         self.within_base = Some(base.into());
         self
@@ -85,19 +166,14 @@ impl VldSchema for ZPath {
 
     fn parse_value(&self, value: &Value) -> Result<PathBuf, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            let msg = self.custom_type_error.clone().unwrap_or_else(|| {
-                format!("Expected path string, received {}", value_type_name(value))
-            });
-            VldError::single_with_value(
-                IssueCode::InvalidType {
-                    expected: "string (path)".to_string(),
-                    received: value_type_name(value),
-                },
-                msg,
+            super::type_error(
+                &self.custom_type_error,
+                "string (path)",
+                "path string",
                 value,
             )
         })?;
-        let p = PathBuf::from(s);
+        let mut p = PathBuf::from(s);
 
         if self.must_be_absolute && !p.is_absolute() {
             return Err(VldError::single_with_value(
@@ -116,6 +192,9 @@ impl VldSchema for ZPath {
                 "Path must be relative",
                 value,
             ));
+        }
+        if let Some(base) = &self.within_base {
+            p = resolve_within(base, &p).ok_or_else(|| outside_base_error(base, value))?;
         }
         if self.must_exist && !p.exists() {
             return Err(VldError::single_with_value(
@@ -137,24 +216,6 @@ impl VldSchema for ZPath {
                 format!("Path is not a directory: {}", p.display()),
                 value,
             ));
-        }
-        if let Some(base) = &self.within_base {
-            let joined = if p.is_absolute() {
-                p.clone()
-            } else {
-                base.join(&p)
-            };
-            let joined_canon = joined.canonicalize().unwrap_or(joined);
-            let base_canon = base.canonicalize().unwrap_or_else(|_| base.clone());
-            if !joined_canon.starts_with(&base_canon) {
-                return Err(VldError::single_with_value(
-                    IssueCode::Custom {
-                        code: "path_outside_base".to_string(),
-                    },
-                    format!("Path must be within base directory: {}", base.display()),
-                    value,
-                ));
-            }
         }
         Ok(p)
     }

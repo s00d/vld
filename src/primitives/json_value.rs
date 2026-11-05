@@ -9,6 +9,7 @@ pub struct ZJsonValue {
     require_array: bool,
     required_keys: Vec<String>,
     max_depth: Option<usize>,
+    custom_type_error: Option<String>,
 }
 
 impl ZJsonValue {
@@ -18,7 +19,15 @@ impl ZJsonValue {
             require_array: false,
             required_keys: Vec::new(),
             max_depth: None,
+            custom_type_error: None,
         }
+    }
+
+    /// Set a custom error message for type mismatch (`object()` / `array()`
+    /// / `require_key` on a non-object).
+    pub fn type_error(mut self, msg: impl Into<String>) -> Self {
+        self.custom_type_error = Some(msg.into());
+        self
     }
 
     pub fn object(mut self) -> Self {
@@ -80,33 +89,27 @@ impl VldSchema for ZJsonValue {
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         if self.require_object && !value.is_object() {
-            return Err(VldError::single_with_value(
-                IssueCode::InvalidType {
-                    expected: "object".to_string(),
-                    received: crate::error::value_type_name(value),
-                },
-                "Expected object JSON value",
+            return Err(super::type_error(
+                &self.custom_type_error,
+                "object",
+                "object JSON value",
                 value,
             ));
         }
         if self.require_array && !value.is_array() {
-            return Err(VldError::single_with_value(
-                IssueCode::InvalidType {
-                    expected: "array".to_string(),
-                    received: crate::error::value_type_name(value),
-                },
-                "Expected array JSON value",
+            return Err(super::type_error(
+                &self.custom_type_error,
+                "array",
+                "array JSON value",
                 value,
             ));
         }
         if !self.required_keys.is_empty() {
             let obj = value.as_object().ok_or_else(|| {
-                VldError::single_with_value(
-                    IssueCode::InvalidType {
-                        expected: "object".to_string(),
-                        received: crate::error::value_type_name(value),
-                    },
-                    "Required keys can be checked only for object values",
+                super::type_error(
+                    &self.custom_type_error,
+                    "object",
+                    "object (required keys need an object)",
                     value,
                 )
             })?;

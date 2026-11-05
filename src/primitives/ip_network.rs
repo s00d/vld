@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{IssueCode, VldError};
 use crate::schema::VldSchema;
 
 #[derive(Clone)]
@@ -56,15 +56,10 @@ impl VldSchema for ZIpNetwork {
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            let msg = self.custom_type_error.clone().unwrap_or_else(|| {
-                format!("Expected CIDR string, received {}", value_type_name(value))
-            });
-            VldError::single_with_value(
-                IssueCode::InvalidType {
-                    expected: "string (cidr)".to_string(),
-                    received: value_type_name(value),
-                },
-                msg,
+            super::type_error(
+                &self.custom_type_error,
+                "string (cidr)",
+                "CIDR string",
                 value,
             )
         })?;

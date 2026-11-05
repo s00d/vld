@@ -89,8 +89,10 @@ fn nanoid_custom_msg() {
 #[test]
 fn emoji_valid() {
     let schema = vld::string().emoji();
-    assert!(schema.parse(r#""hello 😀""#).is_ok());
+    assert!(schema.parse(r#""😀""#).is_ok());
     assert!(schema.parse(r#""⭐""#).is_ok());
+    // Only emoji: mixed text is rejected.
+    assert!(schema.parse(r#""hello 😀""#).is_err());
 }
 
 #[test]
