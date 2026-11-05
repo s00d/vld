@@ -102,8 +102,11 @@ impl VldSchema for ZF32 {
 
     fn parse_value(&self, value: &Value) -> Result<f32, VldError> {
         let f = self.inner.extract_number(value)?;
+        let out = f as f32;
+        // Rounding to f32 overflows to infinity only past the finite range
+        // (values within half an ulp of f32::MAX round down to it).
         let limit = f64::from(f32::MAX);
-        if f < -limit {
+        if out == f32::NEG_INFINITY {
             return Err(VldError::from_code_with_value(
                 IssueCode::TooSmall {
                     origin: SizeOrigin::Number,
@@ -113,7 +116,7 @@ impl VldSchema for ZF32 {
                 value,
             ));
         }
-        if f > limit {
+        if out == f32::INFINITY {
             return Err(VldError::from_code_with_value(
                 IssueCode::TooBig {
                     origin: SizeOrigin::Number,
@@ -123,7 +126,6 @@ impl VldSchema for ZF32 {
                 value,
             ));
         }
-        let out = f as f32;
         self.inner.validate(Num::F(f64::from(out)), value)?;
         Ok(out)
     }
