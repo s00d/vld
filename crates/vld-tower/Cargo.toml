@@ -26,8 +26,9 @@ bytes = "1"
 
 [dev-dependencies]
 vld-http-common = { workspace = true, features = ["conformance"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 tower = { version = "0.5", features = ["util"] }
+axum = "0.8"
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 serde = { workspace = true }
@@ -36,3 +37,7 @@ vld = { workspace = true }
 [[example]]
 name = "tower_basic"
 path = "examples/tower_basic.rs"
+
+[[example]]
+name = "tower_axum"
+path = "examples/tower_axum.rs"

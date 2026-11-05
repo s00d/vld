@@ -49,6 +49,8 @@ vld_http_common::conformance_suite! {
     cases = [
         json_valid,
         json_content_type_case_insensitive,
+        json_content_type_bare_param,
+        json_content_type_unterminated_quote,
         json_malformed,
         json_validation_error,
         json_oversized,
