@@ -1,3 +1,7 @@
+// diesel's QueryableByName derive expands to `Self { id: id, .. }`, which clippy
+// >= 1.99 flags as redundant_field_names; an item attribute does not reach the impl.
+#![allow(clippy::redundant_field_names)]
+
 //! Integration tests for vld-diesel.
 //! Uses an in-memory SQLite database.
 
