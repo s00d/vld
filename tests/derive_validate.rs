@@ -75,6 +75,7 @@ fn derive_vld_parse_method() {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Default, Validate)]
+#[vld(lenient)]
 struct Config {
     #[vld(vld::string().min(1))]
     host: String,

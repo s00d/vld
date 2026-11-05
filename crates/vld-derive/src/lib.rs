@@ -1,9 +1,13 @@
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Expr, Fields, Lit, Meta};
+use syn::ext::IdentExt;
+use syn::spanned::Spanned;
+use syn::{parse_macro_input, Data, DeriveInput, Fields, LitStr, Meta};
 
-/// Derive macro that generates `vld_parse()`, `parse_value()`, `validate_fields()`,
-/// and `parse_lenient()` methods for a struct, plus implements the `VldParse` trait.
+/// Derive macro that generates `vld_parse()`, `parse_value()`, `validate()` /
+/// `is_valid()` (with `serialize`), JSON Schema methods (with `openapi`) and
+/// implements the `VldParse` trait.
 ///
 /// # Usage
 ///
@@ -23,10 +27,23 @@ use syn::{parse_macro_input, Data, DeriveInput, Expr, Fields, Lit, Meta};
 /// let user = User::vld_parse(r#"{"name": "Alex", "email": "a@b.com"}"#).unwrap();
 /// ```
 ///
-/// # Serde rename support
+/// The parse method is named `vld_parse` (not `parse`) so it does not shadow
+/// `clap::Parser::parse()` and similar trait methods.
 ///
-/// The derive macro respects `#[serde(rename = "...")]` on fields and
-/// `#[serde(rename_all = "...")]` on the struct:
+/// # Lenient parsing
+///
+/// `validate_fields()` / `parse_lenient()` are generated only with the
+/// struct-level `#[vld(lenient)]` attribute; they require every field type to
+/// implement `Default` and `serde::Serialize`.
+///
+/// # Serde attributes
+///
+/// - struct: `rename_all = "..."` (also `rename_all(deserialize = "...")`),
+///   `default`
+/// - field: `rename = "..."` (also `rename(deserialize = "...")`), `skip` /
+///   `skip_deserializing` (not validated, set to `Default::default()`),
+///   `default` / `default = "path"` (used when the key is missing)
+/// - `flatten` and `alias` are rejected with a compile error.
 ///
 /// ```ignore
 /// #[derive(Debug, serde::Serialize, Validate)]
@@ -40,18 +57,38 @@ use syn::{parse_macro_input, Data, DeriveInput, Expr, Fields, Lit, Meta};
 /// // Parses from {"firstName": "...", "emailAddress": "..."}
 /// ```
 ///
-/// Supported rename_all conventions: `camelCase`, `PascalCase`, `snake_case`,
-/// `SCREAMING_SNAKE_CASE`, `kebab-case`, `SCREAMING-KEBAB-CASE`.
+/// Supported rename_all conventions: `lowercase`, `UPPERCASE`, `camelCase`,
+/// `PascalCase`, `snake_case`, `SCREAMING_SNAKE_CASE`, `kebab-case`,
+/// `SCREAMING-KEBAB-CASE`.
+///
+/// Raw identifiers map to their bare name (`r#type` → `"type"`).
 ///
 /// The expression inside `#[vld(...)]` is used as-is in the generated code.
 /// Make sure the types are in scope (e.g., use `vld::string()` or import via prelude).
 #[proc_macro_derive(Validate, attributes(vld, into_params))]
 pub fn derive_validate(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let name = &input.ident;
+    expand(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
 
-    // Check for #[serde(rename_all = "...")]
-    let rename_all = get_serde_rename_all(&input.attrs);
+struct FieldInfo {
+    ident: syn::Ident,
+    ty: syn::Type,
+    key: String,
+    /// `None` = `#[serde(skip)]`: not validated, set to `Default::default()`.
+    schema: Option<TokenStream2>,
+    /// Value used when the key is missing (`#[serde(default)]`).
+    default: Option<TokenStream2>,
+}
+
+fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let serde_struct = parse_serde_struct_attrs(&input.attrs)?;
+    let lenient = parse_vld_struct_attrs(&input.attrs)?;
     let parameter_in_expr = match get_into_params_parameter_in(&input.attrs).as_deref() {
         Some("query") => quote! { Some("query") },
         Some("path") => quote! { Some("path") },
@@ -63,110 +100,125 @@ pub fn derive_validate(input: TokenStream) -> TokenStream {
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
             Fields::Named(fields) => &fields.named,
-            _ => panic!("Validate can only be derived for structs with named fields"),
+            other => {
+                return Err(syn::Error::new(
+                    other.span(),
+                    "Validate can only be derived for structs with named fields",
+                ))
+            }
         },
-        _ => panic!("Validate can only be derived for structs"),
+        _ => {
+            return Err(syn::Error::new(
+                name.span(),
+                "Validate can only be derived for structs",
+            ))
+        }
     };
 
-    let mut field_names = Vec::new();
-    let mut field_types = Vec::new();
-    let mut field_schemas = Vec::new();
-    let mut field_json_keys = Vec::new();
-
+    let mut infos = Vec::new();
     for field in fields {
-        let fname = field.ident.as_ref().unwrap();
-        let ftype = &field.ty;
-        field_names.push(fname.clone());
-        field_types.push(ftype.clone());
+        let ident = field
+            .ident
+            .clone()
+            .ok_or_else(|| syn::Error::new(field.span(), "expected a named field"))?;
+        let serde_field = parse_serde_field_attrs(&field.attrs)?;
+        let bare = ident.unraw().to_string();
+        let key = match serde_field.rename {
+            Some(k) => k,
+            None => match &serde_struct.rename_all {
+                Some(conv) => rename_field(&bare, conv),
+                None => bare,
+            },
+        };
 
-        // Determine JSON key: #[serde(rename = "...")] > rename_all > field name
-        let json_key = get_serde_rename(&field.attrs).unwrap_or_else(|| {
-            if let Some(ref convention) = rename_all {
-                rename_field(&fname.to_string(), convention)
-            } else {
-                fname.to_string()
-            }
-        });
-        field_json_keys.push(json_key);
-
-        let schema_tokens = field
-            .attrs
-            .iter()
-            .find(|attr| attr.path().is_ident("vld"))
-            .map(|attr| attr.parse_args::<proc_macro2::TokenStream>().unwrap())
-            .unwrap_or_else(|| panic!("Field `{}` is missing #[vld(...)] attribute", fname));
-
-        field_schemas.push(schema_tokens);
-    }
-
-    let expanded = quote! {
-        impl #name {
-            /// Parse and validate input data into this struct.
-            ///
-            /// Named `vld_parse` to avoid conflicts with other derive macros
-            /// (e.g. `clap::Parser::parse()`).
-            pub fn vld_parse<__VldInputT: ::vld::input::VldInput + ?Sized>(
-                input: &__VldInputT,
-            ) -> ::std::result::Result<#name, ::vld::error::VldError> {
-                let __vld_json = <__VldInputT as ::vld::input::VldInput>::to_json_value(input)?;
-                Self::parse_value(&__vld_json)
-            }
-
-            /// Parse and validate directly from a `serde_json::Value`.
-            pub fn parse_value(
-                __vld_json: &::vld::serde_json::Value,
-            ) -> ::std::result::Result<#name, ::vld::error::VldError> {
-                use ::vld::schema::VldSchema as _;
-
-                let __vld_obj = __vld_json.as_object().ok_or_else(|| {
-                    ::vld::error::VldError::single(
-                        ::vld::error::IssueCode::InvalidType {
-                            expected: ::std::string::String::from("object"),
-                            received: ::vld::error::value_type_name(__vld_json),
-                        },
-                        ::std::format!(
-                            "Expected object, received {}",
-                            ::vld::error::value_type_name(__vld_json)
-                        ),
+        let schema = if serde_field.skip {
+            None
+        } else {
+            let attr = field
+                .attrs
+                .iter()
+                .find(|a| a.path().is_ident("vld"))
+                .ok_or_else(|| {
+                    syn::Error::new(
+                        ident.span(),
+                        format!("field `{}` is missing a #[vld(...)] attribute", ident),
                     )
                 })?;
+            Some(attr.parse_args::<TokenStream2>()?)
+        };
 
-                let mut __vld_errors = ::vld::error::VldError::new();
+        let default = serde_field.default.or_else(|| {
+            serde_struct.default.then(|| {
+                let fid = &ident;
+                quote! { <Self as ::std::default::Default>::default().#fid }
+            })
+        });
 
-                #(
-                    #[allow(non_snake_case)]
-                    let #field_names: ::std::option::Option<#field_types> = {
-                        let __vld_field_schema = { #field_schemas };
-                        let __vld_field_value = __vld_obj
-                            .get(#field_json_keys)
-                            .unwrap_or(&::vld::serde_json::Value::Null);
-                        match __vld_field_schema.parse_value(__vld_field_value) {
-                            ::std::result::Result::Ok(v) => ::std::option::Option::Some(v),
-                            ::std::result::Result::Err(e) => {
-                                __vld_errors = ::vld::error::VldError::merge(
-                                    __vld_errors,
-                                    ::vld::error::VldError::with_prefix(
-                                        e,
-                                        ::vld::error::PathSegment::Field(
-                                            ::std::string::String::from(#field_json_keys),
-                                        ),
-                                    ),
-                                );
-                                ::std::option::Option::None
-                            }
-                        }
-                    };
-                )*
+        infos.push(FieldInfo {
+            ident,
+            ty: field.ty.clone(),
+            key,
+            schema,
+            default,
+        });
+    }
 
-                if !::vld::error::VldError::is_empty(&__vld_errors) {
-                    return ::std::result::Result::Err(__vld_errors);
-                }
+    let field_idents: Vec<_> = infos.iter().map(|f| &f.ident).collect();
 
-                ::std::result::Result::Ok(#name {
-                    #( #field_names: #field_names.unwrap(), )*
-                })
+    // parse_value: one `let` per field
+    let parse_lets = infos.iter().map(|f| {
+        let FieldInfo { ident, ty, key, .. } = f;
+        let Some(schema) = &f.schema else {
+            return quote! {
+                let #ident: ::std::option::Option<#ty> =
+                    ::std::option::Option::Some(::std::default::Default::default());
+            };
+        };
+        let parse = quote! {
+            ::vld::__private::parse_field(__vld_obj, #key, &{ #schema }, &mut __vld_errors)
+        };
+        let value = match &f.default {
+            Some(d) => quote! {
+                if __vld_obj.contains_key(#key) { #parse } else { ::std::option::Option::Some(#d) }
+            },
+            None => parse,
+        };
+        quote! {
+            #[allow(non_snake_case)]
+            let #ident: ::std::option::Option<#ty> = #value;
+        }
+    });
+
+    let lenient_tokens = if lenient {
+        let result_pushes = infos.iter().filter_map(|f| {
+            let schema = f.schema.as_ref()?;
+            let key = &f.key;
+            let push = quote! {
+                __vld_results.push(::vld::__private::field_result(__vld_obj, #key, &{ #schema }));
+            };
+            Some(match f.default {
+                Some(_) => quote! { if __vld_obj.contains_key(#key) { #push } },
+                None => push,
+            })
+        });
+        let lenient_lets = infos.iter().map(|f| {
+            let FieldInfo { ident, ty, key, .. } = f;
+            let Some(schema) = &f.schema else {
+                return quote! { let #ident: #ty = ::std::default::Default::default(); };
+            };
+            let parse = quote! {
+                ::vld::__private::lenient_field(__vld_obj, #key, &{ #schema }, &mut __vld_results)
+            };
+            let value = match &f.default {
+                Some(d) => quote! { if __vld_obj.contains_key(#key) { #parse } else { #d } },
+                None => parse,
+            };
+            quote! {
+                #[allow(non_snake_case)]
+                let #ident: #ty = #value;
             }
-
+        });
+        quote! {
             /// Validate each field individually and return per-field results.
             pub fn validate_fields<__VldInputT: ::vld::input::VldInput + ?Sized>(
                 input: &__VldInputT,
@@ -185,52 +237,20 @@ pub fn derive_validate(input: TokenStream) -> TokenStream {
                 ::std::vec::Vec<::vld::error::FieldResult>,
                 ::vld::error::VldError,
             > {
-                let __vld_obj = __vld_json.as_object().ok_or_else(|| {
-                    ::vld::error::VldError::single(
-                        ::vld::error::IssueCode::InvalidType {
-                            expected: ::std::string::String::from("object"),
-                            received: ::vld::error::value_type_name(__vld_json),
-                        },
-                        ::std::format!(
-                            "Expected object, received {}",
-                            ::vld::error::value_type_name(__vld_json)
-                        ),
-                    )
-                })?;
-
+                #[allow(unused_imports)]
+                use ::vld::schema::VldSchema as _;
+                let __vld_obj = ::vld::__private::expect_object(__vld_json)?;
                 let mut __vld_results: ::std::vec::Vec<::vld::error::FieldResult> =
                     ::std::vec::Vec::new();
-
-                #(
-                    {
-                        let __vld_field_schema = { #field_schemas };
-                        let __vld_field_value = __vld_obj
-                            .get(#field_json_keys)
-                            .unwrap_or(&::vld::serde_json::Value::Null);
-
-                        let __vld_result = ::vld::object::DynSchema::dyn_parse(
-                            &__vld_field_schema,
-                            __vld_field_value,
-                        );
-
-                        __vld_results.push(::vld::error::FieldResult {
-                            name: ::std::string::String::from(#field_json_keys),
-                            input: __vld_field_value.clone(),
-                            result: __vld_result,
-                        });
-                    }
-                )*
-
+                #( #result_pushes )*
                 ::std::result::Result::Ok(__vld_results)
             }
 
             /// Parse leniently: build the struct even when some fields fail.
+            /// Invalid fields fall back to `Default::default()`.
             pub fn parse_lenient<__VldInputT: ::vld::input::VldInput + ?Sized>(
                 input: &__VldInputT,
-            ) -> ::std::result::Result<
-                ::vld::error::ParseResult<#name>,
-                ::vld::error::VldError,
-            > {
+            ) -> ::std::result::Result<::vld::error::ParseResult<Self>, ::vld::error::VldError> {
                 let __vld_json = <__VldInputT as ::vld::input::VldInput>::to_json_value(input)?;
                 Self::parse_lenient_value(&__vld_json)
             }
@@ -238,70 +258,82 @@ pub fn derive_validate(input: TokenStream) -> TokenStream {
             /// Parse leniently from a `serde_json::Value`.
             pub fn parse_lenient_value(
                 __vld_json: &::vld::serde_json::Value,
-            ) -> ::std::result::Result<
-                ::vld::error::ParseResult<#name>,
-                ::vld::error::VldError,
-            > {
+            ) -> ::std::result::Result<::vld::error::ParseResult<Self>, ::vld::error::VldError> {
+                #[allow(unused_imports)]
                 use ::vld::schema::VldSchema as _;
-
-                let __vld_obj = __vld_json.as_object().ok_or_else(|| {
-                    ::vld::error::VldError::single(
-                        ::vld::error::IssueCode::InvalidType {
-                            expected: ::std::string::String::from("object"),
-                            received: ::vld::error::value_type_name(__vld_json),
-                        },
-                        ::std::format!(
-                            "Expected object, received {}",
-                            ::vld::error::value_type_name(__vld_json)
-                        ),
-                    )
-                })?;
-
+                let __vld_obj = ::vld::__private::expect_object(__vld_json)?;
                 let mut __vld_results: ::std::vec::Vec<::vld::error::FieldResult> =
                     ::std::vec::Vec::new();
-
-                #(
-                    #[allow(non_snake_case)]
-                    let #field_names: #field_types = {
-                        let __vld_field_schema = { #field_schemas };
-                        let __vld_field_value = __vld_obj
-                            .get(#field_json_keys)
-                            .unwrap_or(&::vld::serde_json::Value::Null);
-
-                        match __vld_field_schema.parse_value(__vld_field_value) {
-                            ::std::result::Result::Ok(v) => {
-                                let __json_repr = ::vld::serde_json::to_value(&v)
-                                    .unwrap_or_else(|_| __vld_field_value.clone());
-                                __vld_results.push(::vld::error::FieldResult {
-                                    name: ::std::string::String::from(#field_json_keys),
-                                    input: __vld_field_value.clone(),
-                                    result: ::std::result::Result::Ok(__json_repr),
-                                });
-                                v
-                            }
-                            ::std::result::Result::Err(e) => {
-                                __vld_results.push(::vld::error::FieldResult {
-                                    name: ::std::string::String::from(#field_json_keys),
-                                    input: __vld_field_value.clone(),
-                                    result: ::std::result::Result::Err(e),
-                                });
-                                <#field_types as ::std::default::Default>::default()
-                            }
-                        }
-                    };
-                )*
-
-                let __vld_struct = #name {
-                    #( #field_names, )*
-                };
-
-                ::std::result::Result::Ok(
-                    ::vld::error::ParseResult::new(__vld_struct, __vld_results)
-                )
+                #( #lenient_lets )*
+                ::std::result::Result::Ok(::vld::error::ParseResult::new(
+                    Self { #( #field_idents, )* },
+                    __vld_results,
+                ))
             }
         }
+    } else {
+        quote! {}
+    };
 
-        impl ::vld::schema::VldParse for #name {
+    let schema_entries = infos.iter().filter_map(|f| {
+        let schema = f.schema.as_ref()?;
+        let key = &f.key;
+        let required = if f.default.is_some() {
+            quote! { false }
+        } else {
+            quote! { __vld_field_schema.is_required() }
+        };
+        Some(quote! {
+            {
+                let __vld_field_schema = { #schema };
+                (#key, __vld_field_schema.json_schema(), #required)
+            }
+        })
+    });
+    let collect_calls = infos.iter().filter_map(|f| {
+        let schema = f.schema.as_ref()?;
+        Some(quote! {
+            ::vld::json_schema::CollectNestedSchemas::collect_nested_schemas(&{ #schema }, __vld_out);
+        })
+    });
+
+    Ok(quote! {
+        impl #impl_generics #name #ty_generics #where_clause {
+            /// Parse and validate input data into this struct.
+            ///
+            /// Named `vld_parse` to avoid conflicts with other derive macros
+            /// (e.g. `clap::Parser::parse()`).
+            pub fn vld_parse<__VldInputT: ::vld::input::VldInput + ?Sized>(
+                input: &__VldInputT,
+            ) -> ::std::result::Result<Self, ::vld::error::VldError> {
+                let __vld_json = <__VldInputT as ::vld::input::VldInput>::to_json_value(input)?;
+                Self::parse_value(&__vld_json)
+            }
+
+            /// Parse and validate directly from a `serde_json::Value`.
+            pub fn parse_value(
+                __vld_json: &::vld::serde_json::Value,
+            ) -> ::std::result::Result<Self, ::vld::error::VldError> {
+                #[allow(unused_imports)]
+                use ::vld::schema::VldSchema as _;
+                let __vld_obj = ::vld::__private::expect_object(__vld_json)?;
+                let mut __vld_errors = ::vld::error::VldError::new();
+
+                #( #parse_lets )*
+
+                if !__vld_errors.is_empty() {
+                    return ::std::result::Result::Err(__vld_errors);
+                }
+
+                ::std::result::Result::Ok(Self {
+                    #( #field_idents: #field_idents.unwrap(), )*
+                })
+            }
+
+            #lenient_tokens
+        }
+
+        impl #impl_generics ::vld::schema::VldParse for #name #ty_generics #where_clause {
             fn vld_parse_value(
                 value: &::vld::serde_json::Value,
             ) -> ::std::result::Result<Self, ::vld::error::VldError> {
@@ -309,166 +341,255 @@ pub fn derive_validate(input: TokenStream) -> TokenStream {
             }
         }
 
+        ::vld::__vld_if_serialize! {
+            impl #impl_generics #name #ty_generics #where_clause {
+                /// Validate an existing value that can be serialized to JSON.
+                ///
+                /// Requires the `serialize` feature on `vld`.
+                pub fn validate<__VldT: ::vld::serde::Serialize>(
+                    instance: &__VldT,
+                ) -> ::std::result::Result<(), ::vld::error::VldError> {
+                    Self::parse_value(&::vld::__private::to_json(instance)?).map(|_| ())
+                }
+
+                /// Shorthand for `validate(instance).is_ok()`.
+                ///
+                /// Requires the `serialize` feature on `vld`.
+                pub fn is_valid<__VldT: ::vld::serde::Serialize>(instance: &__VldT) -> bool {
+                    Self::validate(instance).is_ok()
+                }
+            }
+        }
+
         ::vld::__vld_if_openapi! {
-            impl #name {
+            impl #impl_generics #name #ty_generics #where_clause {
                 /// Generate a JSON Schema / OpenAPI 3.1 representation of this struct.
                 ///
                 /// Requires the `openapi` feature on `vld`.
                 pub fn json_schema() -> ::vld::serde_json::Value {
+                    #[allow(unused_imports)]
+                    use ::vld::schema::VldSchema as _;
+                    #[allow(unused_imports)]
                     use ::vld::json_schema::JsonSchema as _;
-                    let mut __vld_properties = ::vld::serde_json::Map::new();
-                    let mut __vld_required: ::std::vec::Vec<::std::string::String> =
-                        ::std::vec::Vec::new();
-
-                    #(
-                        {
-                            let __vld_field_schema = { #field_schemas };
-                            __vld_properties.insert(
-                                ::std::string::String::from(#field_json_keys),
-                                __vld_field_schema.json_schema(),
-                            );
-                            if __vld_field_schema.is_required() {
-                                __vld_required.push(
-                                    ::std::string::String::from(#field_json_keys),
-                                );
-                            }
-                        }
-                    )*
-
-                    ::vld::serde_json::json!({
-                        "type": "object",
-                        "required": __vld_required,
-                        "properties": ::vld::serde_json::Value::Object(__vld_properties),
-                    })
+                    ::vld::__private::object_schema(::std::vec![ #( #schema_entries ),* ])
                 }
 
-                /// Wrap `json_schema()` in a minimal OpenAPI 3.1 document.
+                /// Minimal OpenAPI 3.1 document with this struct and every
+                /// nested schema it references under `components.schemas`.
                 ///
                 /// Requires the `openapi` feature on `vld`.
                 pub fn to_openapi_document() -> ::vld::serde_json::Value {
-                    ::vld::json_schema::to_openapi_document(
+                    ::vld::__private::openapi_document(
                         stringify!(#name),
-                        &Self::json_schema(),
+                        Self::json_schema(),
+                        Self::__vld_nested_schemas(),
                     )
+                }
+
+                #[doc(hidden)]
+                pub fn __vld_collect_nested_schemas(
+                    __vld_out: &mut ::std::vec::Vec<::vld::json_schema::NestedSchemaEntry>,
+                ) {
+                    #[allow(unused_imports)]
+                    use ::vld::schema::VldSchema as _;
+                    #( #collect_calls )*
+                }
+
+                #[doc(hidden)]
+                pub fn __vld_nested_schemas()
+                    -> ::std::vec::Vec<::vld::json_schema::NestedSchemaEntry>
+                {
+                    let mut __vld_out = ::std::vec::Vec::new();
+                    Self::__vld_collect_nested_schemas(&mut __vld_out);
+                    __vld_out
                 }
             }
 
-            impl ::vld::json_schema::OpenApiParameterIn for #name {
+            impl #impl_generics ::vld::json_schema::OpenApiParameterIn for #name #ty_generics #where_clause {
                 fn parameter_in() -> Option<&'static str> {
                     #parameter_in_expr
                 }
             }
         }
-    };
-
-    TokenStream::from(expanded)
+    })
 }
 
 // ---------------------------------------------------------------------------
-// Serde attribute parsing helpers
+// Attribute parsing
 // ---------------------------------------------------------------------------
 
-/// Extract `#[serde(rename_all = "...")]` from struct-level attributes.
-fn get_serde_rename_all(attrs: &[syn::Attribute]) -> Option<String> {
-    for attr in attrs {
-        if !attr.path().is_ident("serde") {
-            continue;
-        }
-        if let Ok(nested) = attr
-            .parse_args_with(syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated)
-        {
-            for meta in &nested {
-                if let Meta::NameValue(nv) = meta {
-                    if nv.path.is_ident("rename_all") {
-                        if let Expr::Lit(lit) = &nv.value {
-                            if let Lit::Str(s) = &lit.lit {
-                                return Some(s.value());
-                            }
-                        }
-                    }
-                }
+/// Struct-level `#[vld(lenient)]`.
+fn parse_vld_struct_attrs(attrs: &[syn::Attribute]) -> syn::Result<bool> {
+    let mut lenient = false;
+    for attr in attrs.iter().filter(|a| a.path().is_ident("vld")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("lenient") {
+                lenient = true;
+                Ok(())
+            } else {
+                Err(meta.error("unknown struct-level vld attribute; expected `lenient`"))
             }
-        }
+        })?;
     }
-    None
+    Ok(lenient)
+}
+
+#[derive(Default)]
+struct SerdeStruct {
+    rename_all: Option<String>,
+    default: bool,
+}
+
+#[derive(Default)]
+struct SerdeField {
+    rename: Option<String>,
+    skip: bool,
+    default: Option<TokenStream2>,
+}
+
+/// Consume the value of a serde item we do not interpret (`x`, `x = ...`, `x(...)`).
+fn skip_meta(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
+    if meta.input.peek(syn::Token![=]) {
+        meta.value()?.parse::<syn::Expr>()?;
+    } else if meta.input.peek(syn::token::Paren) {
+        let _content;
+        syn::parenthesized!(_content in meta.input);
+    }
+    Ok(())
+}
+
+/// `name = "x"` or `name(deserialize = "x", serialize = "y")` → the deserialize name.
+fn de_name(meta: &syn::meta::ParseNestedMeta) -> syn::Result<Option<String>> {
+    if meta.input.peek(syn::Token![=]) {
+        return Ok(Some(meta.value()?.parse::<LitStr>()?.value()));
+    }
+    let mut out = None;
+    meta.parse_nested_meta(|inner| {
+        if inner.path.is_ident("deserialize") {
+            out = Some(inner.value()?.parse::<LitStr>()?.value());
+        } else {
+            skip_meta(&inner)?;
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+fn serde_attrs(attrs: &[syn::Attribute]) -> impl Iterator<Item = &syn::Attribute> {
+    attrs
+        .iter()
+        .filter(|a| a.path().is_ident("serde") && matches!(a.meta, Meta::List(_)))
+}
+
+fn parse_serde_struct_attrs(attrs: &[syn::Attribute]) -> syn::Result<SerdeStruct> {
+    let mut out = SerdeStruct::default();
+    for attr in serde_attrs(attrs) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("rename_all") {
+                if let Some(conv) = de_name(&meta)? {
+                    if !RENAME_RULES.contains(&conv.as_str()) {
+                        return Err(meta.error(format!("unknown rename_all rule `{}`", conv)));
+                    }
+                    out.rename_all = Some(conv);
+                }
+            } else if meta.path.is_ident("default") {
+                out.default = true;
+                skip_meta(&meta)?;
+            } else {
+                skip_meta(&meta)?;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(out)
+}
+
+fn parse_serde_field_attrs(attrs: &[syn::Attribute]) -> syn::Result<SerdeField> {
+    let mut out = SerdeField::default();
+    for attr in serde_attrs(attrs) {
+        attr.parse_nested_meta(|meta| {
+            let p = &meta.path;
+            if p.is_ident("rename") {
+                if let Some(k) = de_name(&meta)? {
+                    out.rename = Some(k);
+                }
+            } else if p.is_ident("skip") || p.is_ident("skip_deserializing") {
+                out.skip = true;
+            } else if p.is_ident("default") {
+                out.default = Some(if meta.input.peek(syn::Token![=]) {
+                    let path: syn::ExprPath = meta.value()?.parse::<LitStr>()?.parse()?;
+                    quote! { #path() }
+                } else {
+                    quote! { ::std::default::Default::default() }
+                });
+            } else if p.is_ident("flatten") || p.is_ident("alias") {
+                return Err(meta.error(format!(
+                    "vld: #[serde({})] is not supported by #[derive(Validate)]",
+                    p.get_ident().map(|i| i.to_string()).unwrap_or_default()
+                )));
+            } else {
+                skip_meta(&meta)?;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(out)
 }
 
 /// Extract `#[into_params(parameter_in = ...)]` from struct-level attributes.
 fn get_into_params_parameter_in(attrs: &[syn::Attribute]) -> Option<String> {
-    for attr in attrs {
-        if !attr.path().is_ident("into_params") {
-            continue;
-        }
-        if let Ok(nested) = attr
-            .parse_args_with(syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated)
-        {
-            for meta in &nested {
-                if let Meta::NameValue(nv) = meta {
-                    if nv.path.is_ident("parameter_in") {
-                        if let Expr::Path(path) = &nv.value {
-                            let ident = path.path.get_ident()?;
-                            return Some(ident.to_string().to_ascii_lowercase());
-                        }
+    let mut found = None;
+    for attr in attrs.iter().filter(|a| a.path().is_ident("into_params")) {
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("parameter_in") {
+                let expr: syn::Expr = meta.value()?.parse()?;
+                if let syn::Expr::Path(path) = expr {
+                    if let Some(ident) = path.path.get_ident() {
+                        found = Some(ident.to_string().to_ascii_lowercase());
                     }
                 }
+            } else {
+                skip_meta(&meta)?;
             }
+            Ok(())
+        });
+        if found.is_some() {
+            break;
         }
     }
-    None
+    found
 }
 
-/// Extract `#[serde(rename = "...")]` from field-level attributes.
-fn get_serde_rename(attrs: &[syn::Attribute]) -> Option<String> {
-    for attr in attrs {
-        if !attr.path().is_ident("serde") {
-            continue;
-        }
-        if let Ok(nested) = attr
-            .parse_args_with(syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated)
-        {
-            for meta in &nested {
-                if let Meta::NameValue(nv) = meta {
-                    if nv.path.is_ident("rename") {
-                        if let Expr::Lit(lit) = &nv.value {
-                            if let Lit::Str(s) = &lit.lit {
-                                return Some(s.value());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    None
-}
+const RENAME_RULES: &[&str] = &[
+    "lowercase",
+    "UPPERCASE",
+    "PascalCase",
+    "camelCase",
+    "snake_case",
+    "SCREAMING_SNAKE_CASE",
+    "kebab-case",
+    "SCREAMING-KEBAB-CASE",
+];
 
-/// Convert a snake_case field name to the given naming convention.
+/// Convert a snake_case field name to the given serde naming convention.
 fn rename_field(name: &str, convention: &str) -> String {
     match convention {
-        "camelCase" => to_camel_case(name),
+        "lowercase" => name.to_ascii_lowercase(),
+        "UPPERCASE" => name.to_ascii_uppercase(),
+        "camelCase" => {
+            let pascal = to_pascal_case(name);
+            let mut chars = pascal.chars();
+            match chars.next() {
+                Some(first) => first.to_lowercase().chain(chars).collect(),
+                None => pascal,
+            }
+        }
         "PascalCase" => to_pascal_case(name),
-        "snake_case" => name.to_string(),
-        "SCREAMING_SNAKE_CASE" => name.to_uppercase(),
+        "SCREAMING_SNAKE_CASE" => name.to_ascii_uppercase(),
         "kebab-case" => name.replace('_', "-"),
-        "SCREAMING-KEBAB-CASE" => name.replace('_', "-").to_uppercase(),
+        "SCREAMING-KEBAB-CASE" => name.replace('_', "-").to_ascii_uppercase(),
         _ => name.to_string(),
     }
-}
-
-fn to_camel_case(s: &str) -> String {
-    let mut result = String::new();
-    let mut capitalize_next = false;
-    for ch in s.chars() {
-        if ch == '_' {
-            capitalize_next = true;
-        } else if capitalize_next {
-            result.extend(ch.to_uppercase());
-            capitalize_next = false;
-        } else {
-            result.push(ch);
-        }
-    }
-    result
 }
 
 fn to_pascal_case(s: &str) -> String {
@@ -485,4 +606,22 @@ fn to_pascal_case(s: &str) -> String {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rename_field;
+
+    #[test]
+    fn rename_rules() {
+        assert_eq!(rename_field("first_name", "camelCase"), "firstName");
+        assert_eq!(rename_field("first_name", "PascalCase"), "FirstName");
+        assert_eq!(rename_field("first_name", "lowercase"), "first_name");
+        assert_eq!(rename_field("first_name", "UPPERCASE"), "FIRST_NAME");
+        assert_eq!(rename_field("first_name", "kebab-case"), "first-name");
+        assert_eq!(
+            rename_field("first_name", "SCREAMING-KEBAB-CASE"),
+            "FIRST-NAME"
+        );
+    }
 }
