@@ -484,7 +484,7 @@ fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
         )],
         "json" => vec![check(JSON_FN, "Invalid JSON")],
         "cuid2" => vec![re("/^[a-z][a-z0-9]{1,31}$/".to_string())],
-        "ulid" => vec![re("/^[0-9A-HJKMNP-TV-Z]{26}$/i".to_string())],
+        "ulid" => vec![re("/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i".to_string())],
         "nanoid" => vec![re("/^[A-Za-z0-9_-]+$/".to_string())],
         "emoji" => vec![re(
             "/^[\\u{1F600}-\\u{1F64F}\\u{1F300}-\\u{1F5FF}\\u{1F680}-\\u{1F6FF}\\u{1F1E0}-\\u{1F1FF}\\u{2702}-\\u{27B0}\\u{2600}-\\u{26FF}\\u{FE00}-\\u{FE0F}\\u{1F900}-\\u{1F9FF}\\u{1FA00}-\\u{1FAFF}\\u{231A}-\\u{231B}\\u{23E9}-\\u{23F3}\\u{23F8}-\\u{23FA}\\u{E0020}-\\u{E007F}\\u{20E3}\\u{200D}\\u{2B50}]+$/u"
@@ -823,10 +823,23 @@ fn convert_core(t: Target, schema: &Value) -> (String, Vec<Act>) {
     for key in ["oneOf", "anyOf"] {
         if let Some(variants) = schema.get(key).and_then(Value::as_array) {
             let is_null = |v: &Value| v.get("type").and_then(Value::as_str) == Some("null");
+            // Sibling keywords (`type`, `x-past`, … next to e.g. vld's
+            // naive-datetime `anyOf`) apply to every branch.
+            let mut siblings = schema.as_object().cloned().unwrap_or_default();
+            for k in [key, "description", "default", "title"] {
+                siblings.remove(k);
+            }
             let rest: Vec<String> = variants
                 .iter()
                 .filter(|v| !is_null(v))
-                .map(|v| convert(t, v))
+                .map(|v| match v.as_object() {
+                    Some(o) if !siblings.is_empty() => {
+                        let mut m = siblings.clone();
+                        m.extend(o.clone());
+                        convert(t, &Value::Object(m))
+                    }
+                    _ => convert(t, v),
+                })
                 .collect();
             let has_null = variants.iter().any(is_null);
             return (union_nullable(t, rest, has_null), vec![]);

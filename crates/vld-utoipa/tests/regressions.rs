@@ -189,3 +189,23 @@ fn unsupported_keywords_and_extensions_survive() {
     assert_eq!(d["formatMinimum"], "2020-01-01", "{d}");
     assert_eq!(d["x-past"], true, "{d}");
 }
+
+/// vld's naive-allowed datetime: `{type: string, anyOf: [{format}, {pattern}]}`.
+#[test]
+fn any_of_siblings_go_into_the_branches() {
+    let out = conv(json!({
+        "type": "string",
+        "anyOf": [{"format": "date-time"}, {"pattern": "^a$"}],
+        "description": "when",
+        "x-past": true
+    }));
+    assert_eq!(out["anyOf"][0]["type"], "string", "{out}");
+    assert_eq!(out["anyOf"][0]["format"], "date-time", "{out}");
+    assert_eq!(out["anyOf"][1]["type"], "string", "{out}");
+    assert_eq!(out["anyOf"][1]["pattern"], "^a$", "{out}");
+    assert_eq!(out["description"], "when");
+    assert_eq!(out["x-past"], true, "{out}");
+    // Nullable unions are unchanged.
+    let n = conv(json!({"anyOf": [{"type": "string"}, {"type": "null"}]}));
+    assert_eq!(n["anyOf"][1]["type"], "null", "{n}");
+}

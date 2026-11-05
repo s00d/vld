@@ -15,7 +15,8 @@ pub(crate) struct StrCheck {
     formats: Vec<vld::primitives::ZString>,
     /// `uuid-vN` versions (string-advanced formats checked by shape here).
     uuid_versions: Vec<u8>,
-    temporal: Option<(String, Option<Instant>, Option<Instant>)>,
+    /// `(format, lo, hi)`: the value must parse as one of them within bounds.
+    temporal: Vec<(String, Option<Instant>, Option<Instant>)>,
 }
 
 impl StrCheck {
@@ -31,13 +32,13 @@ impl StrCheck {
             .filter_map(|f| f.strip_prefix("uuid-v").and_then(|v| v.parse().ok()))
             .collect();
         let formats = fmts.iter().filter_map(|f| format_schema(f)).collect();
-        let temporal = fmts
-            .iter()
-            .find(|f| matches!(f.as_str(), "date" | "date-time" | "time"))
+        let temporal = temporal_formats(obj)
+            .into_iter()
             .map(|f| {
-                let (lo, hi) = temporal_bounds(f, obj);
-                (f.clone(), lo, hi)
-            });
+                let (lo, hi) = temporal_bounds(&f, obj);
+                (f, lo, hi)
+            })
+            .collect();
         Self {
             min,
             max,
@@ -59,11 +60,32 @@ impl StrCheck {
                 .uuid_versions
                 .iter()
                 .all(|v| s.as_bytes().get(14) == Some(&(b'0' + v)))
-            && self.temporal.as_ref().is_none_or(|(fmt, lo, hi)| {
-                instant(fmt, s)
-                    .is_some_and(|t| lo.is_none_or(|l| t >= l) && hi.is_none_or(|h| t <= h))
-            })
+            && (self.temporal.is_empty()
+                || self.temporal.iter().any(|(fmt, lo, hi)| {
+                    instant(fmt, s)
+                        .is_some_and(|t| lo.is_none_or(|l| t >= l) && hi.is_none_or(|h| t <= h))
+                }))
     }
+}
+
+/// The date formats a string schema is bounded as: its `date` / `date-time` /
+/// `time` format, or — for date bounds without a format (a pattern-only
+/// branch, e.g. vld's naive datetime) — all three.
+pub(crate) fn temporal_formats(obj: &Map<String, Value>) -> Vec<String> {
+    let fmts = all_of_values(obj, "format");
+    if let Some(f) = fmts
+        .iter()
+        .find(|f| matches!(f.as_str(), "date" | "date-time" | "time"))
+    {
+        return vec![f.clone()];
+    }
+    let bounded = ["formatMinimum", "formatMaximum", "x-past", "x-future"]
+        .iter()
+        .any(|k| obj.contains_key(*k));
+    if fmts.is_empty() && bounded {
+        return ["date-time", "date", "time"].map(String::from).to_vec();
+    }
+    vec![]
 }
 
 /// `key` from the schema plus every `allOf` fragment, in order.

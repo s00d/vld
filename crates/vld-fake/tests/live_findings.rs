@@ -268,3 +268,45 @@ fn arrays_sets_maps_tuples() {
         none(),
     );
 }
+
+/// 0.5 core shapes: a naive-allowed datetime is
+/// `{type: string, anyOf: [{format: date-time}, {pattern}]}`; sibling
+/// keywords (`x-past`, `formatMinimum`) apply to every branch.
+#[test]
+fn any_of_branches_keep_sibling_constraints() {
+    let js = serde_json::json!({
+        "type": "string",
+        "anyOf": [
+            {"format": "date-time"},
+            {"pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"}
+        ],
+        "x-past": true
+    });
+    let schema = vld::chrono::datetime().past();
+    for _ in 0..300 {
+        let v = vld_fake::fake_value(&js);
+        assert!(schema.parse_value(&v).is_ok(), "{v}");
+    }
+    let bounded = serde_json::json!({
+        "type": "string",
+        "anyOf": [{"format": "date"}],
+        "formatMinimum": "2020-03-01",
+        "formatMaximum": "2020-03-02"
+    });
+    let d = vld::chrono::date().min("2020-03-01").max("2020-03-02");
+    for _ in 0..100 {
+        let v = vld_fake::fake_value(&bounded);
+        assert!(d.parse_value(&v).is_ok(), "{v}");
+    }
+}
+
+/// A ULID is 128 bits: its first Crockford char is `0`-`7`.
+#[test]
+fn ulid_first_char_fits_128_bits() {
+    let js = serde_json::json!({"type": "string", "format": "ulid"});
+    for _ in 0..300 {
+        let v = vld_fake::fake_value(&js);
+        let c = v.as_str().unwrap().as_bytes()[0];
+        assert!((b'0'..=b'7').contains(&c), "{v}");
+    }
+}

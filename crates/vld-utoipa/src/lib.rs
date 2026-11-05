@@ -137,6 +137,39 @@ pub fn json_schema_to_schema(value: &Value) -> RefOr<Schema> {
         return RefOr::T(Schema::AllOf(all_of));
     }
 
+    // Sibling keywords next to `oneOf` / `anyOf` (`type`, … — e.g. vld's
+    // naive-datetime `{type: string, anyOf: [...]}`) apply to every branch;
+    // utoipa's composites have no `type`, so push them into the branches.
+    for key in ["oneOf", "anyOf"] {
+        let Some(Value::Array(branches)) = map.get(key) else {
+            continue;
+        };
+        let siblings: Map = map
+            .iter()
+            .filter(|(k, _)| *k != key && !ANNOTATIONS.contains(&k.as_str()) && !is_extension(k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        if siblings.is_empty() {
+            continue;
+        }
+        let mut out = map.clone();
+        out.retain(|k, _| k == key || ANNOTATIONS.contains(&k.as_str()) || is_extension(k));
+        out[key] = Value::Array(
+            branches
+                .iter()
+                .map(|b| match b.as_object() {
+                    Some(o) if b.get("type") != Some(&Value::from("null")) => {
+                        let mut m = siblings.clone();
+                        m.extend(o.clone());
+                        Value::Object(m)
+                    }
+                    _ => b.clone(),
+                })
+                .collect(),
+        );
+        return json_schema_to_schema(&Value::Object(out));
+    }
+
     if let Some(items) = composite_items(map, "oneOf") {
         let mut one_of = annotate!(OneOf::new(), title);
         one_of.items = items;

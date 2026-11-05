@@ -318,7 +318,17 @@ impl<R: Rng> FakeGen<R> {
             }
             if !concrete.is_empty() {
                 let idx = self.rng.gen_range(0..concrete.len());
-                return self.value_with_hint(concrete[idx], hint);
+                // Sibling keywords (`type`, `formatMinimum`, `x-past`, … next to
+                // e.g. a naive-datetime `anyOf`) apply to every branch.
+                let mut rest = obj.clone();
+                for k in ["oneOf", "anyOf", "description", "default", "title"] {
+                    rest.remove(k);
+                }
+                if rest.is_empty() {
+                    return self.value_with_hint(concrete[idx], hint);
+                }
+                let merged = constraints::merge(&[Value::Object(rest), concrete[idx].clone()]);
+                return self.value_with_hint(&Value::Object(merged), hint);
             }
             if !variants.is_empty() {
                 let idx = self.rng.gen_range(0..variants.len());
@@ -373,7 +383,11 @@ impl<R: Rng> FakeGen<R> {
             .collect();
         // 1) Formats (`format` plus further ones in `allOf`): generate and
         //    test against every constraint with vld's own checks.
-        let formats = constraints::all_of_values(obj, "format");
+        let mut formats = constraints::all_of_values(obj, "format");
+        if formats.is_empty() {
+            // Date bounds on a pattern-only string (vld's naive datetime branch).
+            formats = constraints::temporal_formats(obj);
+        }
         if !formats.is_empty() {
             return Value::String(self.gen_formatted(obj, &formats, &patterns));
         }
@@ -1297,9 +1311,13 @@ impl<R: Rng> FakeGen<R> {
         format!("{first}{rest}")
     }
 
+    /// 26 Crockford chars; the first is `0`-`7` (a ULID is 128 bits).
     fn gen_ulid(&mut self) -> String {
         (0..26)
-            .map(|_| CROCKFORD[self.rng.gen_range(0..CROCKFORD.len())] as char)
+            .map(|i| {
+                let n = if i == 0 { 8 } else { CROCKFORD.len() };
+                CROCKFORD[self.rng.gen_range(0..n)] as char
+            })
             .collect()
     }
 

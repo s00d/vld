@@ -436,3 +436,21 @@ fn date_bounds_and_unique_counts_become_checks() {
     let dec = json!({"type": ["string", "number"], "format": "decimal"});
     assert_eq!(zod_of(&dec), "z.union([z.string(), z.number()])");
 }
+
+/// vld's naive-allowed datetime: `{type: string, anyOf: [{format}, {pattern}]}`
+/// — the sibling `type` / `x-past` apply to every branch.
+#[test]
+fn any_of_branches_keep_sibling_keywords() {
+    let s = json!({
+        "type": "string",
+        "anyOf": [{"format": "date-time"}, {"pattern": "^a$"}],
+        "x-past": true
+    });
+    let z = zod_of(&s);
+    assert!(z.starts_with("z.union([z.string().regex("), "{z}");
+    assert!(!z.contains("unknown"), "{z}");
+    assert_eq!(z.matches("Date.now()").count(), 2, "{z}");
+    // A nullable union is unchanged.
+    let n = json!({"anyOf": [{"type": "string"}, {"type": "null"}], "description": "d"});
+    assert_eq!(zod_of(&n), r#"z.string().nullable().describe("d")"#);
+}
