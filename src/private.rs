@@ -52,6 +52,22 @@ pub fn field_value<'a>(obj: &'a Map<String, Value>, key: &str) -> &'a Value {
     obj.get(key).unwrap_or(&NULL)
 }
 
+/// Parse the field `key`; a required field whose key is absent fails with
+/// `missing_field` (a present `null` keeps `invalid_type`).
+fn parse_key<S: VldSchema>(
+    obj: &Map<String, Value>,
+    key: &str,
+    schema: &S,
+) -> Result<S::Output, VldError> {
+    schema.parse_value(field_value(obj, key)).map_err(|e| {
+        if obj.contains_key(key) {
+            e
+        } else {
+            crate::error::absent_field_error(e)
+        }
+    })
+}
+
 /// Parse one field; on failure push its issues (prefixed with `key`) to `errors`.
 pub fn parse_field<S: VldSchema>(
     obj: &Map<String, Value>,
@@ -59,7 +75,7 @@ pub fn parse_field<S: VldSchema>(
     schema: &S,
     errors: &mut VldError,
 ) -> Option<S::Output> {
-    match schema.parse_value(field_value(obj, key)) {
+    match parse_key(obj, key, schema) {
         Ok(v) => Some(v),
         Err(e) => {
             let e = e.with_prefix(PathSegment::Field(key.to_string()));
@@ -79,9 +95,7 @@ where
     FieldResult {
         name: key.to_string(),
         input: input.clone(),
-        result: schema
-            .parse_value(input)
-            .and_then(|v| crate::schema::to_json_value(&v)),
+        result: parse_key(obj, key, schema).and_then(|v| crate::schema::to_json_value(&v)),
     }
 }
 
@@ -97,7 +111,7 @@ where
     S::Output: serde::Serialize + Default,
 {
     let input = field_value(obj, key);
-    let (out, result) = match schema.parse_value(input) {
+    let (out, result) = match parse_key(obj, key, schema) {
         Ok(v) => {
             let repr = serde_json::to_value(&v).unwrap_or_else(|_| input.clone());
             (v, Ok(repr))

@@ -59,6 +59,7 @@ mod builder;
 mod code;
 pub mod format;
 pub mod i18n;
+mod i18n_langs;
 
 pub use crate::object::{FieldResult, ParseResult};
 pub use builder::IssueBuilder;
@@ -242,6 +243,30 @@ pub(crate) fn issue_error(
         .into()
 }
 
+/// Error of a field whose key is absent from its object.
+///
+/// A required field rejects the implied `null` with `invalid_type`
+/// ("received null"); for an absent key that is reported as a single
+/// [`IssueCode::MissingField`] instead. A custom type-error message is kept.
+pub(crate) fn absent_field_error(err: VldError) -> VldError {
+    let rejected_null = err.issues.iter().find(|i| {
+        i.path.is_empty()
+            && matches!(&i.code, IssueCode::InvalidType { received, .. } if received == "null")
+    });
+    match rejected_null {
+        Some(issue) => {
+            let custom = issue.message != issue.code.default_message();
+            let missing = ValidationIssue::new(IssueCode::MissingField);
+            if custom {
+                missing.with_message(issue.message.clone()).into()
+            } else {
+                missing.into()
+            }
+        }
+        None => err,
+    }
+}
+
 impl Default for VldError {
     fn default() -> Self {
         Self::new()
@@ -259,7 +284,11 @@ impl fmt::Display for VldError {
                 write!(f, "{}: ", path_str)?;
             }
             write!(f, "{}", issue.message)?;
-            if let Some(val) = &issue.received {
+            // `invalid_type` messages already name the received type.
+            if let (Some(val), false) = (
+                &issue.received,
+                matches!(issue.code, IssueCode::InvalidType { .. }),
+            ) {
                 write!(f, ", received {}", format_value_short(val))?;
             }
         }

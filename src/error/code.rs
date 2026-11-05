@@ -547,6 +547,16 @@ impl IssueCode {
     /// Fill the `{name}` placeholders of `template` from this code's
     /// parameters (unknown placeholders are kept as is).
     pub(crate) fn render(&self, template: &str) -> String {
+        self.render_with(template, |_, _| None)
+    }
+
+    /// [`render`](Self::render) with `map(name, value)` able to replace a
+    /// parameter value (e.g. translated type names).
+    pub(crate) fn render_with(
+        &self,
+        template: &str,
+        map: impl Fn(&str, &str) -> Option<String>,
+    ) -> String {
         let mut out = String::with_capacity(template.len() + 16);
         let mut rest = template;
         while let Some(open) = rest.find('{') {
@@ -558,7 +568,7 @@ impl IssueCode {
             };
             let name = &after[..close];
             match self.param(name) {
-                Some(v) => out.push_str(&v),
+                Some(v) => out.push_str(&map(name, &v).unwrap_or_else(|| v.into_owned())),
                 None => out.push_str(&rest[open..open + close + 2]),
             }
             rest = &after[close + 1..];
