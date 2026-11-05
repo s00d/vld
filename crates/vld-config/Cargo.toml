@@ -23,7 +23,7 @@ vld = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 config = { version = ">=0.14, <0.16", optional = true, default-features = false, features = ["toml", "json"] }
-figment = { version = "0.10", optional = true, features = ["toml", "json", "env"] }
+figment = { version = "0.10.10", optional = true, features = ["toml", "json", "env"] }
 
 [dev-dependencies]
 vld = { workspace = true }
