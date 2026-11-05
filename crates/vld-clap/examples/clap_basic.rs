@@ -33,7 +33,7 @@ fn main() {
     let cli = Cli::parse();
 
     // Step 2: vld validates (email format, ranges, lengths)
-    if let Err(e) = validate(&cli) {
+    if let Err(e) = validate_cli(&cli) {
         eprintln!("{}", e.message);
         eprintln!();
         eprintln!("Details:");
