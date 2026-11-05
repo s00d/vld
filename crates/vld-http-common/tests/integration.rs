@@ -1,26 +1,52 @@
 use vld_http_common::*;
 
 #[test]
-fn coerce_empty() {
-    assert_eq!(coerce_value(""), serde_json::Value::Null);
+fn coerce_empty_stays_string() {
+    assert_eq!(coerce_value(""), serde_json::json!(""));
 }
 
 #[test]
 fn coerce_bool() {
     assert_eq!(coerce_value("true"), serde_json::Value::Bool(true));
-    assert_eq!(coerce_value("FALSE"), serde_json::Value::Bool(false));
+    assert_eq!(coerce_value("false"), serde_json::Value::Bool(false));
+    assert_eq!(coerce_value("FALSE"), serde_json::json!("FALSE"));
 }
 
 #[test]
-fn coerce_null() {
-    assert_eq!(coerce_value("null"), serde_json::Value::Null);
-    assert_eq!(coerce_value("NULL"), serde_json::Value::Null);
+fn coerce_null_stays_string() {
+    assert_eq!(coerce_value("null"), serde_json::json!("null"));
+    assert_eq!(coerce_value("NULL"), serde_json::json!("NULL"));
 }
 
 #[test]
 fn coerce_int() {
     assert_eq!(coerce_value("42"), serde_json::json!(42));
     assert_eq!(coerce_value("-7"), serde_json::json!(-7));
+    assert_eq!(coerce_value("0"), serde_json::json!(0));
+    assert_eq!(
+        coerce_value("18446744073709551615"),
+        serde_json::json!(u64::MAX)
+    );
+}
+
+#[test]
+fn coerce_keeps_non_canonical_numbers() {
+    for raw in [
+        "01234",
+        "+15551234567",
+        "1e3",
+        "-0",
+        "1.50",
+        "1.",
+        ".5",
+        "12345678901234567890123",
+        "0.1000000000000000000001",
+        "NaN",
+        "inf",
+        " 1",
+    ] {
+        assert_eq!(coerce_value(raw), serde_json::json!(raw), "{raw}");
+    }
 }
 
 #[test]
@@ -80,9 +106,109 @@ fn url_decode_basic() {
 }
 
 #[test]
-fn extract_params() {
-    let names = extract_path_param_names("/users/{id}/posts/{post_id}");
-    assert_eq!(names, vec!["id", "post_id"]);
+fn url_decode_utf8_and_strict_hex() {
+    assert_eq!(url_decode("caf%C3%A9"), "café");
+    assert_eq!(url_decode("%4"), "%4");
+    assert_eq!(url_decode("%4g"), "%4g");
+    assert_eq!(url_decode("%"), "%");
+    assert_eq!(url_decode("%FF"), "\u{FFFD}");
+}
+
+#[test]
+fn percent_decode_keeps_plus() {
+    assert_eq!(percent_decode("a+b%20c"), "a+b c");
+}
+
+#[test]
+fn query_arrays() {
+    let map = parse_query_string("a=1&a=2&b[]=x&c=3");
+    assert_eq!(map["a"], serde_json::json!([1, 2]));
+    assert_eq!(map["b"], serde_json::json!(["x"]));
+    assert_eq!(map["c"], serde_json::json!(3));
+    let map = parse_query_string("a[]=1&a[]=2&a=3");
+    assert_eq!(map["a"], serde_json::json!([1, 2, 3]));
+}
+
+#[test]
+fn query_bare_and_empty_keys() {
+    let map = parse_query_string("flag&x=&n=null");
+    assert_eq!(map["flag"], serde_json::json!(""));
+    assert_eq!(map["x"], serde_json::json!(""));
+    assert_eq!(map["n"], serde_json::json!("null"));
+}
+
+#[test]
+fn cookies_quoted_and_encoded() {
+    let val = cookies_to_json(r#"sid="abc"; name=caf%C3%A9; plus=a+b"#);
+    assert_eq!(val["sid"], "abc");
+    assert_eq!(val["name"], "café");
+    assert_eq!(val["plus"], "a+b");
+}
+
+#[test]
+fn headers_repeated_lossy_and_case() {
+    let h: Vec<(&str, &[u8])> = vec![
+        ("X-Tag", b"a"),
+        ("x-tag", b"b"),
+        ("X-Bin", b"caf\xC3\xA9 \xFF"),
+        ("X-Num", b"42"),
+    ];
+    let v = headers_to_json(h);
+    assert_eq!(v["x_tag"], "a, b");
+    assert_eq!(v["x_bin"], "café \u{FFFD}");
+    assert_eq!(v["x_num"], 42);
+}
+
+#[test]
+fn path_params_coerced() {
+    let v = path_params_to_json([("id", "7"), ("slug", "007")]);
+    assert_eq!(v, serde_json::json!({"id": 7, "slug": "007"}));
+}
+
+#[test]
+fn form_body_parsing() {
+    assert_eq!(
+        parse_form_body(b"a=1&b=x+y").unwrap(),
+        serde_json::json!({"a": 1, "b": "x y"})
+    );
+    let err = parse_form_body(b"a=\xFF").unwrap_err();
+    assert_eq!(err.status(), 422);
+}
+
+#[test]
+fn json_body_parsing() {
+    assert_eq!(
+        parse_json_body(br#"{"a":1}"#).unwrap(),
+        serde_json::json!({"a":1})
+    );
+    let err = parse_json_body(b"{").unwrap_err();
+    assert_eq!(err.status(), 422);
+    assert!(err.body()["issues"][0]["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("Invalid JSON"));
+}
+
+#[test]
+fn json_content_type_detection() {
+    assert!(is_json_content_type("application/json"));
+    assert!(is_json_content_type("Application/JSON; charset=utf-8"));
+    assert!(is_json_content_type("application/vnd.api+json"));
+    assert!(!is_json_content_type("text/plain"));
+    assert!(!is_json_content_type("application/jsonp"));
+    assert!(!is_json_content_type("text/json+x"));
+}
+
+#[test]
+fn http_error_bodies() {
+    let e = VldHttpError::payload_too_large();
+    assert_eq!(e.status(), 413);
+    assert_eq!(e.body(), serde_json::json!({"error": "Payload too large"}));
+    assert_eq!(e.to_string(), "Payload too large");
+    let e = VldHttpError::parse("boom");
+    assert_eq!(e.status(), 422);
+    assert_eq!(e.body()["error"], "Validation failed");
+    assert!(e.to_string().starts_with("Validation failed"));
 }
 
 #[test]
