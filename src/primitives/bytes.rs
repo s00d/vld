@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{IssueCode, PathSegment, VldError};
 use crate::schema::VldSchema;
 
 fn b64_value(b: u8) -> Option<u8> {
@@ -14,7 +14,7 @@ fn b64_value(b: u8) -> Option<u8> {
     }
 }
 
-fn decode_base64(s: &str) -> Option<Vec<u8>> {
+pub(super) fn decode_base64(s: &str) -> Option<Vec<u8>> {
     let bytes = s.as_bytes();
     if bytes.is_empty() || bytes.len() % 4 != 0 {
         return None;
@@ -153,50 +153,37 @@ impl ZBytes {
         self
     }
 
+    /// JSON Schema. In string modes `minLength`/`maxLength` describe the
+    /// *encoded* string length (Base64: `4*ceil(n/3)` padded; Base64URL may be
+    /// unpadded; hex: `2n`, plus an optional `0x` prefix).
     #[cfg(feature = "openapi")]
     pub fn to_json_schema(&self) -> serde_json::Value {
-        if self.string_mode != BytesStringMode::Off {
-            let mut schema = serde_json::json!({
-                "type": "string",
-                "format": match self.string_mode {
-                    BytesStringMode::Base64 => "byte",
-                    BytesStringMode::Base64Url => "byte-base64url",
-                    BytesStringMode::Hex => "byte-hex",
-                    BytesStringMode::Off => "byte",
-                }
-            });
-            if let Some(min) = self.min_len {
-                schema["minLength"] = serde_json::json!(min);
+        let mins = [self.min_len, self.exact_len].into_iter().flatten();
+        let maxs = [self.max_len, self.exact_len].into_iter().flatten();
+        let padded = |n: usize| (n + 2) / 3 * 4;
+        let unpadded = |n: usize| (n * 4 + 2) / 3;
+        type Enc = fn(usize) -> usize;
+        let (format, min_enc, max_enc): (&str, Enc, Enc) = match self.string_mode {
+            BytesStringMode::Off => {
+                let mut schema = serde_json::json!({
+                    "type": "array",
+                    "items": { "type": "integer", "minimum": 0, "maximum": 255 }
+                });
+                super::length_schema(&mut schema, ("minItems", "maxItems"), mins, maxs);
+                return schema;
             }
-            if let Some(max) = self.max_len {
-                schema["maxLength"] = serde_json::json!(max);
-            }
-            if let Some(exact) = self.exact_len {
-                schema["minLength"] = serde_json::json!(exact);
-                schema["maxLength"] = serde_json::json!(exact);
-            }
-            schema
-        } else {
-            let mut schema = serde_json::json!({
-                "type": "array",
-                "items": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 255
-                }
-            });
-            if let Some(min) = self.min_len {
-                schema["minItems"] = serde_json::json!(min);
-            }
-            if let Some(max) = self.max_len {
-                schema["maxItems"] = serde_json::json!(max);
-            }
-            if let Some(exact) = self.exact_len {
-                schema["minItems"] = serde_json::json!(exact);
-                schema["maxItems"] = serde_json::json!(exact);
-            }
-            schema
-        }
+            BytesStringMode::Base64 => ("byte", padded, padded),
+            BytesStringMode::Base64Url => ("byte-base64url", unpadded, padded),
+            BytesStringMode::Hex => ("byte-hex", |n| n * 2, |n| n * 2 + 2),
+        };
+        let mut schema = serde_json::json!({ "type": "string", "format": format });
+        super::length_schema(
+            &mut schema,
+            ("minLength", "maxLength"),
+            mins.map(min_enc),
+            maxs.map(max_enc),
+        );
+        schema
     }
 }
 
@@ -216,24 +203,22 @@ impl VldSchema for ZBytes {
             } else {
                 "bytes array"
             };
-            let msg = self.custom_type_error.clone().unwrap_or_else(|| {
-                format!("Expected {}, received {}", expected, value_type_name(value))
-            });
-            VldError::single_with_value(
-                IssueCode::InvalidType {
-                    expected: expected.to_string(),
-                    received: value_type_name(value),
-                },
-                msg,
-                value,
-            )
+            super::type_error(&self.custom_type_error, expected, expected, value)
         };
 
         let bytes = match value {
             Value::Array(arr) => {
                 let mut out = Vec::with_capacity(arr.len());
-                for item in arr {
-                    let n = item.as_u64().ok_or_else(type_err)?;
+                for (i, item) in arr.iter().enumerate() {
+                    let n = item.as_u64().ok_or_else(|| {
+                        super::type_error(
+                            &self.custom_type_error,
+                            "byte (integer 0..=255)",
+                            "byte (integer 0..=255)",
+                            item,
+                        )
+                        .with_prefix(PathSegment::Index(i))
+                    })?;
                     if n > 255 {
                         return Err(VldError::single_with_value(
                             IssueCode::TooBig {
@@ -242,7 +227,8 @@ impl VldSchema for ZBytes {
                             },
                             "Byte value must be in range 0..=255",
                             item,
-                        ));
+                        )
+                        .with_prefix(PathSegment::Index(i)));
                     }
                     out.push(n as u8);
                 }

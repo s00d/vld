@@ -1,7 +1,10 @@
 use serde_json::Value;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
-use crate::error::{value_type_name, IssueCode, StringValidation, VldError};
+use crate::error::{IssueCode, StringValidation, VldError};
 use crate::schema::VldSchema;
+
+use super::iso::{is_valid_iso_date, is_valid_iso_datetime, is_valid_iso_time};
 
 // ---------------------------------------------------------------------------
 // Manual validation functions (no regex)
@@ -9,74 +12,51 @@ use crate::schema::VldSchema;
 
 fn is_valid_email(s: &str) -> bool {
     // local@domain — basic RFC-like check
-    let at = match s.find('@') {
-        Some(pos) if pos > 0 => pos,
-        _ => return false,
+    let Some((local, domain)) = s.rsplit_once('@') else {
+        return false;
     };
-    let local = &s[..at];
-    let domain = &s[at + 1..];
-
-    if local.is_empty() || domain.is_empty() {
+    if local.is_empty() || local.starts_with('.') || local.ends_with('.') || local.contains("..") {
         return false;
     }
-
     // Local part: printable ASCII except some specials, no spaces
-    for ch in local.chars() {
-        if ch.is_ascii_alphanumeric() || "!#$%&'*+/=?^_`{|}~.-".contains(ch) {
-            continue;
-        }
-        return false;
-    }
-
-    is_valid_hostname(domain)
+    local
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || "!#$%&'*+/=?^_`{|}~.-".contains(ch))
+        && is_valid_hostname(domain)
 }
 
 fn is_valid_uuid(s: &str) -> bool {
-    // 8-4-4-4-12 hex with dashes: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-    if s.len() != 36 {
-        return false;
-    }
-    let bytes = s.as_bytes();
-    for (i, &b) in bytes.iter().enumerate() {
-        match i {
-            8 | 13 | 18 | 23 => {
-                if b != b'-' {
-                    return false;
-                }
-            }
-            _ => {
-                if !b.is_ascii_hexdigit() {
-                    return false;
-                }
-            }
-        }
-    }
-    true
+    // 8-4-4-4-12 hex with dashes
+    s.len() == 36
+        && s.bytes().enumerate().all(|(i, b)| match i {
+            8 | 13 | 18 | 23 => b == b'-',
+            _ => b.is_ascii_hexdigit(),
+        })
 }
 
 #[cfg(feature = "string-advanced")]
 fn is_valid_uuid_version(s: &str, version: usize) -> bool {
-    let u = match uuid::Uuid::parse_str(s) {
-        Ok(v) => v,
-        Err(_) => return false,
-    };
-    u.get_version_num() == version
+    uuid::Uuid::parse_str(s).is_ok_and(|u| u.get_version_num() == version)
 }
 
 fn is_valid_url(s: &str) -> bool {
-    // Must start with http:// or https:// and have something after
-    let rest = if let Some(r) = s.strip_prefix("https://") {
-        r
-    } else if let Some(r) = s.strip_prefix("http://") {
-        r
-    } else {
-        return false;
+    let rest = match s
+        .strip_prefix("https://")
+        .or_else(|| s.strip_prefix("http://"))
+    {
+        Some(r) => r,
+        None => return false,
     };
-    if rest.is_empty() {
-        return false;
-    }
-    // No whitespace allowed
-    !rest.contains(char::is_whitespace)
+    !rest.is_empty() && !rest.contains(char::is_whitespace)
+}
+
+#[cfg(feature = "string-advanced")]
+fn is_public_ipv4(v4: Ipv4Addr) -> bool {
+    !(v4.is_private()
+        || v4.is_loopback()
+        || v4.is_link_local()
+        || v4.is_unspecified()
+        || v4.is_broadcast())
 }
 
 #[cfg(feature = "string-advanced")]
@@ -88,31 +68,23 @@ fn is_valid_url_strict(s: &str) -> bool {
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return false;
     }
-    let host = match parsed.host_str() {
-        Some(h) => h,
-        None => return false,
-    };
-    if host.eq_ignore_ascii_case("localhost") {
-        return false;
-    }
-    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        match ip {
-            std::net::IpAddr::V4(v4) => {
-                if v4.is_private() || v4.is_loopback() || v4.is_link_local() {
-                    return false;
-                }
+    match parsed.host() {
+        None => false,
+        Some(url::Host::Domain(d)) => {
+            let d = d.trim_end_matches('.').to_ascii_lowercase();
+            d != "localhost" && !d.ends_with(".localhost")
+        }
+        Some(url::Host::Ipv4(v4)) => is_public_ipv4(v4),
+        Some(url::Host::Ipv6(v6)) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_public_ipv4(v4);
             }
-            std::net::IpAddr::V6(v6) => {
-                let seg0 = v6.segments()[0];
-                let is_link_local = (seg0 & 0xffc0) == 0xfe80; // fe80::/10
-                let is_unique_local = (seg0 & 0xfe00) == 0xfc00; // fc00::/7
-                if v6.is_loopback() || is_link_local || is_unique_local {
-                    return false;
-                }
-            }
+            let seg0 = v6.segments()[0];
+            let is_link_local = (seg0 & 0xffc0) == 0xfe80; // fe80::/10
+            let is_unique_local = (seg0 & 0xfe00) == 0xfc00; // fc00::/7
+            !(v6.is_loopback() || v6.is_unspecified() || is_link_local || is_unique_local)
         }
     }
-    true
 }
 
 #[cfg(feature = "string-advanced")]
@@ -121,72 +93,11 @@ fn is_valid_uri(s: &str) -> bool {
 }
 
 fn is_valid_ipv4(s: &str) -> bool {
-    let parts: Vec<&str> = s.split('.').collect();
-    if parts.len() != 4 {
-        return false;
-    }
-    for part in parts {
-        if part.is_empty() || part.len() > 3 {
-            return false;
-        }
-        // No leading zeros (except "0" itself)
-        if part.len() > 1 && part.starts_with('0') {
-            return false;
-        }
-        match part.parse::<u16>() {
-            Ok(n) if n <= 255 => {}
-            _ => return false,
-        }
-    }
-    true
+    s.parse::<Ipv4Addr>().is_ok()
 }
 
 fn is_valid_ipv6(s: &str) -> bool {
-    // Handle :: shorthand
-    if s == "::" {
-        return true;
-    }
-
-    let (left, right) = if let Some(pos) = s.find("::") {
-        (&s[..pos], &s[pos + 2..])
-    } else {
-        (s, "")
-    };
-
-    let has_double_colon = s.contains("::");
-
-    let left_groups: Vec<&str> = if left.is_empty() {
-        vec![]
-    } else {
-        left.split(':').collect()
-    };
-
-    let right_groups: Vec<&str> = if right.is_empty() {
-        vec![]
-    } else {
-        right.split(':').collect()
-    };
-
-    let total = left_groups.len() + right_groups.len();
-
-    if has_double_colon {
-        if total > 7 {
-            return false;
-        }
-    } else if total != 8 {
-        return false;
-    }
-
-    for group in left_groups.iter().chain(right_groups.iter()) {
-        if group.is_empty() || group.len() > 4 {
-            return false;
-        }
-        if !group.chars().all(|c| c.is_ascii_hexdigit()) {
-            return false;
-        }
-    }
-
-    true
+    s.parse::<Ipv6Addr>().is_ok()
 }
 
 fn is_valid_ip(s: &str) -> bool {
@@ -194,31 +105,33 @@ fn is_valid_ip(s: &str) -> bool {
 }
 
 fn is_valid_cidr(s: &str) -> bool {
-    let (ip, prefix) = match s.split_once('/') {
-        Some(v) => v,
-        None => return false,
+    let Some((ip, prefix)) = s.split_once('/') else {
+        return false;
     };
-    let prefix = match prefix.parse::<u8>() {
-        Ok(v) => v,
-        Err(_) => return false,
+    // Digits only, no sign, no leading zeros.
+    if prefix.is_empty()
+        || prefix.len() > 3
+        || !prefix.bytes().all(|b| b.is_ascii_digit())
+        || (prefix.len() > 1 && prefix.starts_with('0'))
+    {
+        return false;
+    }
+    let Ok(prefix) = prefix.parse::<u8>() else {
+        return false;
     };
     if is_valid_ipv4(ip) {
         prefix <= 32
-    } else if is_valid_ipv6(ip) {
-        prefix <= 128
     } else {
-        false
+        is_valid_ipv6(ip) && prefix <= 128
     }
 }
 
 fn is_valid_mac(s: &str) -> bool {
     let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() != 6 {
-        return false;
-    }
-    parts
-        .iter()
-        .all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
+    parts.len() == 6
+        && parts
+            .iter()
+            .all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
 fn is_valid_hex(s: &str) -> bool {
@@ -226,59 +139,56 @@ fn is_valid_hex(s: &str) -> bool {
 }
 
 fn is_valid_credit_card(s: &str) -> bool {
-    let digits: Vec<u32> = s
-        .chars()
-        .filter(|c| c.is_ascii_digit())
-        .filter_map(|c| c.to_digit(10))
-        .collect();
+    // Only digits with optional space/dash separators.
+    if !s
+        .bytes()
+        .all(|b| b.is_ascii_digit() || b == b' ' || b == b'-')
+    {
+        return false;
+    }
+    let digits: Vec<u32> = s.chars().filter_map(|c| c.to_digit(10)).collect();
     if digits.len() < 12 || digits.len() > 19 {
         return false;
     }
-    let mut sum = 0;
-    let mut double = false;
-    for d in digits.iter().rev() {
-        let mut v = *d;
-        if double {
-            v *= 2;
-            if v > 9 {
-                v -= 9;
-            }
-        }
-        sum += v;
-        double = !double;
-    }
+    let sum: u32 = digits
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(i, &d)| match (i % 2 == 1, d * 2) {
+            (true, v) if v > 9 => v - 9,
+            (true, v) => v,
+            (false, _) => d,
+        })
+        .sum();
     sum % 10 == 0
 }
 
 fn is_valid_phone(s: &str) -> bool {
-    if s.is_empty() {
+    // Leading `+`, then digits with optional space / dash / parenthesis separators.
+    let Some(rest) = s.strip_prefix('+') else {
+        return false;
+    };
+    if !rest
+        .bytes()
+        .all(|b| b.is_ascii_digit() || matches!(b, b' ' | b'-' | b'(' | b')'))
+    {
         return false;
     }
-    let mut chars = s.chars();
-    let first = chars.next().unwrap_or_default();
-    if first != '+' {
-        return false;
-    }
-    let digits: String = chars.filter(|c| c.is_ascii_digit()).collect();
     // E.164: max 15 digits, min practical 8.
-    (8..=15).contains(&digits.len())
+    (8..=15).contains(&rest.bytes().filter(u8::is_ascii_digit).count())
 }
 
 #[cfg(feature = "string-advanced")]
 fn is_valid_phone_e164_strict(s: &str) -> bool {
-    let num = match phonenumber::parse(None, s) {
-        Ok(n) => n,
-        Err(_) => return false,
-    };
-    phonenumber::is_valid(&num)
+    phonenumber::parse(None, s).is_ok_and(|n| phonenumber::is_valid(&n))
 }
 
 fn is_valid_slug(s: &str) -> bool {
-    if s.is_empty() || s.starts_with('-') || s.ends_with('-') {
-        return false;
-    }
-    s.bytes()
-        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    !s.is_empty()
+        && !s.starts_with('-')
+        && !s.ends_with('-')
+        && s.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 fn is_valid_color(s: &str) -> bool {
@@ -286,32 +196,21 @@ fn is_valid_color(s: &str) -> bool {
         return (hex.len() == 6 || hex.len() == 8) && hex.bytes().all(|b| b.is_ascii_hexdigit());
     }
     let lower = s.to_ascii_lowercase();
-    if lower.starts_with("rgb(") && lower.ends_with(')') {
-        let inner = &lower[4..lower.len() - 1];
-        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
-        if parts.len() != 3 {
-            return false;
-        }
+    let parts_of = |prefix: &str| -> Option<Vec<String>> {
+        let inner = lower.strip_prefix(prefix)?.strip_suffix(')')?;
+        let parts: Vec<String> = inner.split(',').map(|p| p.trim().to_string()).collect();
+        (parts.len() == 3).then_some(parts)
+    };
+    if let Some(parts) = parts_of("rgb(") {
         return parts.iter().all(|p| p.parse::<u8>().is_ok());
     }
-    if lower.starts_with("hsl(") && lower.ends_with(')') {
-        let inner = &lower[4..lower.len() - 1];
-        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
-        if parts.len() != 3 {
-            return false;
-        }
-        let h_ok = parts[0].parse::<u16>().map(|h| h <= 360).unwrap_or(false);
-        let s_ok = parts[1]
-            .strip_suffix('%')
-            .and_then(|v| v.parse::<u8>().ok())
-            .map(|v| v <= 100)
-            .unwrap_or(false);
-        let l_ok = parts[2]
-            .strip_suffix('%')
-            .and_then(|v| v.parse::<u8>().ok())
-            .map(|v| v <= 100)
-            .unwrap_or(false);
-        return h_ok && s_ok && l_ok;
+    if let Some(parts) = parts_of("hsl(") {
+        let pct = |p: &str| {
+            p.strip_suffix('%')
+                .and_then(|v| v.parse::<u8>().ok())
+                .is_some_and(|v| v <= 100)
+        };
+        return parts[0].parse::<u16>().is_ok_and(|h| h <= 360) && pct(&parts[1]) && pct(&parts[2]);
     }
     false
 }
@@ -325,46 +224,36 @@ fn is_valid_country_code(s: &str) -> bool {
 }
 
 fn is_valid_locale(s: &str) -> bool {
-    let bytes = s.as_bytes();
-    if bytes.len() == 2 {
-        return bytes[0].is_ascii_lowercase() && bytes[1].is_ascii_lowercase();
+    let b = s.as_bytes();
+    match b.len() {
+        2 => b.iter().all(u8::is_ascii_lowercase),
+        5 => {
+            b[2] == b'-'
+                && b[..2].iter().all(u8::is_ascii_lowercase)
+                && b[3..].iter().all(u8::is_ascii_uppercase)
+        }
+        _ => false,
     }
-    if bytes.len() == 5 && bytes[2] == b'-' {
-        return bytes[0].is_ascii_lowercase()
-            && bytes[1].is_ascii_lowercase()
-            && bytes[3].is_ascii_uppercase()
-            && bytes[4].is_ascii_uppercase();
-    }
-    false
 }
 
 fn is_valid_cron(s: &str) -> bool {
     let fields: Vec<&str> = s.split_whitespace().collect();
-    if fields.len() != 5 && fields.len() != 6 {
-        return false;
-    }
-    fields.iter().all(|f| {
-        !f.is_empty()
-            && f.bytes().all(|b| {
-                b.is_ascii_digit() || b == b'*' || b == b'/' || b == b',' || b == b'-' || b == b'?'
-            })
-    })
+    (fields.len() == 5 || fields.len() == 6)
+        && fields.iter().all(|f| {
+            f.bytes()
+                .all(|b| b.is_ascii_digit() || matches!(b, b'*' | b'/' | b',' | b'-' | b'?'))
+        })
 }
 
 fn is_valid_semver(s: &str) -> bool {
     let s = s.trim();
-    if s.is_empty() {
-        return false;
-    }
     let s = s.strip_prefix('v').unwrap_or(s);
     let main = s.split(['-', '+']).next().unwrap_or("");
     let parts: Vec<&str> = main.split('.').collect();
-    if parts.len() != 3 {
-        return false;
-    }
-    parts
-        .iter()
-        .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
 }
 
 #[cfg(feature = "string-advanced")]
@@ -380,396 +269,304 @@ fn is_valid_base64_url(s: &str) -> bool {
 
 fn is_valid_jwt(s: &str) -> bool {
     let parts: Vec<&str> = s.split('.').collect();
-    if parts.len() != 3 {
-        return false;
-    }
-    parts.iter().all(|p| is_valid_base64_url(p))
+    parts.len() == 3 && parts.iter().all(|p| is_valid_base64_url(p))
 }
 
 fn is_valid_base64(s: &str) -> bool {
-    if s.is_empty() || s.len() % 4 != 0 {
-        return false;
-    }
-    let mut pad_started = false;
-    for &b in s.as_bytes() {
-        if pad_started {
-            if b != b'=' {
-                return false;
-            }
-        } else if b == b'=' {
-            pad_started = true;
-        } else if !(b.is_ascii_alphanumeric() || b == b'+' || b == b'/') {
-            return false;
-        }
-    }
-    // At most 2 padding chars
-    let pad_count = s.bytes().rev().take_while(|&b| b == b'=').count();
-    pad_count <= 2
-}
-
-/// Parse exactly `n` ASCII digits from `s`, return the number and remaining slice.
-fn parse_digits(s: &str, n: usize) -> Option<(u32, &str)> {
-    if s.len() < n {
-        return None;
-    }
-    let (digits, rest) = s.split_at(n);
-    if !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    digits.parse::<u32>().ok().map(|v| (v, rest))
-}
-
-fn is_valid_iso_date(s: &str) -> bool {
-    // YYYY-MM-DD (exactly 10 chars)
-    if s.len() != 10 {
-        return false;
-    }
-    let (year, rest) = match parse_digits(s, 4) {
-        Some(v) => v,
-        None => return false,
-    };
-    let rest = rest.strip_prefix('-').unwrap_or("");
-    let (month, rest) = match parse_digits(rest, 2) {
-        Some(v) => v,
-        None => return false,
-    };
-    let rest = rest.strip_prefix('-').unwrap_or("");
-    let (day, rest) = match parse_digits(rest, 2) {
-        Some(v) => v,
-        None => return false,
-    };
-    if !rest.is_empty() {
-        return false;
-    }
-    let _ = year; // any 4-digit year is OK
-    (1..=12).contains(&month) && (1..=31).contains(&day)
-}
-
-fn is_valid_iso_time(s: &str) -> bool {
-    // HH:MM[:SS[.frac]]
-    if s.len() < 5 {
-        return false;
-    }
-    let (hour, rest) = match parse_digits(s, 2) {
-        Some(v) => v,
-        None => return false,
-    };
-    let rest = match rest.strip_prefix(':') {
-        Some(r) => r,
-        None => return false,
-    };
-    let (min, rest) = match parse_digits(rest, 2) {
-        Some(v) => v,
-        None => return false,
-    };
-    if !(0..=23).contains(&hour) || !(0..=59).contains(&min) {
-        return false;
-    }
-    if rest.is_empty() {
-        return true;
-    }
-    // Optional :SS
-    let rest = match rest.strip_prefix(':') {
-        Some(r) => r,
-        None => return false,
-    };
-    let (sec, rest) = match parse_digits(rest, 2) {
-        Some(v) => v,
-        None => return false,
-    };
-    if !(0..=59).contains(&sec) {
-        return false;
-    }
-    if rest.is_empty() {
-        return true;
-    }
-    // Optional .fraction
-    let rest = match rest.strip_prefix('.') {
-        Some(r) => r,
-        None => return false,
-    };
-    !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())
-}
-
-fn is_valid_iso_datetime(s: &str) -> bool {
-    // YYYY-MM-DDTHH:MM[:SS[.frac]][Z|+HH:MM|-HH:MM]
-    let t_pos = match s.find('T') {
-        Some(p) => p,
-        None => return false,
-    };
-    let date_part = &s[..t_pos];
-    let after_t = &s[t_pos + 1..];
-
-    if !is_valid_iso_date(date_part) {
-        return false;
-    }
-
-    // Find timezone suffix
-    let (time_part, _tz_part) = if let Some(pos) = after_t.rfind('Z') {
-        (&after_t[..pos], &after_t[pos..])
-    } else if let Some(pos) = after_t.rfind('+') {
-        (&after_t[..pos], &after_t[pos..])
-    } else if let Some(pos) = after_t[1..].rfind('-') {
-        // skip first char to avoid matching negative in time itself
-        let actual = pos + 1;
-        (&after_t[..actual], &after_t[actual..])
-    } else {
-        (after_t, "")
-    };
-
-    is_valid_iso_time(time_part)
+    super::bytes::decode_base64(s).is_some()
 }
 
 fn is_valid_hostname(s: &str) -> bool {
-    if s.is_empty() || s.len() > 253 {
-        return false;
-    }
-    for label in s.split('.') {
-        if label.is_empty() || label.len() > 63 {
-            return false;
-        }
-        if label.starts_with('-') || label.ends_with('-') {
-            return false;
-        }
-        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return false;
-        }
-    }
-    true
+    !s.is_empty()
+        && s.len() <= 253
+        && s.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        })
 }
 
 fn is_valid_cuid2(s: &str) -> bool {
-    if s.is_empty() {
-        return false;
-    }
-    if !s.as_bytes()[0].is_ascii_lowercase() {
-        return false;
-    }
-    s.chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    (2..=32).contains(&s.len())
+        && s.as_bytes()[0].is_ascii_lowercase()
+        && s.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
 }
 
 fn is_valid_ulid(s: &str) -> bool {
-    if s.len() != 26 {
-        return false;
-    }
     // Crockford's Base32: 0-9 A-H J K M N P-T V-Z (no I, L, O, U)
-    s.chars().all(|c| {
-        let c = c.to_ascii_uppercase();
-        matches!(c, '0'..='9' | 'A'..='H' | 'J' | 'K' | 'M' | 'N' | 'P'..='T' | 'V'..='Z')
-    })
+    s.len() == 26
+        && s.chars().all(|c| {
+            matches!(c.to_ascii_uppercase(), '0'..='9' | 'A'..='H' | 'J' | 'K' | 'M' | 'N' | 'P'..='T' | 'V'..='Z')
+        })
 }
 
 fn is_valid_nanoid(s: &str) -> bool {
-    if s.is_empty() {
-        return false;
-    }
-    s.chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
+fn is_emoji_char(c: char) -> bool {
+    let cp = c as u32;
+    matches!(cp,
+        0x1F600..=0x1F64F
+        | 0x1F300..=0x1F5FF
+        | 0x1F680..=0x1F6FF
+        | 0x1F1E0..=0x1F1FF
+        | 0x2702..=0x27B0
+        | 0x2600..=0x26FF
+        | 0xFE00..=0xFE0F
+        | 0x1F900..=0x1F9FF
+        | 0x1FA00..=0x1FAFF
+        | 0x231A..=0x231B
+        | 0x23E9..=0x23F3
+        | 0x23F8..=0x23FA
+        | 0xE0020..=0xE007F // tag sequences (subdivision flags)
+        | 0x20E3 // combining keycap
+        | 0x200D
+        | 0x2B50)
+}
+
+/// Non-empty and made of emoji characters only (ZWJ / variation selectors allowed).
 fn is_valid_emoji(s: &str) -> bool {
-    s.chars().any(|c| {
-        let cp = c as u32;
-        (0x1F600..=0x1F64F).contains(&cp)
-            || (0x1F300..=0x1F5FF).contains(&cp)
-            || (0x1F680..=0x1F6FF).contains(&cp)
-            || (0x1F1E0..=0x1F1FF).contains(&cp)
-            || (0x2702..=0x27B0).contains(&cp)
-            || (0x2600..=0x26FF).contains(&cp)
-            || (0xFE00..=0xFE0F).contains(&cp)
-            || (0x1F900..=0x1F9FF).contains(&cp)
-            || (0x1FA00..=0x1FA6F).contains(&cp)
-            || (0x1FA70..=0x1FAFF).contains(&cp)
-            || (0x231A..=0x231B).contains(&cp)
-            || (0x23E9..=0x23F3).contains(&cp)
-            || (0x23F8..=0x23FA).contains(&cp)
-            || cp == 0x200D
-            || cp == 0x2B50
-            || cp == 0x2764
-    })
+    !s.is_empty() && s.chars().all(is_emoji_char)
+}
+
+/// Escape a literal for an ECMA-262 (`u` mode) JSON Schema `pattern`.
+#[cfg(feature = "openapi")]
+fn regex_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if "^$\\.*+?()[]{}|/".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
-// StringCheck / StringTransform
+// Checks
 // ---------------------------------------------------------------------------
+
+/// Declares every predicate-based string format exactly once: the enum
+/// variant, its builder pair (`name()` / `name_msg()`), the `with_messages`
+/// key, the [`StringValidation`] code, the JSON Schema `format` and the predicate.
+macro_rules! string_formats {
+    ($(
+        $(#[cfg($cfg:meta)])?
+        $variant:ident: $method:ident / $method_msg:ident,
+        $key:literal, $schema_fmt:literal, $check:expr, $default:literal, $doc:literal;
+    )+) => {
+        #[derive(Clone, Copy)]
+        enum Format {
+            $( $(#[cfg($cfg)])? $variant, )+
+        }
+
+        impl Format {
+            fn key(self) -> &'static str {
+                match self { $( $(#[cfg($cfg)])? Format::$variant => $key, )+ }
+            }
+
+            #[cfg_attr(not(feature = "openapi"), allow(dead_code))]
+            fn schema_format(self) -> &'static str {
+                match self { $( $(#[cfg($cfg)])? Format::$variant => $schema_fmt, )+ }
+            }
+
+            fn validation(self) -> StringValidation {
+                match self { $( $(#[cfg($cfg)])? Format::$variant => StringValidation::$variant, )+ }
+            }
+
+            fn check(self, s: &str) -> bool {
+                match self { $( $(#[cfg($cfg)])? Format::$variant => ($check)(s), )+ }
+            }
+        }
+
+        impl ZString {
+            $(
+                #[doc = $doc]
+                $(#[cfg($cfg)])?
+                pub fn $method(self) -> Self {
+                    self.$method_msg($default)
+                }
+
+                #[doc = $doc]
+                #[doc = ""]
+                #[doc = "With a custom error message."]
+                $(#[cfg($cfg)])?
+                pub fn $method_msg(self, msg: impl Into<String>) -> Self {
+                    self.push(Kind::Format(Format::$variant), msg)
+                }
+            )+
+        }
+    };
+}
+
+string_formats! {
+    Email: email / email_msg, "invalid_email", "email", is_valid_email,
+        "Invalid email address", "Must be a valid email address.";
+    Url: url / url_msg, "invalid_url", "uri", is_valid_url,
+        "Invalid URL", "Must be a valid URL (http/https).";
+    #[cfg(feature = "string-advanced")]
+    UrlStrict: url_strict / url_strict_msg, "invalid_url_strict", "url-strict", is_valid_url_strict,
+        "Invalid strict URL",
+        "Must be a strict public URL: http/https, real host, not localhost / private / loopback / link-local / unspecified (IPv4-mapped IPv6 included).";
+    #[cfg(feature = "string-advanced")]
+    Uri: uri / uri_msg, "invalid_uri", "uri", is_valid_uri, "Invalid URI", "Must be a valid URI.";
+    Uuid: uuid / uuid_msg, "invalid_uuid", "uuid", is_valid_uuid, "Invalid UUID", "Must be a valid UUID.";
+    #[cfg(feature = "string-advanced")]
+    UuidV1: uuid_v1 / uuid_v1_msg, "invalid_uuid_v1", "uuid-v1", |s| is_valid_uuid_version(s, 1),
+        "Invalid UUID v1", "Must be a valid UUID v1.";
+    #[cfg(feature = "string-advanced")]
+    UuidV4: uuid_v4 / uuid_v4_msg, "invalid_uuid_v4", "uuid-v4", |s| is_valid_uuid_version(s, 4),
+        "Invalid UUID v4", "Must be a valid UUID v4.";
+    #[cfg(feature = "string-advanced")]
+    UuidV7: uuid_v7 / uuid_v7_msg, "invalid_uuid_v7", "uuid-v7", |s| is_valid_uuid_version(s, 7),
+        "Invalid UUID v7", "Must be a valid UUID v7.";
+    Ip: ip / ip_msg, "invalid_ip", "ip", is_valid_ip,
+        "Invalid IP address", "Must be a valid IP address (IPv4 or IPv6).";
+    Slug: slug / slug_msg, "invalid_slug", "slug", is_valid_slug,
+        "Invalid slug", "Must be a URL-friendly slug (`[a-z0-9-]`).";
+    Color: color / color_msg, "invalid_color", "color", is_valid_color,
+        "Invalid color", "Must be a color (`#RRGGBB`, `#RRGGBBAA`, `rgb(...)`, `hsl(...)`).";
+    Currency: currency_code / currency_code_msg, "invalid_currency", "currency-code", is_valid_currency_code,
+        "Invalid currency code", "Must be a currency code (ISO-4217-like uppercase 3 letters).";
+    CountryCode: country_code / country_code_msg, "invalid_country_code", "country-code", is_valid_country_code,
+        "Invalid country code", "Must be a country code (ISO-3166 alpha-2).";
+    Locale: locale / locale_msg, "invalid_locale", "locale", is_valid_locale,
+        "Invalid locale", "Must be a locale (`ll` or `ll-RR`, example: `en`, `en-US`).";
+    Cron: cron / cron_msg, "invalid_cron", "cron", is_valid_cron,
+        "Invalid cron expression", "Must be a cron expression (5 or 6 fields).";
+    Ipv4: ipv4 / ipv4_msg, "invalid_ipv4", "ipv4", is_valid_ipv4,
+        "Invalid IPv4 address", "Must be a valid IPv4 address.";
+    Ipv6: ipv6 / ipv6_msg, "invalid_ipv6", "ipv6", is_valid_ipv6,
+        "Invalid IPv6 address", "Must be a valid IPv6 address (IPv4-mapped forms included).";
+    Cidr: cidr / cidr_msg, "invalid_cidr", "cidr", is_valid_cidr,
+        "Invalid CIDR", "Must be a valid CIDR block (IPv4/IPv6 with a decimal prefix).";
+    Mac: mac / mac_msg, "invalid_mac", "mac", is_valid_mac,
+        "Invalid MAC address", "Must be a valid MAC address (`xx:xx:xx:xx:xx:xx`).";
+    Hex: hex / hex_msg, "invalid_hex", "hex", is_valid_hex,
+        "Invalid hexadecimal string", "Must contain only hexadecimal characters.";
+    CreditCard: credit_card / credit_card_msg, "invalid_credit_card", "credit-card", is_valid_credit_card,
+        "Invalid credit card number",
+        "Must be a valid credit card number: digits with optional spaces/dashes, 12-19 digits, Luhn check.";
+    Phone: phone / phone_msg, "invalid_phone", "phone", is_valid_phone,
+        "Invalid phone number",
+        "Must be an international phone number: leading `+`, 8-15 digits, optional spaces, dashes and parentheses.";
+    #[cfg(feature = "string-advanced")]
+    PhoneE164: phone_e164_strict / phone_e164_strict_msg, "invalid_phone_e164", "phone-e164", is_valid_phone_e164_strict,
+        "Invalid E.164 phone number", "Must be a valid strict E.164 phone number.";
+    Semver: semver / semver_msg, "invalid_semver", "semver", is_valid_semver,
+        "Invalid semver", "Must be a semantic version (`MAJOR.MINOR.PATCH`, optional `v` prefix).";
+    #[cfg(feature = "string-advanced")]
+    SemverFull: semver_full / semver_full_msg, "invalid_semver_full", "semver-full", is_valid_semver_full,
+        "Invalid semantic version", "Must be a full semantic version parsed by the `semver` crate.";
+    Jwt: jwt / jwt_msg, "invalid_jwt", "jwt", is_valid_jwt,
+        "Invalid JWT", "Must be a JWT-like token (`header.payload.signature`, base64url parts).";
+    Ascii: ascii / ascii_msg, "invalid_ascii", "ascii", |s: &str| s.is_ascii(),
+        "String must contain only ASCII characters", "Must contain only ASCII characters.";
+    Alpha: alpha / alpha_msg, "invalid_alpha", "alpha", |s: &str| s.chars().all(|c| c.is_ascii_alphabetic()),
+        "String must contain only alphabetic characters", "Must contain only alphabetic ASCII characters.";
+    Alphanumeric: alphanumeric / alphanumeric_msg, "invalid_alphanumeric", "alphanumeric",
+        |s: &str| s.chars().all(|c| c.is_ascii_alphanumeric()),
+        "String must contain only alphanumeric characters", "Must contain only ASCII alphanumeric characters.";
+    Lowercase: lowercase / lowercase_msg, "invalid_lowercase", "lowercase", |s: &str| s == s.to_lowercase(),
+        "String must be lowercase", "Must already be lowercase.";
+    Uppercase: uppercase / uppercase_msg, "invalid_uppercase", "uppercase", |s: &str| s == s.to_uppercase(),
+        "String must be uppercase", "Must already be uppercase.";
+    Base64: base64 / base64_msg, "invalid_base64", "byte", is_valid_base64,
+        "Invalid Base64 string", "Must be a valid (padded) Base64 string.";
+    IsoDate: iso_date / iso_date_msg, "invalid_iso_date", "date", is_valid_iso_date,
+        "Invalid ISO date (expected YYYY-MM-DD)", "Must be a valid ISO 8601 calendar date (`YYYY-MM-DD`, real day of month).";
+    IsoDatetime: iso_datetime / iso_datetime_msg, "invalid_iso_datetime", "date-time", is_valid_iso_datetime,
+        "Invalid ISO datetime",
+        "Must be a valid ISO 8601 datetime: `YYYY-MM-DDTHH:MM[:SS[.frac]]` with optional `Z` / `±HH:MM`.";
+    IsoTime: iso_time / iso_time_msg, "invalid_iso_time", "time", is_valid_iso_time,
+        "Invalid ISO time", "Must be a valid ISO 8601 time (`HH:MM[:SS[.frac]]`).";
+    Hostname: hostname / hostname_msg, "invalid_hostname", "hostname", is_valid_hostname,
+        "Invalid hostname", "Must be a valid hostname.";
+    Cuid2: cuid2 / cuid2_msg, "invalid_cuid2", "cuid2", is_valid_cuid2,
+        "Invalid CUID2", "Must be a valid CUID2 (2-32 lowercase alphanumerics, starting with a letter).";
+    Ulid: ulid / ulid_msg, "invalid_ulid", "ulid", is_valid_ulid,
+        "Invalid ULID", "Must be a valid ULID (26-char Crockford Base32).";
+    Nanoid: nanoid / nanoid_msg, "invalid_nanoid", "nanoid", is_valid_nanoid,
+        "Invalid Nano ID", "Must be a valid Nano ID (alphanumeric + `_` + `-`).";
+    Emoji: emoji / emoji_msg, "invalid_emoji", "emoji", is_valid_emoji,
+        "String must contain only emoji", "Must be non-empty and consist only of emoji.";
+}
 
 #[derive(Clone)]
-enum StringCheck {
-    Min(usize, String),
-    Max(usize, String),
-    Len(usize, String),
-    Email(String),
-    Url(String),
-    #[cfg(feature = "string-advanced")]
-    UrlStrict(String),
-    #[cfg(feature = "string-advanced")]
-    Uri(String),
-    Uuid(String),
-    #[cfg(feature = "string-advanced")]
-    UuidV1(String),
-    #[cfg(feature = "string-advanced")]
-    UuidV4(String),
-    #[cfg(feature = "string-advanced")]
-    UuidV7(String),
-    Ip(String),
-    Slug(String),
-    Color(String),
-    Currency(String),
-    CountryCode(String),
-    Locale(String),
-    Cron(String),
+enum Kind {
+    Min(usize),
+    Max(usize),
+    Len(usize),
+    NonEmpty,
+    StartsWith(String),
+    EndsWith(String),
+    Contains(String),
     #[cfg(feature = "regex")]
-    Regex(regex_lite::Regex, String),
-    StartsWith(String, String),
-    EndsWith(String, String),
-    Contains(String, String),
-    NonEmpty(String),
-    Ipv4(String),
-    Ipv6(String),
-    Cidr(String),
-    Mac(String),
-    Hex(String),
-    CreditCard(String),
-    Phone(String),
-    #[cfg(feature = "string-advanced")]
-    PhoneE164(String),
-    Semver(String),
-    #[cfg(feature = "string-advanced")]
-    SemverFull(String),
-    Jwt(String),
-    Ascii(String),
-    Alpha(String),
-    Alphanumeric(String),
-    Lowercase(String),
-    Uppercase(String),
-    Base64(String),
-    IsoDate(String),
-    IsoDatetime(String),
-    IsoTime(String),
-    Hostname(String),
-    Cuid2(String),
-    Ulid(String),
-    Nanoid(String),
-    Emoji(String),
+    Regex(regex_lite::Regex),
+    Format(Format),
 }
 
-impl StringCheck {
-    /// Stable key identifying the check category.
-    fn key(&self) -> &str {
+#[derive(Clone)]
+struct StringCheck {
+    kind: Kind,
+    msg: String,
+}
+
+impl Kind {
+    /// Stable key identifying the check category (for `with_messages`).
+    fn key(&self) -> &'static str {
         match self {
-            StringCheck::Min(..) => "too_small",
-            StringCheck::Max(..) => "too_big",
-            StringCheck::Len(..) => "invalid_length",
-            StringCheck::Email(..) => "invalid_email",
-            StringCheck::Url(..) => "invalid_url",
-            #[cfg(feature = "string-advanced")]
-            StringCheck::UrlStrict(..) => "invalid_url_strict",
-            #[cfg(feature = "string-advanced")]
-            StringCheck::Uri(..) => "invalid_uri",
-            StringCheck::Uuid(..) => "invalid_uuid",
-            #[cfg(feature = "string-advanced")]
-            StringCheck::UuidV1(..) => "invalid_uuid_v1",
-            #[cfg(feature = "string-advanced")]
-            StringCheck::UuidV4(..) => "invalid_uuid_v4",
-            #[cfg(feature = "string-advanced")]
-            StringCheck::UuidV7(..) => "invalid_uuid_v7",
-            StringCheck::Ip(..) => "invalid_ip",
-            StringCheck::Slug(..) => "invalid_slug",
-            StringCheck::Color(..) => "invalid_color",
-            StringCheck::Currency(..) => "invalid_currency",
-            StringCheck::CountryCode(..) => "invalid_country_code",
-            StringCheck::Locale(..) => "invalid_locale",
-            StringCheck::Cron(..) => "invalid_cron",
+            Kind::Min(_) => "too_small",
+            Kind::Max(_) => "too_big",
+            Kind::Len(_) => "invalid_length",
+            Kind::NonEmpty => "non_empty",
+            Kind::StartsWith(_) => "invalid_starts_with",
+            Kind::EndsWith(_) => "invalid_ends_with",
+            Kind::Contains(_) => "invalid_contains",
             #[cfg(feature = "regex")]
-            StringCheck::Regex(..) => "invalid_regex",
-            StringCheck::StartsWith(..) => "invalid_starts_with",
-            StringCheck::EndsWith(..) => "invalid_ends_with",
-            StringCheck::Contains(..) => "invalid_contains",
-            StringCheck::NonEmpty(..) => "non_empty",
-            StringCheck::Ipv4(..) => "invalid_ipv4",
-            StringCheck::Ipv6(..) => "invalid_ipv6",
-            StringCheck::Cidr(..) => "invalid_cidr",
-            StringCheck::Mac(..) => "invalid_mac",
-            StringCheck::Hex(..) => "invalid_hex",
-            StringCheck::CreditCard(..) => "invalid_credit_card",
-            StringCheck::Phone(..) => "invalid_phone",
-            #[cfg(feature = "string-advanced")]
-            StringCheck::PhoneE164(..) => "invalid_phone_e164",
-            StringCheck::Semver(..) => "invalid_semver",
-            #[cfg(feature = "string-advanced")]
-            StringCheck::SemverFull(..) => "invalid_semver_full",
-            StringCheck::Jwt(..) => "invalid_jwt",
-            StringCheck::Ascii(..) => "invalid_ascii",
-            StringCheck::Alpha(..) => "invalid_alpha",
-            StringCheck::Alphanumeric(..) => "invalid_alphanumeric",
-            StringCheck::Lowercase(..) => "invalid_lowercase",
-            StringCheck::Uppercase(..) => "invalid_uppercase",
-            StringCheck::Base64(..) => "invalid_base64",
-            StringCheck::IsoDate(..) => "invalid_iso_date",
-            StringCheck::IsoDatetime(..) => "invalid_iso_datetime",
-            StringCheck::IsoTime(..) => "invalid_iso_time",
-            StringCheck::Hostname(..) => "invalid_hostname",
-            StringCheck::Cuid2(..) => "invalid_cuid2",
-            StringCheck::Ulid(..) => "invalid_ulid",
-            StringCheck::Nanoid(..) => "invalid_nanoid",
-            StringCheck::Emoji(..) => "invalid_emoji",
+            Kind::Regex(_) => "invalid_regex",
+            Kind::Format(f) => f.key(),
         }
     }
 
-    /// Replace the error message stored in this check.
-    fn set_message(&mut self, msg: String) {
+    /// `None` when the check passes, otherwise the issue code to report.
+    fn failure(&self, s: &str) -> Option<IssueCode> {
+        let invalid = |validation| Some(IssueCode::InvalidString { validation });
         match self {
-            #[cfg(feature = "string-advanced")]
-            StringCheck::UrlStrict(ref mut m)
-            | StringCheck::Uri(ref mut m)
-            | StringCheck::UuidV1(ref mut m)
-            | StringCheck::UuidV4(ref mut m)
-            | StringCheck::UuidV7(ref mut m)
-            | StringCheck::PhoneE164(ref mut m)
-            | StringCheck::SemverFull(ref mut m) => *m = msg,
-            StringCheck::Min(_, ref mut m)
-            | StringCheck::Max(_, ref mut m)
-            | StringCheck::Len(_, ref mut m)
-            | StringCheck::Email(ref mut m)
-            | StringCheck::Url(ref mut m)
-            | StringCheck::Uuid(ref mut m)
-            | StringCheck::Ip(ref mut m)
-            | StringCheck::Slug(ref mut m)
-            | StringCheck::Color(ref mut m)
-            | StringCheck::Currency(ref mut m)
-            | StringCheck::CountryCode(ref mut m)
-            | StringCheck::Locale(ref mut m)
-            | StringCheck::Cron(ref mut m)
-            | StringCheck::NonEmpty(ref mut m)
-            | StringCheck::Ipv4(ref mut m)
-            | StringCheck::Ipv6(ref mut m)
-            | StringCheck::Cidr(ref mut m)
-            | StringCheck::Mac(ref mut m)
-            | StringCheck::Hex(ref mut m)
-            | StringCheck::CreditCard(ref mut m)
-            | StringCheck::Phone(ref mut m)
-            | StringCheck::Semver(ref mut m)
-            | StringCheck::Jwt(ref mut m)
-            | StringCheck::Ascii(ref mut m)
-            | StringCheck::Alpha(ref mut m)
-            | StringCheck::Alphanumeric(ref mut m)
-            | StringCheck::Lowercase(ref mut m)
-            | StringCheck::Uppercase(ref mut m)
-            | StringCheck::Base64(ref mut m)
-            | StringCheck::IsoDate(ref mut m)
-            | StringCheck::IsoDatetime(ref mut m)
-            | StringCheck::IsoTime(ref mut m)
-            | StringCheck::Hostname(ref mut m)
-            | StringCheck::Cuid2(ref mut m)
-            | StringCheck::Ulid(ref mut m)
-            | StringCheck::Nanoid(ref mut m)
-            | StringCheck::Emoji(ref mut m) => *m = msg,
-            StringCheck::StartsWith(_, ref mut m)
-            | StringCheck::EndsWith(_, ref mut m)
-            | StringCheck::Contains(_, ref mut m) => *m = msg,
+            Kind::Min(n) => (s.chars().count() < *n).then_some(IssueCode::TooSmall {
+                minimum: *n as f64,
+                inclusive: true,
+            }),
+            Kind::Max(n) => (s.chars().count() > *n).then_some(IssueCode::TooBig {
+                maximum: *n as f64,
+                inclusive: true,
+            }),
+            Kind::Len(n) => (s.chars().count() != *n).then(|| IssueCode::Custom {
+                code: "invalid_length".to_string(),
+            }),
+            Kind::NonEmpty => s.is_empty().then_some(IssueCode::TooSmall {
+                minimum: 1.0,
+                inclusive: true,
+            }),
+            Kind::StartsWith(p) if !s.starts_with(p.as_str()) => {
+                invalid(StringValidation::StartsWith)
+            }
+            Kind::EndsWith(p) if !s.ends_with(p.as_str()) => invalid(StringValidation::EndsWith),
+            // ponytail: `StringValidation` (error.rs) has no `Contains` variant yet,
+            // so this stays a custom `invalid_string` code.
+            Kind::Contains(p) if !s.contains(p.as_str()) => Some(IssueCode::Custom {
+                code: "invalid_string".to_string(),
+            }),
             #[cfg(feature = "regex")]
-            StringCheck::Regex(_, ref mut m) => *m = msg,
+            Kind::Regex(re) if !re.is_match(s) => invalid(StringValidation::Regex),
+            Kind::Format(f) if !f.check(s) => invalid(f.validation()),
+            _ => None,
         }
     }
 }
@@ -807,6 +604,14 @@ impl ZString {
         }
     }
 
+    fn push(mut self, kind: Kind, msg: impl Into<String>) -> Self {
+        self.checks.push(StringCheck {
+            kind,
+            msg: msg.into(),
+        });
+        self
+    }
+
     /// Set a custom error message for type mismatch (when the input is not a string).
     ///
     /// # Example
@@ -826,15 +631,11 @@ impl ZString {
     /// The closure receives the check key (e.g. `"too_small"`, `"invalid_email"`)
     /// and should return `Some(new_message)` to replace, or `None` to keep the original.
     ///
-    /// Available keys: `"too_small"`, `"too_big"`, `"invalid_length"`, `"invalid_email"`,
-    /// `"invalid_url"`, `"invalid_uuid"`, `"invalid_ip"`, `"invalid_regex"`,
-    /// `"invalid_starts_with"`, `"invalid_ends_with"`, `"invalid_contains"`, `"non_empty"`,
-    /// `"invalid_ipv4"`, `"invalid_ipv6"`, `"invalid_cidr"`, `"invalid_mac"`, `"invalid_hex"`,
-    /// `"invalid_credit_card"`, `"invalid_phone"`, `"invalid_semver"`, `"invalid_jwt"`,
-    /// `"invalid_ascii"`, `"invalid_alpha"`, `"invalid_alphanumeric"`, `"invalid_lowercase"`,
-    /// `"invalid_uppercase"`, `"invalid_base64"`, `"invalid_iso_date"`,
-    /// `"invalid_iso_datetime"`, `"invalid_iso_time"`, `"invalid_hostname"`,
-    /// `"invalid_cuid2"`, `"invalid_ulid"`, `"invalid_nanoid"`, `"invalid_emoji"`.
+    /// Keys: `"too_small"`, `"too_big"`, `"invalid_length"`, `"non_empty"`,
+    /// `"invalid_regex"`, `"invalid_starts_with"`, `"invalid_ends_with"`,
+    /// `"invalid_contains"`, and `"invalid_<format>"` for every format check
+    /// (`"invalid_email"`, `"invalid_url"`, `"invalid_uuid"`, `"invalid_ip"`,
+    /// `"invalid_currency"`, `"invalid_phone_e164"`, …).
     ///
     /// # Example
     /// ```
@@ -851,153 +652,44 @@ impl ZString {
         F: Fn(&str) -> Option<String>,
     {
         for check in &mut self.checks {
-            if let Some(msg) = f(check.key()) {
-                check.set_message(msg);
+            if let Some(msg) = f(check.kind.key()) {
+                check.msg = msg;
             }
         }
         self
     }
 
-    /// Minimum string length (inclusive).
+    /// Minimum string length in characters (inclusive).
     pub fn min(self, len: usize) -> Self {
         self.min_msg(len, format!("String must be at least {} characters", len))
     }
 
     /// Minimum string length with custom message.
-    pub fn min_msg(mut self, len: usize, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Min(len, msg.into()));
-        self
+    pub fn min_msg(self, len: usize, msg: impl Into<String>) -> Self {
+        self.push(Kind::Min(len), msg)
     }
 
-    /// Maximum string length (inclusive).
+    /// Maximum string length in characters (inclusive).
     pub fn max(self, len: usize) -> Self {
         self.max_msg(len, format!("String must be at most {} characters", len))
     }
 
     /// Maximum string length with custom message.
-    pub fn max_msg(mut self, len: usize, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Max(len, msg.into()));
-        self
+    pub fn max_msg(self, len: usize, msg: impl Into<String>) -> Self {
+        self.push(Kind::Max(len), msg)
     }
 
-    /// Exact string length.
+    /// Exact string length in characters.
     pub fn len(self, len: usize) -> Self {
         self.len_msg(len, format!("String must be exactly {} characters", len))
     }
 
     /// Exact string length with custom message.
-    pub fn len_msg(mut self, len: usize, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Len(len, msg.into()));
-        self
+    pub fn len_msg(self, len: usize, msg: impl Into<String>) -> Self {
+        self.push(Kind::Len(len), msg)
     }
 
-    /// Must be a valid email address.
-    pub fn email(self) -> Self {
-        self.email_msg("Invalid email address")
-    }
-
-    /// Must be a valid email address, with custom message.
-    pub fn email_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Email(msg.into()));
-        self
-    }
-
-    /// Must be a valid URL (http/https).
-    pub fn url(self) -> Self {
-        self.url_msg("Invalid URL")
-    }
-
-    /// Must be a valid URL, with custom message.
-    pub fn url_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Url(msg.into()));
-        self
-    }
-
-    /// Must be a strict URL (http/https + valid host).
-    #[cfg(feature = "string-advanced")]
-    pub fn url_strict(self) -> Self {
-        self.url_strict_msg("Invalid strict URL")
-    }
-
-    /// Must be a strict URL, with custom message.
-    #[cfg(feature = "string-advanced")]
-    pub fn url_strict_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::UrlStrict(msg.into()));
-        self
-    }
-
-    /// Must be a valid URI.
-    #[cfg(feature = "string-advanced")]
-    pub fn uri(self) -> Self {
-        self.uri_msg("Invalid URI")
-    }
-
-    /// Must be a valid URI, with custom message.
-    #[cfg(feature = "string-advanced")]
-    pub fn uri_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Uri(msg.into()));
-        self
-    }
-
-    /// Must be a valid UUID.
-    pub fn uuid(self) -> Self {
-        self.uuid_msg("Invalid UUID")
-    }
-
-    /// Must be a valid UUID, with custom message.
-    pub fn uuid_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Uuid(msg.into()));
-        self
-    }
-
-    /// Must be a valid UUID v1.
-    #[cfg(feature = "string-advanced")]
-    pub fn uuid_v1(self) -> Self {
-        self.uuid_v1_msg("Invalid UUID v1")
-    }
-
-    #[cfg(feature = "string-advanced")]
-    pub fn uuid_v1_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::UuidV1(msg.into()));
-        self
-    }
-
-    /// Must be a valid UUID v4.
-    #[cfg(feature = "string-advanced")]
-    pub fn uuid_v4(self) -> Self {
-        self.uuid_v4_msg("Invalid UUID v4")
-    }
-
-    #[cfg(feature = "string-advanced")]
-    pub fn uuid_v4_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::UuidV4(msg.into()));
-        self
-    }
-
-    /// Must be a valid UUID v7.
-    #[cfg(feature = "string-advanced")]
-    pub fn uuid_v7(self) -> Self {
-        self.uuid_v7_msg("Invalid UUID v7")
-    }
-
-    #[cfg(feature = "string-advanced")]
-    pub fn uuid_v7_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::UuidV7(msg.into()));
-        self
-    }
-
-    /// Must be a valid IP address (IPv4 or IPv6).
-    pub fn ip(self) -> Self {
-        self.ip_msg("Invalid IP address")
-    }
-
-    /// Must be a valid IP address (IPv4 or IPv6), with custom message.
-    pub fn ip_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Ip(msg.into()));
-        self
-    }
-
-    /// Must match the given regex.
+    /// Must match the given regex (emitted as JSON Schema `pattern`).
     ///
     /// Requires the `regex` feature.
     #[cfg(feature = "regex")]
@@ -1009,9 +701,8 @@ impl ZString {
     ///
     /// Requires the `regex` feature.
     #[cfg(feature = "regex")]
-    pub fn regex_msg(mut self, re: regex_lite::Regex, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Regex(re, msg.into()));
-        self
+    pub fn regex_msg(self, re: regex_lite::Regex, msg: impl Into<String>) -> Self {
+        self.push(Kind::Regex(re), msg)
     }
 
     /// Must start with the given prefix.
@@ -1022,10 +713,8 @@ impl ZString {
     }
 
     /// Must start with the given prefix, with custom message.
-    pub fn starts_with_msg(mut self, prefix: impl Into<String>, msg: impl Into<String>) -> Self {
-        self.checks
-            .push(StringCheck::StartsWith(prefix.into(), msg.into()));
-        self
+    pub fn starts_with_msg(self, prefix: impl Into<String>, msg: impl Into<String>) -> Self {
+        self.push(Kind::StartsWith(prefix.into()), msg)
     }
 
     /// Must end with the given suffix.
@@ -1036,10 +725,8 @@ impl ZString {
     }
 
     /// Must end with the given suffix, with custom message.
-    pub fn ends_with_msg(mut self, suffix: impl Into<String>, msg: impl Into<String>) -> Self {
-        self.checks
-            .push(StringCheck::EndsWith(suffix.into(), msg.into()));
-        self
+    pub fn ends_with_msg(self, suffix: impl Into<String>, msg: impl Into<String>) -> Self {
+        self.push(Kind::EndsWith(suffix.into()), msg)
     }
 
     /// Must contain the given substring.
@@ -1050,10 +737,8 @@ impl ZString {
     }
 
     /// Must contain the given substring, with custom message.
-    pub fn contains_msg(mut self, sub: impl Into<String>, msg: impl Into<String>) -> Self {
-        self.checks
-            .push(StringCheck::Contains(sub.into(), msg.into()));
-        self
+    pub fn contains_msg(self, sub: impl Into<String>, msg: impl Into<String>) -> Self {
+        self.push(Kind::Contains(sub.into()), msg)
     }
 
     /// Must not be empty.
@@ -1062,9 +747,8 @@ impl ZString {
     }
 
     /// Must not be empty, with custom message.
-    pub fn non_empty_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::NonEmpty(msg.into()));
-        self
+    pub fn non_empty_msg(self, msg: impl Into<String>) -> Self {
+        self.push(Kind::NonEmpty, msg)
     }
 
     /// Trim whitespace before validation.
@@ -1091,490 +775,55 @@ impl ZString {
         self
     }
 
-    /// Must be a valid IPv4 address.
-    pub fn ipv4(self) -> Self {
-        self.ipv4_msg("Invalid IPv4 address")
-    }
-
-    /// Must be a valid IPv4 address, with custom message.
-    pub fn ipv4_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Ipv4(msg.into()));
-        self
-    }
-
-    /// Must be a valid IPv6 address.
-    pub fn ipv6(self) -> Self {
-        self.ipv6_msg("Invalid IPv6 address")
-    }
-
-    /// Must be a valid IPv6 address, with custom message.
-    pub fn ipv6_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Ipv6(msg.into()));
-        self
-    }
-
-    /// Must be a valid CIDR block (IPv4/IPv6 with prefix).
-    pub fn cidr(self) -> Self {
-        self.cidr_msg("Invalid CIDR")
-    }
-
-    /// Must be a valid CIDR block, with custom message.
-    pub fn cidr_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Cidr(msg.into()));
-        self
-    }
-
-    /// Must be a valid MAC address (`xx:xx:xx:xx:xx:xx`).
-    pub fn mac(self) -> Self {
-        self.mac_msg("Invalid MAC address")
-    }
-
-    /// Must be a valid MAC address, with custom message.
-    pub fn mac_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Mac(msg.into()));
-        self
-    }
-
-    /// Must contain only hexadecimal characters.
-    pub fn hex(self) -> Self {
-        self.hex_msg("Invalid hexadecimal string")
-    }
-
-    /// Must contain only hexadecimal characters, with custom message.
-    pub fn hex_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Hex(msg.into()));
-        self
-    }
-
-    /// Must be a valid credit card number (Luhn check).
-    pub fn credit_card(self) -> Self {
-        self.credit_card_msg("Invalid credit card number")
-    }
-
-    /// Must be a valid credit card number, with custom message.
-    pub fn credit_card_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::CreditCard(msg.into()));
-        self
-    }
-
-    /// Must be a valid international phone number (E.164-like, starts with `+`).
-    pub fn phone(self) -> Self {
-        self.phone_msg("Invalid phone number")
-    }
-
-    /// Must be a valid international phone number, with custom message.
-    pub fn phone_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Phone(msg.into()));
-        self
-    }
-
-    /// Must be a valid strict E.164 phone number.
-    #[cfg(feature = "string-advanced")]
-    pub fn phone_e164_strict(self) -> Self {
-        self.phone_e164_strict_msg("Invalid E.164 phone number")
-    }
-
-    #[cfg(feature = "string-advanced")]
-    pub fn phone_e164_strict_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::PhoneE164(msg.into()));
-        self
-    }
-
-    /// Must be a valid semantic version (`MAJOR.MINOR.PATCH`, optional `v` prefix).
-    pub fn semver(self) -> Self {
-        self.semver_msg("Invalid semver")
-    }
-
-    /// Must be a valid semantic version, with custom message.
-    pub fn semver_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Semver(msg.into()));
-        self
-    }
-
-    /// Must be a full semantic version parsed by the `semver` crate.
-    #[cfg(feature = "string-advanced")]
-    pub fn semver_full(self) -> Self {
-        self.semver_full_msg("Invalid semantic version")
-    }
-
-    #[cfg(feature = "string-advanced")]
-    pub fn semver_full_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::SemverFull(msg.into()));
-        self
-    }
-
-    /// Must be a JWT-like token (`header.payload.signature`, base64url parts).
-    pub fn jwt(self) -> Self {
-        self.jwt_msg("Invalid JWT")
-    }
-
-    /// Must be a JWT-like token, with custom message.
-    pub fn jwt_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Jwt(msg.into()));
-        self
-    }
-
-    /// Must contain only ASCII characters.
-    pub fn ascii(self) -> Self {
-        self.ascii_msg("String must contain only ASCII characters")
-    }
-
-    /// Must contain only ASCII characters, with custom message.
-    pub fn ascii_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Ascii(msg.into()));
-        self
-    }
-
-    /// Must contain only alphabetic ASCII characters.
-    pub fn alpha(self) -> Self {
-        self.alpha_msg("String must contain only alphabetic characters")
-    }
-
-    /// Must contain only alphabetic ASCII characters, with custom message.
-    pub fn alpha_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Alpha(msg.into()));
-        self
-    }
-
-    /// Must contain only ASCII alphanumeric characters.
-    pub fn alphanumeric(self) -> Self {
-        self.alphanumeric_msg("String must contain only alphanumeric characters")
-    }
-
-    /// Must contain only ASCII alphanumeric characters, with custom message.
-    pub fn alphanumeric_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Alphanumeric(msg.into()));
-        self
-    }
-
-    /// Must already be lowercase.
-    pub fn lowercase(self) -> Self {
-        self.lowercase_msg("String must be lowercase")
-    }
-
-    /// Must already be lowercase, with custom message.
-    pub fn lowercase_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Lowercase(msg.into()));
-        self
-    }
-
-    /// Must already be uppercase.
-    pub fn uppercase(self) -> Self {
-        self.uppercase_msg("String must be uppercase")
-    }
-
-    /// Must already be uppercase, with custom message.
-    pub fn uppercase_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Uppercase(msg.into()));
-        self
-    }
-
-    /// Must be a valid Base64 string.
-    pub fn base64(self) -> Self {
-        self.base64_msg("Invalid Base64 string")
-    }
-
-    /// Must be a valid Base64 string, with custom message.
-    pub fn base64_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Base64(msg.into()));
-        self
-    }
-
-    /// Must be a valid ISO 8601 date (YYYY-MM-DD).
-    pub fn iso_date(self) -> Self {
-        self.iso_date_msg("Invalid ISO date (expected YYYY-MM-DD)")
-    }
-
-    /// Must be a valid ISO 8601 date, with custom message.
-    pub fn iso_date_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::IsoDate(msg.into()));
-        self
-    }
-
-    /// Must be a valid ISO 8601 datetime.
-    pub fn iso_datetime(self) -> Self {
-        self.iso_datetime_msg("Invalid ISO datetime")
-    }
-
-    /// Must be a valid ISO 8601 datetime, with custom message.
-    pub fn iso_datetime_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::IsoDatetime(msg.into()));
-        self
-    }
-
-    /// Must be a valid ISO 8601 time (HH:MM or HH:MM:SS).
-    pub fn iso_time(self) -> Self {
-        self.iso_time_msg("Invalid ISO time")
-    }
-
-    /// Must be a valid ISO 8601 time, with custom message.
-    pub fn iso_time_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::IsoTime(msg.into()));
-        self
-    }
-
-    /// Must be a valid hostname.
-    pub fn hostname(self) -> Self {
-        self.hostname_msg("Invalid hostname")
-    }
-
-    /// Must be a valid hostname, with custom message.
-    pub fn hostname_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Hostname(msg.into()));
-        self
-    }
-
-    /// Must be a valid CUID2 string (lowercase alphanumeric, starts with a letter).
-    pub fn cuid2(self) -> Self {
-        self.cuid2_msg("Invalid CUID2")
-    }
-
-    /// Must be a valid CUID2 string, with custom message.
-    pub fn cuid2_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Cuid2(msg.into()));
-        self
-    }
-
-    /// Must be a valid ULID (26-char Crockford Base32).
-    pub fn ulid(self) -> Self {
-        self.ulid_msg("Invalid ULID")
-    }
-
-    /// Must be a valid ULID, with custom message.
-    pub fn ulid_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Ulid(msg.into()));
-        self
-    }
-
-    /// Must be a valid Nano ID (alphanumeric + `_` + `-`).
-    pub fn nanoid(self) -> Self {
-        self.nanoid_msg("Invalid Nano ID")
-    }
-
-    /// Must be a valid Nano ID, with custom message.
-    pub fn nanoid_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Nanoid(msg.into()));
-        self
-    }
-
-    /// Must contain at least one emoji character.
-    pub fn emoji(self) -> Self {
-        self.emoji_msg("String must contain an emoji")
-    }
-
-    /// Must contain an emoji, with custom message.
-    pub fn emoji_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Emoji(msg.into()));
-        self
-    }
-
-    /// Must be a URL-friendly slug (`[a-z0-9-]`).
-    pub fn slug(self) -> Self {
-        self.slug_msg("Invalid slug")
-    }
-
-    pub fn slug_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Slug(msg.into()));
-        self
-    }
-
-    /// Must be a hex color (`#RRGGBB` or `#RRGGBBAA`).
-    pub fn color(self) -> Self {
-        self.color_msg("Invalid color")
-    }
-
-    pub fn color_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Color(msg.into()));
-        self
-    }
-
-    /// Must be a currency code (ISO-4217-like uppercase 3 letters).
-    pub fn currency_code(self) -> Self {
-        self.currency_code_msg("Invalid currency code")
-    }
-
-    pub fn currency_code_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Currency(msg.into()));
-        self
-    }
-
-    /// Must be a country code (ISO-3166 alpha-2).
-    pub fn country_code(self) -> Self {
-        self.country_code_msg("Invalid country code")
-    }
-
-    pub fn country_code_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::CountryCode(msg.into()));
-        self
-    }
-
-    /// Must be a locale (`ll` or `ll-RR`, example: `en`, `en-US`).
-    pub fn locale(self) -> Self {
-        self.locale_msg("Invalid locale")
-    }
-
-    pub fn locale_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Locale(msg.into()));
-        self
-    }
-
-    /// Must be a cron expression (5 or 6 fields).
-    pub fn cron(self) -> Self {
-        self.cron_msg("Invalid cron expression")
-    }
-
-    pub fn cron_msg(mut self, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck::Cron(msg.into()));
-        self
-    }
-
     /// Generate a JSON Schema representation of this string schema.
+    ///
+    /// - Length bounds: the strictest `min`/`max`/`len`/`non_empty` wins.
+    /// - Formats: the first goes into `format`, further ones into `allOf`.
+    /// - `regex`/`starts_with`/`ends_with`/`contains` become `pattern`s
+    ///   (first in `pattern`, further ones in `allOf`).
     ///
     /// Requires the `openapi` feature.
     #[cfg(feature = "openapi")]
     pub fn to_json_schema(&self) -> serde_json::Value {
         let mut schema = serde_json::json!({"type": "string"});
+        let (mut mins, mut maxs) = (vec![], vec![]);
+        let mut formats: Vec<&str> = vec![];
+        let mut patterns: Vec<String> = vec![];
         for check in &self.checks {
-            match check {
-                StringCheck::Min(n, _) => {
-                    schema["minLength"] = serde_json::json!(*n);
+            match &check.kind {
+                Kind::Min(n) => mins.push(*n),
+                Kind::Max(n) => maxs.push(*n),
+                Kind::Len(n) => {
+                    mins.push(*n);
+                    maxs.push(*n);
                 }
-                StringCheck::Max(n, _) => {
-                    schema["maxLength"] = serde_json::json!(*n);
+                Kind::NonEmpty => mins.push(1),
+                Kind::StartsWith(p) => patterns.push(format!("^{}", regex_escape(p))),
+                Kind::EndsWith(p) => patterns.push(format!("{}$", regex_escape(p))),
+                Kind::Contains(p) => patterns.push(regex_escape(p)),
+                #[cfg(feature = "regex")]
+                Kind::Regex(re) => patterns.push(re.as_str().to_string()),
+                Kind::Format(f) => {
+                    if !formats.contains(&f.schema_format()) {
+                        formats.push(f.schema_format());
+                    }
                 }
-                StringCheck::Len(n, _) => {
-                    schema["minLength"] = serde_json::json!(*n);
-                    schema["maxLength"] = serde_json::json!(*n);
-                }
-                StringCheck::Email(_) => {
-                    schema["format"] = serde_json::json!("email");
-                }
-                StringCheck::Url(_) => {
-                    schema["format"] = serde_json::json!("uri");
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::UrlStrict(_) => {
-                    schema["format"] = serde_json::json!("url-strict");
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::Uri(_) => {
-                    schema["format"] = serde_json::json!("uri");
-                }
-                StringCheck::Uuid(_) => {
-                    schema["format"] = serde_json::json!("uuid");
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::UuidV1(_) => {
-                    schema["format"] = serde_json::json!("uuid-v1");
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::UuidV4(_) => {
-                    schema["format"] = serde_json::json!("uuid-v4");
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::UuidV7(_) => {
-                    schema["format"] = serde_json::json!("uuid-v7");
-                }
-                StringCheck::Ip(_) => {
-                    schema["format"] = serde_json::json!("ip");
-                }
-                StringCheck::Slug(_) => {
-                    schema["format"] = serde_json::json!("slug");
-                }
-                StringCheck::Color(_) => {
-                    schema["format"] = serde_json::json!("color");
-                }
-                StringCheck::Currency(_) => {
-                    schema["format"] = serde_json::json!("currency-code");
-                }
-                StringCheck::CountryCode(_) => {
-                    schema["format"] = serde_json::json!("country-code");
-                }
-                StringCheck::Locale(_) => {
-                    schema["format"] = serde_json::json!("locale");
-                }
-                StringCheck::Cron(_) => {
-                    schema["format"] = serde_json::json!("cron");
-                }
-                StringCheck::Ipv4(_) => {
-                    schema["format"] = serde_json::json!("ipv4");
-                }
-                StringCheck::Ipv6(_) => {
-                    schema["format"] = serde_json::json!("ipv6");
-                }
-                StringCheck::Cidr(_) => {
-                    schema["format"] = serde_json::json!("cidr");
-                }
-                StringCheck::Mac(_) => {
-                    schema["format"] = serde_json::json!("mac");
-                }
-                StringCheck::Hex(_) => {
-                    schema["format"] = serde_json::json!("hex");
-                }
-                StringCheck::CreditCard(_) => {
-                    schema["format"] = serde_json::json!("credit-card");
-                }
-                StringCheck::Phone(_) => {
-                    schema["format"] = serde_json::json!("phone");
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::PhoneE164(_) => {
-                    schema["format"] = serde_json::json!("phone-e164");
-                }
-                StringCheck::Semver(_) => {
-                    schema["format"] = serde_json::json!("semver");
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::SemverFull(_) => {
-                    schema["format"] = serde_json::json!("semver-full");
-                }
-                StringCheck::Jwt(_) => {
-                    schema["format"] = serde_json::json!("jwt");
-                }
-                StringCheck::Ascii(_) => {
-                    schema["format"] = serde_json::json!("ascii");
-                }
-                StringCheck::Alpha(_) => {
-                    schema["format"] = serde_json::json!("alpha");
-                }
-                StringCheck::Alphanumeric(_) => {
-                    schema["format"] = serde_json::json!("alphanumeric");
-                }
-                StringCheck::Lowercase(_) => {
-                    schema["format"] = serde_json::json!("lowercase");
-                }
-                StringCheck::Uppercase(_) => {
-                    schema["format"] = serde_json::json!("uppercase");
-                }
-                StringCheck::IsoDate(_) => {
-                    schema["format"] = serde_json::json!("date");
-                }
-                StringCheck::IsoDatetime(_) => {
-                    schema["format"] = serde_json::json!("date-time");
-                }
-                StringCheck::IsoTime(_) => {
-                    schema["format"] = serde_json::json!("time");
-                }
-                StringCheck::Hostname(_) => {
-                    schema["format"] = serde_json::json!("hostname");
-                }
-                StringCheck::NonEmpty(_) => {
-                    schema["minLength"] = serde_json::json!(1);
-                }
-                StringCheck::Cuid2(_) => {
-                    schema["format"] = serde_json::json!("cuid2");
-                }
-                StringCheck::Ulid(_) => {
-                    schema["format"] = serde_json::json!("ulid");
-                }
-                StringCheck::Nanoid(_) => {
-                    schema["format"] = serde_json::json!("nanoid");
-                }
-                StringCheck::Emoji(_) => {
-                    schema["format"] = serde_json::json!("emoji");
-                }
-                _ => {}
             }
+        }
+        super::length_schema(&mut schema, ("minLength", "maxLength"), mins, maxs);
+        let mut all_of = vec![];
+        let mut formats = formats.into_iter();
+        if let Some(f) = formats.next() {
+            schema["format"] = serde_json::json!(f);
+        }
+        all_of.extend(formats.map(|f| serde_json::json!({ "format": f })));
+        let mut patterns = patterns.into_iter();
+        if let Some(p) = patterns.next() {
+            schema["pattern"] = serde_json::json!(p);
+        }
+        all_of.extend(patterns.map(|p| serde_json::json!({ "pattern": p })));
+        if !all_of.is_empty() {
+            schema["allOf"] = serde_json::Value::Array(all_of);
         }
         schema
     }
@@ -1590,588 +839,28 @@ impl VldSchema for ZString {
     type Output = String;
 
     fn parse_value(&self, value: &Value) -> Result<String, VldError> {
-        let type_err = |value: &Value| -> VldError {
-            let msg = self
-                .custom_type_error
-                .clone()
-                .unwrap_or_else(|| format!("Expected string, received {}", value_type_name(value)));
-            VldError::single_with_value(
-                IssueCode::InvalidType {
-                    expected: "string".to_string(),
-                    received: value_type_name(value),
-                },
-                msg,
-                value,
-            )
+        let type_err = || super::type_error(&self.custom_type_error, "string", "string", value);
+
+        let mut s = match value {
+            Value::String(s) => s.clone(),
+            Value::Number(n) if self.coerce => n.to_string(),
+            Value::Bool(b) if self.coerce => b.to_string(),
+            _ => return Err(type_err()),
         };
 
-        // Extract string value
-        let mut s = if let Some(s) = value.as_str() {
-            s.to_string()
-        } else if self.coerce {
-            match value {
-                Value::Number(n) => n.to_string(),
-                Value::Bool(b) => b.to_string(),
-                _ => return Err(type_err(value)),
-            }
-        } else {
-            return Err(type_err(value));
-        };
-
-        // Apply transforms
         for t in &self.transforms {
-            match t {
-                StringTransform::Trim => s = s.trim().to_string(),
-                StringTransform::ToLowerCase => s = s.to_lowercase(),
-                StringTransform::ToUpperCase => s = s.to_uppercase(),
-            }
+            s = match t {
+                StringTransform::Trim => s.trim().to_string(),
+                StringTransform::ToLowerCase => s.to_lowercase(),
+                StringTransform::ToUpperCase => s.to_uppercase(),
+            };
         }
 
-        // Run checks, accumulate errors
         let str_val = Value::String(s.clone());
         let mut errors = VldError::new();
-
         for check in &self.checks {
-            match check {
-                StringCheck::Min(min, msg) => {
-                    if s.chars().count() < *min {
-                        errors.push_with_value(
-                            IssueCode::TooSmall {
-                                minimum: *min as f64,
-                                inclusive: true,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Max(max, msg) => {
-                    if s.chars().count() > *max {
-                        errors.push_with_value(
-                            IssueCode::TooBig {
-                                maximum: *max as f64,
-                                inclusive: true,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Len(len, msg) => {
-                    if s.chars().count() != *len {
-                        errors.push_with_value(
-                            IssueCode::Custom {
-                                code: "invalid_length".to_string(),
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Email(msg) => {
-                    if !is_valid_email(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Email,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Url(msg) => {
-                    if !is_valid_url(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Url,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::UrlStrict(msg) => {
-                    if !is_valid_url_strict(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::UrlStrict,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::Uri(msg) => {
-                    if !is_valid_uri(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Uri,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Uuid(msg) => {
-                    if !is_valid_uuid(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Uuid,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::UuidV1(msg) => {
-                    if !is_valid_uuid_version(&s, 1) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::UuidV1,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::UuidV4(msg) => {
-                    if !is_valid_uuid_version(&s, 4) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::UuidV4,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::UuidV7(msg) => {
-                    if !is_valid_uuid_version(&s, 7) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::UuidV7,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Ip(msg) => {
-                    if !is_valid_ip(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Ip,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Slug(msg) => {
-                    if !is_valid_slug(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Slug,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Color(msg) => {
-                    if !is_valid_color(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Color,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Currency(msg) => {
-                    if !is_valid_currency_code(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Currency,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::CountryCode(msg) => {
-                    if !is_valid_country_code(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::CountryCode,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Locale(msg) => {
-                    if !is_valid_locale(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Locale,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Cron(msg) => {
-                    if !is_valid_cron(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Cron,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                #[cfg(feature = "regex")]
-                StringCheck::Regex(re, msg) => {
-                    if !re.is_match(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Regex,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::StartsWith(prefix, msg) => {
-                    if !s.starts_with(prefix.as_str()) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::StartsWith,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::EndsWith(suffix, msg) => {
-                    if !s.ends_with(suffix.as_str()) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::EndsWith,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Contains(sub, msg) => {
-                    if !s.contains(sub.as_str()) {
-                        errors.push_with_value(
-                            IssueCode::Custom {
-                                code: "invalid_string".to_string(),
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::NonEmpty(msg) => {
-                    if s.is_empty() {
-                        errors.push_with_value(
-                            IssueCode::TooSmall {
-                                minimum: 1.0,
-                                inclusive: true,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Ipv4(msg) => {
-                    if !is_valid_ipv4(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Ipv4,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Ipv6(msg) => {
-                    if !is_valid_ipv6(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Ipv6,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Cidr(msg) => {
-                    if !is_valid_cidr(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Cidr,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Mac(msg) => {
-                    if !is_valid_mac(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Mac,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Hex(msg) => {
-                    if !is_valid_hex(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Hex,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::CreditCard(msg) => {
-                    if !is_valid_credit_card(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::CreditCard,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Phone(msg) => {
-                    if !is_valid_phone(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Phone,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::PhoneE164(msg) => {
-                    if !is_valid_phone_e164_strict(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::PhoneE164,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Semver(msg) => {
-                    if !is_valid_semver(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Semver,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                #[cfg(feature = "string-advanced")]
-                StringCheck::SemverFull(msg) => {
-                    if !is_valid_semver_full(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::SemverFull,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Jwt(msg) => {
-                    if !is_valid_jwt(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Jwt,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Ascii(msg) => {
-                    if !s.is_ascii() {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Ascii,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Alpha(msg) => {
-                    if !s.chars().all(|c| c.is_ascii_alphabetic()) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Alpha,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Alphanumeric(msg) => {
-                    if !s.chars().all(|c| c.is_ascii_alphanumeric()) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Alphanumeric,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Lowercase(msg) => {
-                    if s != s.to_lowercase() {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Lowercase,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Uppercase(msg) => {
-                    if s != s.to_uppercase() {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Uppercase,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Base64(msg) => {
-                    if !is_valid_base64(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Base64,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::IsoDate(msg) => {
-                    if !is_valid_iso_date(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::IsoDate,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::IsoDatetime(msg) => {
-                    if !is_valid_iso_datetime(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::IsoDatetime,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::IsoTime(msg) => {
-                    if !is_valid_iso_time(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::IsoTime,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Hostname(msg) => {
-                    if !is_valid_hostname(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Hostname,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Cuid2(msg) => {
-                    if !is_valid_cuid2(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Cuid2,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Ulid(msg) => {
-                    if !is_valid_ulid(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Ulid,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Nanoid(msg) => {
-                    if !is_valid_nanoid(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Nanoid,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
-                StringCheck::Emoji(msg) => {
-                    if !is_valid_emoji(&s) {
-                        errors.push_with_value(
-                            IssueCode::InvalidString {
-                                validation: StringValidation::Emoji,
-                            },
-                            msg.clone(),
-                            &str_val,
-                        );
-                    }
-                }
+            if let Some(code) = check.kind.failure(&s) {
+                errors.push_with_value(code, check.msg.clone(), &str_val);
             }
         }
 
