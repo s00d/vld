@@ -3,12 +3,11 @@
 mod common;
 #[cfg(feature = "ntex-4")]
 use common::TestRequestExt;
-use ntex::web::types::{JsonConfig, PayloadConfig};
 use ntex::web::{self, test, App, HttpResponse};
 use vld_ntex::ntex;
-use vld_ntex::{VldForm, VldJson, VldQuery};
+use vld_ntex::{VldBodyLimit, VldForm, VldJson, VldQuery};
 
-/// Registers an extractor config (`JsonConfig` / `PayloadConfig`) on the app.
+/// Registers app state (`VldBodyLimit`) on the app.
 macro_rules! with_state {
     ($app:expr, $cfg:expr) => {{
         #[cfg(feature = "ntex-3")]
@@ -48,7 +47,7 @@ async fn tags_handler(q: VldQuery<TagsQuery>) -> HttpResponse {
 #[ntex::test]
 async fn json_overflow_returns_413_json() {
     let app = test::init_service(
-        with_state!(App::new(), JsonConfig::default().limit(8))
+        with_state!(App::new(), VldBodyLimit(8))
             .route("/j", web::post().to(json_handler)),
     )
     .await;
@@ -67,7 +66,7 @@ async fn json_overflow_returns_413_json() {
 #[ntex::test]
 async fn form_overflow_returns_413_json() {
     let app = test::init_service(
-        with_state!(App::new(), PayloadConfig::new(8)).route("/f", web::post().to(form_handler)),
+        with_state!(App::new(), VldBodyLimit(8)).route("/f", web::post().to(form_handler)),
     )
     .await;
     let req = test::TestRequest::post()
@@ -102,4 +101,20 @@ async fn query_repeated_keys_become_array() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 200);
     assert_eq!(test::read_body(resp).await, "[1, 2]");
+}
+
+/// Without `VldBodyLimit` the limit is 2 MiB, not ntex's 32 KiB `JsonConfig`
+/// default (and ntex's content-type parsing no longer rejects
+/// `application/json;charset`).
+#[ntex::test]
+async fn default_json_limit_is_2_mib() {
+    let app = test::init_service(App::new().route("/j", web::post().to(json_handler))).await;
+    let name = "x".repeat(1024 * 1024);
+    let req = test::TestRequest::post()
+        .uri("/j")
+        .header("content-type", "application/json;charset")
+        .set_payload(format!(r#"{{"name":"{name}"}}"#))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
 }

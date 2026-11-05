@@ -7,7 +7,9 @@ use common::TestRequestExt;
 use ntex::http::header::HeaderValue;
 use ntex::http::Method;
 use ntex::web::{self, test, App, HttpResponse};
-use vld_http_common::conformance::{Cookies, Headers, PathId, Query, Request, Response, User};
+use vld_http_common::conformance::{
+    Cookies, Headers, PathId, PathNone, PathStr, Query, Request, Response, User,
+};
 use vld_ntex::ntex;
 use vld_ntex::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 
@@ -21,6 +23,12 @@ async fn query(q: VldQuery<Query>) -> HttpResponse {
     HttpResponse::Ok().body(q.reply())
 }
 async fn path(p: VldPath<PathId>) -> HttpResponse {
+    HttpResponse::Ok().body(p.reply())
+}
+async fn pstr(p: VldPath<PathStr>) -> HttpResponse {
+    HttpResponse::Ok().body(p.s.clone())
+}
+async fn pnone(p: VldPath<PathNone>) -> HttpResponse {
     HttpResponse::Ok().body(p.reply())
 }
 async fn headers(h: VldHeaders<Headers>) -> HttpResponse {
@@ -37,6 +45,8 @@ async fn send(r: Request) -> Response {
             .route("/form", web::post().to(form))
             .route("/query", web::get().to(query))
             .route("/path/{id}", web::get().to(path))
+            .route("/pstr/{s}", web::get().to(pstr))
+            .route("/pnone", web::get().to(pnone))
             .route("/headers", web::get().to(headers))
             .route("/cookie", web::get().to(cookie)),
     )
@@ -61,10 +71,16 @@ vld_http_common::conformance_suite! {
     cases = [
         json_valid,
         json_content_type_case_insensitive,
+        json_content_type_bare_param,
+        json_content_type_unterminated_quote,
+        json_content_type_empty_suffix,
         json_malformed,
         json_validation_error,
         json_oversized,
         form_valid,
+        form_content_type_params,
+        form_wrong_content_type,
+        form_too_many_fields,
         form_validation_error,
         form_non_utf8,
         form_oversized,
@@ -73,9 +89,23 @@ vld_http_common::conformance_suite! {
         query_missing_field,
         path_valid,
         path_invalid,
+        path_percent_decoding,
+        // The extractor decodes lossily, but ntex 3's router never matches
+        // such a path.
+        #[cfg_attr(
+            feature = "ntex-3",
+            ignore = "ntex 3 router answers 404 for invalid UTF-8 in the path"
+        )]
+        path_invalid_utf8,
+        path_no_params_optional,
         headers_valid,
+        headers_underscore_ignored,
+        headers_underscore_only,
         headers_missing,
         cookie_quoted_encoded,
+        cookie_multiple_headers,
+        cookie_duplicate_first_wins,
+        cookie_non_ascii,
         cookie_missing,
     ],
 }

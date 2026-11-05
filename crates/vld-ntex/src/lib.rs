@@ -14,18 +14,18 @@
 //! All extractors return **422 Unprocessable Entity** on validation failure
 //! or malformed input, and **413 Payload Too Large** when the body exceeds
 //! the limit. [`VldJson`] requires a JSON `Content-Type` (`application/json`
-//! or `application/*+json`) and answers **415 Unsupported Media Type**
-//! otherwise.
+//! or `application/*+json`) and [`VldForm`]
+//! `application/x-www-form-urlencoded`; anything else is **415 Unsupported
+//! Media Type**. See the [error body format](vld_http_common#error-bodies).
 //!
 //! # Body limits
 //!
-//! Body reading is delegated to ntex, so its configuration applies:
-//! `JsonConfig` for [`VldJson`] (ntex default 32 KiB) and `PayloadConfig`
-//! for [`VldForm`] (ntex default 256 KiB). To use the same 2 MiB default as
-//! the other `vld` adapters, register
-//! `JsonConfig::default().limit(vld_http_common::DEFAULT_BODY_LIMIT)` via
-//! `App::new().state(cfg)` (ntex 3) or
-//! `App::new().with_config(WebAppConfig::new().set_state(cfg))` (ntex 4).
+//! [`VldJson`] and [`VldForm`] read the body themselves up to
+//! [`DEFAULT_BODY_LIMIT`] (2 MiB); ntex's `JsonConfig` / `PayloadConfig` do
+//! not apply. Register [`VldBodyLimit`] as app state to change it:
+//! `App::new().state(VldBodyLimit(n))` (ntex 3) or
+//! `App::new().with_config(WebAppConfig::new().set_state(VldBodyLimit(n)))`
+//! (ntex 4). Compressed request bodies are not decoded.
 //!
 //! # ntex versions
 //!
@@ -73,22 +73,22 @@ pub use ntex3 as ntex;
 #[cfg(feature = "ntex-4")]
 pub use ntex4 as ntex;
 
-use ntex::http::error::PayloadError;
-use ntex::http::{Payload, StatusCode};
-use ntex::web::error::JsonPayloadError;
+use ntex::http::{header, Payload, StatusCode};
 use ntex::web::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use std::fmt;
 use vld::schema::VldParse;
+pub use vld_http_common::VldBodyLimit;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, path_params_to_json,
-    query_string_to_json, require_json_content_type, VldHttpError,
+    cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
+    path_params_to_json, percent_decode, query_string_to_json, require_form_content_type,
+    require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
 };
 
 // ============================= Error / Rejection =============================
 
 /// Error type returned when validation or body reading fails.
 ///
-/// Used by all `Vld*` extractors in this crate.
+/// Used by all `Vld*` extractors in this crate; wraps [`VldHttpError`].
 #[derive(Debug)]
 pub struct VldNtexError(VldHttpError);
 
@@ -96,6 +96,16 @@ impl VldNtexError {
     /// The underlying validation error.
     pub fn error(&self) -> &vld::error::VldError {
         self.0.error()
+    }
+
+    /// HTTP status (422, 413 or 415).
+    pub fn status(&self) -> StatusCode {
+        StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
+    }
+
+    /// JSON response body.
+    pub fn body(&self) -> serde_json::Value {
+        self.0.body()
     }
 }
 
@@ -120,23 +130,35 @@ impl fmt::Display for VldNtexError {
 impl std::error::Error for VldNtexError {}
 
 impl VldNtexError {
-    fn status_code(&self) -> StatusCode {
-        StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
-    }
-
     fn render(&self) -> HttpResponse {
-        HttpResponseBuilder::new(self.status_code())
+        HttpResponseBuilder::new(self.status())
             .header("content-type", "application/json")
             .body(self.0.body().to_string())
     }
 }
 
-/// `PayloadError::Overflow` → 413, anything else → 422.
-fn payload_error(e: PayloadError, what: &str) -> VldNtexError {
-    match e {
-        PayloadError::Overflow => VldHttpError::payload_too_large().into(),
-        other => VldHttpError::parse(format!("{what}: {other}")).into(),
+/// Read the body up to the [`VldBodyLimit`] app state, or
+/// [`DEFAULT_BODY_LIMIT`].
+async fn read_body(req: &HttpRequest, payload: &mut Payload) -> Result<Vec<u8>, VldHttpError> {
+    let limit = req
+        .app_state::<VldBodyLimit>()
+        .map_or(DEFAULT_BODY_LIMIT, |l| l.0);
+    let mut body = Vec::new();
+    while let Some(chunk) = payload.recv().await {
+        let chunk = chunk
+            .map_err(|e| VldHttpError::parse(format!("Failed to read request body: {e}")))?;
+        if body.len() + chunk.len() > limit {
+            return Err(VldHttpError::payload_too_large());
+        }
+        body.extend_from_slice(&chunk);
     }
+    Ok(body)
+}
+
+fn content_type(req: &HttpRequest) -> Option<&str> {
+    req.headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
 }
 
 /// Validate a value coerced from text (query, path, form, headers, cookies).
@@ -146,44 +168,25 @@ fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, VldNtexError> {
 
 // ============================= Version glue ==================================
 //
-// The only ntex-version-specific code: error rendering, delegation to ntex's
-// own `Json` / `Bytes` extractors, and the `FromRequest` impls (generated by
-// `from_request!`, forwarding to each extractor's inherent `extract`).
+// The only ntex-version-specific code: error rendering and the `FromRequest`
+// impls (generated by `from_request!`, forwarding to each extractor's
+// inherent `extract`).
 
 #[cfg(feature = "ntex-3")]
 mod compat {
     use super::*;
     use ntex::web::error::WebResponseError;
-    use ntex::web::{DefaultError, ErrorRenderer, FromRequest};
+    use ntex::web::{ErrorRenderer, FromRequest};
 
     impl<Err: ErrorRenderer> WebResponseError<Err> for VldNtexError {
         fn status_code(&self) -> StatusCode {
-            VldNtexError::status_code(self)
+            self.status()
         }
 
         fn error_response(&self, _: &HttpRequest) -> HttpResponse {
             self.render()
         }
     }
-
-    pub(crate) async fn read_json(
-        req: &HttpRequest,
-        payload: &mut Payload,
-    ) -> Result<serde_json::Value, JsonPayloadError> {
-        <ntex::web::types::Json<serde_json::Value> as FromRequest<DefaultError>>::from_request(
-            req, payload,
-        )
-        .await
-        .map(|j| j.into_inner())
-    }
-
-    pub(crate) async fn read_bytes(
-        req: &HttpRequest,
-        payload: &mut Payload,
-    ) -> Result<ntex::util::Bytes, ntex::web::error::PayloadError> {
-        <ntex::util::Bytes as FromRequest<DefaultError>>::from_request(req, payload).await
-    }
-
     macro_rules! from_request {
         ($($t:ident),+) => {$(
             impl<T: VldParse, Err: ErrorRenderer> FromRequest<Err> for $t<T> {
@@ -212,27 +215,6 @@ mod compat {
             self.render()
         }
     }
-
-    pub(crate) async fn read_json(
-        req: &HttpRequest,
-        payload: &mut Payload,
-    ) -> Result<serde_json::Value, JsonPayloadError> {
-        <ntex::web::types::Json<serde_json::Value> as FromRequest<()>>::from_request(
-            &(),
-            req,
-            payload,
-        )
-        .await
-        .map(|j| j.into_inner())
-    }
-
-    pub(crate) async fn read_bytes(
-        req: &HttpRequest,
-        payload: &mut Payload,
-    ) -> Result<ntex::util::Bytes, ntex::web::error::PayloadError> {
-        <ntex::util::Bytes as FromRequest<()>>::from_request(&(), req, payload).await
-    }
-
     macro_rules! from_request {
         ($($t:ident),+) => {$(
             impl<T: VldParse, St> FromRequest<St> for $t<T> {
@@ -260,18 +242,9 @@ pub struct VldJson<T>(pub T);
 
 impl<T: VldParse> VldJson<T> {
     async fn extract(req: &HttpRequest, payload: &mut Payload) -> Result<Self, VldNtexError> {
-        require_json_content_type(
-            req.headers()
-                .get(ntex::http::header::CONTENT_TYPE)
-                .and_then(|v| v.to_str().ok()),
-        )?;
-        let json_value = compat::read_json(req, payload).await.map_err(|e| match e {
-            JsonPayloadError::Overflow => VldHttpError::payload_too_large().into(),
-            JsonPayloadError::Payload(p) => payload_error(p, "JSON parse error"),
-            other => VldNtexError::from(VldHttpError::parse(format!("JSON parse error: {other}"))),
-        })?;
-
-        T::vld_parse_value(&json_value)
+        require_json_content_type(content_type(req))?;
+        let body = read_body(req, payload).await?;
+        T::vld_parse_value(&parse_json_body(&body)?)
             .map(VldJson)
             .map_err(VldNtexError::from)
     }
@@ -298,12 +271,22 @@ impl<T: VldParse> VldQuery<T> {
 ///
 /// Drop-in replacement for `ntex::web::types::Path<T>`.
 ///
-/// Path segment values are coerced the same way as query parameters.
+/// Path segment values are percent-decoded (ntex keeps `%2F`, `%25` and
+/// `%2B` encoded in `match_info`) and coerced the same way as query
+/// parameters.
 pub struct VldPath<T>(pub T);
 
 impl<T: VldParse> VldPath<T> {
     async fn extract(req: &HttpRequest, _payload: &mut Payload) -> Result<Self, VldNtexError> {
-        validate(&path_params_to_json(req.match_info().iter())).map(VldPath)
+        let params: Vec<_> = req
+            .match_info()
+            .iter()
+            .map(|(k, v)| (k, percent_decode(v)))
+            .collect();
+        validate(&path_params_to_json(
+            params.iter().map(|(k, v)| (*k, v.as_str())),
+        ))
+        .map(VldPath)
     }
 }
 
@@ -319,16 +302,9 @@ pub struct VldForm<T>(pub T);
 
 impl<T: VldParse> VldForm<T> {
     async fn extract(req: &HttpRequest, payload: &mut Payload) -> Result<Self, VldNtexError> {
-        let bytes = compat::read_bytes(req, payload)
-            .await
-            .map_err(|e| match e {
-                ntex::web::error::PayloadError::Payload(p) => {
-                    payload_error(p, "Failed to read form body")
-                }
-                other => VldHttpError::parse(format!("Failed to read form body: {other}")).into(),
-            })?;
-
-        validate(&parse_form_body(&bytes)?).map(VldForm)
+        require_form_content_type(content_type(req))?;
+        let body = read_body(req, payload).await?;
+        validate(&parse_form_body(&body)?).map(VldForm)
     }
 }
 
@@ -337,7 +313,8 @@ impl<T: VldParse> VldForm<T> {
 /// ntex extractor that validates **HTTP headers**.
 ///
 /// See [`vld_http_common::headers_to_json`]: names become snake_case
-/// (`X-Request-Id` → `x_request_id`), repeated headers are joined with `", "`.
+/// (`X-Request-Id` → `x_request_id`), names containing `_` are ignored,
+/// repeated headers are joined with `", "`.
 pub struct VldHeaders<T>(pub T);
 
 impl<T: VldParse> VldHeaders<T> {
@@ -353,7 +330,8 @@ impl<T: VldParse> VldHeaders<T> {
 
 // ============================= VldCookie =====================================
 
-/// ntex extractor that validates **cookie values** from the `Cookie` header.
+/// ntex extractor that validates **cookie values** from the `Cookie`
+/// headers (all of them; the first occurrence of a name wins).
 ///
 /// Cookie names are used as-is for schema field matching.
 /// Values are unquoted, percent-decoded and coerced.
@@ -361,12 +339,12 @@ pub struct VldCookie<T>(pub T);
 
 impl<T: VldParse> VldCookie<T> {
     async fn extract(req: &HttpRequest, _payload: &mut Payload) -> Result<Self, VldNtexError> {
-        let cookie_header = req
-            .headers()
-            .get(ntex::http::header::COOKIE)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        validate(&cookies_to_json(cookie_header)).map(VldCookie)
+        let value = cookie_headers_to_json(
+            req.headers()
+                .get_all(header::COOKIE)
+                .map(|v| v.as_bytes()),
+        );
+        validate(&value).map(VldCookie)
     }
 }
 
@@ -374,6 +352,8 @@ vld_http_common::impl_deref!(VldJson, VldQuery, VldPath, VldForm, VldHeaders, Vl
 
 /// Prelude — import everything you need.
 pub mod prelude {
-    pub use crate::{VldCookie, VldForm, VldHeaders, VldJson, VldNtexError, VldPath, VldQuery};
+    pub use crate::{
+        VldBodyLimit, VldCookie, VldForm, VldHeaders, VldJson, VldNtexError, VldPath, VldQuery,
+    };
     pub use vld::prelude::*;
 }
