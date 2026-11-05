@@ -158,8 +158,9 @@ async fn unknown_rejection_is_500() {
 
 #[tokio::test]
 async fn chunked_body_without_content_length_is_accepted() {
-    let (addr, server) = warp::serve(routes()).bind_ephemeral(([127, 0, 0, 1], 0));
-    tokio::spawn(server);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(warp::serve(routes()).incoming(listener).run());
 
     let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
     let body = r#"{"name":"Al"}"#;
