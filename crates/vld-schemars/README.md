@@ -149,11 +149,31 @@ let user = User::vld_parse_value(&json).unwrap();
 `format`, `enum`, `const`, `minItems`, `maxItems`, `uniqueItems`,
 `minProperties`, `maxProperties`, `multipleOf`, `oneOf`, `anyOf`, `allOf`, `not`,
 `$ref` (local, resolved against the root schema), `additionalProperties`
-(`false` or a schema), `patternProperties`, `prefixItems` / tuple `items`.
+(`false` or a schema), `patternProperties`, `prefixItems` / tuple `items`,
+`contains` / `minContains` / `maxContains`, `propertyNames`,
+`formatMinimum` / `formatMaximum` (for `date`, `date-time` — offsets
+honoured — and `time`).
 
-String lengths count Unicode characters; `multipleOf` tolerates float rounding;
-an uncompilable `pattern` is reported as a validation issue; `format: "uri"`
-accepts any RFC 3986 scheme (`url` stays http/https).
+String lengths count Unicode characters; integers are compared exactly (no
+`f64` rounding of large `u64` / `i64`); `multipleOf` is exact for integers and
+tolerates float rounding otherwise; an uncompilable `pattern` is reported as a
+validation issue; `format: "uri"` accepts any RFC 3986 scheme (`url` stays
+http/https); `format: "email"` follows vld (`a@b` is valid).
+
+**Not checked:** vendor `x-*` keywords that vld emits (`x-past` / `x-future`,
+`x-minUniqueItems` / `x-maxUniqueItems`, `x-minDecimal`, `x-maxDepth`, …) and
+most formats beyond a basic shape check (unknown formats pass). Validate with
+the vld schema itself when those matter.
+
+### OpenAPI 3.0 (`SchemaSettings::openapi3()`)
+
+`impl_json_schema!` detects an OpenAPI 3.0 generator and rewrites vld's 2020-12
+output with `to_openapi3`: tuples become `items: {anyOf: [...]}` + `minItems` /
+`maxItems`; `null` branches and `"null"` types become `nullable: true`; numeric
+`exclusiveMinimum` / `exclusiveMaximum` become `minimum` / `maximum` plus the
+boolean 3.0 form; a null-only schema (`vld::null()`) becomes
+`{"type": "string", "nullable": true, "enum": [null]}` (3.0 has no `null` type
+and ignores `nullable` without a `type`).
 
 ### Nested vld schemas
 
@@ -223,7 +243,8 @@ let result = vld_schemars::overlay_constraints(&base, &extra);
 
 | Function | Description |
 |---|---|
-| `vld_to_schemars(&Value)` | Convert JSON value to `schemars::Schema` |
+| `vld_to_schemars(&Value)` | Convert JSON value to `schemars::Schema`; a non-schema value (not an object / bool) fails closed as `false` |
+| `try_vld_to_schemars(&Value)` | Same, but a non-schema value is an error |
 | `vld_schema_to_schemars(&Value)` | Same, convenience alias |
 | `impl_json_schema!(Type)` | Implement `schemars::JsonSchema` for a vld type |
 | `impl_json_schema!(Type, "Name")` | Same, with custom schema name |

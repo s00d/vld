@@ -44,9 +44,9 @@ fn vld_to_schemars_primitive() {
 }
 
 #[test]
-fn vld_to_schemars_invalid_falls_back() {
+fn vld_to_schemars_invalid_fails_closed() {
     let schema = vld_to_schemars(&json!("not a schema"));
-    assert_eq!(schema, schemars::Schema::default());
+    assert_eq!(schema, schemars::Schema::from(false));
 }
 
 #[test]
