@@ -5,12 +5,12 @@ use rama::http::body::util::BodyExt;
 use rama::http::service::web::extract::{FromRequest, FromRequestBody};
 use rama::http::{Body, Method, Request};
 use vld::schema::VldParse;
-use vld_http_common::{query_string_to_json, DEFAULT_BODY_LIMIT};
+use vld_http_common::{parse_form_body, query_string_to_json, DEFAULT_BODY_LIMIT};
 
 /// Rama extractor that validates **URL-encoded form bodies**.
 ///
 /// For `GET`, the query string is used. For other methods, the body is parsed
-/// as `application/x-www-form-urlencoded`.
+/// as `application/x-www-form-urlencoded` (413 beyond [`DEFAULT_BODY_LIMIT`]).
 pub struct VldForm<T>(pub T);
 
 impl<T> FromRequest for VldForm<T>
@@ -35,32 +35,26 @@ where
         parts: &rama::http::request::Parts,
         body: Body,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send + 'static {
-        let is_get = parts.method == Method::GET;
-        let query_string = if is_get {
-            Some(
-                parts
-                    .uri
-                    .query()
-                    .map(|q| q.as_encoded_str().into_owned())
-                    .unwrap_or_default(),
-            )
-        } else {
-            None
-        };
+        let query_string = (parts.method == Method::GET).then(|| {
+            parts
+                .uri
+                .query()
+                .map(|q| q.as_encoded_str().into_owned())
+                .unwrap_or_default()
+        });
 
         async move {
-            let value = if let Some(qs) = query_string {
-                query_string_to_json(&qs)
-            } else {
-                let bytes = body
-                    .limited(DEFAULT_BODY_LIMIT)
-                    .collect()
-                    .await
-                    .map_err(|_| VldRejection::payload_too_large())?
-                    .to_bytes();
-                let body_str = std::str::from_utf8(&bytes)
-                    .map_err(|_| VldRejection::parse("Form body is not valid UTF-8"))?;
-                query_string_to_json(body_str)
+            let value = match query_string {
+                Some(qs) => query_string_to_json(&qs),
+                None => {
+                    let bytes = body
+                        .limited(DEFAULT_BODY_LIMIT)
+                        .collect()
+                        .await
+                        .map_err(|e| VldRejection::from_body_error(&e))?
+                        .to_bytes();
+                    parse_form_body(&bytes)?
+                }
             };
 
             let parsed = T::vld_parse_value(&value).map_err(VldRejection::from_vld)?;

@@ -13,7 +13,10 @@
 //! | [`VldCookie<T>`] | Cookie values |
 //! | [`ValidateJsonLayer<T>`] | Middleware for Service stacks |
 //!
-//! All extractors return **422 Unprocessable Entity** on validation failure.
+//! All extractors return **422 Unprocessable Entity** on validation failure
+//! or malformed input, and **413 Payload Too Large** when a body exceeds
+//! [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT) (2 MiB;
+//! configurable on the layer via [`ValidateJsonLayer::with_limit`]).
 //!
 //! Requires Rust **1.96+** (Rama MSRV).
 
@@ -22,14 +25,18 @@ mod layer;
 mod rejection;
 
 pub use extract::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
-pub use layer::{try_validated, validated, ValidateJsonLayer, ValidateJsonService, Validated};
+#[allow(deprecated)]
+pub use layer::try_validated;
+pub use layer::{validated, ValidateJsonLayer, ValidateJsonService, Validated};
 pub use rejection::VldRejection;
 
 /// Prelude — import everything you need.
 pub mod prelude {
+    #[allow(deprecated)]
+    pub use crate::try_validated;
     pub use crate::{
-        try_validated, validated, ValidateJsonLayer, ValidateJsonService, Validated, VldCookie,
-        VldForm, VldHeaders, VldJson, VldPath, VldQuery, VldRejection,
+        validated, ValidateJsonLayer, ValidateJsonService, Validated, VldCookie, VldForm,
+        VldHeaders, VldJson, VldPath, VldQuery, VldRejection,
     };
     pub use vld::prelude::*;
 }

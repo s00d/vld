@@ -1,7 +1,9 @@
 //! Shared rejection type for all `Vld*` extractors.
 
+use rama::http::body::util::LengthLimitError;
 use rama::http::service::web::response::IntoResponse;
 use rama::http::{header, Response, StatusCode};
+use vld_http_common::VldHttpError;
 
 /// Rejection returned when validation (or body parsing) fails.
 ///
@@ -9,69 +11,78 @@ use rama::http::{header, Response, StatusCode};
 /// - validation / parse → **422**
 /// - payload too large → **413**
 #[derive(Debug)]
-pub struct VldRejection {
-    error: vld::error::VldError,
-    status: StatusCode,
-}
+pub struct VldRejection(VldHttpError);
 
 impl VldRejection {
     /// Create a rejection from a [`vld::error::VldError`].
     #[must_use]
     pub fn from_vld(error: vld::error::VldError) -> Self {
-        Self {
-            error,
-            status: StatusCode::UNPROCESSABLE_ENTITY,
-        }
+        Self(VldHttpError::validation(error))
     }
 
     /// Create a rejection for a parse / transport error message.
     #[must_use]
     pub fn parse(message: impl Into<String>) -> Self {
-        Self::from_vld(vld::error::VldError::single(
-            vld::error::IssueCode::ParseError,
-            message.into(),
-        ))
+        Self(VldHttpError::parse(message))
     }
 
     /// Create a rejection for an oversized request body.
     #[must_use]
     pub fn payload_too_large() -> Self {
-        Self {
-            error: vld::error::VldError::single(
-                vld::error::IssueCode::ParseError,
-                "Payload too large",
-            ),
-            status: StatusCode::PAYLOAD_TOO_LARGE,
+        Self(VldHttpError::payload_too_large())
+    }
+
+    /// Map a body-collection error: only a length-limit error is 413,
+    /// anything else is a 422 parse error.
+    pub(crate) fn from_body_error(e: &(dyn std::error::Error + 'static)) -> Self {
+        let mut cur = Some(e);
+        while let Some(err) = cur {
+            if err.is::<LengthLimitError>() {
+                return Self::payload_too_large();
+            }
+            cur = err.source();
         }
+        Self::parse(format!("Failed to read request body: {e}"))
     }
 
     /// Borrow the underlying validation error.
     #[must_use]
     pub fn error(&self) -> &vld::error::VldError {
-        &self.error
+        self.0.error()
+    }
+
+    /// HTTP status of this rejection (422 or 413).
+    #[must_use]
+    pub fn status(&self) -> StatusCode {
+        StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
+    }
+}
+
+impl From<VldHttpError> for VldRejection {
+    fn from(e: VldHttpError) -> Self {
+        Self(e)
     }
 }
 
 impl IntoResponse for VldRejection {
     fn into_response(self) -> Response {
-        let body = if self.status == StatusCode::PAYLOAD_TOO_LARGE {
-            vld_http_common::format_payload_too_large()
-        } else {
-            vld_http_common::format_vld_error(&self.error)
-        };
-        (
-            self.status,
-            [(header::CONTENT_TYPE, "application/json")],
-            body.to_string(),
-        )
-            .into_response()
+        json_response(self.status(), &self.0.body())
     }
 }
 
 impl std::fmt::Display for VldRejection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Validation failed: {}", self.error)
+        self.0.fmt(f)
     }
 }
 
 impl std::error::Error for VldRejection {}
+
+pub(crate) fn json_response(status: StatusCode, body: &serde_json::Value) -> Response {
+    (
+        status,
+        [(header::CONTENT_TYPE, "application/json")],
+        body.to_string(),
+    )
+        .into_response()
+}

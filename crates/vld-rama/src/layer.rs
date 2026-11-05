@@ -7,9 +7,12 @@ use std::marker::PhantomData;
 use rama::extensions::{Extension, ExtensionsRef};
 use rama::http::body::util::BodyExt;
 use rama::http::header;
-use rama::http::{Body, Request, Response, StatusCode};
+use rama::http::{Body, Request, Response};
 use rama::{Layer, Service};
 use vld::schema::VldParse;
+use vld_http_common::{is_json_content_type, parse_json_body, DEFAULT_BODY_LIMIT};
+
+use crate::rejection::VldRejection;
 
 /// Wrapper stored in Rama [`Extensions`](rama::extensions::Extensions) so
 /// validated values do not require a manual `Extension` impl on `T`.
@@ -34,18 +37,31 @@ impl<T: fmt::Debug + Send + Sync + 'static> Extension for Validated<T> {}
 /// A Rama [`Layer`] that validates JSON request bodies with `vld`.
 ///
 /// On success inserts [`Validated<T>`] into request extensions and forwards
-/// the original body bytes. On failure returns `422` without calling the
-/// inner service. Non-JSON content types are passed through unchanged.
+/// the original body bytes. On failure returns `422` (`413` when the body
+/// exceeds the limit) without calling the inner service.
+///
+/// Requests whose `Content-Type` is not JSON (`application/json` or
+/// `application/*+json`) are passed through **untouched** — their body is
+/// not read, so use [`validated`] (which returns `Option`) in handlers.
 #[derive(Clone)]
 pub struct ValidateJsonLayer<T> {
+    limit: usize,
     _marker: PhantomData<fn() -> T>,
 }
 
 impl<T> ValidateJsonLayer<T> {
-    /// Create a new validation layer.
+    /// Create a new validation layer with the default body limit
+    /// ([`DEFAULT_BODY_LIMIT`], 2 MiB).
     #[must_use]
     pub fn new() -> Self {
+        Self::with_limit(DEFAULT_BODY_LIMIT)
+    }
+
+    /// Create a new validation layer with a custom body limit in bytes.
+    #[must_use]
+    pub fn with_limit(limit: usize) -> Self {
         Self {
+            limit,
             _marker: PhantomData,
         }
     }
@@ -63,6 +79,7 @@ impl<S, T> Layer<S> for ValidateJsonLayer<T> {
     fn layer(&self, inner: S) -> Self::Service {
         ValidateJsonService {
             inner,
+            limit: self.limit,
             _marker: PhantomData,
         }
     }
@@ -72,6 +89,7 @@ impl<S, T> Layer<S> for ValidateJsonLayer<T> {
 #[derive(Clone)]
 pub struct ValidateJsonService<S, T> {
     inner: S,
+    limit: usize,
     _marker: PhantomData<fn() -> T>,
 }
 
@@ -84,90 +102,56 @@ where
     type Error = Infallible;
 
     async fn serve(&self, req: Request) -> Result<Self::Output, Self::Error> {
+        use rama::http::service::web::response::IntoResponse;
+
         let is_json = req
             .headers()
             .get(header::CONTENT_TYPE)
             .and_then(|v| v.to_str().ok())
-            .map(|ct| {
-                let ct = ct.to_ascii_lowercase();
-                ct.starts_with("application/json") || ct.contains("+json")
-            })
-            .unwrap_or(false);
-
-        let (parts, body) = req.into_parts();
-        let bytes = match body
-            .limited(vld_http_common::DEFAULT_BODY_LIMIT)
-            .collect()
-            .await
-        {
-            Ok(collected) => collected.to_bytes(),
-            Err(_) => {
-                let error_body = vld_http_common::format_payload_too_large();
-                return Ok(json_response(StatusCode::PAYLOAD_TOO_LARGE, &error_body));
-            }
-        };
+            .is_some_and(is_json_content_type);
 
         if !is_json {
-            let new_req = Request::from_parts(parts, Body::from(bytes));
-            return self.inner.serve(new_req).await;
+            return self.inner.serve(req).await;
         }
 
-        let json_value: serde_json::Value = match serde_json::from_slice(&bytes) {
-            Ok(v) => v,
-            Err(e) => {
-                let error_body = vld_http_common::format_vld_error(&vld::error::VldError::single(
-                    vld::error::IssueCode::ParseError,
-                    format!("Invalid JSON: {e}"),
-                ));
-                return Ok(json_response(StatusCode::UNPROCESSABLE_ENTITY, &error_body));
-            }
+        let (parts, body) = req.into_parts();
+        let bytes = match body.limited(self.limit).collect().await {
+            Ok(collected) => collected.to_bytes(),
+            Err(e) => return Ok(VldRejection::from_body_error(&e).into_response()),
         };
 
-        match T::vld_parse_value(&json_value) {
+        let result = parse_json_body(&bytes)
+            .map_err(VldRejection::from)
+            .and_then(|v| T::vld_parse_value(&v).map_err(VldRejection::from_vld));
+
+        match result {
             Ok(validated) => {
                 let new_req = Request::from_parts(parts, Body::from(bytes));
                 new_req.extensions().insert(Validated(validated));
                 self.inner.serve(new_req).await
             }
-            Err(vld_err) => {
-                let error_body = vld_http_common::format_vld_error(&vld_err);
-                Ok(json_response(StatusCode::UNPROCESSABLE_ENTITY, &error_body))
-            }
+            Err(rejection) => Ok(rejection.into_response()),
         }
     }
 }
 
-fn json_response(status: StatusCode, body: &serde_json::Value) -> Response {
-    use rama::http::service::web::response::IntoResponse;
-    (
-        status,
-        [(header::CONTENT_TYPE, "application/json")],
-        serde_json::to_string(body).unwrap_or_else(|_| "{}".into()),
-    )
-        .into_response()
-}
-
 /// Extract the validated value from request extensions.
 ///
-/// # Panics
-///
-/// Panics if [`ValidateJsonLayer`] was not applied (or the type does not match).
+/// Returns `None` when the request was not validated — [`ValidateJsonLayer`]
+/// was not applied, the type does not match, or the request was not JSON.
 #[must_use]
-pub fn validated<T: Clone + fmt::Debug + Send + Sync + 'static>(req: &Request) -> T {
+pub fn validated<T: Clone + fmt::Debug + Send + Sync + 'static>(req: &Request) -> Option<T> {
     req.extensions()
         .get_ref::<Validated<T>>()
-        .expect(
-            "vld-rama: Validated<T> not found in request extensions. \
-             Make sure ValidateJsonLayer is applied.",
-        )
-        .0
-        .clone()
+        .map(|v| v.0.clone())
 }
 
 /// Try to extract the validated value from request extensions.
 #[must_use]
+#[deprecated(
+    since = "0.5.0",
+    note = "use `validated`, which now returns `Option<T>`"
+)]
 pub fn try_validated<T: Clone + fmt::Debug + Send + Sync + 'static>(req: &Request) -> Option<T> {
-    req.extensions()
-        .get_ref::<Validated<T>>()
-        .map(|v| v.0.clone())
+    validated(req)
 }

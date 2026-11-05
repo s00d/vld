@@ -3,7 +3,7 @@ use rama::http::matcher::UriParams;
 use rama::http::request::Parts;
 use rama::http::service::web::extract::FromPartsStateRefPair;
 use vld::schema::VldParse;
-use vld_http_common::coerce_value;
+use vld_http_common::path_params_to_json;
 
 /// Rama extractor that validates **URL path parameters**.
 ///
@@ -26,12 +26,7 @@ where
             .get_ref::<UriParams>()
             .ok_or_else(|| VldRejection::parse("No path parameters found for matched route"))?;
 
-        let mut map = serde_json::Map::new();
-        for (k, v) in params.iter() {
-            map.insert(k.to_string(), coerce_value(v));
-        }
-        let value = serde_json::Value::Object(map);
-
+        let value = path_params_to_json(params.iter());
         let parsed = T::vld_parse_value(&value).map_err(VldRejection::from_vld)?;
         Ok(VldPath(parsed))
     }
