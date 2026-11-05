@@ -129,3 +129,16 @@ fn params_take_outer_description_and_default() {
     assert_eq!(q["description"], "query");
     assert_eq!(q["schema"]["type"], "string");
 }
+
+#[test]
+fn optional_ref_any_of_keeps_ref_and_is_not_object() {
+    let out = conv(json!({"anyOf": [{"$ref": "#/components/schemas/Address"}, {"type": "null"}]}));
+    assert!(out.get("type").is_none(), "{out}");
+    assert_eq!(out["anyOf"][0]["$ref"], "#/components/schemas/Address");
+    let obj = conv(json!({"type": "object", "properties": {
+        "addr": {"anyOf": [{"$ref": "#/components/schemas/Address"}, {"type": "null"}]}}}));
+    assert_eq!(
+        obj["properties"]["addr"]["anyOf"][0]["$ref"],
+        "#/components/schemas/Address"
+    );
+}
