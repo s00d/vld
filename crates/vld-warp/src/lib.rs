@@ -29,8 +29,9 @@ use futures_util::{Stream, StreamExt};
 use std::convert::Infallible;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
-    parse_coerced, percent_decode, query_string_to_json, require_json_content_type, VldHttpError,
+    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
+    path_params_to_json, percent_decode, query_string_to_json, require_json_content_type,
+    VldHttpError,
 };
 use warp::http::StatusCode;
 use warp::reject::Reject;

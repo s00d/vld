@@ -138,7 +138,14 @@ fn issue_line(i: &vld::error::ValidationIssue, cmd: Option<&clap::Command>) -> S
                     .unwrap_or_else(|| arg.get_id().as_str().to_uppercase());
                 format!("<{value}>")
             };
-            format!("{name}{}", if rest.is_empty() { String::new() } else { format!(".{rest}") })
+            format!(
+                "{name}{}",
+                if rest.is_empty() {
+                    String::new()
+                } else {
+                    format!(".{rest}")
+                }
+            )
         }
         None => {
             let field = vld_integration_common::format_path(&i.path).replace('_', "-");
@@ -271,8 +278,7 @@ where
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        validate, validate_cli, validate_json, validate_or_exit, validate_with_schema,
-        VldClapError,
+        validate, validate_cli, validate_json, validate_or_exit, validate_with_schema, VldClapError,
     };
     pub use vld::prelude::*;
 }

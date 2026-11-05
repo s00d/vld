@@ -119,12 +119,14 @@ pub fn translate_issue(issue: &ValidationIssue, resolver: &dyn MessageResolver) 
         .map(|template| {
             // Type names (`{expected}` / `{received}` of `invalid_type`) are
             // looked up as `type.<name>`.
-            issue.code.render_with(&template, |name, value| match (&issue.code, name) {
-                (crate::error::IssueCode::InvalidType { .. }, "expected" | "received") => {
-                    resolver.resolve(&format!("type.{value}"))
-                }
-                _ => None,
-            })
+            issue
+                .code
+                .render_with(&template, |name, value| match (&issue.code, name) {
+                    (crate::error::IssueCode::InvalidType { .. }, "expected" | "received") => {
+                        resolver.resolve(&format!("type.{value}"))
+                    }
+                    _ => None,
+                })
         })
         .unwrap_or_else(|| issue.message.clone());
     ValidationIssue {

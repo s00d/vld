@@ -60,7 +60,9 @@ async fn json_content_types() {
         "application/problem+json; charset=utf-8",
     ] {
         let req = payload!(
-            test::TestRequest::post().uri("/j").header("content-type", ct),
+            test::TestRequest::post()
+                .uri("/j")
+                .header("content-type", ct),
             r#"{"name":"alice"}"#
         )
         .to_request();

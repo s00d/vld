@@ -56,6 +56,8 @@ fn duration_and_patterns() {
     check("contains_max", vld::string().contains("@@").max(6));
     check(
         "regex_and_prefix",
-        vld::string().regex(re("^[a-z]{3}[0-9]{2}$")).starts_with("ab"),
+        vld::string()
+            .regex(re("^[a-z]{3}[0-9]{2}$"))
+            .starts_with("ab"),
     );
 }

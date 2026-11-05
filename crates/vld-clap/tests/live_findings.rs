@@ -38,5 +38,9 @@ fn errors_use_clap_argument_names() {
     assert!(msg.contains("-t:"), "{msg}");
     assert!(msg.contains("<INPUT>:"), "{msg}");
     assert!(!msg.contains("--input"), "{msg}");
-    assert!(err.format_issues().contains("  --out:"), "{}", err.format_issues());
+    assert!(
+        err.format_issues().contains("  --out:"),
+        "{}",
+        err.format_issues()
+    );
 }

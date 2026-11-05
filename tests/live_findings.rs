@@ -51,7 +51,11 @@ fn translations_cover_types_and_units() {
     let msg = &vld::i18n::translate_error(&err, &ru).issues[0].message;
     assert!(msg.contains("3 символов"), "{msg}");
 
-    for lang in [vld::i18n::russian(), vld::i18n::german(), vld::i18n::spanish()] {
+    for lang in [
+        vld::i18n::russian(),
+        vld::i18n::german(),
+        vld::i18n::spanish(),
+    ] {
         let err = vld::literal("a").parse_value(&json!("b")).unwrap_err();
         let msg = &vld::i18n::translate_error(&err, &lang).issues[0].message;
         assert!(!msg.starts_with("Expected"), "{msg}");
@@ -135,7 +139,9 @@ fn fail_silently() -> Silent0 {
 
 #[test]
 fn issue_less_inner_errors_fail_the_container() {
-    assert!(vld::array(fail_silently()).parse_value(&json!([1])).is_err());
+    assert!(vld::array(fail_silently())
+        .parse_value(&json!([1]))
+        .is_err());
     assert!(vld::set(fail_silently()).parse_value(&json!([1])).is_err());
     assert!(vld::record(fail_silently())
         .parse_value(&json!({"a": 1}))
@@ -166,7 +172,10 @@ fn base64url_bytes_reject_standard_alphabet() {
     let s = vld::bytes().base64url();
     assert!(s.parse_value(&json!("-_8")).is_ok());
     assert!(s.parse_value(&json!("+/8")).is_err());
-    assert!(vld::string().base64url().parse_value(&json!("a+b")).is_err());
+    assert!(vld::string()
+        .base64url()
+        .parse_value(&json!("a+b"))
+        .is_err());
 }
 
 // ---- time datetime default is RFC 3339 -------------------------------------------

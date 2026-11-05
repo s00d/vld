@@ -12,10 +12,14 @@ vld::schema! {
 #[cfg(feature = "config-rs")]
 #[test]
 fn config_rs_parsed_env_fits_string_fields() {
-    let vars = [("APP_HOST", "12345"), ("APP_PORT", "8080"), ("APP_TAGS", "7")]
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
+    let vars = [
+        ("APP_HOST", "12345"),
+        ("APP_PORT", "8080"),
+        ("APP_TAGS", "7"),
+    ]
+    .iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect();
     let env = config::Environment::with_prefix("APP")
         .source(Some(vars))
         .try_parsing(true);

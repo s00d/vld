@@ -34,7 +34,10 @@ vld::schema! {
 
 fn app() -> Router {
     Router::new()
-        .route("/j", post(|b: VldJson<Named>| async move { b.name.clone() }))
+        .route(
+            "/j",
+            post(|b: VldJson<Named>| async move { b.name.clone() }),
+        )
         .route(
             "/q",
             get(|q: VldQuery<Search>| async move {

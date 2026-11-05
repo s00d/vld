@@ -61,8 +61,7 @@ use serde_json::Value;
 use utoipa::openapi::path::{Parameter, ParameterBuilder, ParameterIn};
 use utoipa::openapi::schema::{
     AdditionalProperties, AllOf, AnyOf, Array, ArrayItems, Object, OneOf, Schema, SchemaFormat,
-    SchemaType,
-    Type,
+    SchemaType, Type,
 };
 use utoipa::openapi::{Ref, RefOr, Required};
 

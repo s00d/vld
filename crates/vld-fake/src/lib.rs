@@ -719,7 +719,11 @@ impl<R: Rng> FakeGen<R> {
         if fmt == "base64url" {
             let mut n = self.pick_len(min, max, 8, 32);
             if n % 4 == 1 {
-                n = if max.is_none_or(|m| n < m) { n + 1 } else { n - 1 };
+                n = if max.is_none_or(|m| n < m) {
+                    n + 1
+                } else {
+                    n - 1
+                };
             }
             let bytes: Vec<u8> = (0..n * 3 / 4).map(|_| self.rng.gen()).collect();
             return base64url(&bytes);
@@ -792,7 +796,10 @@ impl<R: Rng> FakeGen<R> {
                 2 => json!(self.pick(WORDS)).to_string(),
                 _ => {
                     let mut m = Map::new();
-                    m.insert(self.pick(WORDS).to_lowercase(), json!(self.rng.gen_range(0..100)));
+                    m.insert(
+                        self.pick(WORDS).to_lowercase(),
+                        json!(self.rng.gen_range(0..100)),
+                    );
                     Value::Object(m).to_string()
                 }
             },
@@ -1483,7 +1490,9 @@ impl<R: Rng> FakeGen<R> {
         if let Some(additional) = obj.get("additionalProperties") {
             if additional.is_object() {
                 let count = |k: &str| obj.get(k).and_then(Value::as_u64).map(|v| v as usize);
-                let lo = count("minProperties").unwrap_or(0).saturating_sub(result.len());
+                let lo = count("minProperties")
+                    .unwrap_or(0)
+                    .saturating_sub(result.len());
                 let hi = count("maxProperties")
                     .map_or(lo.max(2), |m| m.saturating_sub(result.len()))
                     .max(lo);
@@ -1896,9 +1905,17 @@ fn is_bare_string(schema: &Value) -> bool {
         return false;
     };
     o.get("type").and_then(Value::as_str) == Some("string")
-        && ["format", "pattern", "enum", "const", "minLength", "maxLength", "allOf"]
-            .iter()
-            .all(|k| !o.contains_key(*k))
+        && [
+            "format",
+            "pattern",
+            "enum",
+            "const",
+            "minLength",
+            "maxLength",
+            "allOf",
+        ]
+        .iter()
+        .all(|k| !o.contains_key(*k))
 }
 
 fn len_bounds(obj: &Map<String, Value>) -> (Option<usize>, Option<usize>) {

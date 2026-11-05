@@ -683,7 +683,11 @@ pub fn to_openapi3(value: &mut Value) {
                 let Some(Value::Array(branches)) = map.get(key) else {
                     continue;
                 };
-                let rest: Vec<Value> = branches.iter().filter(|b| !is_null_schema(b)).cloned().collect();
+                let rest: Vec<Value> = branches
+                    .iter()
+                    .filter(|b| !is_null_schema(b))
+                    .cloned()
+                    .collect();
                 if rest.len() == branches.len() {
                     continue;
                 }

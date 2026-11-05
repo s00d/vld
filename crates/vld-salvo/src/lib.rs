@@ -116,9 +116,7 @@ impl Writer for VldSalvoError {
     async fn write(mut self, _req: &mut Request, _depot: &mut Depot, res: &mut Response) {
         let body = match self.status {
             StatusCode::PAYLOAD_TOO_LARGE => vld_http_common::format_payload_too_large(),
-            StatusCode::UNSUPPORTED_MEDIA_TYPE => {
-                vld_http_common::format_unsupported_media_type()
-            }
+            StatusCode::UNSUPPORTED_MEDIA_TYPE => vld_http_common::format_unsupported_media_type(),
             _ => vld_http_common::format_vld_error(&self.error),
         };
         res.status_code(self.status);
