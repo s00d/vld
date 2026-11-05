@@ -68,7 +68,6 @@ vld_http_common::conformance_suite! {
         query_percent_decoding,
         query_repeated_keys,
         query_missing_field,
-        #[ignore = "BUG: VldPath sees no route params (req.params::<Vec<(String, String)>>() fails, falls back to empty)"]
         path_valid,
         path_invalid,
         headers_valid,
