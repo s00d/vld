@@ -1,4 +1,5 @@
 use serde_json::json;
+#[allow(unused_imports)] // needed only with some schemars versions
 use vld::schema::VldSchema as _;
 use vld_aide::schemars;
 use vld_aide::schemars::JsonSchema;

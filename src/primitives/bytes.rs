@@ -160,8 +160,8 @@ impl ZBytes {
     pub fn to_json_schema(&self) -> serde_json::Value {
         let mins = [self.min_len, self.exact_len].into_iter().flatten();
         let maxs = [self.max_len, self.exact_len].into_iter().flatten();
-        let padded = |n: usize| (n + 2) / 3 * 4;
-        let unpadded = |n: usize| (n * 4 + 2) / 3;
+        let padded = |n: usize| n.div_ceil(3) * 4;
+        let unpadded = |n: usize| (n * 4).div_ceil(3);
         type Enc = fn(usize) -> usize;
         let (format, min_enc, max_enc): (&str, Enc, Enc) = match self.string_mode {
             BytesStringMode::Off => {

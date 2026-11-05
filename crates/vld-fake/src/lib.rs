@@ -598,9 +598,29 @@ impl<R: Rng> FakeGen<R> {
             return self.gen_chars(cs, n);
         }
 
-        // Byte-string formats: `minLength`/`maxLength` count decoded bytes.
+        // Byte-string formats: `minLength`/`maxLength` count *encoded* characters
+        // (as emitted by `vld::bytes()`), so pick a byte count whose encoding fits.
         if let Some(enc) = fmt.strip_prefix("byte") {
-            let n = self.pick_len(min, max, 8, 32);
+            let encoded_len = |n: usize| match enc {
+                "-hex" => n * 2,
+                "-base64url" => (n * 4).div_ceil(3),
+                _ => n.div_ceil(3) * 4,
+            };
+            let fits: Vec<usize> = (1..=64)
+                .filter(|_| min.is_some() || max.is_some())
+                .filter(|&n| {
+                    let l = encoded_len(n);
+                    // vld's hex `maxLength` reserves 2 chars for an optional `0x`
+                    // prefix, so an unprefixed value must leave that room.
+                    let slack = if enc == "-hex" { 2 } else { 0 };
+                    min.is_none_or(|m| l >= m) && max.is_none_or(|m| l + slack <= m)
+                })
+                .collect();
+            let n = if fits.is_empty() {
+                self.pick_len(None, None, 8, 32)
+            } else {
+                fits[self.rng.gen_range(0..fits.len())]
+            };
             let bytes: Vec<u8> = (0..n).map(|_| self.rng.gen()).collect();
             return match enc {
                 "-hex" => bytes.iter().map(|b| format!("{b:02x}")).collect(),
@@ -1128,10 +1148,10 @@ impl<R: Rng> FakeGen<R> {
         let in_range = |v: f64| {
             v >= lo
                 && v <= hi
-                && ex_lo.map_or(true, |e| v > e)
-                && ex_hi.map_or(true, |e| v < e)
-                && f("minimum").map_or(true, |m| v >= m)
-                && f("maximum").map_or(true, |m| v <= m)
+                && ex_lo.is_none_or(|e| v > e)
+                && ex_hi.is_none_or(|e| v < e)
+                && f("minimum").is_none_or(|m| v >= m)
+                && f("maximum").is_none_or(|m| v <= m)
         };
 
         // multipleOf: pick k * m inside the range.
@@ -1741,14 +1761,14 @@ fn len_bounds(obj: &Map<String, Value>) -> (Option<usize>, Option<usize>) {
 /// Whether `s` (counted in chars, like vld) satisfies the length bounds.
 fn len_ok(s: &str, min: Option<usize>, max: Option<usize>) -> bool {
     let n = s.chars().count();
-    min.map_or(true, |m| n >= m) && max.map_or(true, |m| n <= m)
+    min.is_none_or(|m| n >= m) && max.is_none_or(|m| n <= m)
 }
 
 /// Pad with `pad` / truncate `s` so its char count lies in `[min, max]`.
 fn fit_len(mut s: String, min: usize, max: Option<usize>, pad: char) -> String {
     let n = s.chars().count();
     if n < min {
-        s.extend(std::iter::repeat(pad).take(min - n));
+        s.extend(std::iter::repeat_n(pad, min - n));
     }
     if let Some(mx) = max {
         if let Some((idx, _)) = s.char_indices().nth(mx) {
@@ -1780,7 +1800,7 @@ const PASSWORD_ALPHA: &[u8] =
 
 fn base64_encode(data: &[u8]) -> String {
     const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
