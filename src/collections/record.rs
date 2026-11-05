@@ -43,32 +43,6 @@ impl<V: VldSchema> ZRecord<V> {
         self.max_keys = Some(n);
         self
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn value_schema_ref(&self) -> &V {
-        &self.value_schema
-    }
-
-    /// Generate a JSON Schema (called by [`JsonSchema`](crate::openapi::JsonSchema) trait impl).
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema_inner(&self) -> serde_json::Value
-    where
-        V: crate::openapi::JsonSchema,
-    {
-        let mut schema = serde_json::json!({
-            "type": "object",
-            "additionalProperties": self.value_schema.json_schema(),
-        });
-        crate::primitives::length_schema(
-            &mut schema,
-            ("minProperties", "maxProperties"),
-            self.min_keys,
-            self.max_keys,
-        );
-        schema
-    }
 }
 
 impl<V: VldSchema> VldSchema for ZRecord<V> {
@@ -122,5 +96,35 @@ impl<V: VldSchema> VldSchema for ZRecord<V> {
         } else {
             Err(errors)
         }
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<V> crate::openapi::JsonSchema for ZRecord<V>
+where
+    V: VldSchema + crate::openapi::JsonSchema,
+{
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({
+            "type": "object",
+            "additionalProperties": self.value_schema.json_schema(),
+        });
+        crate::primitives::length_schema(
+            &mut schema,
+            ("minProperties", "maxProperties"),
+            self.min_keys,
+            self.max_keys,
+        );
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<V> crate::openapi::CollectNestedSchemas for ZRecord<V>
+where
+    V: VldSchema + crate::openapi::CollectNestedSchemas,
+{
+    fn collect_nested_schemas(&self, out: &mut Vec<crate::schema::NestedSchemaEntry>) {
+        self.value_schema.collect_nested_schemas(out);
     }
 }

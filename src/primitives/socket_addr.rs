@@ -36,14 +36,6 @@ impl ZSocketAddr {
         self.max_port = Some(p);
         self
     }
-
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "string",
-            "format": "socket-addr"
-        })
-    }
 }
 
 impl Default for ZSocketAddr {
@@ -95,3 +87,16 @@ impl VldSchema for ZSocketAddr {
         Ok(addr)
     }
 }
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZSocketAddr {
+    fn json_schema(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "string",
+            "format": "socket-addr"
+        })
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZSocketAddr {}

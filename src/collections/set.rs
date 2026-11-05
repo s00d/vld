@@ -43,37 +43,6 @@ impl<T: VldSchema> ZSet<T> {
         self.max_size = Some(n);
         self
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn element_schema(&self) -> &T {
-        &self.element
-    }
-
-    /// Generate a JSON Schema (called by [`JsonSchema`](crate::openapi::JsonSchema) trait impl).
-    ///
-    /// `min_size` becomes `minItems` (n unique items need at least n items);
-    /// `max_size` is *not* emitted as `maxItems`, because duplicates in the
-    /// input are allowed and do not count towards the limit. The bound is
-    /// exposed as `x-maxUniqueItems` instead.
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema_inner(&self) -> serde_json::Value
-    where
-        T: crate::openapi::JsonSchema,
-    {
-        let mut schema = serde_json::json!({
-            "type": "array",
-            "items": self.element.json_schema(),
-        });
-        if let Some(min) = self.min_size {
-            schema["minItems"] = serde_json::json!(min);
-        }
-        if let Some(max) = self.max_size {
-            schema["x-maxUniqueItems"] = serde_json::json!(max);
-        }
-        schema
-    }
 }
 
 impl<T> VldSchema for ZSet<T>
@@ -130,5 +99,41 @@ where
         } else {
             Err(errors)
         }
+    }
+}
+
+/// `min_size` becomes `minItems` (n unique items need at least n items);
+/// `max_size` is *not* emitted as `maxItems`, because duplicates in the
+/// input are allowed and do not count towards the limit. The bound is
+/// exposed as `x-maxUniqueItems` instead.
+#[cfg(feature = "openapi")]
+impl<T> crate::openapi::JsonSchema for ZSet<T>
+where
+    T: VldSchema + crate::openapi::JsonSchema,
+    T::Output: Eq + std::hash::Hash,
+{
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({
+            "type": "array",
+            "items": self.element.json_schema(),
+        });
+        if let Some(min) = self.min_size {
+            schema["minItems"] = serde_json::json!(min);
+        }
+        if let Some(max) = self.max_size {
+            schema["x-maxUniqueItems"] = serde_json::json!(max);
+        }
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<T> crate::openapi::CollectNestedSchemas for ZSet<T>
+where
+    T: VldSchema + crate::openapi::CollectNestedSchemas,
+    T::Output: Eq + std::hash::Hash,
+{
+    fn collect_nested_schemas(&self, out: &mut Vec<crate::schema::NestedSchemaEntry>) {
+        self.element.collect_nested_schemas(out);
     }
 }

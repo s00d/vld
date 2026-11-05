@@ -204,59 +204,6 @@ impl ZString {
         self.coerce = true;
         self
     }
-
-    /// Generate a JSON Schema representation of this string schema.
-    ///
-    /// - Length bounds: the strictest `min`/`max`/`len`/`non_empty` wins.
-    /// - Formats: the first goes into `format`, further ones into `allOf`.
-    /// - `regex`/`starts_with`/`ends_with`/`contains` become `pattern`s
-    ///   (first in `pattern`, further ones in `allOf`).
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({"type": "string"});
-        let (mut mins, mut maxs) = (vec![], vec![]);
-        let mut formats: Vec<&str> = vec![];
-        let mut patterns: Vec<String> = vec![];
-        for check in &self.checks {
-            match &check.kind {
-                Kind::Min(n) => mins.push(*n),
-                Kind::Max(n) => maxs.push(*n),
-                Kind::Len(n) => {
-                    mins.push(*n);
-                    maxs.push(*n);
-                }
-                Kind::NonEmpty => mins.push(1),
-                Kind::StartsWith(p) => patterns.push(format!("^{}", regex_escape(p))),
-                Kind::EndsWith(p) => patterns.push(format!("{}$", regex_escape(p))),
-                Kind::Contains(p) => patterns.push(regex_escape(p)),
-                #[cfg(feature = "regex")]
-                Kind::Regex(re) => patterns.push(re.as_str().to_string()),
-                Kind::Format(f) => {
-                    if !formats.contains(&f.schema_format()) {
-                        formats.push(f.schema_format());
-                    }
-                }
-            }
-        }
-        crate::primitives::length_schema(&mut schema, ("minLength", "maxLength"), mins, maxs);
-        let mut all_of = vec![];
-        let mut formats = formats.into_iter();
-        if let Some(f) = formats.next() {
-            schema["format"] = serde_json::json!(f);
-        }
-        all_of.extend(formats.map(|f| serde_json::json!({ "format": f })));
-        let mut patterns = patterns.into_iter();
-        if let Some(p) = patterns.next() {
-            schema["pattern"] = serde_json::json!(p);
-        }
-        all_of.extend(patterns.map(|p| serde_json::json!({ "pattern": p })));
-        if !all_of.is_empty() {
-            schema["allOf"] = serde_json::Value::Array(all_of);
-        }
-        schema
-    }
 }
 
 impl Default for ZString {
@@ -307,3 +254,59 @@ impl VldSchema for ZString {
         }
     }
 }
+
+/// Generate a JSON Schema representation of this string schema.
+///
+/// - Length bounds: the strictest `min`/`max`/`len`/`non_empty` wins.
+/// - Formats: the first goes into `format`, further ones into `allOf`.
+/// - `regex`/`starts_with`/`ends_with`/`contains` become `pattern`s
+///   (first in `pattern`, further ones in `allOf`).
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZString {
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({"type": "string"});
+        let (mut mins, mut maxs) = (vec![], vec![]);
+        let mut formats: Vec<&str> = vec![];
+        let mut patterns: Vec<String> = vec![];
+        for check in &self.checks {
+            match &check.kind {
+                Kind::Min(n) => mins.push(*n),
+                Kind::Max(n) => maxs.push(*n),
+                Kind::Len(n) => {
+                    mins.push(*n);
+                    maxs.push(*n);
+                }
+                Kind::NonEmpty => mins.push(1),
+                Kind::StartsWith(p) => patterns.push(format!("^{}", regex_escape(p))),
+                Kind::EndsWith(p) => patterns.push(format!("{}$", regex_escape(p))),
+                Kind::Contains(p) => patterns.push(regex_escape(p)),
+                #[cfg(feature = "regex")]
+                Kind::Regex(re) => patterns.push(re.as_str().to_string()),
+                Kind::Format(f) => {
+                    if !formats.contains(&f.schema_format()) {
+                        formats.push(f.schema_format());
+                    }
+                }
+            }
+        }
+        crate::primitives::length_schema(&mut schema, ("minLength", "maxLength"), mins, maxs);
+        let mut all_of = vec![];
+        let mut formats = formats.into_iter();
+        if let Some(f) = formats.next() {
+            schema["format"] = serde_json::json!(f);
+        }
+        all_of.extend(formats.map(|f| serde_json::json!({ "format": f })));
+        let mut patterns = patterns.into_iter();
+        if let Some(p) = patterns.next() {
+            schema["pattern"] = serde_json::json!(p);
+        }
+        all_of.extend(patterns.map(|p| serde_json::json!({ "pattern": p })));
+        if !all_of.is_empty() {
+            schema["allOf"] = serde_json::Value::Array(all_of);
+        }
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZString {}

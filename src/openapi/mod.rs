@@ -23,8 +23,6 @@
 
 use serde_json::{json, Value};
 
-use crate::schema::VldSchema;
-
 #[cfg(feature = "diff")]
 pub mod diff;
 
@@ -84,442 +82,56 @@ pub fn nullable_schema(inner: Value) -> Value {
 }
 
 // ---------------------------------------------------------------------------
-// Leaf schemas: `to_json_schema()` + no nested schemas
+// Impl helpers for wrapper schemas (used next to each type)
 // ---------------------------------------------------------------------------
 
-macro_rules! leaf_schemas {
-    ($( $(#[$m:meta])* $t:ty ),* $(,)?) => {$(
-        $(#[$m])*
-        impl JsonSchema for $t {
-            fn json_schema(&self) -> Value {
-                self.to_json_schema()
-            }
-        }
-        $(#[$m])*
-        impl CollectNestedSchemas for $t {}
-    )*};
-}
-
-leaf_schemas!(
-    crate::primitives::ZString,
-    crate::primitives::ZNumber,
-    crate::primitives::ZInt,
-    crate::primitives::ZBoolean,
-    crate::primitives::ZBytes,
-    #[cfg(feature = "decimal")]
-    crate::primitives::ZDecimal,
-    #[cfg(feature = "net")]
-    crate::primitives::ZIpNetwork,
-    crate::primitives::ZSocketAddr,
-    crate::primitives::ZJsonValue,
-    #[cfg(feature = "file")]
-    crate::primitives::ZFile,
-    crate::primitives::ZDuration,
-    crate::primitives::ZPath,
-    crate::primitives::ZEnum,
-    crate::primitives::ZAny,
-);
-
-// ---------------------------------------------------------------------------
-// Wrappers that forward everything to `inner_schema()`
-// ---------------------------------------------------------------------------
-
+/// `JsonSchema` + `CollectNestedSchemas` forwarding to `inner_schema()`.
+///
 /// `impl[<generics>] Type, inner = S, where [extra bounds];`
-macro_rules! forward_inner {
+macro_rules! forward_inner_schema {
     ($( impl[$($g:tt)*] $t:ty, inner = $S:ident $(, where [$($w:tt)*])? ; )*) => {$(
-        impl<$($g)*> JsonSchema for $t
+        impl<$($g)*> $crate::openapi::JsonSchema for $t
         where
-            $S: VldSchema + JsonSchema,
+            $S: $crate::schema::VldSchema + $crate::openapi::JsonSchema,
             $($($w)*)?
         {
-            fn json_schema(&self) -> Value {
-                self.inner_schema().json_schema()
+            fn json_schema(&self) -> serde_json::Value {
+                $crate::openapi::JsonSchema::json_schema(self.inner_schema())
             }
             fn is_required(&self) -> bool {
-                self.inner_schema().is_required()
+                $crate::openapi::JsonSchema::is_required(self.inner_schema())
             }
         }
 
-        impl<$($g)*> CollectNestedSchemas for $t
+        impl<$($g)*> $crate::openapi::CollectNestedSchemas for $t
         where
-            $S: VldSchema + CollectNestedSchemas,
+            $S: $crate::schema::VldSchema + $crate::openapi::CollectNestedSchemas,
             $($($w)*)?
         {
-            fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-                self.inner_schema().collect_nested_schemas(out);
+            fn collect_nested_schemas(&self, out: &mut Vec<$crate::schema::NestedSchemaEntry>) {
+                $crate::openapi::CollectNestedSchemas::collect_nested_schemas(self.inner_schema(), out);
             }
         }
     )*};
 }
 
-forward_inner! {
-    impl[S] crate::combinators::ZCatch<S>, inner = S, where [S::Output: Clone];
-    impl[S, F] crate::combinators::ZRefine<S, F>, inner = S, where [F: Fn(&S::Output) -> bool];
-    impl[S, F, U] crate::combinators::ZTransform<S, F, U>, inner = S, where [F: Fn(S::Output) -> U];
-    impl[S] crate::combinators::ZMessage<S>, inner = S;
-    impl[S, F] crate::combinators::ZSuperRefine<S, F>, inner = S,
-        where [F: Fn(&S::Output, &mut crate::error::VldError)];
-    impl[F, S] crate::combinators::ZPreprocess<F, S>, inner = S, where [F: Fn(&Value) -> Value];
-}
+pub(crate) use forward_inner_schema;
 
 /// Collect-only forwarding for wrappers whose `JsonSchema` impl is custom.
-macro_rules! collect_inner {
+macro_rules! collect_inner_schemas {
     ($( impl[$($g:tt)*] $t:ty, inner = $S:ident $(, where [$($w:tt)*])? ; )*) => {$(
-        impl<$($g)*> CollectNestedSchemas for $t
+        impl<$($g)*> $crate::openapi::CollectNestedSchemas for $t
         where
-            $S: VldSchema + CollectNestedSchemas,
+            $S: $crate::schema::VldSchema + $crate::openapi::CollectNestedSchemas,
             $($($w)*)?
         {
-            fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-                self.inner_schema().collect_nested_schemas(out);
+            fn collect_nested_schemas(&self, out: &mut Vec<$crate::schema::NestedSchemaEntry>) {
+                $crate::openapi::CollectNestedSchemas::collect_nested_schemas(self.inner_schema(), out);
             }
         }
     )*};
 }
-
-collect_inner! {
-    impl[S] crate::modifiers::ZOptional<S>, inner = S;
-    impl[S] crate::modifiers::ZNullable<S>, inner = S;
-    impl[S] crate::modifiers::ZNullish<S>, inner = S;
-    impl[S] crate::modifiers::ZDefault<S>, inner = S, where [S::Output: Clone];
-    impl[S] crate::combinators::ZDescribe<S>, inner = S;
-}
-
-// ---------------------------------------------------------------------------
-// Modifiers
-// ---------------------------------------------------------------------------
-
-impl<S: VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZOptional<S> {
-    fn json_schema(&self) -> Value {
-        nullable_schema(self.inner_schema().json_schema())
-    }
-    fn is_required(&self) -> bool {
-        false
-    }
-}
-
-impl<S: VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZNullable<S> {
-    fn json_schema(&self) -> Value {
-        nullable_schema(self.inner_schema().json_schema())
-    }
-}
-
-impl<S: VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZNullish<S> {
-    fn json_schema(&self) -> Value {
-        nullable_schema(self.inner_schema().json_schema())
-    }
-    fn is_required(&self) -> bool {
-        false
-    }
-}
-
-impl<S: VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZDefault<S>
-where
-    S::Output: Clone + serde::Serialize,
-{
-    fn json_schema(&self) -> Value {
-        let mut schema = self.inner_schema().json_schema();
-        if let (Some(obj), Ok(default)) = (
-            schema.as_object_mut(),
-            serde_json::to_value(self.default_value()),
-        ) {
-            obj.insert("default".to_string(), default);
-        }
-        schema
-    }
-    fn is_required(&self) -> bool {
-        false
-    }
-}
-
-impl<S: VldSchema + JsonSchema> JsonSchema for crate::combinators::ZDescribe<S> {
-    fn json_schema(&self) -> Value {
-        let mut schema = self.inner_schema().json_schema();
-        let desc = self.description();
-        if !desc.is_empty() {
-            schema["description"] = Value::String(desc.to_string());
-        }
-        schema
-    }
-    fn is_required(&self) -> bool {
-        self.inner_schema().is_required()
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Collections
-// ---------------------------------------------------------------------------
-
-impl<T: VldSchema + JsonSchema> JsonSchema for crate::collections::ZArray<T> {
-    fn json_schema(&self) -> Value {
-        self.to_json_schema_inner()
-    }
-}
-
-impl<T: VldSchema + CollectNestedSchemas> CollectNestedSchemas for crate::collections::ZArray<T> {
-    fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-        self.element_schema().collect_nested_schemas(out);
-    }
-}
-
-impl<V: VldSchema + JsonSchema> JsonSchema for crate::collections::ZRecord<V> {
-    fn json_schema(&self) -> Value {
-        self.to_json_schema_inner()
-    }
-}
-
-impl<V: VldSchema + CollectNestedSchemas> CollectNestedSchemas for crate::collections::ZRecord<V> {
-    fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-        self.value_schema_ref().collect_nested_schemas(out);
-    }
-}
-
-impl<T> JsonSchema for crate::collections::ZSet<T>
-where
-    T: VldSchema + JsonSchema,
-    T::Output: Eq + std::hash::Hash,
-{
-    fn json_schema(&self) -> Value {
-        self.to_json_schema_inner()
-    }
-}
-
-impl<T> CollectNestedSchemas for crate::collections::ZSet<T>
-where
-    T: VldSchema + CollectNestedSchemas,
-    T::Output: Eq + std::hash::Hash,
-{
-    fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-        self.element_schema().collect_nested_schemas(out);
-    }
-}
-
-// ZMap parses `[[key, value], ...]`. `ZMap` exposes no key/value schema
-// accessors, so the pair items are left unconstrained.
-impl<K: VldSchema, V: VldSchema> JsonSchema for crate::collections::ZMap<K, V> {
-    fn json_schema(&self) -> Value {
-        json!({
-            "type": "array",
-            "items": { "type": "array", "minItems": 2, "maxItems": 2 }
-        })
-    }
-}
-
-impl<K: VldSchema, V: VldSchema> CollectNestedSchemas for crate::collections::ZMap<K, V> {}
-
-// Tuples parse a fixed-length JSON array.
-macro_rules! tuple_schemas {
-    ($( $n:literal; $( ($idx:tt, $T:ident) ),+ );* $(;)?) => {$(
-        impl<$($T: VldSchema + JsonSchema),+> JsonSchema for ($($T,)+) {
-            fn json_schema(&self) -> Value {
-                json!({
-                    "type": "array",
-                    "prefixItems": [ $( self.$idx.json_schema() ),+ ],
-                    "items": false,
-                    "minItems": $n,
-                    "maxItems": $n,
-                })
-            }
-        }
-
-        impl<$($T: VldSchema + CollectNestedSchemas),+> CollectNestedSchemas for ($($T,)+) {
-            fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-                $( self.$idx.collect_nested_schemas(out); )+
-            }
-        }
-    )*};
-}
-
-tuple_schemas! {
-    1; (0, A);
-    2; (0, A), (1, B);
-    3; (0, A), (1, B), (2, C);
-    4; (0, A), (1, B), (2, C), (3, D);
-    5; (0, A), (1, B), (2, C), (3, D), (4, E);
-    6; (0, A), (1, B), (2, C), (3, D), (4, E), (5, F);
-}
-
-// ---------------------------------------------------------------------------
-// Combinators
-// ---------------------------------------------------------------------------
-
-impl<A, B> JsonSchema for crate::combinators::ZUnion2<A, B>
-where
-    A: VldSchema + JsonSchema,
-    B: VldSchema + JsonSchema,
-{
-    fn json_schema(&self) -> Value {
-        json!({ "anyOf": [self.schema_a().json_schema(), self.schema_b().json_schema()] })
-    }
-}
-
-impl<A, B> CollectNestedSchemas for crate::combinators::ZUnion2<A, B>
-where
-    A: VldSchema + CollectNestedSchemas,
-    B: VldSchema + CollectNestedSchemas,
-{
-    fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-        self.schema_a().collect_nested_schemas(out);
-        self.schema_b().collect_nested_schemas(out);
-    }
-}
-
-impl<A, B, C> JsonSchema for crate::combinators::ZUnion3<A, B, C>
-where
-    A: VldSchema + JsonSchema,
-    B: VldSchema + JsonSchema,
-    C: VldSchema + JsonSchema,
-{
-    fn json_schema(&self) -> Value {
-        json!({
-            "anyOf": [
-                self.schema_a().json_schema(),
-                self.schema_b().json_schema(),
-                self.schema_c().json_schema(),
-            ]
-        })
-    }
-}
-
-impl<A, B, C> CollectNestedSchemas for crate::combinators::ZUnion3<A, B, C>
-where
-    A: VldSchema + CollectNestedSchemas,
-    B: VldSchema + CollectNestedSchemas,
-    C: VldSchema + CollectNestedSchemas,
-{
-    fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-        self.schema_a().collect_nested_schemas(out);
-        self.schema_b().collect_nested_schemas(out);
-        self.schema_c().collect_nested_schemas(out);
-    }
-}
-
-impl<A, B> JsonSchema for crate::combinators::ZIntersection<A, B>
-where
-    A: VldSchema + JsonSchema,
-    B: VldSchema + JsonSchema,
-{
-    fn json_schema(&self) -> Value {
-        json!({ "allOf": [self.schema_a().json_schema(), self.schema_b().json_schema()] })
-    }
-}
-
-impl<A, B> CollectNestedSchemas for crate::combinators::ZIntersection<A, B>
-where
-    A: VldSchema + CollectNestedSchemas,
-    B: VldSchema + CollectNestedSchemas,
-{
-    fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-        self.schema_a().collect_nested_schemas(out);
-        self.schema_b().collect_nested_schemas(out);
-    }
-}
-
-// The following types expose no accessors for their inner schema/value, so
-// they emit a permissive schema (`{}` accepts anything) rather than failing
-// to compile inside `schema!` under `openapi`.
-
-/// `{}` — the literal value is not exposed by `ZLiteral`.
-impl<T: crate::primitives::IntoLiteral> JsonSchema for crate::primitives::ZLiteral<T> {
-    fn json_schema(&self) -> Value {
-        json!({})
-    }
-}
-impl<T: crate::primitives::IntoLiteral> CollectNestedSchemas for crate::primitives::ZLiteral<T> {}
-
-/// `{"type": "object"}` — variants are type-erased and not exposed.
-impl JsonSchema for crate::combinators::ZDiscriminatedUnion {
-    fn json_schema(&self) -> Value {
-        json!({ "type": "object" })
-    }
-}
-impl CollectNestedSchemas for crate::combinators::ZDiscriminatedUnion {}
-
-/// `{}` — a recursive schema cannot be expanded inline.
-impl<T: VldSchema, F: Fn() -> T> JsonSchema for crate::combinators::ZLazy<T, F> {
-    fn json_schema(&self) -> Value {
-        json!({})
-    }
-}
-impl<T: VldSchema, F: Fn() -> T> CollectNestedSchemas for crate::combinators::ZLazy<T, F> {}
-
-/// `{}` — arbitrary validation function.
-impl<F, T> JsonSchema for crate::combinators::ZCustom<F, T> {
-    fn json_schema(&self) -> Value {
-        json!({})
-    }
-}
-impl<F, T> CollectNestedSchemas for crate::combinators::ZCustom<F, T> {}
-
-/// `{}` — the first stage (input schema) is not exposed by `ZPipe`.
-impl<A, B> JsonSchema for crate::combinators::ZPipe<A, B>
-where
-    A: VldSchema,
-    B: VldSchema,
-    A::Output: serde::Serialize,
-{
-    fn json_schema(&self) -> Value {
-        json!({})
-    }
-}
-impl<A, B> CollectNestedSchemas for crate::combinators::ZPipe<A, B>
-where
-    A: VldSchema,
-    B: VldSchema,
-    A::Output: serde::Serialize,
-{
-}
-
-// ---------------------------------------------------------------------------
-// NestedSchema
-// ---------------------------------------------------------------------------
-
-impl<T, F> JsonSchema for crate::schema::NestedSchema<T, F>
-where
-    F: Fn(&Value) -> Result<T, crate::error::VldError>,
-{
-    fn json_schema(&self) -> Value {
-        match self.name {
-            Some(name) => json!({ "$ref": format!("#/components/schemas/{}", name) }),
-            // Unnamed nested schemas are opaque closures.
-            None => json!({ "type": "object" }),
-        }
-    }
-}
-
-impl<T, F> CollectNestedSchemas for crate::schema::NestedSchema<T, F>
-where
-    F: Fn(&Value) -> Result<T, crate::error::VldError>,
-{
-    fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-        if let (Some(name), Some(f)) = (self.name, self.json_schema_fn) {
-            // Dedup by name: skip cycles and diamond references already visited.
-            if out.iter().any(|(n, _)| *n == name) {
-                return;
-            }
-            out.push((name, f));
-            if let Some(collect) = self.collect_nested_fn {
-                collect(out);
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Object (dynamic)
-// ---------------------------------------------------------------------------
-
-impl JsonSchema for crate::object::ZObject {
-    fn json_schema(&self) -> Value {
-        self.to_json_schema()
-    }
-}
-
-impl CollectNestedSchemas for crate::object::ZObject {
-    fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
-        self.collect_nested_into(out);
-    }
-}
+pub(crate) use collect_inner_schemas;
 
 // ---------------------------------------------------------------------------
 // Helpers

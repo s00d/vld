@@ -51,23 +51,6 @@ impl ZJsonValue {
         self.max_depth = Some(depth);
         self
     }
-
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({});
-        if self.require_object {
-            schema["type"] = serde_json::json!("object");
-            if !self.required_keys.is_empty() {
-                schema["required"] = serde_json::json!(self.required_keys);
-            }
-        } else if self.require_array {
-            schema["type"] = serde_json::json!("array");
-        }
-        if let Some(depth) = self.max_depth {
-            schema["x-maxDepth"] = serde_json::json!(depth);
-        }
-        schema
-    }
 }
 
 impl Default for ZJsonValue {
@@ -128,3 +111,25 @@ impl VldSchema for ZJsonValue {
         Ok(value.clone())
     }
 }
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZJsonValue {
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({});
+        if self.require_object {
+            schema["type"] = serde_json::json!("object");
+            if !self.required_keys.is_empty() {
+                schema["required"] = serde_json::json!(self.required_keys);
+            }
+        } else if self.require_array {
+            schema["type"] = serde_json::json!("array");
+        }
+        if let Some(depth) = self.max_depth {
+            schema["x-maxDepth"] = serde_json::json!(depth);
+        }
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZJsonValue {}

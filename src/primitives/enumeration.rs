@@ -42,16 +42,6 @@ impl ZEnum {
     }
 }
 
-impl ZEnum {
-    /// Generate a JSON Schema representation.
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        serde_json::json!({"type": "string", "enum": self.variants})
-    }
-}
-
 impl VldSchema for ZEnum {
     type Output = String;
 
@@ -72,3 +62,14 @@ impl VldSchema for ZEnum {
         }
     }
 }
+
+/// Generate a JSON Schema representation.
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZEnum {
+    fn json_schema(&self) -> serde_json::Value {
+        serde_json::json!({"type": "string", "enum": self.variants})
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZEnum {}

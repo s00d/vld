@@ -143,37 +143,6 @@ impl ZDecimal {
             }
         })
     }
-
-    /// JSON Schema: a `decimal`-format string with `x-minDecimal` /
-    /// `x-exclusiveMinDecimal` (strictest lower bound, sign flags included),
-    /// `x-maxDecimal` / `x-exclusiveMaxDecimal` and `x-multipleOfDecimal`.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({
-            "type": "string",
-            "format": "decimal"
-        });
-        if let Some((v, excl)) = self.lower() {
-            let key = if excl {
-                "x-exclusiveMinDecimal"
-            } else {
-                "x-minDecimal"
-            };
-            schema[key] = serde_json::json!(v.to_string());
-        }
-        if let Some((v, excl)) = self.upper() {
-            let key = if excl {
-                "x-exclusiveMaxDecimal"
-            } else {
-                "x-maxDecimal"
-            };
-            schema[key] = serde_json::json!(v.to_string());
-        }
-        if let Some(m) = self.multiple_of {
-            schema["x-multipleOfDecimal"] = serde_json::json!(m.to_string());
-        }
-        schema
-    }
 }
 
 impl Default for ZDecimal {
@@ -267,3 +236,39 @@ impl VldSchema for ZDecimal {
         Ok(n)
     }
 }
+
+/// JSON Schema: a `decimal`-format string with `x-minDecimal` /
+/// `x-exclusiveMinDecimal` (strictest lower bound, sign flags included),
+/// `x-maxDecimal` / `x-exclusiveMaxDecimal` and `x-multipleOfDecimal`.
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZDecimal {
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({
+            "type": "string",
+            "format": "decimal"
+        });
+        if let Some((v, excl)) = self.lower() {
+            let key = if excl {
+                "x-exclusiveMinDecimal"
+            } else {
+                "x-minDecimal"
+            };
+            schema[key] = serde_json::json!(v.to_string());
+        }
+        if let Some((v, excl)) = self.upper() {
+            let key = if excl {
+                "x-exclusiveMaxDecimal"
+            } else {
+                "x-maxDecimal"
+            };
+            schema[key] = serde_json::json!(v.to_string());
+        }
+        if let Some(m) = self.multiple_of {
+            schema["x-multipleOfDecimal"] = serde_json::json!(m.to_string());
+        }
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZDecimal {}

@@ -152,39 +152,6 @@ impl ZBytes {
         self.string_mode = BytesStringMode::Hex;
         self
     }
-
-    /// JSON Schema. In string modes `minLength`/`maxLength` describe the
-    /// *encoded* string length (Base64: `4*ceil(n/3)` padded; Base64URL may be
-    /// unpadded; hex: `2n`, plus an optional `0x` prefix).
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mins = [self.min_len, self.exact_len].into_iter().flatten();
-        let maxs = [self.max_len, self.exact_len].into_iter().flatten();
-        let padded = |n: usize| n.div_ceil(3) * 4;
-        let unpadded = |n: usize| (n * 4).div_ceil(3);
-        type Enc = fn(usize) -> usize;
-        let (format, min_enc, max_enc): (&str, Enc, Enc) = match self.string_mode {
-            BytesStringMode::Off => {
-                let mut schema = serde_json::json!({
-                    "type": "array",
-                    "items": { "type": "integer", "minimum": 0, "maximum": 255 }
-                });
-                super::length_schema(&mut schema, ("minItems", "maxItems"), mins, maxs);
-                return schema;
-            }
-            BytesStringMode::Base64 => ("byte", padded, padded),
-            BytesStringMode::Base64Url => ("byte-base64url", unpadded, padded),
-            BytesStringMode::Hex => ("byte-hex", |n| n * 2, |n| n * 2 + 2),
-        };
-        let mut schema = serde_json::json!({ "type": "string", "format": format });
-        super::length_schema(
-            &mut schema,
-            ("minLength", "maxLength"),
-            mins.map(min_enc),
-            maxs.map(max_enc),
-        );
-        schema
-    }
 }
 
 impl Default for ZBytes {
@@ -309,3 +276,41 @@ impl VldSchema for ZBytes {
         }
     }
 }
+
+/// JSON Schema. In string modes `minLength`/`maxLength` describe the
+/// *encoded* string length (Base64: `4*ceil(n/3)` padded; Base64URL may be
+/// unpadded; hex: `2n`, plus an optional `0x` prefix).
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZBytes {
+    fn json_schema(&self) -> serde_json::Value {
+        let mins = [self.min_len, self.exact_len].into_iter().flatten();
+        let maxs = [self.max_len, self.exact_len].into_iter().flatten();
+        let padded = |n: usize| n.div_ceil(3) * 4;
+        let unpadded = |n: usize| (n * 4).div_ceil(3);
+        type Enc = fn(usize) -> usize;
+        let (format, min_enc, max_enc): (&str, Enc, Enc) = match self.string_mode {
+            BytesStringMode::Off => {
+                let mut schema = serde_json::json!({
+                    "type": "array",
+                    "items": { "type": "integer", "minimum": 0, "maximum": 255 }
+                });
+                super::length_schema(&mut schema, ("minItems", "maxItems"), mins, maxs);
+                return schema;
+            }
+            BytesStringMode::Base64 => ("byte", padded, padded),
+            BytesStringMode::Base64Url => ("byte-base64url", unpadded, padded),
+            BytesStringMode::Hex => ("byte-hex", |n| n * 2, |n| n * 2 + 2),
+        };
+        let mut schema = serde_json::json!({ "type": "string", "format": format });
+        super::length_schema(
+            &mut schema,
+            ("minLength", "maxLength"),
+            mins.map(min_enc),
+            maxs.map(max_enc),
+        );
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZBytes {}

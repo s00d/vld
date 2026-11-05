@@ -151,7 +151,7 @@ mod openapi {
     #[test]
     fn zobject_collects_nested_schemas() {
         use vld::openapi::CollectNestedSchemas;
-        let obj = vld::object().field_schema("home", vld::nested!(Address).optional());
+        let obj = vld::object().field("home", vld::nested!(Address).optional());
         let mut out = Vec::new();
         obj.collect_nested_schemas(&mut out);
         assert_eq!(out.len(), 1);
@@ -172,7 +172,7 @@ mod openapi {
     #[test]
     fn field_optional_schema_allows_null() {
         let js = vld::object()
-            .field_optional("n", vld::object().field_schema("x", vld::string()))
+            .field_optional("n", vld::object().field("x", vld::string()))
             .to_json_schema();
         assert_eq!(js["properties"]["n"]["anyOf"][1], json!({"type": "null"}));
     }

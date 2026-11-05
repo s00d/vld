@@ -35,14 +35,6 @@ impl ZIpNetwork {
         self.must_be_ipv4 = false;
         self
     }
-
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "string",
-            "format": "cidr"
-        })
-    }
 }
 
 impl Default for ZIpNetwork {
@@ -85,3 +77,16 @@ impl VldSchema for ZIpNetwork {
         Ok(net)
     }
 }
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZIpNetwork {
+    fn json_schema(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "string",
+            "format": "cidr"
+        })
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZIpNetwork {}

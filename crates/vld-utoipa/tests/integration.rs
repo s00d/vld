@@ -483,8 +483,8 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
     let js = CreateTicket::json_schema();
     assert_eq!(
         utoipa_required(&js),
-        vec!["title", "body", "reporter"],
-        "nullable stays required; optional/nullish/default omitted"
+        vec!["title", "body"],
+        "optional/nullable/nullish/default omitted"
     );
     assert_eq!(js["properties"]["title"]["description"], "ticket title");
     assert_eq!(js["properties"]["title"]["maxLength"], 120);
@@ -504,27 +504,21 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
 
     let utoipa_json = serde_json::to_value(json_schema_to_schema(&js)).unwrap();
     assert_eq!(utoipa_json["type"], "object");
-    assert_eq!(
-        utoipa_required(&utoipa_json),
-        vec!["title", "body", "reporter"]
-    );
+    assert_eq!(utoipa_required(&utoipa_json), vec!["title", "body"]);
     assert_eq!(utoipa_json["properties"]["title"]["minLength"], 3);
     assert!(union(&utoipa_json["properties"]["labels"]).is_array());
     assert!(union(&utoipa_json["properties"]["reporter"]).is_array());
 
     // ToSchema path must keep the same required matrix
     let schema_json = serde_json::to_value(CreateTicket::schema()).unwrap();
-    assert_eq!(
-        utoipa_required(&schema_json),
-        vec!["title", "body", "reporter"]
-    );
+    assert_eq!(utoipa_required(&schema_json), vec!["title", "body"]);
 
     // derive(Validate) path
     let derive_js = DerivePatchTicket::json_schema();
     assert_eq!(
         utoipa_required(&derive_js),
-        vec!["title", "cursor"],
-        "derive: optional/nullish/default omitted, nullable kept"
+        vec!["title"],
+        "derive: optional/nullable/nullish/default omitted"
     );
     assert_eq!(derive_js["properties"]["title"]["description"], "title");
     assert!(union(&derive_js["properties"]["body"]).is_array());
@@ -533,7 +527,7 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
     assert!(union(&derive_js["properties"]["cursor"]).is_array());
 
     let derive_utoipa = serde_json::to_value(DerivePatchTicket::schema()).unwrap();
-    assert_eq!(utoipa_required(&derive_utoipa), vec!["title", "cursor"]);
+    assert_eq!(utoipa_required(&derive_utoipa), vec!["title"]);
 
     // IntoParams: required flags mirror json_schema required array
     let params = json_schema_to_params(&TicketFilter::json_schema(), ParameterIn::Query);
@@ -563,7 +557,7 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
     ));
     assert!(matches!(
         by_name("cursor").required,
-        utoipa::openapi::Required::True
+        utoipa::openapi::Required::False
     ));
 
     let q_schema = serde_json::to_value(by_name("q").schema.as_ref().unwrap()).unwrap();

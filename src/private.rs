@@ -51,7 +51,9 @@ where
     FieldResult {
         name: key.to_string(),
         input: input.clone(),
-        result: crate::schema::DynSchema::dyn_parse(schema, input),
+        result: schema
+            .parse_value(input)
+            .and_then(|v| crate::schema::to_json_value(&v)),
     }
 }
 
@@ -85,10 +87,9 @@ where
 /// Serialize a value for `validate()` / `is_valid()`.
 pub fn to_json<T: serde::Serialize + ?Sized>(instance: &T) -> Result<Value, VldError> {
     serde_json::to_value(instance).map_err(|e| {
-        VldError::single(
-            crate::error::IssueCode::ParseError,
-            format!("Serialization error: {}", e),
-        )
+        VldError::from_code(crate::error::IssueCode::SerializeError {
+            detail: e.to_string(),
+        })
     })
 }
 

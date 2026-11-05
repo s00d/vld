@@ -19,16 +19,6 @@ impl Default for ZAny {
     }
 }
 
-impl ZAny {
-    /// Generate a JSON Schema representation (empty schema = any).
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        serde_json::json!({})
-    }
-}
-
 impl VldSchema for ZAny {
     type Output = Value;
 
@@ -36,3 +26,14 @@ impl VldSchema for ZAny {
         Ok(value.clone())
     }
 }
+
+/// Generate a JSON Schema representation (empty schema = any).
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZAny {
+    fn json_schema(&self) -> serde_json::Value {
+        serde_json::json!({})
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZAny {}

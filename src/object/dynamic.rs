@@ -3,8 +3,6 @@ use serde_json::{Map, Value};
 use crate::error::{IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::{DynSchema, VldSchema};
 
-#[cfg(feature = "openapi")]
-use super::field::JsonSchemaField;
 use super::field::{OptionalDynSchema, RequiredDynSchema};
 
 struct ObjectField {
@@ -73,12 +71,9 @@ impl ZObject {
 
     /// Add a field with its validation schema.
     ///
-    /// For OpenAPI / JSON Schema output (`to_json_schema`), prefer
-    /// [`field_schema`](Self::field_schema) (preserves property schemas and
-    /// `is_required`) or [`field_optional`](Self::field_optional) (omits the
-    /// key from `required`). Plain `.field(..., schema.optional())` does not
-    /// erase the field from `required` because the type is erased without
-    /// [`JsonSchema`](crate::openapi::JsonSchema).
+    /// With the `openapi` feature the field keeps its JSON Schema, its
+    /// `required` status (`.optional()` / `.nullish()` / `.with_default(...)`
+    /// / `.nullable()` are not required) and its named nested schemas.
     pub fn field<S: DynSchema + 'static>(mut self, name: impl Into<String>, schema: S) -> Self {
         self.fields.push(ObjectField {
             name: name.into(),
@@ -87,30 +82,11 @@ impl ZObject {
         self
     }
 
-    /// Add a field with its validation schema **and** JSON Schema support.
-    ///
-    /// Same as [`field()`](Self::field), but the field's schema will be
-    /// included in the output of [`to_json_schema()`](Self::to_json_schema)
-    /// and [`json_schema()`](crate::openapi::JsonSchema::json_schema).
-    /// Also respects [`JsonSchema::is_required`](crate::openapi::JsonSchema::is_required)
-    /// (e.g. `.optional()` / `.nullish()` / `.with_default(...)`).
-    ///
-    /// Named nested schemas used by the field (e.g. [`vld::nested!`](crate::nested!))
-    /// are reported through [`CollectNestedSchemas`](crate::openapi::CollectNestedSchemas)
-    /// so `$ref`s resolve.
-    ///
-    /// Requires the `openapi` feature.
+    /// Same as [`field()`](Self::field), which now keeps the JSON Schema too.
     #[cfg(feature = "openapi")]
-    pub fn field_schema<S>(mut self, name: impl Into<String>, schema: S) -> Self
-    where
-        S: VldSchema + crate::openapi::JsonSchema + crate::openapi::CollectNestedSchemas + 'static,
-        S::Output: serde::Serialize,
-    {
-        self.fields.push(ObjectField {
-            name: name.into(),
-            schema: Box::new(JsonSchemaField { inner: schema }),
-        });
-        self
+    #[deprecated(since = "0.5.0", note = "use `field()`: it keeps the JSON Schema now")]
+    pub fn field_schema<S: DynSchema + 'static>(self, name: impl Into<String>, schema: S) -> Self {
+        self.field(name, schema)
     }
 
     /// Add a field that is automatically optional (null/missing → `null`).
@@ -292,60 +268,18 @@ impl ZObject {
         self.partial()
     }
 
-    /// Collect named nested schemas referenced by fields added with
-    /// [`field_schema()`](Self::field_schema) (and the catchall schema).
-    #[cfg(feature = "openapi")]
-    pub(crate) fn collect_nested_into(&self, out: &mut Vec<crate::schema::NestedSchemaEntry>) {
-        for f in &self.fields {
-            f.schema.dyn_collect_nested_schemas(out);
-        }
-        if let Some(ref c) = self.catchall_schema {
-            c.dyn_collect_nested_schemas(out);
-        }
-    }
-
     /// Get the list of field names defined in this schema.
     pub fn keyof(&self) -> Vec<String> {
         self.fields.iter().map(|f| f.name.clone()).collect()
     }
+}
 
-    /// Generate a JSON Schema representation of this object schema.
-    ///
-    /// Fields added via [`field_schema()`](Self::field_schema) will include their
-    /// full JSON Schema. Fields added via [`field()`](Self::field) will appear as
-    /// empty schemas `{}`.
-    ///
-    /// Requires the `openapi` feature.
+impl ZObject {
+    /// JSON Schema of this object; same as
+    /// [`JsonSchema::json_schema`](crate::openapi::JsonSchema::json_schema).
     #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let required: Vec<String> = self
-            .fields
-            .iter()
-            .filter(|f| f.schema.dyn_is_required())
-            .map(|f| f.name.clone())
-            .collect();
-        let mut props = serde_json::Map::new();
-        for f in &self.fields {
-            props.insert(f.name.clone(), f.schema.dyn_json_schema());
-        }
-        let mut schema = serde_json::json!({
-            "type": "object",
-            "properties": Value::Object(props),
-            "additionalProperties": self.unknown_mode != UnknownFieldMode::Strict,
-        });
-        if !required.is_empty() {
-            schema["required"] = serde_json::json!(required);
-        }
-        if let Some(ref catchall) = self.catchall_schema {
-            schema["additionalProperties"] = catchall.dyn_json_schema();
-        }
-        if let Some(min) = self.min_keys {
-            schema["minProperties"] = serde_json::json!(min);
-        }
-        if let Some(max) = self.max_keys {
-            schema["maxProperties"] = serde_json::json!(max);
-        }
-        schema
+    pub fn to_json_schema(&self) -> Value {
+        crate::openapi::JsonSchema::json_schema(self)
     }
 }
 
@@ -453,6 +387,55 @@ impl VldSchema for ZObject {
             Ok(result)
         } else {
             Err(errors)
+        }
+    }
+}
+
+/// Properties from the fields (with their own schemas and `required` status);
+/// `additionalProperties` is `false` for `strict()`, the catchall schema when
+/// set, `true` otherwise.
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZObject {
+    fn json_schema(&self) -> Value {
+        let required: Vec<&str> = self
+            .fields
+            .iter()
+            .filter(|f| f.schema.dyn_is_required())
+            .map(|f| f.name.as_str())
+            .collect();
+        let props: Map<String, Value> = self
+            .fields
+            .iter()
+            .map(|f| (f.name.clone(), f.schema.dyn_json_schema()))
+            .collect();
+        let mut schema = serde_json::json!({
+            "type": "object",
+            "properties": props,
+            "additionalProperties": self.unknown_mode != UnknownFieldMode::Strict,
+        });
+        if !required.is_empty() {
+            schema["required"] = serde_json::json!(required);
+        }
+        if let Some(ref catchall) = self.catchall_schema {
+            schema["additionalProperties"] = catchall.dyn_json_schema();
+        }
+        if let Some(min) = self.min_keys {
+            schema["minProperties"] = serde_json::json!(min);
+        }
+        if let Some(max) = self.max_keys {
+            schema["maxProperties"] = serde_json::json!(max);
+        }
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZObject {
+    fn collect_nested_schemas(&self, out: &mut Vec<crate::schema::NestedSchemaEntry>) {
+        let fields = self.fields.iter().map(|f| &f.schema);
+        let rules = self.conditional_rules.iter().map(|r| &r.schema);
+        for s in fields.chain(rules).chain(self.catchall_schema.iter()) {
+            s.dyn_collect_nested_schemas(out);
         }
     }
 }

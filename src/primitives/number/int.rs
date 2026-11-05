@@ -134,16 +134,6 @@ impl ZInt {
         self
     }
 
-    /// Generate a JSON Schema representation of this integer schema.
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = self.inner.to_json_schema();
-        schema["type"] = serde_json::json!("integer");
-        schema
-    }
-
     fn not_int(&self, value: &Value) -> VldError {
         issue_error(IssueCode::NotInt, self.custom_int_error.as_ref(), value)
     }
@@ -208,3 +198,16 @@ impl VldSchema for ZInt {
         Ok(n)
     }
 }
+
+/// Generate a JSON Schema representation of this integer schema.
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZInt {
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = crate::openapi::JsonSchema::json_schema(&self.inner);
+        schema["type"] = serde_json::json!("integer");
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZInt {}

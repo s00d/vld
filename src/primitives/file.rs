@@ -276,26 +276,6 @@ impl ZFile {
     pub fn parse_path(&self, path: impl AsRef<Path>) -> Result<ValidatedFile, VldError> {
         self.parse_value(&Value::String(path.as_ref().to_string_lossy().to_string()))
     }
-
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": { "type": "string" },
-                "size": { "type": "integer", "minimum": 0 },
-                "mediaType": { "type": ["string", "null"] }
-            },
-            "required": ["path", "size"]
-        });
-        if let Some(min) = self.min_size {
-            schema["properties"]["size"]["minimum"] = serde_json::json!(min);
-        }
-        if let Some(max) = self.max_size {
-            schema["properties"]["size"]["maximum"] = serde_json::json!(max);
-        }
-        schema
-    }
 }
 
 impl Default for ZFile {
@@ -635,3 +615,28 @@ impl VldSchema for ZFile {
         })
     }
 }
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZFile {
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": { "type": "string" },
+                "size": { "type": "integer", "minimum": 0 },
+                "mediaType": { "type": ["string", "null"] }
+            },
+            "required": ["path", "size"]
+        });
+        if let Some(min) = self.min_size {
+            schema["properties"]["size"]["minimum"] = serde_json::json!(min);
+        }
+        if let Some(max) = self.max_size {
+            schema["properties"]["size"]["maximum"] = serde_json::json!(max);
+        }
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZFile {}

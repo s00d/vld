@@ -123,3 +123,14 @@ impl<T: IntoLiteral> VldSchema for ZLiteral<T> {
             })
     }
 }
+
+/// `{"const": <literal>}`.
+#[cfg(feature = "openapi")]
+impl<T: IntoLiteral> crate::openapi::JsonSchema for ZLiteral<T> {
+    fn json_schema(&self) -> Value {
+        serde_json::json!({ "const": self.expected_value })
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<T: IntoLiteral> crate::openapi::CollectNestedSchemas for ZLiteral<T> {}

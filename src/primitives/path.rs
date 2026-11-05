@@ -144,14 +144,6 @@ impl ZPath {
         self.within_base = Some(base.into());
         self
     }
-
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "string",
-            "format": "path"
-        })
-    }
 }
 
 impl Default for ZPath {
@@ -208,3 +200,16 @@ impl VldSchema for ZPath {
         Ok(p)
     }
 }
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZPath {
+    fn json_schema(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "string",
+            "format": "path"
+        })
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZPath {}

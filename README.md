@@ -60,7 +60,7 @@ No features are enabled by default (serde / `serde_json` are always on). Optiona
 
 | Feature           | Description                                                                                                                                                         |
 |-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `openapi`         | Enables `JsonSchema` trait, `to_json_schema()`, `json_schema()`, `to_openapi_document()`, `field_schema()`                                                        |
+| `openapi`         | `vld::openapi`: `JsonSchema` trait (`json_schema()`), `to_openapi_document()`                                                                                       |
 | `diff`            | Schema diffing (implies `openapi`)                                                                                                                                  |
 | `regex`           | Custom regex patterns via `.regex()` (uses `regex-lite`)                                                                                                            |
 | `derive`          | `#[derive(Validate)]` procedural macro                                                                                                                              |
@@ -979,8 +979,8 @@ each property:
 
 ```rust
 let js = vld::object()
-    .field_schema("email", vld::string().email().min(5))
-    .field_schema("score", vld::number().min(0.0).max(100.0))
+    .field("email", vld::string().email().min(5))
+    .field("score", vld::number().min(0.0).max(100.0))
     .strict()
     .json_schema();
 // {"type": "object", "properties": {"email": {...}, "score": {...}}, ...}

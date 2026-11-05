@@ -111,3 +111,36 @@ where
         }
     }
 }
+
+/// `[[key, value], ...]`: an array of 2-item tuples.
+#[cfg(feature = "openapi")]
+impl<K, V> crate::openapi::JsonSchema for ZMap<K, V>
+where
+    K: VldSchema + crate::openapi::JsonSchema,
+    V: VldSchema + crate::openapi::JsonSchema,
+{
+    fn json_schema(&self) -> Value {
+        serde_json::json!({
+            "type": "array",
+            "items": {
+                "type": "array",
+                "prefixItems": [self.key_schema.json_schema(), self.value_schema.json_schema()],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2,
+            }
+        })
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<K, V> crate::openapi::CollectNestedSchemas for ZMap<K, V>
+where
+    K: VldSchema + crate::openapi::CollectNestedSchemas,
+    V: VldSchema + crate::openapi::CollectNestedSchemas,
+{
+    fn collect_nested_schemas(&self, out: &mut Vec<crate::schema::NestedSchemaEntry>) {
+        self.key_schema.collect_nested_schemas(out);
+        self.value_schema.collect_nested_schemas(out);
+    }
+}

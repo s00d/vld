@@ -2,14 +2,42 @@
 
 use vld::prelude::*;
 
+#[test]
+fn dyn_fields_and_catchall_keep_json_schema() {
+    let js = vld::object()
+        .field("email", vld::string().email())
+        .field("age", vld::number().int().optional())
+        .catchall(vld::number().min(0.0))
+        .json_schema();
+    assert_eq!(js["properties"]["email"]["format"], "email");
+    assert_eq!(js["properties"]["age"]["anyOf"][0]["type"], "integer");
+    assert_eq!(required_keys(&js), vec!["email"]);
+    assert_eq!(js["additionalProperties"]["type"], "number");
+    assert_eq!(js["additionalProperties"]["minimum"], 0.0);
+}
+
+#[test]
+fn literal_and_discriminated_union_schemas() {
+    assert_eq!(
+        vld::literal("admin").json_schema(),
+        serde_json::json!({"const": "admin"})
+    );
+    let du = vld::discriminated_union("type")
+        .variant_str("a", vld::object().field("type", vld::literal("a")))
+        .variant_str("b", vld::object().field("type", vld::literal("b")));
+    let js = du.json_schema();
+    assert_eq!(js["anyOf"].as_array().unwrap().len(), 2);
+    assert_eq!(js["anyOf"][1]["properties"]["type"]["const"], "b");
+}
+
 // ---------------------------------------------------------------------------
-// Primitive schemas (existing to_json_schema + trait)
+// Primitive schemas
 // ---------------------------------------------------------------------------
 
 #[test]
 fn string_basic_schema() {
     let schema = vld::string().min(3).max(50);
-    let js = schema.to_json_schema();
+    let js = schema.json_schema();
     assert_eq!(js["type"], "string");
     assert_eq!(js["minLength"], 3);
     assert_eq!(js["maxLength"], 50);
@@ -92,8 +120,8 @@ fn object_schema_basic() {
 #[test]
 fn object_field_schema_includes_property_schemas() {
     let schema = vld::object()
-        .field_schema("email", vld::string().email().min(5))
-        .field_schema("score", vld::number().min(0.0).max(100.0));
+        .field("email", vld::string().email().min(5))
+        .field("score", vld::number().min(0.0).max(100.0));
     let js = schema.json_schema();
 
     // Properties should have full schemas
@@ -183,9 +211,9 @@ fn modifiers_json_schema_and_is_required_matrix() {
     assert_one_of_nullish(&nullish.json_schema(), "integer");
     assert_eq!(nullish.json_schema()["anyOf"][0]["minimum"], 0.0);
 
-    // nullable → stays required, anyOf with null
+    // nullable → a missing key parses as None, so not required; anyOf with null
     let nullable = vld::number().min(0.0).max(100.0).nullable();
-    assert!(nullable.is_required());
+    assert!(!nullable.is_required());
     assert_one_of_nullish(&nullable.json_schema(), "number");
     assert_eq!(nullable.json_schema()["anyOf"][0]["maximum"], 100.0);
 
@@ -241,14 +269,14 @@ fn is_required_survives_wrapper_stacks() {
     assert_eq!(default_stack.json_schema()["type"], "string");
     assert_eq!(default_stack.json_schema()["description"], "role");
 
-    // nullable under wrappers stays required
+    // nullable under wrappers is not required either
     let nullable_stack = vld::string()
         .email()
         .nullable()
         .describe("contact")
         .message("bad contact")
         .super_refine(|_v, _err| {});
-    assert!(nullable_stack.is_required());
+    assert!(!nullable_stack.is_required());
     assert_one_of_nullish(&nullable_stack.json_schema(), "string");
     assert_eq!(nullable_stack.json_schema()["description"], "contact");
     assert_eq!(nullable_stack.json_schema()["anyOf"][0]["format"], "email");
@@ -403,7 +431,7 @@ fn schema_macro_required_matrix_and_openapi_doc() {
                 .optional()
                 .refine(|v| v.as_ref().map(|s| s.len() == 2).unwrap_or(true), "xx"),
 
-            // nullable stays required
+            // nullable: missing key parses as None → not required
             meta: Option<String> => vld::string().nullable().describe("opaque meta"),
             notes: Option<String> => vld::string()
                 .max(200)
@@ -417,10 +445,7 @@ fn schema_macro_required_matrix_and_openapi_doc() {
     assert_eq!(js["type"], "object");
 
     // Exact required set — order follows field declaration
-    assert_eq!(
-        required_keys(&js),
-        vec!["name", "email", "tags", "address", "meta", "notes"]
-    );
+    assert_eq!(required_keys(&js), vec!["name", "email", "tags", "address"]);
 
     // Required property shapes
     assert_eq!(js["properties"]["name"]["type"], "string");
@@ -487,7 +512,7 @@ fn schema_macro_required_matrix_and_openapi_doc() {
     let component = &doc["components"]["schemas"]["CreateProfile"];
     assert_eq!(
         required_keys(component),
-        vec!["name", "email", "tags", "address", "meta", "notes"]
+        vec!["name", "email", "tags", "address"]
     );
     assert!(!required_keys(component).contains(&"age"));
     assert!(!required_keys(component).contains(&"role"));
@@ -522,8 +547,8 @@ fn schema_macro_required_matrix_and_openapi_doc() {
 fn object_openapi_required_pipeline() {
     // Mixed field_schema / field_optional / modifiers / wrappers
     let base = vld::object()
-        .field_schema("id", vld::number().int().positive())
-        .field_schema(
+        .field("id", vld::number().int().positive())
+        .field(
             "title",
             vld::string()
                 .min(1)
@@ -531,7 +556,7 @@ fn object_openapi_required_pipeline() {
                 .describe("post title")
                 .message("bad title"),
         )
-        .field_schema(
+        .field(
             "slug",
             vld::string().min(3).optional().describe("url slug").refine(
                 |v| v.as_ref().map(|s| !s.contains(' ')).unwrap_or(true),
@@ -539,18 +564,18 @@ fn object_openapi_required_pipeline() {
             ),
         )
         .field_optional("draft_note", vld::string().max(200))
-        .field_schema(
+        .field(
             "status",
             vld::string()
                 .with_default("draft".into())
                 .describe("workflow"),
         )
-        .field_schema("summary", vld::string().max(500).nullish())
-        .field_schema(
+        .field("summary", vld::string().max(500).nullish())
+        .field(
             "body",
             vld::string().min(1).nullable().describe("markdown body"),
         )
-        .field_schema(
+        .field(
             "score",
             vld::number()
                 .min(0.0)
@@ -566,8 +591,8 @@ fn object_openapi_required_pipeline() {
     assert_eq!(js["additionalProperties"], false);
     assert_eq!(
         required_keys(&js),
-        vec!["id", "title", "body"],
-        "optional/nullish/default/field_optional omitted; nullable kept"
+        vec!["id", "title"],
+        "optional/nullable/nullish/default/field_optional omitted"
     );
 
     assert_eq!(js["properties"]["id"]["type"], "integer");
@@ -588,9 +613,9 @@ fn object_openapi_required_pipeline() {
 
     // partial() clears required; required() restores all current fields
     let partial_js = vld::object()
-        .field_schema("id", vld::number().int())
-        .field_schema("title", vld::string())
-        .field_schema("body", vld::string().nullable())
+        .field("id", vld::number().int())
+        .field("title", vld::string())
+        .field("body", vld::string().nullable())
         .partial()
         .json_schema();
     assert!(
@@ -600,9 +625,9 @@ fn object_openapi_required_pipeline() {
     );
 
     let restored = vld::object()
-        .field_schema("id", vld::number().int())
-        .field_schema("title", vld::string())
-        .field_schema("body", vld::string().nullable())
+        .field("id", vld::number().int())
+        .field("title", vld::string())
+        .field("body", vld::string().nullable())
         .partial()
         .required()
         .json_schema();
@@ -610,33 +635,33 @@ fn object_openapi_required_pipeline() {
 
     // pick / omit keep required semantics of remaining fields
     let picked = vld::object()
-        .field_schema("id", vld::number().int())
-        .field_schema("title", vld::string().optional())
-        .field_schema("body", vld::string())
+        .field("id", vld::number().int())
+        .field("title", vld::string().optional())
+        .field("body", vld::string())
         .pick(&["title", "body"])
         .json_schema();
     assert_eq!(required_keys(&picked), vec!["body"]);
     assert!(picked["properties"].get("id").is_none());
 
     let omitted = vld::object()
-        .field_schema("id", vld::number().int())
-        .field_schema("title", vld::string().optional())
-        .field_schema("body", vld::string().nullable())
+        .field("id", vld::number().int())
+        .field("title", vld::string().optional())
+        .field("body", vld::string().nullable())
         .omit("id")
         .json_schema();
-    assert_eq!(required_keys(&omitted), vec!["body"]);
+    assert!(required_keys(&omitted).is_empty());
     assert!(!required_keys(&omitted).contains(&"title"));
 
     // extend: later schema wins for same key; required follows winner
     let left = vld::object()
-        .field_schema("name", vld::string())
-        .field_schema("age", vld::number().int());
+        .field("name", vld::string())
+        .field("age", vld::number().int());
     let right = vld::object()
-        .field_schema(
+        .field(
             "age",
             vld::number().int().optional().describe("optional age"),
         )
-        .field_schema("city", vld::string().min(1));
+        .field("city", vld::string().min(1));
     let merged = left.extend(right).json_schema();
     assert_eq!(required_keys(&merged), vec!["name", "city"]);
     assert_one_of_nullish(&merged["properties"]["age"], "integer");
@@ -678,8 +703,8 @@ fn derive_validate_json_schema_required_matrix() {
     assert_eq!(js["type"], "object");
     assert_eq!(
         required_keys(&js),
-        vec!["name", "email", "meta", "notes"],
-        "derive must mirror schema! optional/nullish/default vs nullable"
+        vec!["name", "email"],
+        "derive must mirror schema!: optional/nullable/nullish/default omitted"
     );
 
     assert_eq!(js["properties"]["name"]["description"], "full name");
@@ -711,10 +736,7 @@ fn derive_validate_json_schema_required_matrix() {
 
     let doc = PatchUser::to_openapi_document();
     let component = &doc["components"]["schemas"]["PatchUser"];
-    assert_eq!(
-        required_keys(component),
-        vec!["name", "email", "meta", "notes"]
-    );
+    assert_eq!(required_keys(component), vec!["name", "email"]);
 }
 
 #[test]

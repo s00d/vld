@@ -10,6 +10,8 @@ mod dyn_schema;
 pub mod input;
 mod nested;
 
+pub(crate) use dyn_schema::to_json_value;
+
 pub use dyn_schema::DynSchema;
 pub use input::VldInput;
 pub use nested::{NestedSchema, NestedSchemaCollectFn, NestedSchemaEntry};
@@ -54,13 +56,7 @@ pub trait VldSchema: Sized {
     /// assert!(schema.validate(&data).is_ok());
     /// ```
     fn validate<T: serde::Serialize>(&self, value: &T) -> Result<Self::Output, VldError> {
-        let json = serde_json::to_value(value).map_err(|e| {
-            VldError::single(
-                crate::error::IssueCode::ParseError,
-                format!("Serialization error: {}", e),
-            )
-        })?;
-        self.parse_value(&json)
+        self.parse_value(&to_json_value(value)?)
     }
 
     /// Check if an existing Rust value passes this schema's validation.

@@ -228,17 +228,33 @@ impl ZNumber {
             Err(errors)
         }
     }
+}
 
-    /// Generate a JSON Schema representation of this number schema.
-    ///
-    /// The strictest lower/upper bound (from `min`/`gt`/`positive`/
-    /// `non_negative`/`safe`, …) is emitted as `minimum` or `exclusiveMinimum`
-    /// (likewise for the maximum). The first `multiple_of` goes into
-    /// `multipleOf`, further ones into `allOf`.
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
+impl Default for ZNumber {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl VldSchema for ZNumber {
+    type Output = f64;
+
+    fn parse_value(&self, value: &Value) -> Result<f64, VldError> {
+        let n = self.extract_number(value)?;
+        self.validate(Num::F(n), value)?;
+        Ok(n)
+    }
+}
+
+/// Generate a JSON Schema representation of this number schema.
+///
+/// The strictest lower/upper bound (from `min`/`gt`/`positive`/
+/// `non_negative`/`safe`, …) is emitted as `minimum` or `exclusiveMinimum`
+/// (likewise for the maximum). The first `multiple_of` goes into
+/// `multipleOf`, further ones into `allOf`.
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZNumber {
+    fn json_schema(&self) -> serde_json::Value {
         let mut schema = serde_json::json!({"type": "number"});
         // Strictest bound: larger lower bound wins, exclusive wins ties.
         let pick = |a: (Num, bool), b: (Num, bool), want: Ordering| match b.0.cmp(a.0) {
@@ -281,18 +297,5 @@ impl ZNumber {
     }
 }
 
-impl Default for ZNumber {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl VldSchema for ZNumber {
-    type Output = f64;
-
-    fn parse_value(&self, value: &Value) -> Result<f64, VldError> {
-        let n = self.extract_number(value)?;
-        self.validate(Num::F(n), value)?;
-        Ok(n)
-    }
-}
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZNumber {}

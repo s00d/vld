@@ -4,39 +4,6 @@ use serde_json::Value;
 
 use crate::error::{IssueCode, VldError};
 use crate::schema::DynSchema;
-#[cfg(feature = "openapi")]
-use crate::schema::VldSchema;
-
-#[cfg(feature = "openapi")]
-/// Wrapper that stores a schema implementing both `DynSchema` and `JsonSchema`.
-///
-/// Used by [`ZObject::field_schema()`] to include JSON Schema info for fields.
-pub(crate) struct JsonSchemaField<T> {
-    pub(crate) inner: T,
-}
-
-#[cfg(feature = "openapi")]
-impl<T> DynSchema for JsonSchemaField<T>
-where
-    T: VldSchema + crate::openapi::JsonSchema + crate::openapi::CollectNestedSchemas,
-    T::Output: serde::Serialize,
-{
-    fn dyn_parse(&self, value: &Value) -> Result<Value, VldError> {
-        DynSchema::dyn_parse(&self.inner, value)
-    }
-
-    fn dyn_json_schema(&self) -> Value {
-        self.inner.json_schema()
-    }
-
-    fn dyn_is_required(&self) -> bool {
-        crate::openapi::JsonSchema::is_required(&self.inner)
-    }
-
-    fn dyn_collect_nested_schemas(&self, out: &mut Vec<crate::schema::NestedSchemaEntry>) {
-        self.inner.collect_nested_schemas(out);
-    }
-}
 
 /// Internal wrapper that makes a DynSchema nullable (null/missing → Value::Null).
 ///

@@ -21,13 +21,13 @@ where
     F: Fn(&Value) -> Result<T, VldError>,
 {
     parse_fn: F,
-    #[allow(dead_code)]
+    #[cfg_attr(not(feature = "openapi"), allow(dead_code))]
     pub(crate) name: Option<&'static str>,
     /// Returns the full JSON Schema of the nested type (for OpenAPI component registration).
-    #[allow(dead_code)]
+    #[cfg_attr(not(feature = "openapi"), allow(dead_code))]
     pub(crate) json_schema_fn: Option<fn() -> serde_json::Value>,
     /// Collects transitive nested schemas of the nested type into a shared buffer.
-    #[allow(dead_code)]
+    #[cfg_attr(not(feature = "openapi"), allow(dead_code))]
     pub(crate) collect_nested_fn: Option<NestedSchemaCollectFn>,
     _phantom: PhantomData<T>,
 }
@@ -69,5 +69,38 @@ where
     type Output = T;
     fn parse_value(&self, value: &Value) -> Result<T, VldError> {
         (self.parse_fn)(value)
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<T, F> crate::openapi::JsonSchema for NestedSchema<T, F>
+where
+    F: Fn(&Value) -> Result<T, VldError>,
+{
+    fn json_schema(&self) -> Value {
+        match self.name {
+            Some(name) => serde_json::json!({ "$ref": format!("#/components/schemas/{}", name) }),
+            // Unnamed nested schemas are opaque closures.
+            None => serde_json::json!({ "type": "object" }),
+        }
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<T, F> crate::openapi::CollectNestedSchemas for NestedSchema<T, F>
+where
+    F: Fn(&Value) -> Result<T, VldError>,
+{
+    fn collect_nested_schemas(&self, out: &mut Vec<NestedSchemaEntry>) {
+        if let (Some(name), Some(f)) = (self.name, self.json_schema_fn) {
+            // Dedup by name: skip cycles and diamond references already visited.
+            if out.iter().any(|(n, _)| *n == name) {
+                return;
+            }
+            out.push((name, f));
+            if let Some(collect) = self.collect_nested_fn {
+                collect(out);
+            }
+        }
     }
 }

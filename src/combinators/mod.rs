@@ -3,6 +3,8 @@ mod custom;
 mod describe;
 mod discriminated_union;
 mod intersection;
+#[cfg(feature = "openapi")]
+mod json_schema;
 mod lazy_schema;
 mod message;
 mod pipe;

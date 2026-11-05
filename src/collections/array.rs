@@ -115,44 +115,6 @@ impl<T: VldSchema> ZArray<T> {
         self.unique = true;
         self
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn element_schema(&self) -> &T {
-        &self.element
-    }
-
-    /// Generate a JSON Schema (called by [`JsonSchema`](crate::openapi::JsonSchema) trait impl).
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema_inner(&self) -> serde_json::Value
-    where
-        T: crate::openapi::JsonSchema,
-    {
-        let mut schema = serde_json::json!({
-            "type": "array",
-            "items": self.element.json_schema(),
-        });
-        crate::primitives::length_schema(
-            &mut schema,
-            ("minItems", "maxItems"),
-            [self.min_len, self.exact_len].into_iter().flatten(),
-            [self.max_len, self.exact_len].into_iter().flatten(),
-        );
-        if let Some(ref contains) = self.contains {
-            schema["contains"] = serde_json::json!({ "const": contains });
-            if let Some(min_contains) = self.min_contains {
-                schema["minContains"] = serde_json::json!(min_contains);
-            }
-            if let Some(max_contains) = self.max_contains {
-                schema["maxContains"] = serde_json::json!(max_contains);
-            }
-        }
-        if self.unique {
-            schema["uniqueItems"] = serde_json::json!(true);
-        }
-        schema
-    }
 }
 
 impl<T: VldSchema> VldSchema for ZArray<T> {
@@ -254,5 +216,47 @@ impl<T: VldSchema> VldSchema for ZArray<T> {
         } else {
             Err(errors)
         }
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<T> crate::openapi::JsonSchema for ZArray<T>
+where
+    T: VldSchema + crate::openapi::JsonSchema,
+{
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({
+            "type": "array",
+            "items": self.element.json_schema(),
+        });
+        crate::primitives::length_schema(
+            &mut schema,
+            ("minItems", "maxItems"),
+            [self.min_len, self.exact_len].into_iter().flatten(),
+            [self.max_len, self.exact_len].into_iter().flatten(),
+        );
+        if let Some(ref contains) = self.contains {
+            schema["contains"] = serde_json::json!({ "const": contains });
+            if let Some(min_contains) = self.min_contains {
+                schema["minContains"] = serde_json::json!(min_contains);
+            }
+            if let Some(max_contains) = self.max_contains {
+                schema["maxContains"] = serde_json::json!(max_contains);
+            }
+        }
+        if self.unique {
+            schema["uniqueItems"] = serde_json::json!(true);
+        }
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<T> crate::openapi::CollectNestedSchemas for ZArray<T>
+where
+    T: VldSchema + crate::openapi::CollectNestedSchemas,
+{
+    fn collect_nested_schemas(&self, out: &mut Vec<crate::schema::NestedSchemaEntry>) {
+        self.element.collect_nested_schemas(out);
     }
 }

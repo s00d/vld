@@ -56,27 +56,6 @@ impl ZDuration {
     pub fn max_secs(self, secs: u64) -> Self {
         self.max(Duration::from_secs(secs))
     }
-
-    /// JSON Schema. `min`/`max` become `minimum`/`maximum` (seconds) on the
-    /// integer branch and `x-minSeconds`/`x-maxSeconds` on the string branch.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({
-            "anyOf": [
-                { "type": "string", "description": "Duration like `PT15S`, `10s`, `250ms`" },
-                { "type": "integer", "minimum": 0, "description": "Duration in seconds" }
-            ]
-        });
-        if let Some(min) = self.min {
-            schema["anyOf"][0]["x-minSeconds"] = serde_json::json!(min.as_secs_f64());
-            schema["anyOf"][1]["minimum"] = serde_json::json!(min.as_secs_f64().ceil() as u64);
-        }
-        if let Some(max) = self.max {
-            schema["anyOf"][0]["x-maxSeconds"] = serde_json::json!(max.as_secs_f64());
-            schema["anyOf"][1]["maximum"] = serde_json::json!(max.as_secs_f64().floor() as u64);
-        }
-        schema
-    }
 }
 
 impl Default for ZDuration {
@@ -129,3 +108,29 @@ impl VldSchema for ZDuration {
         Ok(d)
     }
 }
+
+/// JSON Schema. `min`/`max` become `minimum`/`maximum` (seconds) on the
+/// integer branch and `x-minSeconds`/`x-maxSeconds` on the string branch.
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZDuration {
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({
+            "anyOf": [
+                { "type": "string", "description": "Duration like `PT15S`, `10s`, `250ms`" },
+                { "type": "integer", "minimum": 0, "description": "Duration in seconds" }
+            ]
+        });
+        if let Some(min) = self.min {
+            schema["anyOf"][0]["x-minSeconds"] = serde_json::json!(min.as_secs_f64());
+            schema["anyOf"][1]["minimum"] = serde_json::json!(min.as_secs_f64().ceil() as u64);
+        }
+        if let Some(max) = self.max {
+            schema["anyOf"][0]["x-maxSeconds"] = serde_json::json!(max.as_secs_f64());
+            schema["anyOf"][1]["maximum"] = serde_json::json!(max.as_secs_f64().floor() as u64);
+        }
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZDuration {}
