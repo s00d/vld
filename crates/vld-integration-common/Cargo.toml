@@ -1,0 +1,18 @@
+[package]
+name = "vld-integration-common"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Shared helpers for vld integration crates (internal)"
+documentation = "https://docs.rs/vld-integration-common"
+keywords = ["validation", "vld", "helpers"]
+categories = ["parsing"]
+exclude = [".idea/"]
+
+[dependencies]
+vld = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

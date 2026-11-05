@@ -8958,6 +8958,7 @@ dependencies = [
  "serde",
  "serde_json",
  "vld",
+ "vld-integration-common",
 ]
 
 [[package]]
@@ -8973,6 +8974,15 @@ dependencies = [
 
 [[package]]
 name = "vld-http-common"
+version = "0.4.6"
+dependencies = [
+ "serde",
+ "serde_json",
+ "vld",
+]
+
+[[package]]
+name = "vld-integration-common"
 version = "0.4.6"
 dependencies = [
  "serde",
@@ -9000,6 +9010,7 @@ dependencies = [
  "serde",
  "serde_json",
  "vld",
+ "vld-integration-common",
 ]
 
 [[package]]
