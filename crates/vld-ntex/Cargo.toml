@@ -2,7 +2,7 @@
 name = "vld-ntex"
 version.workspace = true
 edition.workspace = true
-rust-version = "1.75"
+rust-version = "1.97"
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
@@ -13,14 +13,23 @@ keywords = ["validation", "ntex", "web", "json", "extractor"]
 categories = ["web-programming", "web-programming::http-server"]
 exclude = [".idea/", "tests/", "examples/"]
 
+[features]
+default = ["ntex-4"]
+ntex-3 = ["dep:ntex3"]
+ntex-4 = ["dep:ntex4"]
+
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
-ntex = { version = "3", default-features = false }
+ntex3 = { package = "ntex", version = "3", default-features = false, optional = true }
+ntex4 = { package = "ntex", version = "4", default-features = false, optional = true }
 serde_json = { workspace = true }
 
+# Tests/examples name ntex via the `vld_ntex::ntex` re-export; these only
+# enable the tokio runtime on whichever version is selected.
 [dev-dependencies]
-ntex = { version = "3", features = ["tokio"] }
+ntex3 = { package = "ntex", version = "3", default-features = false, features = ["tokio"] }
+ntex4 = { package = "ntex", version = "4", default-features = false, features = ["tokio"] }
 serde = { workspace = true }
 vld = { workspace = true }
 

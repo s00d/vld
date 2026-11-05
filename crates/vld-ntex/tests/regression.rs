@@ -1,8 +1,23 @@
 //! Regression tests for the 0.5.0 audit fixes.
 
+mod common;
+#[cfg(feature = "ntex-4")]
+use common::TestRequestExt;
 use ntex::web::types::{JsonConfig, PayloadConfig};
 use ntex::web::{self, test, App, HttpResponse};
+use vld_ntex::ntex;
 use vld_ntex::{VldForm, VldJson, VldQuery};
+
+/// Registers an extractor config (`JsonConfig` / `PayloadConfig`) on the app.
+macro_rules! with_state {
+    ($app:expr, $cfg:expr) => {{
+        #[cfg(feature = "ntex-3")]
+        let app = $app.state($cfg);
+        #[cfg(feature = "ntex-4")]
+        let app = $app.with_config(web::WebAppConfig::new().set_state($cfg));
+        app
+    }};
+}
 
 vld::schema! {
     #[derive(Debug)]
@@ -33,8 +48,7 @@ async fn tags_handler(q: VldQuery<TagsQuery>) -> HttpResponse {
 #[ntex::test]
 async fn json_overflow_returns_413_json() {
     let app = test::init_service(
-        App::new()
-            .state(JsonConfig::default().limit(8))
+        with_state!(App::new(), JsonConfig::default().limit(8))
             .route("/j", web::post().to(json_handler)),
     )
     .await;
@@ -53,9 +67,7 @@ async fn json_overflow_returns_413_json() {
 #[ntex::test]
 async fn form_overflow_returns_413_json() {
     let app = test::init_service(
-        App::new()
-            .state(PayloadConfig::new(8))
-            .route("/f", web::post().to(form_handler)),
+        with_state!(App::new(), PayloadConfig::new(8)).route("/f", web::post().to(form_handler)),
     )
     .await;
     let req = test::TestRequest::post()

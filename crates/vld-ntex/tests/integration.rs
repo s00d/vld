@@ -1,4 +1,8 @@
+mod common;
+#[cfg(feature = "ntex-4")]
+use common::TestRequestExt;
 use ntex::web::{self, test, App, HttpResponse};
+use vld_ntex::ntex;
 #[allow(unused_imports)]
 use vld_ntex::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 

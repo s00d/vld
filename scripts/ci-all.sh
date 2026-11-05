@@ -51,6 +51,7 @@ cargo check -p vld-warp "${PROFILE[@]}"
 cargo check -p vld-lapin --no-default-features --features "lapin-2" "${PROFILE[@]}"
 cargo test -p vld-lapin --no-default-features --features "lapin-3" "${PROFILE[@]}"
 cargo test -p vld-lapin --no-default-features --features "lapin-4" "${PROFILE[@]}"
+cargo test -p vld-ntex --no-default-features --features ntex-3 "${PROFILE[@]}"
 cargo check -p vld-schemars --no-default-features --features "schemars-0" "${PROFILE[@]}"
 cargo test -p vld-schemars --no-default-features --features "schemars-1" "${PROFILE[@]}"
 cargo check -p vld-aide --no-default-features --features "schemars-0" "${PROFILE[@]}"
@@ -101,6 +102,7 @@ cargo clippy -p vld-sqlx --no-default-features --features "sqlx-0_9,sqlite" --al
 cargo clippy -p vld-sea --no-default-features --features "sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal" --lib "${PROFILE[@]}" -- -D warnings
 cargo clippy -p vld-redis --no-default-features --features "redis-1,aio" --all-targets "${PROFILE[@]}" -- -D warnings
 cargo clippy -p vld-lapin --no-default-features --features lapin-4 --all-targets "${PROFILE[@]}" -- -D warnings
+cargo clippy -p vld-ntex --no-default-features --features ntex-3 --all-targets "${PROFILE[@]}" -- -D warnings
 cargo clippy -p vld-config --no-default-features --features "config-rs,figment" --all-targets "${PROFILE[@]}" -- -D warnings
 
 echo "==> Format check"

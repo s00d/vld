@@ -1,4 +1,5 @@
 use ntex::web::{self, App, HttpResponse, HttpServer};
+use vld_ntex::ntex;
 use vld_ntex::prelude::*;
 
 vld::schema! {
@@ -44,13 +45,18 @@ async fn search(params: VldQuery<SearchQuery>) -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     println!("Starting ntex server at http://127.0.0.1:8080");
 
-    HttpServer::new(async || {
+    let app = || {
         App::new()
             .route("/users", web::post().to(create_user))
             .route("/users/{id}", web::get().to(get_user))
             .route("/search", web::get().to(search))
-    })
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
+    };
+
+    #[cfg(feature = "ntex-3")]
+    let server = HttpServer::new(async move || app()).bind("127.0.0.1:8080")?;
+    #[cfg(feature = "ntex-4")]
+    let server =
+        HttpServer::new(async move |_| app()).bind("127.0.0.1:8080", ntex::SharedCfg::default())?;
+
+    server.run().await
 }

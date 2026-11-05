@@ -28,10 +28,30 @@ On validation failure (and for malformed bodies) all extractors return **422 Unp
 
 ```toml
 [dependencies]
-vld = "0.4"
-vld-ntex = "0.4"
-ntex = "3"
+vld = "0.5"
+vld-ntex = "0.5"
+ntex = "4"
 ```
+
+### ntex versions
+
+| Feature | ntex |
+|---|---|
+| `ntex-4` (default) | 4.x |
+| `ntex-3` | 3.x |
+
+Enable exactly one. The selected crate is re-exported as `vld_ntex::ntex`. Crate MSRV is
+Rust 1.97 (required by ntex 4).
+
+**Migrating from 0.4 (ntex 3):** the default is now ntex 4. To stay on ntex 3:
+
+```toml
+vld-ntex = { version = "0.5", default-features = false, features = ["ntex-3"] }
+```
+
+Extractors, error type and status codes are identical on both versions. Body-limit
+configs are registered with `App::state(cfg)` on ntex 3 and
+`App::with_config(WebAppConfig::new().set_state(cfg))` on ntex 4.
 
 ## VldJson — JSON body
 
