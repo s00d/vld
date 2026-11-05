@@ -8,8 +8,9 @@ use super::{Num, ZNumber};
 /// Schema for `f32` numbers. Created via [`vld::f32()`](crate::f32).
 ///
 /// Values outside the finite `f32` range fail with `too_small` / `too_big`
-/// (origin `number`). Bounds are compared after rounding the input to `f32`,
-/// so `vld::f32().min(0.1)` accepts `0.1`.
+/// (origin `number`). Bounds and the input are compared at `f32` precision
+/// (via their shortest decimal form), so `vld::f32().max(0.1)` accepts `0.1`,
+/// `multiple_of(0.1)` accepts `0.3`, and messages print `0.1`.
 ///
 /// JSON Schema: `{"type": "number", "format": "float"}` plus bounds.
 ///
@@ -26,11 +27,18 @@ pub struct ZF32 {
     inner: ZNumber,
 }
 
+/// The `f64` nearest to the shortest decimal form of `v` (`0.1f32` → `0.1`,
+/// not `0.10000000149011612`). Bounds and inputs are both widened this way,
+/// so comparisons, `multiple_of` and messages work at `f32` precision.
+fn widen(v: f32) -> f64 {
+    v.to_string().parse().unwrap_or(f64::from(v))
+}
+
 macro_rules! bound_methods {
     ($($(#[$doc:meta])* $name:ident),+ $(,)?) => {$(
         $(#[$doc])*
         pub fn $name(mut self, val: f32) -> Self {
-            self.inner = self.inner.$name(f64::from(val));
+            self.inner = self.inner.$name(widen(val));
             self
         }
     )+};
@@ -105,7 +113,7 @@ impl VldSchema for ZF32 {
         let out = f as f32;
         // Rounding to f32 overflows to infinity only past the finite range
         // (values within half an ulp of f32::MAX round down to it).
-        let limit = f64::from(f32::MAX);
+        let limit = widen(f32::MAX);
         if out == f32::NEG_INFINITY {
             return Err(VldError::from_code_with_value(
                 IssueCode::TooSmall {
@@ -126,7 +134,7 @@ impl VldSchema for ZF32 {
                 value,
             ));
         }
-        self.inner.validate(Num::F(f64::from(out)), value)?;
+        self.inner.validate(Num::F(widen(out)), value)?;
         Ok(out)
     }
 }

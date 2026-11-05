@@ -56,6 +56,50 @@ impl IntoLiteral for i64 {
     }
 }
 
+/// The other integer types: exact `i64` / `u64` JSON integers (or integral
+/// floats) that fit the type.
+macro_rules! int_literals {
+    ($($t:ty),+) => {$(
+        impl IntoLiteral for $t {
+            type Output = $t;
+            fn to_json_value(&self) -> Value {
+                Value::Number((*self).into())
+            }
+            fn extract(value: &Value) -> Option<$t> {
+                let exact = value
+                    .as_i64()
+                    .and_then(|i| <$t>::try_from(i).ok())
+                    .or_else(|| value.as_u64().and_then(|u| <$t>::try_from(u).ok()));
+                exact.or_else(|| i64::extract(value).and_then(|i| <$t>::try_from(i).ok()))
+            }
+            fn display(&self) -> String {
+                self.to_string()
+            }
+        }
+    )+};
+}
+
+int_literals!(i8, i16, i32, u8, u16, u32, u64, isize, usize);
+
+impl IntoLiteral for f32 {
+    type Output = f32;
+    fn to_json_value(&self) -> Value {
+        // Shortest decimal form: `0.1f32` is the JSON number `0.1`.
+        self.to_string()
+            .parse::<f64>()
+            .ok()
+            .and_then(serde_json::Number::from_f64)
+            .map(Value::Number)
+            .unwrap_or(Value::Null)
+    }
+    fn extract(value: &Value) -> Option<f32> {
+        value.as_f64().map(|f| f as f32)
+    }
+    fn display(&self) -> String {
+        self.to_string()
+    }
+}
+
 impl IntoLiteral for f64 {
     type Output = f64;
     fn to_json_value(&self) -> Value {

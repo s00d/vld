@@ -87,7 +87,7 @@ impl VldSchema for ZDiscriminatedUnion {
             .ok_or_else(|| at_disc(VldError::from_code(IssueCode::MissingField)))?;
 
         for variant in &self.variants {
-            if *disc_value == variant.discriminator_value {
+            if crate::primitives::json_eq(disc_value, &variant.discriminator_value) {
                 return variant.schema.dyn_parse(value);
             }
         }

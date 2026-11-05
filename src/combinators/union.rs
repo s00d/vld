@@ -6,15 +6,44 @@ use crate::schema::VldSchema;
 /// Error for a union where every variant failed: one `invalid_union` issue
 /// (with the received value) followed by each variant's own issues, their
 /// messages prefixed with `[variant N]` (paths are kept).
+///
+/// A variant that is itself a union (`union!` nests them) is flattened: its
+/// `invalid_union` issue is dropped and its variants are renumbered, so `N`
+/// counts the leaf schemas and prefixes never stack.
 fn union_error(value: &Value, variants: Vec<VldError>) -> VldError {
     let mut err = VldError::from_code_with_value(IssueCode::InvalidUnion, value);
-    for (i, e) in variants.into_iter().enumerate() {
-        for mut issue in e.issues {
-            issue.message = format!("[variant {}] {}", i + 1, issue.message);
+    let mut n = 0;
+    for e in variants {
+        let nested = e
+            .issues
+            .first()
+            .is_some_and(|i| i.code == IssueCode::InvalidUnion && i.path.is_empty());
+        if !nested {
+            n += 1;
+            for mut issue in e.issues {
+                issue.message = format!("[variant {}] {}", n, issue.message);
+                err.issues.push(issue);
+            }
+            continue;
+        }
+        let mut inner_count = 0;
+        for mut issue in e.issues.into_iter().skip(1) {
+            if let Some((k, rest)) = split_variant_prefix(&issue.message) {
+                inner_count = inner_count.max(k);
+                issue.message = format!("[variant {}] {}", n + k, rest);
+            }
             err.issues.push(issue);
         }
+        n += inner_count.max(1);
     }
     err
+}
+
+/// `"[variant 3] msg"` → `(3, "msg")`.
+pub(crate) fn split_variant_prefix(message: &str) -> Option<(usize, &str)> {
+    let rest = message.strip_prefix("[variant ")?;
+    let (k, rest) = rest.split_once("] ")?;
+    Some((k.parse().ok()?, rest))
 }
 
 /// A value that can be one of two types.

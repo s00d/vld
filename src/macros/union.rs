@@ -20,6 +20,10 @@
 /// ```
 #[macro_export]
 macro_rules! union {
+    // 1 schema (tail of the 7+ recursion)
+    ($a:expr $(,)?) => {
+        $a
+    };
     // 2 schemas
     ($a:expr, $b:expr $(,)?) => {
         $crate::union($a, $b)
