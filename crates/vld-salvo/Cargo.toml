@@ -21,6 +21,7 @@ serde_json = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
+vld-http-common = { workspace = true, features = ["conformance"] }
 vld = { workspace = true }
 salvo = { version = "1", default-features = false, features = ["test", "server", "http1", "cookie"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

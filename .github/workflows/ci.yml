@@ -6,19 +6,134 @@ on:
   pull_request:
     branches: [master, main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
+  # Pinned so new clippy lints / rustdoc checks cannot break CI unannounced;
+  # the `latest-stable` job warns about them early. Bump deliberately.
+  RUST_TOOLCHAIN: "1.99.1"
+  # Declared workspace rust-version (core vld); some integration crates need more.
+  VLD_MSRV_TOOLCHAIN: "1.85"
+  # Keep target/ for Swatinem/rust-cache (ci-all.sh deletes it by default).
+  CARGO_TARGET_DIR: target
+  VLD_CI_KEEP_TARGET: "1"
 
 jobs:
+  # Each job runs one group of scripts/ci-all.sh, so a failure in one area
+  # does not hide the others and the local preflight stays the same script.
   test:
-    name: Test
+    name: Build + test (workspace, doctests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - run: bash scripts/ci-all.sh test playground
 
+  features:
+    name: vld feature matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+      - uses: Swatinem/rust-cache@v2
+      - run: bash scripts/ci-all.sh features
+
+  integrations:
+    name: Integration crates (dual-major features, live redis/rabbitmq)
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      rabbitmq:
+        image: rabbitmq:3-alpine
+        ports: ["5672:5672"]
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s --health-timeout 10s --health-retries 20
+    env:
+      REDIS_URL: redis://127.0.0.1:6379/0
+      AMQP_URL: amqp://guest:guest@127.0.0.1:5672/%2f
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - run: bash scripts/ci-all.sh integrations
+
+  clippy:
+    name: Clippy + rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: bash scripts/ci-all.sh fmt clippy
+
+  docs:
+    name: Docs (rustdoc -D warnings)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - run: bash scripts/ci-all.sh docs
+
+  msrv:
+    name: MSRV (core vld on 1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Default toolchain resolves the MSRV-compatible lockfile; the MSRV
+      # toolchain builds and tests.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - run: rustup toolchain install "${VLD_MSRV_TOOLCHAIN}" --profile minimal
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv
+      - run: bash scripts/ci-all.sh msrv
+
+  deny:
+    name: cargo deny (advisories, licenses, bans, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  latest-stable:
+    name: Clippy on latest stable (early warning, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-
-      - name: Run unified CI script
-        run: bash ./scripts/ci-all.sh
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: latest-stable
+      - run: cargo clippy --workspace --all-targets --profile ci -- -D warnings

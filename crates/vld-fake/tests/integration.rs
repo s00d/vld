@@ -1,9 +1,84 @@
 use serde_json::{json, Value};
-#[allow(unused_imports)]
 use vld::prelude::*;
-use vld_fake::{
-    fake_many, fake_parsed, fake_value, fake_value_seeded, try_fake_parsed, FakeData, FakeGen,
-};
+use vld_fake::{fake_value_seeded, FakeData, FakeGen};
+
+/// Every random draw in this file is seeded: `VLD_FAKE_SEED` (default fixed)
+/// mixed with the test name, so each test sees the same sequence on every run.
+/// A failing test prints the base seed and the seed of its last draw.
+mod seed {
+    use std::cell::Cell;
+    use std::sync::Once;
+
+    thread_local! {
+        static NEXT: Cell<Option<u64>> = const { Cell::new(None) };
+        static LAST: Cell<Option<u64>> = const { Cell::new(None) };
+    }
+
+    pub fn base() -> u64 {
+        std::env::var("VLD_FAKE_SEED")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0x5eed_f00d)
+    }
+
+    /// FNV-1a of the test (thread) name.
+    fn name_hash() -> u64 {
+        let name = std::thread::current().name().unwrap_or("").to_string();
+        name.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+            (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+        })
+    }
+
+    fn install_hook() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            let prev = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| {
+                if let Some(last) = LAST.with(Cell::get) {
+                    eprintln!(
+                        "vld-fake: VLD_FAKE_SEED={} (last draw: fake_value_seeded(.., {last}))",
+                        base()
+                    );
+                }
+                prev(info)
+            }));
+        });
+    }
+
+    pub fn next() -> u64 {
+        install_hook();
+        NEXT.with(|n| {
+            let cur = n.get().unwrap_or_else(|| base() ^ name_hash());
+            n.set(Some(
+                cur.wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407),
+            ));
+            LAST.with(|l| l.set(Some(cur)));
+            cur
+        })
+    }
+}
+
+fn fake_value(schema: &Value) -> Value {
+    fake_value_seeded(schema, seed::next())
+}
+
+fn fake_many(schema: &Value, count: usize) -> Vec<Value> {
+    (0..count).map(|_| fake_value(schema)).collect()
+}
+
+fn fake_parsed<T: VldParse>(schema: &Value) -> T {
+    vld_fake::parse_or_panic(&fake_value(schema))
+}
+
+fn try_fake_parsed<T: VldParse>(schema: &Value) -> Result<T, VldError> {
+    T::vld_parse_value(&fake_value(schema))
+}
+
+fn seeded_gen() -> FakeGen<rand::rngs::StdRng> {
+    use rand::SeedableRng;
+    FakeGen::with_rng(rand::rngs::StdRng::seed_from_u64(seed::next()))
+}
 
 // ───────────────────── test schemas ─────────────────────────────────────
 
@@ -1150,15 +1225,6 @@ fn typed_try_fake_ok() {
     assert!(user.age >= 18);
 }
 
-#[test]
-fn typed_fake_field_access() {
-    // The whole point: direct field access on the result
-    let user = SimpleUser::fake();
-    let _name: &str = &user.name;
-    let _email: &str = &user.email;
-    let _age: i64 = user.age;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 //  $ref resolution (vld::nested! emits `#/components/schemas/X`)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1184,7 +1250,7 @@ vld_fake::impl_fake!(RefUser);
 fn typed_fake_resolves_nested_ref() {
     assert!(RefUser::json_schema()["properties"]["address"]["$ref"].is_string());
     for _ in 0..20 {
-        let u = RefUser::fake();
+        let u = RefUser::fake_seeded(seed::next());
         assert!(!u.address.city.is_empty());
     }
     let _ = RefUser::fake_seeded(7);
@@ -1340,7 +1406,7 @@ fn pattern_is_honoured() {
 fn hint_truncation_is_char_safe() {
     // CITIES contains "São Paulo"; max(2) used to split 'ã' and panic.
     let schema = json!({"type": "string", "maxLength": 2, "minLength": 2});
-    let mut gen = FakeGen::new();
+    let mut gen = seeded_gen();
     for _ in 0..2000 {
         let v = gen.value_with_hint(&schema, Some("city"));
         assert_eq!(v.as_str().unwrap().chars().count(), 2);
@@ -1359,7 +1425,7 @@ fn integer_one_sided_and_hinted_ranges_never_panic() {
     assert_fakes(n().gt(7)); // exclusive only
     assert_fakes(n().multiple_of(7).min(5000));
     assert_fakes(n().multiple_of(5).max(-12));
-    let mut gen = FakeGen::new();
+    let mut gen = seeded_gen();
     for (hint, schema) in [
         ("year", json!({"type": "integer", "maximum": 1990})),
         ("age", json!({"type": "integer", "minimum": 150})),

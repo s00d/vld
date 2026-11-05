@@ -1,0 +1,42 @@
+---
+source: tests/all/json_schema/mod.rs
+expression: value
+---
+{
+  "multi": {
+    "components": {
+      "schemas": {
+        "Age": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "Name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      }
+    },
+    "info": {
+      "title": "API",
+      "version": "1.0.0"
+    },
+    "openapi": "3.1.0",
+    "paths": {}
+  },
+  "single": {
+    "components": {
+      "schemas": {
+        "Email": {
+          "format": "email",
+          "type": "string"
+        }
+      }
+    },
+    "info": {
+      "title": "API",
+      "version": "1.0.0"
+    },
+    "openapi": "3.1.0",
+    "paths": {}
+  }
+}

@@ -20,7 +20,7 @@
 //!
 //! `VldJson` uses Rocket's `json` limit (default 1 MiB) and `VldForm` the
 //! `form` limit (default 32 KiB; falls back to
-//! [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT) if unset).
+//! [`DEFAULT_BODY_LIMIT`] if unset).
 //! Configure them via `limits` in `Rocket.toml`.
 //!
 //! # Error catchers

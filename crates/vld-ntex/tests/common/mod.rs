@@ -1,3 +1,4 @@
+#![allow(dead_code)] // each test binary uses a different subset
 //! ntex 3 / ntex 4 test glue: ntex 4 renamed `TestRequest::set_json` /
 //! `set_payload` to `json` / `payload`; tests keep the ntex 3 names.
 

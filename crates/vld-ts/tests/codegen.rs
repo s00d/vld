@@ -25,17 +25,6 @@ fn vld_schema_union() {
     assert_eq!(zod, "z.union([z.string(), z.number()])");
 }
 
-#[test]
-fn vld_schema_array_and_description() {
-    let zod = vld_ts::to_zod(
-        &vld::array(vld::string().min(1))
-            .max_len(10)
-            .describe("Tags"),
-    );
-    assert!(zod.contains("z.array(z.string().min(1)).max(10)"));
-    assert!(zod.contains(".describe(\"Tags\")"));
-}
-
 vld::schema! {
     #[derive(Debug)]
     pub struct TsAddress {
@@ -78,57 +67,45 @@ vld_ts::impl_to_zod!(TsCustomNamed, "RequestBody");
 vld_ts::impl_to_openapi!(TsCustomNamed, "RequestBody");
 vld_ts::impl_to_valibot!(TsCustomNamed, "RequestBody");
 
+/// Full generated code for typed structs (nested refs, renames, custom
+/// export names) — one text snapshot per generator.
 #[test]
-fn type_to_zod_single_with_nested() {
-    let ts = TsOrder::to_zod();
-    assert!(ts.starts_with("z.object("));
-    assert!(!ts.contains("import { z } from \"zod\""));
-    assert!(!ts.contains("export const TsOrderSchema"));
-    assert!(!ts.contains("export const TsAddressSchema"));
-    assert!(ts.contains("shipping: z.lazy(() => TsAddressSchema)"));
-}
+fn generated_code_snapshots() {
+    let zod = [
+        TsOrder::to_zod(),
+        TsRenamed::to_zod(),
+        TsCustomNamed::to_zod(),
+        TsOrder::to_zod_export(),
+        TsCustomNamed::to_zod_export(),
+        vld_ts::to_zod(
+            &vld::array(vld::string().min(1))
+                .max_len(10)
+                .describe("Tags"),
+        ),
+    ]
+    .join("\n\n");
+    insta::assert_snapshot!("zod", zod);
 
-#[test]
-fn type_to_zod_respects_renamed_fields() {
-    let ts = TsRenamed::to_zod();
-    assert!(ts.contains("firstName: z.string().min(1)"));
-    assert!(ts.contains("isActive: z.boolean()"));
-    assert!(!ts.contains("first_name:"));
-    assert!(!ts.contains("is_active:"));
-}
+    let valibot = [
+        TsOrder::to_valibot(),
+        TsRenamed::to_valibot(),
+        TsCustomNamed::to_valibot(),
+        TsCustomNamed::to_valibot_export(),
+        vld_ts::to_valibot(&vld::string().min(2).email()),
+    ]
+    .join("\n\n");
+    insta::assert_snapshot!("valibot", valibot);
 
-#[test]
-fn impl_to_zod_custom_name() {
-    let ts = TsCustomNamed::to_zod();
-    assert!(ts.starts_with("z.object("));
-    assert!(ts.contains("name: z.string().min(1)"));
-    assert!(!ts.contains("RequestBodySchema"));
-}
-
-#[test]
-fn to_valibot_from_schema_instance() {
-    let ts = vld_ts::to_valibot(&vld::string().min(2).email());
-    assert!(ts.contains("v.string()"));
-    assert!(ts.contains("v.minLength(2)"));
-    assert!(ts.contains("v.email()"));
-}
-
-#[test]
-fn type_to_valibot_single_with_nested() {
-    let ts = TsOrder::to_valibot();
-    assert!(ts.starts_with("v.object"));
-    assert!(!ts.contains("import * as v from \"valibot\""));
-    assert!(!ts.contains("export const TsOrderSchema"));
-    assert!(!ts.contains("export const TsAddressSchema"));
-    assert!(ts.contains("shipping: v.lazy(() => TsAddressSchema)"));
-}
-
-#[test]
-fn impl_to_valibot_custom_name() {
-    let ts = TsCustomNamed::to_valibot();
-    assert!(ts.starts_with("v.object"));
-    assert!(ts.contains("name: v.pipe(v.string(), v.minLength(1))"));
-    assert!(!ts.contains("RequestBodySchema"));
+    insta::with_settings!({ sort_maps => true }, {
+        insta::assert_json_snapshot!(
+            "openapi",
+            serde_json::json!({
+                "order": TsOrder::to_openapi(),
+                "renamed": TsRenamed::to_openapi(),
+                "custom_named": TsCustomNamed::to_openapi(),
+            })
+        );
+    });
 }
 
 #[test]
@@ -150,13 +127,6 @@ fn type_to_openapi_single_with_nested() {
     assert!(refs.contains(&"#/components/schemas/TsAddress".to_string()));
     let refs2 = TsOrder::to_refs();
     assert!(refs2.contains(&"#/components/schemas/TsAddress".to_string()));
-}
-
-#[test]
-fn type_to_openapi_custom_name() {
-    let doc = TsCustomNamed::to_openapi();
-    assert_eq!(doc["type"], "object");
-    assert!(doc["properties"]["name"].is_object());
 }
 
 // ---------------------------------------------------------------------------
@@ -325,19 +295,4 @@ fn valibot_array_length_uses_min_length() {
         ts,
         "v.pipe(v.array(v.string()), v.minLength(1), v.maxLength(3))"
     );
-}
-
-#[test]
-fn named_exports() {
-    let zod = TsCustomNamed::to_zod_export();
-    assert!(zod.starts_with("export const RequestBodySchema = z.object("));
-    assert!(zod.contains("export type RequestBody = z.infer<typeof RequestBodySchema>;"));
-
-    let order = TsOrder::to_zod_export();
-    assert!(order.starts_with("export const TsOrderSchema = z.object("));
-    assert!(order.contains("z.lazy(() => TsAddressSchema)"));
-
-    let valibot = TsCustomNamed::to_valibot_export();
-    assert!(valibot.starts_with("export const RequestBodySchema = v.object("));
-    assert!(valibot.contains("export type RequestBody = v.InferOutput<typeof RequestBodySchema>;"));
 }

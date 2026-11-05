@@ -1,0 +1,99 @@
+---
+source: tests/all/json_schema/mod.rs
+expression: value
+---
+{
+  "array": {
+    "required": true,
+    "schema": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 10,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "array_contains": {
+    "required": true,
+    "schema": {
+      "contains": {
+        "const": 5
+      },
+      "items": {
+        "type": "number"
+      },
+      "type": "array"
+    }
+  },
+  "array_min_contains_without_contains": {
+    "required": true,
+    "schema": {
+      "items": {
+        "type": "number"
+      },
+      "type": "array"
+    }
+  },
+  "map": {
+    "required": true,
+    "schema": {
+      "items": {
+        "items": false,
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "type": "array"
+      },
+      "type": "array"
+    }
+  },
+  "record": {
+    "required": true,
+    "schema": {
+      "additionalProperties": {
+        "exclusiveMinimum": 0,
+        "type": "number"
+      },
+      "maxProperties": 3,
+      "minProperties": 1,
+      "type": "object"
+    }
+  },
+  "set": {
+    "required": true,
+    "schema": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "x-maxUniqueItems": 5
+    }
+  },
+  "tuple": {
+    "required": true,
+    "schema": {
+      "items": false,
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "type": "array"
+    }
+  }
+}

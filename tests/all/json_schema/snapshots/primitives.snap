@@ -1,0 +1,178 @@
+---
+source: tests/all/json_schema/mod.rs
+expression: value
+---
+{
+  "any": {
+    "required": true,
+    "schema": {}
+  },
+  "boolean": {
+    "required": true,
+    "schema": {
+      "type": "boolean"
+    }
+  },
+  "bytes_base64_len4": {
+    "required": true,
+    "schema": {
+      "format": "byte",
+      "maxLength": 8,
+      "minLength": 8,
+      "type": "string"
+    }
+  },
+  "bytes_hex_min3": {
+    "required": true,
+    "schema": {
+      "format": "byte-hex",
+      "minLength": 6,
+      "type": "string"
+    }
+  },
+  "duration_min5": {
+    "required": true,
+    "schema": {
+      "anyOf": [
+        {
+          "description": "Duration like `PT15S`, `10s`, `250ms`",
+          "type": "string",
+          "x-minSeconds": 5.0
+        },
+        {
+          "description": "Duration in seconds",
+          "minimum": 5,
+          "type": "integer"
+        }
+      ]
+    }
+  },
+  "enum": {
+    "required": true,
+    "schema": {
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "type": "string"
+    }
+  },
+  "int": {
+    "required": true,
+    "schema": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "int_non_positive_safe": {
+    "required": true,
+    "schema": {
+      "maximum": 0,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    }
+  },
+  "json_value_object": {
+    "required": true,
+    "schema": {
+      "type": "object"
+    }
+  },
+  "literal": {
+    "required": true,
+    "schema": {
+      "const": "admin"
+    }
+  },
+  "number": {
+    "required": true,
+    "schema": {
+      "maximum": 100.0,
+      "minimum": 0.0,
+      "type": "number"
+    }
+  },
+  "number_positive": {
+    "required": true,
+    "schema": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+    }
+  },
+  "number_strictest_min": {
+    "required": true,
+    "schema": {
+      "minimum": 5.0,
+      "type": "number"
+    }
+  },
+  "path": {
+    "required": true,
+    "schema": {
+      "format": "path",
+      "type": "string"
+    }
+  },
+  "socket_addr": {
+    "required": true,
+    "schema": {
+      "format": "socket-addr",
+      "type": "string"
+    }
+  },
+  "string": {
+    "required": true,
+    "schema": {
+      "maxLength": 50,
+      "minLength": 3,
+      "type": "string"
+    }
+  },
+  "string_email": {
+    "required": true,
+    "schema": {
+      "format": "email",
+      "type": "string"
+    }
+  },
+  "string_email_lowercase": {
+    "required": true,
+    "schema": {
+      "allOf": [
+        {
+          "format": "lowercase"
+        }
+      ],
+      "format": "email",
+      "type": "string"
+    }
+  },
+  "string_prefix_suffix": {
+    "required": true,
+    "schema": {
+      "allOf": [
+        {
+          "pattern": "z$"
+        }
+      ],
+      "pattern": "^a\\.b",
+      "type": "string"
+    }
+  },
+  "string_strictest_bounds": {
+    "required": true,
+    "schema": {
+      "maxLength": 8,
+      "minLength": 4,
+      "type": "string"
+    }
+  },
+  "string_uuid": {
+    "required": true,
+    "schema": {
+      "format": "uuid",
+      "type": "string"
+    }
+  }
+}

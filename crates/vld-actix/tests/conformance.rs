@@ -1,0 +1,77 @@
+//! Shared HTTP conformance suite (see `vld_http_common::conformance`).
+
+use actix_web::{test, web, App, HttpResponse};
+use vld_actix::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
+use vld_http_common::conformance::{Cookies, Headers, PathId, Query, Request, Response, User};
+
+async fn json(b: VldJson<User>) -> HttpResponse {
+    HttpResponse::Ok().body(b.reply())
+}
+async fn form(b: VldForm<User>) -> HttpResponse {
+    HttpResponse::Ok().body(b.reply())
+}
+async fn query(q: VldQuery<Query>) -> HttpResponse {
+    HttpResponse::Ok().body(q.reply())
+}
+async fn path(p: VldPath<PathId>) -> HttpResponse {
+    HttpResponse::Ok().body(p.reply())
+}
+async fn headers(h: VldHeaders<Headers>) -> HttpResponse {
+    HttpResponse::Ok().body(h.x_tag.clone())
+}
+async fn cookie(c: VldCookie<Cookies>) -> HttpResponse {
+    HttpResponse::Ok().body(c.sid.clone())
+}
+
+async fn send(r: Request) -> Response {
+    let app = test::init_service(
+        App::new()
+            .route("/json", web::post().to(json))
+            .route("/form", web::post().to(form))
+            .route("/query", web::get().to(query))
+            .route("/path/{id}", web::get().to(path))
+            .route("/headers", web::get().to(headers))
+            .route("/cookie", web::get().to(cookie)),
+    )
+    .await;
+    let mut req = test::TestRequest::default()
+        .method(r.method.parse().unwrap())
+        .uri(&r.uri)
+        .set_payload(r.body);
+    for (k, v) in r.headers {
+        req = req.append_header((
+            k,
+            actix_web::http::header::HeaderValue::from_bytes(&v).unwrap(),
+        ));
+    }
+    let resp = test::call_service(&app, req.to_request()).await;
+    Response {
+        status: resp.status().as_u16(),
+        body: test::read_body(resp).await.to_vec(),
+    }
+}
+
+vld_http_common::conformance_suite! {
+    runtime = actix_rt::test,
+    send = send,
+    cases = [
+        json_valid,
+        json_content_type_case_insensitive,
+        json_malformed,
+        json_validation_error,
+        json_oversized,
+        form_valid,
+        form_validation_error,
+        form_non_utf8,
+        form_oversized,
+        query_percent_decoding,
+        query_repeated_keys,
+        query_missing_field,
+        path_valid,
+        path_invalid,
+        headers_valid,
+        headers_missing,
+        cookie_quoted_encoded,
+        cookie_missing,
+    ],
+}

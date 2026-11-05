@@ -185,7 +185,10 @@ fn error_is_std_error() {
         workers: 2,
     };
     let err = validate(&cli).unwrap_err();
-    let _: &dyn std::error::Error = &err;
+    let dyn_err: &dyn std::error::Error = &err;
+    let source = dyn_err.source().expect("wraps the VldError");
+    assert!(source.downcast_ref::<vld::error::VldError>().is_some());
+    assert!(dyn_err.to_string().contains("--port"), "{dyn_err}");
 }
 
 #[derive(Debug, serde::Serialize, Validate)]

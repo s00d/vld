@@ -9,34 +9,6 @@ vld::schema! {
     }
 }
 
-#[test]
-fn impl_to_redis_api_compiles() {
-    fn compile_check(
-        mut conn: RedisConn<redis::Connection>,
-        user: &UserSchema,
-    ) -> Result<(), VldRedisError> {
-        conn.set("user:1", user)?;
-        let _loaded: Option<UserSchema> = conn.get("user:1")?;
-        conn.mset([("user:2", user), ("user:3", user)])?;
-        let _loaded_many: Vec<Option<UserSchema>> = conn.mget(["user:2", "user:3"])?;
-        conn.hset("users:hash", "good", user)?;
-        let _from_hash: Option<UserSchema> = conn.hget("users:hash", "good")?;
-        let _list_len = conn.lpush("users:list", user)?;
-        let _list_len2 = conn.rpush("users:list", user)?;
-        let _popped_l: Option<UserSchema> = conn.lpop("users:list")?;
-        let _popped_r: Option<UserSchema> = conn.rpop("users:list")?;
-        let _set_added = conn.sadd("users:set", user)?;
-        let _set_members: Vec<UserSchema> = conn.smembers("users:set")?;
-        let _zset_added = conn.zadd("users:zset", 1.0, user)?;
-        let _zset_members: Vec<UserSchema> = conn.zrange("users:zset", 0, -1)?;
-        let _subscribers: i64 = conn.publish("users", user)?;
-        Ok(())
-    }
-
-    let _ =
-        compile_check as fn(RedisConn<redis::Connection>, &UserSchema) -> Result<(), VldRedisError>;
-}
-
 /// Fake connection: records sent commands and answers every request with `reply`.
 struct Mock {
     reply: Value,
@@ -163,4 +135,124 @@ mod aio {
         let none: Option<UserSchema> = conn.lpop("k").await.unwrap();
         assert!(none.is_none());
     }
+}
+
+// ---------------------------------------------------------------------------
+// Live server tests: run when REDIS_URL is set (CI starts a redis service),
+// otherwise print a note and pass.
+// ---------------------------------------------------------------------------
+
+fn redis_url() -> Option<String> {
+    match std::env::var("REDIS_URL") {
+        Ok(url) if !url.is_empty() => Some(url),
+        _ => {
+            eprintln!("note: REDIS_URL not set, skipping live redis test");
+            None
+        }
+    }
+}
+
+/// Unique key prefix so parallel runs never collide.
+fn prefix() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    format!("vld-test:{}:{nanos}", std::process::id())
+}
+
+fn alice() -> UserSchema {
+    UserSchema {
+        name: "Alice".into(),
+        email: "alice@example.com".into(),
+    }
+}
+
+#[test]
+fn live_round_trips_every_command() {
+    let Some(url) = redis_url() else { return };
+    let client = redis::Client::open(url).unwrap();
+    let mut conn = RedisConn::new(client.get_connection().unwrap());
+    let p = prefix();
+    let k = |s: &str| format!("{p}:{s}");
+    let user = alice();
+
+    conn.set(k("str"), &user).unwrap();
+    let got: Option<UserSchema> = conn.get(k("str")).unwrap();
+    assert_eq!(got.unwrap().email, "alice@example.com");
+    let missing: Option<UserSchema> = conn.get(k("missing")).unwrap();
+    assert!(missing.is_none());
+
+    conn.mset([(k("m1"), &user), (k("m2"), &user)]).unwrap();
+    let many: Vec<Option<UserSchema>> = conn.mget([k("m1"), k("m2"), k("m3")]).unwrap();
+    assert_eq!(many.iter().filter(|u| u.is_some()).count(), 2);
+    assert!(many[2].is_none());
+
+    conn.hset(k("h"), "a", &user).unwrap();
+    let h: Option<UserSchema> = conn.hget(k("h"), "a").unwrap();
+    assert_eq!(h.unwrap().name, "Alice");
+
+    assert_eq!(conn.lpush(k("l"), &user).unwrap(), 1);
+    assert_eq!(conn.rpush(k("l"), &user).unwrap(), 2);
+    let l: Option<UserSchema> = conn.lpop(k("l")).unwrap();
+    let r: Option<UserSchema> = conn.rpop(k("l")).unwrap();
+    assert!(l.is_some() && r.is_some());
+    let empty: Option<UserSchema> = conn.lpop(k("l")).unwrap();
+    assert!(empty.is_none());
+
+    assert_eq!(conn.sadd(k("s"), &user).unwrap(), 1);
+    let members: Vec<UserSchema> = conn.smembers(k("s")).unwrap();
+    assert_eq!(members.len(), 1);
+
+    assert_eq!(conn.zadd(k("z"), 1.0, &user).unwrap(), 1);
+    let zs: Vec<UserSchema> = conn.zrange(k("z"), 0, -1).unwrap();
+    assert_eq!(zs[0].name, "Alice");
+
+    let subscribers: i64 = conn.publish(k("chan"), &user).unwrap();
+    assert_eq!(subscribers, 0);
+
+    // A value written by someone else that violates the schema is rejected on read.
+    redis::Commands::set::<_, _, ()>(&mut *conn, k("bad"), r#"{"name":"","email":"x"}"#).unwrap();
+    let err = conn.get::<_, UserSchema>(k("bad")).unwrap_err();
+    match err {
+        VldRedisError::Validation(e) => {
+            let paths: Vec<String> = e
+                .issues
+                .iter()
+                .map(|i| i.path.iter().map(|s| s.to_string()).collect())
+                .collect();
+            assert_eq!(paths, [".name", ".email"]);
+        }
+        other => panic!("expected a validation error, got {other:?}"),
+    }
+
+    // Invalid values are never written.
+    let bad = UserSchema {
+        name: String::new(),
+        email: "nope".into(),
+    };
+    assert!(matches!(
+        conn.set(k("never"), &bad),
+        Err(VldRedisError::Validation(_))
+    ));
+    let exists: bool = redis::Commands::exists(&mut *conn, k("never")).unwrap();
+    assert!(!exists);
+
+    let keys: Vec<String> = redis::Commands::keys(&mut *conn, format!("{p}:*")).unwrap();
+    let _: () = redis::Commands::del(&mut *conn, keys).unwrap();
+}
+
+#[cfg(feature = "aio")]
+#[tokio::test]
+async fn live_async_round_trip() {
+    use vld_redis::AsyncRedisConn;
+    let Some(url) = redis_url() else { return };
+    let client = redis::Client::open(url).unwrap();
+    let mut conn = AsyncRedisConn::new(client.get_multiplexed_async_connection().await.unwrap());
+    let key = format!("{}:async", prefix());
+
+    conn.set(&key, &alice()).await.unwrap();
+    let got: Option<UserSchema> = conn.get(&key).await.unwrap();
+    assert_eq!(got.unwrap().name, "Alice");
+    let _: () = redis::AsyncCommands::del(&mut *conn, &key).await.unwrap();
 }

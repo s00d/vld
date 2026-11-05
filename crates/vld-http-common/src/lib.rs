@@ -25,6 +25,10 @@
 /// user-configurable limit instead.
 pub const DEFAULT_BODY_LIMIT: usize = 2 * 1024 * 1024;
 
+/// Shared adapter conformance suite (test support, `conformance` feature).
+#[cfg(feature = "conformance")]
+pub mod conformance;
+
 /// Coerce a raw string value (query, form, path, header, cookie) into JSON.
 ///
 /// Coercion never loses information: a value is only converted when the

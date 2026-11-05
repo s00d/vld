@@ -1,0 +1,71 @@
+---
+source: tests/all/json_schema/mod.rs
+expression: value
+---
+{
+  "properties": {
+    "custom": {},
+    "du": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "properties": {
+            "t": {
+              "const": "x"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "kind": {
+      "const": "a"
+    },
+    "lazy": {},
+    "m": {
+      "items": {
+        "items": false,
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "type": "array"
+      },
+      "type": "array"
+    },
+    "pair": {
+      "items": false,
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "type": "array"
+    },
+    "piped": {}
+  },
+  "required": [
+    "kind",
+    "pair",
+    "m",
+    "du",
+    "lazy",
+    "custom",
+    "piped"
+  ],
+  "type": "object"
+}

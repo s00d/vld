@@ -328,59 +328,32 @@ fn aide_required(schema: &serde_json::Value) -> Vec<&str> {
 }
 
 /// End-to-end aide/schemars: schema! + derive required matrix with wrappers.
+/// Required sets are asserted; the generated schemas are snapshots
+/// (sorted maps; schemars 0.9 and 1.x must agree).
 #[test]
 fn openapi_required_matrix_roundtrip_schema_and_derive() {
     let js = AideCreateTicket::json_schema();
-    assert_eq!(
-        aide_required(&js),
-        vec!["title", "body"],
-        "optional/nullable/nullish/default omitted"
-    );
-    assert_eq!(js["properties"]["title"]["description"], "ticket title");
-    assert_eq!(js["properties"]["title"]["maxLength"], 120);
-    assert_eq!(js["properties"]["priority"]["type"], "string");
-    assert!(union(&js["properties"]["labels"]).is_array());
-    assert!(union(&js["properties"]["due_at"]).is_array());
-    assert_eq!(js["properties"]["due_at"]["description"], "ISO date");
-    assert!(union(&js["properties"]["reporter"]).is_array());
-    assert_eq!(
-        js["properties"]["reporter"]["description"],
-        "reporter email"
-    );
-    assert!(union(&js["properties"]["meta"]).is_array());
-
-    let schemars = vld_to_schemars(&js);
-    assert_eq!(schemars.get("type").unwrap(), "object");
-    assert_eq!(
-        aide_required(&serde_json::to_value(&schemars).unwrap()),
-        vec!["title", "body"]
-    );
+    assert_eq!(aide_required(&js), ["title", "body"]);
+    let converted = serde_json::to_value(vld_to_schemars(&js)).unwrap();
+    assert_eq!(converted, js, "vld_to_schemars keeps the document");
 
     let mut gen = schemars::SchemaGenerator::default();
-    let generated = <AideCreateTicket as JsonSchema>::json_schema(&mut gen);
-    let generated_json = serde_json::to_value(&generated).unwrap();
-    assert_eq!(aide_required(&generated_json), vec!["title", "body"]);
-    assert_eq!(generated_json["properties"]["title"]["minLength"], 3);
-    assert!(union(&generated_json["properties"]["labels"]).is_array());
-    assert!(union(&generated_json["properties"]["reporter"]).is_array());
+    let generated =
+        serde_json::to_value(<AideCreateTicket as JsonSchema>::json_schema(&mut gen)).unwrap();
+    assert_eq!(aide_required(&generated), ["title", "body"]);
 
-    let derive_js = AideDerivePatch::json_schema();
-    assert_eq!(
-        aide_required(&derive_js),
-        vec!["title"],
-        "derive: optional/nullable/nullish/default omitted"
-    );
-    assert!(union(&derive_js["properties"]["body"]).is_array());
-    assert_eq!(derive_js["properties"]["priority"]["type"], "string");
-    assert!(union(&derive_js["properties"]["assignee"]).is_array());
-    assert!(union(&derive_js["properties"]["cursor"]).is_array());
+    let mut gen = schemars::SchemaGenerator::default();
+    let derive =
+        serde_json::to_value(<AideDerivePatch as JsonSchema>::json_schema(&mut gen)).unwrap();
+    assert_eq!(aide_required(&derive), ["title"]);
+    assert_eq!(aide_required(&AideDerivePatch::json_schema()), ["title"]);
 
-    let mut gen2 = schemars::SchemaGenerator::default();
-    let derive_generated = <AideDerivePatch as JsonSchema>::json_schema(&mut gen2);
-    let derive_json = serde_json::to_value(&derive_generated).unwrap();
-    assert_eq!(aide_required(&derive_json), vec!["title"]);
-    assert_eq!(derive_json["properties"]["title"]["description"], "title");
-    assert_eq!(derive_json["properties"]["cursor"]["description"], "cursor");
+    insta::with_settings!({ sort_maps => true }, {
+        insta::assert_json_snapshot!(
+            "required_matrix",
+            json!({"create_ticket": generated, "derive_patch": derive})
+        );
+    });
 }
 
 // ---- Nested schemas ----
@@ -480,13 +453,4 @@ fn transitive_nested_schema_registered_in_definitions() {
         "grandchild AideBreak missing: {:?}",
         defs.keys().collect::<Vec<_>>()
     );
-}
-
-/// Core emits `anyOf` for optional/nullable/union (older core: `oneOf`).
-fn union(v: &serde_json::Value) -> &serde_json::Value {
-    if v["anyOf"].is_array() {
-        &v["anyOf"]
-    } else {
-        &v["oneOf"]
-    }
 }

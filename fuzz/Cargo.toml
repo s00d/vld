@@ -1,0 +1,46 @@
+[package]
+name = "vld-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+vld = { path = ".." }
+vld-http-common = { path = "../crates/vld-http-common" }
+
+# Standalone: not a member of the vld workspace (needs nightly to run).
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "iso_formats"
+path = "fuzz_targets/iso_formats.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "string_formats"
+path = "fuzz_targets/string_formats.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "url_decode"
+path = "fuzz_targets/url_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "error_truncation"
+path = "fuzz_targets/error_truncation.rs"
+test = false
+doc = false
+bench = false

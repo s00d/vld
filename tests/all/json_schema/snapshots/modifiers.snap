@@ -1,0 +1,191 @@
+---
+source: tests/all/json_schema/mod.rs
+expression: value
+---
+{
+  "catch": {
+    "required": true,
+    "schema": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "default_stack": {
+    "required": false,
+    "schema": {
+      "default": "user",
+      "description": "role",
+      "type": "string"
+    }
+  },
+  "describe": {
+    "required": true,
+    "schema": {
+      "description": "User display name",
+      "type": "string"
+    }
+  },
+  "nullable": {
+    "required": false,
+    "schema": {
+      "anyOf": [
+        {
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "nullable_optional_no_double_wrap": {
+    "required": false,
+    "schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "nullable_stack": {
+    "required": false,
+    "schema": {
+      "anyOf": [
+        {
+          "format": "email",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "contact"
+    }
+  },
+  "nullish": {
+    "required": false,
+    "schema": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "nullish_stack": {
+    "required": false,
+    "schema": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "optional age"
+    }
+  },
+  "optional": {
+    "required": false,
+    "schema": {
+      "anyOf": [
+        {
+          "format": "email",
+          "minLength": 2,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "optional_stack": {
+    "required": false,
+    "schema": {
+      "anyOf": [
+        {
+          "minLength": 3,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "nickname"
+    }
+  },
+  "plain": {
+    "required": true,
+    "schema": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "plain_stack": {
+    "required": true,
+    "schema": {
+      "description": "name",
+      "minLength": 2,
+      "type": "string"
+    }
+  },
+  "preprocess_optional": {
+    "required": false,
+    "schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "preprocess_required": {
+    "required": true,
+    "schema": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "refine_passes_inner": {
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  },
+  "transform_passes_inner": {
+    "required": true,
+    "schema": {
+      "type": "string"
+    }
+  },
+  "with_default": {
+    "required": false,
+    "schema": {
+      "default": "hello",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "with_default_bool": {
+    "required": false,
+    "schema": {
+      "default": false,
+      "type": "boolean"
+    }
+  }
+}

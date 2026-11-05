@@ -20,6 +20,7 @@ poem = "3"
 serde_json = { workspace = true }
 
 [dev-dependencies]
+vld-http-common = { workspace = true, features = ["conformance"] }
 vld = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 poem = { version = "3", features = ["test"] }

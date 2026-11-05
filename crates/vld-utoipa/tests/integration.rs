@@ -388,21 +388,23 @@ fn roundtrip_optional_schema() {
     assert!(union(&json).is_array());
 }
 
+/// Snapshot with sorted map keys (independent of serde_json `preserve_order`);
+/// utoipa 5 and 6 must produce the same documents.
+macro_rules! snap {
+    ($name:expr, $value:expr) => {
+        insta::with_settings!({ sort_maps => true }, {
+            let value = $value;
+            insta::assert_json_snapshot!($name, value);
+        })
+    };
+}
+
 #[test]
 fn roundtrip_full_struct() {
     let js = TestUser::json_schema();
-    let utoipa_schema = json_schema_to_schema(&js);
-    let json = serde_json::to_value(&utoipa_schema).unwrap();
-
-    assert_eq!(json["type"], "object");
-    let req = json["required"].as_array().unwrap();
-    assert!(req.contains(&json!("name")));
-    assert!(req.contains(&json!("email")));
-    assert!(!req.contains(&json!("age")));
-    assert_eq!(json["properties"]["name"]["minLength"], 2);
-    assert_eq!(json["properties"]["name"]["maxLength"], 50);
-    assert_eq!(json["properties"]["email"]["format"], "email");
-    assert!(union(&json["properties"]["age"]).is_array());
+    let utoipa_json = serde_json::to_value(json_schema_to_schema(&js)).unwrap();
+    assert_eq!(utoipa_required(&utoipa_json), ["name", "email"]);
+    snap!("roundtrip_full_struct", utoipa_json);
 }
 
 vld::schema! {
@@ -475,116 +477,55 @@ fn utoipa_required(json: &serde_json::Value) -> Vec<&str> {
         .unwrap_or_default()
 }
 
-/// End-to-end: schema! required matrix → utoipa ToSchema → JSON, including
-/// optional / nullish / default / nullable / wrapper stacks and IntoParams.
+/// End-to-end: schema! / derive required matrix → utoipa ToSchema and
+/// IntoParams. Required sets are asserted; full documents are snapshots.
 #[test]
 fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
-    // schema! CreateTicket through json_schema + utoipa conversion
     let js = CreateTicket::json_schema();
+    let via_fn = serde_json::to_value(json_schema_to_schema(&js)).unwrap();
+    let via_trait = serde_json::to_value(CreateTicket::schema()).unwrap();
+    assert_eq!(utoipa_required(&js), ["title", "body"]);
+    assert_eq!(utoipa_required(&via_fn), ["title", "body"]);
+    assert_eq!(via_fn, via_trait);
+
+    let derive = serde_json::to_value(DerivePatchTicket::schema()).unwrap();
+    assert_eq!(utoipa_required(&derive), ["title"]);
+
+    // Sorted: parameter order follows the JSON object's key order.
+    let mut params = json_schema_to_params(&TicketFilter::json_schema(), ParameterIn::Query);
+    params.sort_by(|a, b| a.name.cmp(&b.name));
+    let required: Vec<(&str, bool)> = params
+        .iter()
+        .map(|p| {
+            let req = matches!(p.required, utoipa::openapi::Required::True);
+            (p.name.as_str(), req)
+        })
+        .collect();
     assert_eq!(
-        utoipa_required(&js),
-        vec!["title", "body"],
-        "optional/nullable/nullish/default omitted"
+        required,
+        [
+            ("assignee", false),
+            ("cursor", false),
+            ("include_closed", false),
+            ("page", false),
+            ("q", true),
+            ("status", false),
+        ]
     );
-    assert_eq!(js["properties"]["title"]["description"], "ticket title");
-    assert_eq!(js["properties"]["title"]["maxLength"], 120);
-    assert_eq!(js["properties"]["priority"]["type"], "string");
-    assert!(js["properties"]["priority"].get("oneOf").is_none());
-    assert!(js["properties"]["priority"].get("anyOf").is_none());
-    assert!(union(&js["properties"]["labels"]).is_array());
-    assert!(union(&js["properties"]["due_at"]).is_array());
-    assert_eq!(js["properties"]["due_at"]["description"], "ISO date");
-    assert!(union(&js["properties"]["reporter"]).is_array());
-    assert_eq!(
-        js["properties"]["reporter"]["description"],
-        "reporter email"
-    );
-    assert!(union(&js["properties"]["meta"]).is_array());
-    assert_eq!(js["properties"]["meta"]["description"], "freeform");
 
-    let utoipa_json = serde_json::to_value(json_schema_to_schema(&js)).unwrap();
-    assert_eq!(utoipa_json["type"], "object");
-    assert_eq!(utoipa_required(&utoipa_json), vec!["title", "body"]);
-    assert_eq!(utoipa_json["properties"]["title"]["minLength"], 3);
-    assert!(union(&utoipa_json["properties"]["labels"]).is_array());
-    assert!(union(&utoipa_json["properties"]["reporter"]).is_array());
-
-    // ToSchema path must keep the same required matrix
-    let schema_json = serde_json::to_value(CreateTicket::schema()).unwrap();
-    assert_eq!(utoipa_required(&schema_json), vec!["title", "body"]);
-
-    // derive(Validate) path
-    let derive_js = DerivePatchTicket::json_schema();
-    assert_eq!(
-        utoipa_required(&derive_js),
-        vec!["title"],
-        "derive: optional/nullable/nullish/default omitted"
-    );
-    assert_eq!(derive_js["properties"]["title"]["description"], "title");
-    assert!(union(&derive_js["properties"]["body"]).is_array());
-    assert_eq!(derive_js["properties"]["priority"]["type"], "string");
-    assert!(union(&derive_js["properties"]["assignee"]).is_array());
-    assert!(union(&derive_js["properties"]["cursor"]).is_array());
-
-    let derive_utoipa = serde_json::to_value(DerivePatchTicket::schema()).unwrap();
-    assert_eq!(utoipa_required(&derive_utoipa), vec!["title"]);
-
-    // IntoParams: required flags mirror json_schema required array
-    let params = json_schema_to_params(&TicketFilter::json_schema(), ParameterIn::Query);
-    assert_eq!(params.len(), 6);
-
-    let by_name = |n: &str| params.iter().find(|p| p.name == n).unwrap();
-
-    assert!(matches!(
-        by_name("q").required,
-        utoipa::openapi::Required::True
-    ));
-    assert!(matches!(
-        by_name("status").required,
-        utoipa::openapi::Required::False
-    ));
-    assert!(matches!(
-        by_name("assignee").required,
-        utoipa::openapi::Required::False
-    ));
-    assert!(matches!(
-        by_name("page").required,
-        utoipa::openapi::Required::False
-    ));
-    assert!(matches!(
-        by_name("include_closed").required,
-        utoipa::openapi::Required::False
-    ));
-    assert!(matches!(
-        by_name("cursor").required,
-        utoipa::openapi::Required::False
-    ));
-
-    let q_schema = serde_json::to_value(by_name("q").schema.as_ref().unwrap()).unwrap();
-    assert_eq!(q_schema["type"], "string");
-    assert_eq!(q_schema["minLength"], 1);
-    assert_eq!(q_schema["maxLength"], 200);
-
-    let page_schema = serde_json::to_value(by_name("page").schema.as_ref().unwrap()).unwrap();
-    assert_eq!(page_schema["type"], "integer");
-    assert_eq!(page_schema["minimum"], 1.0);
-
-    let cursor_schema = serde_json::to_value(by_name("cursor").schema.as_ref().unwrap()).unwrap();
-    // nullable becomes oneOf in json_schema; params may flatten — at least present
-    assert!(!cursor_schema.is_null());
-
-    // rename_all camelCase: optional addition must not be required
     let renamed = serde_json::to_value(DeriveRenamedRequest::schema()).unwrap();
     let req = utoipa_required(&renamed);
-    assert!(req.contains(&"firstName"));
-    assert!(req.contains(&"emailAddress"));
-    assert!(req.contains(&"streetNumber"));
-    assert!(req.contains(&"isActive"));
-    assert!(
-        !req.contains(&"streetNumberAddition"),
-        "optional camelCase field must be omitted from required: {req:?}"
+    assert!(!req.contains(&"streetNumberAddition"), "{req:?}");
+
+    snap!(
+        "required_matrix",
+        json!({
+            "create_ticket": via_fn,
+            "derive_patch_ticket": derive,
+            "ticket_filter_params": serde_json::to_value(&params).unwrap(),
+            "derive_renamed_request": renamed,
+        })
     );
-    assert!(union(&renamed["properties"]["streetNumberAddition"]).is_array());
 }
 
 // ---- Nested schema tests ----

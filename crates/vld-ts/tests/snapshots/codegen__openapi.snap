@@ -1,0 +1,50 @@
+---
+source: crates/vld-ts/tests/codegen.rs
+expression: "serde_json::json!({\n    \"order\": TsOrder::to_openapi(), \"renamed\": TsRenamed::to_openapi(),\n    \"custom_named\": TsCustomNamed::to_openapi(),\n})"
+---
+{
+  "custom_named": {
+    "properties": {
+      "name": {
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "type": "object"
+  },
+  "order": {
+    "properties": {
+      "id": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "shipping": {
+        "$ref": "#/components/schemas/TsAddress"
+      }
+    },
+    "required": [
+      "id",
+      "shipping"
+    ],
+    "type": "object"
+  },
+  "renamed": {
+    "properties": {
+      "firstName": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "isActive": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "firstName",
+      "isActive"
+    ],
+    "type": "object"
+  }
+}

@@ -257,13 +257,16 @@ async fn error_response_has_content_type() {
     );
 }
 
+/// `Default` and `Clone` produce working layers (same behaviour as `new`).
 #[tokio::test]
-async fn layer_is_clone() {
-    let layer = ValidateJsonLayer::<CreateUser>::new();
-    let _clone = layer.clone();
-}
-
-#[tokio::test]
-async fn layer_default() {
-    let _layer = ValidateJsonLayer::<CreateUser>::default();
+async fn default_and_cloned_layers_validate() {
+    let layer = ValidateJsonLayer::<CreateUser>::default();
+    for layer in [layer.clone(), layer] {
+        let svc = ServiceBuilder::new().layer(layer).service_fn(echo_service);
+        let resp = svc
+            .oneshot(make_json_request(r#"{"name": "A", "email": "bad"}"#))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
 }

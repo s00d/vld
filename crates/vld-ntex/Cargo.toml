@@ -28,6 +28,7 @@ serde_json = { workspace = true }
 # Tests/examples name ntex via the `vld_ntex::ntex` re-export; these only
 # enable the tokio runtime on whichever version is selected.
 [dev-dependencies]
+vld-http-common = { workspace = true, features = ["conformance"] }
 ntex3 = { package = "ntex", version = "3", default-features = false, features = ["tokio"] }
 ntex4 = { package = "ntex", version = "4", default-features = false, features = ["tokio"] }
 serde = { workspace = true }

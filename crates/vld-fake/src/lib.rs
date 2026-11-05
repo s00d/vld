@@ -164,7 +164,7 @@ pub struct FakeGen<R: Rng> {
 const MAX_DEPTH: usize = 12;
 
 impl FakeGen<rand::rngs::ThreadRng> {
-    /// Create a generator using [`rand::thread_rng()`].
+    /// Create a generator using the thread-local RNG.
     pub fn new() -> Self {
         Self {
             rng: thread_rng_compat(),

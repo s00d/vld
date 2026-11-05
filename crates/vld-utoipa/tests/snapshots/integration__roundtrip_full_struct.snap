@@ -1,0 +1,33 @@
+---
+source: crates/vld-utoipa/tests/integration.rs
+expression: value
+---
+{
+  "properties": {
+    "age": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "email": {
+      "format": "email",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 50,
+      "minLength": 2,
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "email"
+  ],
+  "type": "object"
+}
