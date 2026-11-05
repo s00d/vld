@@ -197,6 +197,57 @@ fn json_content_type_detection() {
     assert!(!is_json_content_type("text/plain"));
     assert!(!is_json_content_type("application/jsonp"));
     assert!(!is_json_content_type("text/json+x"));
+    assert!(is_json_content_type("application/json;charset"));
+    assert!(is_json_content_type("application/json; charset=\"utf-8"));
+    assert!(!is_json_content_type("application/+json"));
+}
+
+#[test]
+fn form_content_type_detection() {
+    assert!(require_form_content_type(Some("application/x-www-form-urlencoded")).is_ok());
+    assert!(
+        require_form_content_type(Some("Application/X-WWW-Form-Urlencoded; charset=UTF-8")).is_ok()
+    );
+    for ct in [None, Some("application/json"), Some("multipart/form-data")] {
+        let e = require_form_content_type(ct).unwrap_err();
+        assert_eq!(e.status(), 415);
+        assert_eq!(e.body()["message"], UNSUPPORTED_FORM_MEDIA_TYPE_MESSAGE);
+    }
+    assert_eq!(
+        require_json_content_type(None).unwrap_err().body()["message"],
+        UNSUPPORTED_MEDIA_TYPE_MESSAGE
+    );
+}
+
+#[test]
+fn form_body_field_cap() {
+    let ok = "a=1&".repeat(MAX_FORM_FIELDS);
+    assert!(parse_form_body(ok.as_bytes()).is_ok());
+    let err = parse_form_body(format!("{ok}b").as_bytes()).unwrap_err();
+    assert_eq!(err.status(), 422);
+    // 2 MiB of `a&a&…` is rejected before it expands into JSON values.
+    let amplified = "a&".repeat(DEFAULT_BODY_LIMIT / 2);
+    assert_eq!(parse_form_body(amplified.as_bytes()).unwrap_err().status(), 422);
+}
+
+#[test]
+fn cookies_first_occurrence_wins() {
+    let val = cookies_to_json("sid=legit; sid=evil");
+    assert_eq!(val["sid"], "legit");
+}
+
+#[test]
+fn cookie_headers_are_joined() {
+    let headers: [&[u8]; 3] = [b"a=1", b"b=2; a=3", "c=caf\u{e9}".as_bytes()];
+    let val = cookie_headers_to_json(headers);
+    assert_eq!(val, serde_json::json!({"a": 1, "b": 2, "c": "café"}));
+    assert_eq!(cookie_headers_to_json([]), serde_json::json!({}));
+}
+
+#[test]
+fn headers_with_underscore_are_skipped() {
+    let h: Vec<(&str, &[u8])> = vec![("x_user", b"admin"), ("X-User", b"bob")];
+    assert_eq!(headers_to_json(h), serde_json::json!({"x_user": "bob"}));
 }
 
 #[test]
@@ -220,6 +271,7 @@ fn format_issues_basic() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn format_issues_with_code_joins_path_with_dots() {
     use vld::error::{IssueCode, PathSegment, VldError};
     let mut err = VldError::single(IssueCode::MissingField, "Required");
@@ -242,6 +294,7 @@ fn format_vld_error_structure() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn format_json_parse_error_structure() {
     let body = format_json_parse_error("unexpected token");
     assert_eq!(body["error"], "Invalid JSON");
@@ -249,6 +302,7 @@ fn format_json_parse_error_structure() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn format_utf8_error_structure() {
     let body = format_utf8_error();
     assert_eq!(body["error"], "Invalid UTF-8");

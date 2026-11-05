@@ -18,21 +18,52 @@
 //!   (`?q=123` into `vld::string()` is `"123"`), and a single value is
 //!   wrapped into an array where the schema expects one (`?tags=a`).
 //! - JSON body extractors require a JSON `Content-Type` (`application/json`
-//!   or `application/*+json`, see [`is_json_content_type`]); a missing or
-//!   different type is **415** `{"error": "Unsupported Media Type", "message": ...}`.
-//! - Malformed bodies (JSON, non-UTF-8 forms) → **422** with the
-//!   [`ValidationErrorBody`] shape; oversized bodies → **413**
-//!   `{"error": "Payload too large"}`.
+//!   or `application/*+json`, see [`is_json_content_type`]) and form
+//!   extractors `application/x-www-form-urlencoded`
+//!   ([`require_form_content_type`]); a missing or different type is **415**
+//!   `{"error": "Unsupported Media Type", "message": ...}`.
+//! - Malformed bodies (JSON, non-UTF-8 forms, more than [`MAX_FORM_FIELDS`]
+//!   form fields) → **422** with the [`ValidationErrorBody`] shape; oversized
+//!   bodies → **413** `{"error": "Payload too large"}`.
+//! - Header names containing `_` are ignored (see [`headers_to_json`]); all
+//!   `Cookie` headers are read and the first occurrence of a cookie name wins
+//!   (see [`cookie_headers_to_json`]).
+//!
+//! # Error bodies
+//!
+//! | Status | Body |
+//! |---|---|
+//! | 422 | `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}` |
+//! | 413 | `{"error": "Payload too large"}` |
+//! | 415 | `{"error": "Unsupported Media Type", "message": "Expected Content-Type: ..."}` |
+//!
+//! `path` is `""` for the root (e.g. malformed JSON), `.field` for fields and
+//! `[0]` for array items (`.items[0].name`); `code` is
+//! [`IssueCode::key()`](vld::error::IssueCode::key).
 
 pub use vld::schema::parse_coerced;
 
 /// Default max request body size (2 MiB — same as axum `DefaultBodyLimit`).
 ///
-/// Used by every adapter that reads the body itself (axum, poem, rama, tower,
-/// warp, rocket form fallback). Adapters that delegate body reading to the
-/// framework (actix, ntex, salvo, rocket) honour the framework's own,
-/// user-configurable limit instead.
+/// Every adapter applies it to JSON and form bodies unless a limit is
+/// configured (see each adapter's README for how: [`VldBodyLimit`], the
+/// framework's own setting, or a constructor argument).
 pub const DEFAULT_BODY_LIMIT: usize = 2 * 1024 * 1024;
+
+/// Max number of `&`-separated fields in a form body ([`parse_form_body`]).
+///
+/// Caps the memory a small body can expand into (`a&a&a&…` turns every two
+/// bytes into a JSON value); more fields are a 422 parse error.
+pub const MAX_FORM_FIELDS: usize = 1000;
+
+/// Body size limit in bytes, registered as request/app data for the adapters
+/// without a framework-native body limit setting (`vld-actix` `app_data`,
+/// `vld-ntex` app state, `vld-poem` `.data(..)`; `vld-rama` has its own
+/// extension type).
+///
+/// Without it those adapters use [`DEFAULT_BODY_LIMIT`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VldBodyLimit(pub usize);
 
 /// Shared adapter conformance suite (test support, `conformance` feature).
 #[cfg(feature = "conformance")]
@@ -150,6 +181,11 @@ pub fn query_string_to_json(query: &str) -> serde_json::Value {
 ///
 /// Cookie names are used as-is. Values are unquoted (`"abc"` → `abc`),
 /// percent-decoded (`+` is kept) and coerced via [`coerce_value`].
+///
+/// When a name repeats (`sid=legit; sid=evil`) the **first** occurrence
+/// wins, as in most cookie parsers (browsers send the most specific path
+/// first); letting a later one win enables cookie tossing from a sibling
+/// subdomain.
 pub fn cookies_to_json(cookie_header: &str) -> serde_json::Value {
     let mut map = serde_json::Map::new();
 
@@ -164,18 +200,32 @@ pub fn cookies_to_json(cookie_header: &str) -> serde_json::Value {
             .strip_prefix('"')
             .and_then(|v| v.strip_suffix('"'))
             .unwrap_or(value);
-        map.insert(
-            name.trim().to_string(),
-            coerce_value(&percent_decode(value)),
-        );
+        map.entry(name.trim())
+            .or_insert_with(|| coerce_value(&percent_decode(value)));
     }
 
     serde_json::Value::Object(map)
 }
 
+/// Build a JSON object from **all** `Cookie` header values of a request.
+///
+/// HTTP/2 clients may send one `Cookie` header per cookie, so the values are
+/// joined with `"; "` before [`cookies_to_json`] (the first occurrence of a
+/// name wins). Non-UTF-8 bytes become `U+FFFD`.
+pub fn cookie_headers_to_json<'a, I>(values: I) -> serde_json::Value
+where
+    I: IntoIterator<Item = &'a [u8]>,
+{
+    let values: Vec<_> = values.into_iter().map(String::from_utf8_lossy).collect();
+    cookies_to_json(&values.join("; "))
+}
+
 /// Build a JSON object from HTTP header name/value pairs.
 ///
 /// - names are lowercased and `-` becomes `_` (`X-Request-Id` → `x_request_id`);
+/// - names that already contain `_` (`x_user`) are **skipped**: a client
+///   could otherwise fill the `x_user` field past a proxy that strips only
+///   `X-User` (nginx, for one, also drops such names by default);
 /// - non-UTF-8 bytes become `U+FFFD` instead of silently dropping the header;
 /// - repeated headers are joined with `", "` (RFC 9110 §5.3);
 /// - the joined value is coerced via [`coerce_value`].
@@ -186,6 +236,9 @@ where
     let mut map = serde_json::Map::new();
     let mut raw: Vec<(String, String)> = Vec::new();
     for (name, value) in headers {
+        if name.contains('_') {
+            continue;
+        }
         let key = name.to_ascii_lowercase().replace('-', "_");
         let value = String::from_utf8_lossy(value);
         match raw.iter_mut().find(|(k, _)| *k == key) {
@@ -218,10 +271,16 @@ where
 
 /// Parse an `application/x-www-form-urlencoded` body.
 ///
-/// Fails with a 422 parse error when the body is not valid UTF-8.
+/// Fails with a 422 parse error when the body is not valid UTF-8 or has more
+/// than [`MAX_FORM_FIELDS`] fields.
 pub fn parse_form_body(body: &[u8]) -> Result<serde_json::Value, VldHttpError> {
     let s = std::str::from_utf8(body)
         .map_err(|_| VldHttpError::parse("Form body is not valid UTF-8"))?;
+    if s.split('&').filter(|p| !p.is_empty()).count() > MAX_FORM_FIELDS {
+        return Err(VldHttpError::parse(format!(
+            "Too many form fields (max {MAX_FORM_FIELDS})"
+        )));
+    }
     Ok(query_string_to_json(s))
 }
 
@@ -230,17 +289,27 @@ pub fn parse_json_body(body: &[u8]) -> Result<serde_json::Value, VldHttpError> {
     serde_json::from_slice(body).map_err(|e| VldHttpError::parse(format!("Invalid JSON: {e}")))
 }
 
-/// `true` for `application/json` and any `application/*+json` media type
-/// (case-insensitive; parameters such as `; charset=utf-8` are ignored).
-pub fn is_json_content_type(content_type: &str) -> bool {
-    let essence = content_type
+/// The media type without parameters, trimmed and lowercased
+/// (`Application/JSON; charset=utf-8` → `application/json`).
+fn media_type_essence(content_type: &str) -> String {
+    content_type
         .split(';')
         .next()
         .unwrap_or("")
         .trim()
-        .to_ascii_lowercase();
+        .to_ascii_lowercase()
+}
+
+/// `true` for `application/json` and any `application/<x>+json` media type
+/// with a non-empty `<x>` (case-insensitive; parameters such as
+/// `; charset=utf-8` are ignored, even malformed ones).
+pub fn is_json_content_type(content_type: &str) -> bool {
+    let essence = media_type_essence(content_type);
     essence == "application/json"
-        || (essence.starts_with("application/") && essence.ends_with("+json"))
+        || essence
+            .strip_prefix("application/")
+            .and_then(|s| s.strip_suffix("+json"))
+            .is_some_and(|prefix| !prefix.is_empty())
 }
 
 /// Check the `Content-Type` of a JSON body: `Ok` for JSON media types
@@ -250,6 +319,17 @@ pub fn require_json_content_type(content_type: Option<&str>) -> Result<(), VldHt
     match content_type {
         Some(ct) if is_json_content_type(ct) => Ok(()),
         _ => Err(VldHttpError::unsupported_media_type()),
+    }
+}
+
+/// Check the `Content-Type` of a form body: `Ok` for
+/// `application/x-www-form-urlencoded` (case-insensitive, parameters
+/// allowed), otherwise a **415** error (also when the header is missing or
+/// not valid UTF-8).
+pub fn require_form_content_type(content_type: Option<&str>) -> Result<(), VldHttpError> {
+    match content_type.map(media_type_essence) {
+        Some(ct) if ct == "application/x-www-form-urlencoded" => Ok(()),
+        _ => Err(VldHttpError::unsupported_form_media_type()),
     }
 }
 
@@ -263,7 +343,7 @@ pub fn require_json_content_type(content_type: Option<&str>) -> Result<(), VldHt
 /// |---|---|---|
 /// | [`validation`](Self::validation) / [`parse`](Self::parse) | 422 | [`ValidationErrorBody`] |
 /// | [`payload_too_large`](Self::payload_too_large) | 413 | [`ErrorBody`] |
-/// | [`unsupported_media_type`](Self::unsupported_media_type) | 415 | [`ErrorWithMessage`] |
+/// | [`unsupported_media_type`](Self::unsupported_media_type) / [`unsupported_form_media_type`](Self::unsupported_form_media_type) | 415 | [`ErrorWithMessage`] |
 ///
 /// Adapters only convert [`status`](Self::status) and [`body`](Self::body)
 /// into their framework's response type.
@@ -306,16 +386,27 @@ impl VldHttpError {
     /// [`error`](Self::error) holds a single `ParseError` issue with
     /// [`UNSUPPORTED_MEDIA_TYPE_MESSAGE`].
     pub fn unsupported_media_type() -> Self {
+        Self::unsupported(UNSUPPORTED_MEDIA_TYPE_MESSAGE)
+    }
+
+    /// 415 — a form body was sent without
+    /// `Content-Type: application/x-www-form-urlencoded`.
+    ///
+    /// [`error`](Self::error) holds a single `ParseError` issue with
+    /// [`UNSUPPORTED_FORM_MEDIA_TYPE_MESSAGE`].
+    pub fn unsupported_form_media_type() -> Self {
+        Self::unsupported(UNSUPPORTED_FORM_MEDIA_TYPE_MESSAGE)
+    }
+
+    fn unsupported(message: &str) -> Self {
         Self {
             status: 415,
-            error: vld::error::VldError::single(
-                vld::error::IssueCode::ParseError,
-                UNSUPPORTED_MEDIA_TYPE_MESSAGE,
-            ),
+            error: vld::error::VldError::single(vld::error::IssueCode::ParseError, message),
         }
     }
 
     /// HTTP status code (422, 413 or 415).
+    #[must_use]
     pub fn status(&self) -> u16 {
         self.status
     }
@@ -334,7 +425,16 @@ impl VldHttpError {
     pub fn body(&self) -> serde_json::Value {
         match self.status {
             413 => format_payload_too_large(),
-            415 => format_unsupported_media_type(),
+            415 => serde_json::to_value(ErrorWithMessage {
+                error: "Unsupported Media Type".into(),
+                message: self
+                    .error
+                    .issues
+                    .first()
+                    .map_or(UNSUPPORTED_MEDIA_TYPE_MESSAGE, |i| i.message.as_str())
+                    .into(),
+            })
+            .expect("ErrorWithMessage serialization cannot fail"),
             _ => format_vld_error(&self.error),
         }
     }
@@ -398,8 +498,8 @@ vld::schema! {
 vld::schema! {
     /// Error body with a message: `{ "error": "...", "message": "..." }`.
     ///
-    /// Returned by [`format_json_parse_error`]. The adapters report malformed
-    /// JSON as a 422 [`ValidationErrorBody`] instead.
+    /// The **415** body ([`VldHttpError::unsupported_media_type`],
+    /// [`VldHttpError::unsupported_form_media_type`]).
     #[derive(Debug, Clone, Serialize)]
     pub struct ErrorWithMessage {
         pub error: String   => vld::string(),
@@ -419,18 +519,9 @@ vld::schema! {
     }
 }
 
-vld::schema! {
-    /// A validation issue with an error code:
-    /// `{ "path": "...", "message": "...", "code": "..." }`.
-    ///
-    /// Used by `vld-tonic` status details.
-    #[derive(Debug, Clone, Serialize)]
-    pub struct ValidationIssueWithCode {
-        pub path: String    => vld::string(),
-        pub message: String => vld::string(),
-        pub code: String    => vld::string(),
-    }
-}
+/// Same as [`ValidationIssue`], which always carries `code`.
+#[deprecated(since = "0.5.0", note = "use `ValidationIssue`")]
+pub type ValidationIssueWithCode = ValidationIssue;
 
 vld::schema! {
     /// Validation error response body:
@@ -486,19 +577,10 @@ pub fn format_vld_error(err: &vld::error::VldError) -> serde_json::Value {
     serde_json::to_value(body).expect("ValidationErrorBody serialization cannot fail")
 }
 
-/// Format issues with an additional `"code"` key from
-/// [`IssueCode::key()`](vld::error::IssueCode::key).
-///
-/// Returns a list of [`ValidationIssueWithCode`] structs.
-pub fn format_issues_with_code(err: &vld::error::VldError) -> Vec<ValidationIssueWithCode> {
-    err.issues
-        .iter()
-        .map(|issue| ValidationIssueWithCode {
-            path: format_path(&issue.path),
-            message: issue.message.clone(),
-            code: issue.code.key().to_string(),
-        })
-        .collect()
+/// Same as [`format_issues`], which always includes `code`.
+#[deprecated(since = "0.5.0", note = "use `format_issues`")]
+pub fn format_issues_with_code(err: &vld::error::VldError) -> Vec<ValidationIssue> {
+    format_issues(err)
 }
 
 /// Decode a form/query component: `+` → space, then [`percent_decode`].
@@ -537,8 +619,10 @@ pub fn percent_decode(input: &str) -> String {
 /// Build a JSON error body for invalid JSON parse errors.
 ///
 /// Returns `{ "error": "Invalid JSON", "message": "..." }`.
-///
-/// Internally constructs an [`ErrorWithMessage`] and serializes it.
+#[deprecated(
+    since = "0.5.0",
+    note = "unused: the adapters answer malformed JSON with a 422 `VldHttpError::parse` body"
+)]
 pub fn format_json_parse_error(message: &str) -> serde_json::Value {
     serde_json::to_value(ErrorWithMessage {
         error: "Invalid JSON".into(),
@@ -550,8 +634,10 @@ pub fn format_json_parse_error(message: &str) -> serde_json::Value {
 /// Build a JSON error body for invalid UTF-8 payloads.
 ///
 /// Returns `{ "error": "Invalid UTF-8" }`.
-///
-/// Internally constructs an [`ErrorBody`] and serializes it.
+#[deprecated(
+    since = "0.5.0",
+    note = "unused: the adapters answer invalid UTF-8 with a 422 `VldHttpError::parse` body"
+)]
 pub fn format_utf8_error() -> serde_json::Value {
     format_generic_error("Invalid UTF-8")
 }
@@ -565,19 +651,19 @@ pub fn format_payload_too_large() -> serde_json::Value {
     format_generic_error("Payload too large")
 }
 
-/// Message of the 415 body and error.
+/// Message of the 415 body and error for JSON extractors.
 pub const UNSUPPORTED_MEDIA_TYPE_MESSAGE: &str =
     "Expected Content-Type: application/json (or application/*+json)";
+
+/// Message of the 415 body and error for form extractors.
+pub const UNSUPPORTED_FORM_MEDIA_TYPE_MESSAGE: &str =
+    "Expected Content-Type: application/x-www-form-urlencoded";
 
 /// Build the JSON error body for a non-JSON `Content-Type`.
 ///
 /// Returns `{ "error": "Unsupported Media Type", "message": "Expected Content-Type: ..." }`.
 pub fn format_unsupported_media_type() -> serde_json::Value {
-    serde_json::to_value(ErrorWithMessage {
-        error: "Unsupported Media Type".into(),
-        message: UNSUPPORTED_MEDIA_TYPE_MESSAGE.into(),
-    })
-    .expect("ErrorWithMessage serialization cannot fail")
+    VldHttpError::unsupported_media_type().body()
 }
 
 /// Build a generic JSON error body with a custom error string.
