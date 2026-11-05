@@ -14,11 +14,13 @@ Validate data **before** inserting into the database. Provides:
 | Feature | Description |
 |---------|-------------|
 | `validate_insert::<Schema, _>(&value)` | Standalone validation before INSERT |
-| `validate_update::<Schema, _>(&value)` | Standalone validation before UPDATE |
+| `validate_update::<Schema, _>(&value)` | Deprecated alias of `validate_insert` |
 | `validate_row::<Schema, _>(&row)` | Validate data loaded from DB |
 | `Validated<Schema, T>` | Wrapper that guarantees `T` passes `Schema` |
-| `VldText<S>` | Validated `String` column type with Diesel `ToSql`/`FromSql` |
-| `VldInt<S>` | Validated `i64` column type with Diesel `ToSql`/`FromSql` |
+| `VldText<S>` | Validated `String` column type (`Text`) |
+| `VldInt<S>` | Validated `i64` column type (`BigInt`; also reads `Integer`) |
+| `VldFloat<S>` | Validated `f64` column type (`Double`) |
+| `VldBool<S>` | Validated `bool` column type (`Bool`) |
 
 ## Installation
 
@@ -92,7 +94,13 @@ vld::schema! {
 // Validates on construction
 let email = VldText::<EmailField>::new("user@example.com")?;
 
-// Use in Diesel models — implements ToSql/FromSql for Text
+// Column types implement ToSql/FromSql + AsExpression/FromSqlRow, so they work in
+// #[derive(Insertable, Queryable, Selectable)] structs and in filters:
+#[derive(Insertable)]
+#[diesel(table_name = users)]
+struct NewUser { email: VldText<EmailField> }
+
+let found = users::table.filter(users::email.eq(&email)).load::<User>(&mut conn)?;
 ```
 
 ### 4. Validate rows from DB

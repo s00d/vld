@@ -150,6 +150,7 @@ fn validate_insert_multiple_errors() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[allow(deprecated)]
 fn validate_update_works() {
     let user = NewUser {
         name: "Updated".into(),
@@ -454,4 +455,92 @@ fn error_from_vld() {
     let vld_err = vld::error::VldError::single(vld::error::IssueCode::MissingField, "test");
     let err: VldDieselError = vld_err.into();
     assert!(matches!(err, VldDieselError::Validation(_)));
+}
+
+// ---------------------------------------------------------------------------
+// Tests: wrappers in Insertable / Queryable / filter (AsExpression + FromSqlRow)
+// ---------------------------------------------------------------------------
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct PriceFieldSchema {
+        pub value: f64 => vld::number().min(0.0),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct ActiveFieldSchema {
+        pub value: bool => vld::boolean(),
+    }
+}
+
+diesel::table! {
+    products (id) {
+        id -> Integer,
+        email -> Text,
+        qty -> BigInt,
+        price -> Double,
+        active -> Bool,
+    }
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = products)]
+struct NewProduct {
+    email: VldText<EmailFieldSchema>,
+    qty: VldInt<AgeFieldSchema>,
+    price: VldFloat<PriceFieldSchema>,
+    active: VldBool<ActiveFieldSchema>,
+}
+
+#[derive(Queryable, Selectable, Debug)]
+#[diesel(table_name = products)]
+struct Product {
+    #[allow(dead_code)]
+    id: i32,
+    email: VldText<EmailFieldSchema>,
+    qty: VldInt<AgeFieldSchema>,
+    price: VldFloat<PriceFieldSchema>,
+    active: VldBool<ActiveFieldSchema>,
+}
+
+#[test]
+fn wrappers_in_insertable_queryable_and_filter() {
+    let mut conn = SqliteConnection::establish(":memory:").unwrap();
+    diesel::sql_query(
+        "CREATE TABLE products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            qty BIGINT NOT NULL,
+            price DOUBLE NOT NULL,
+            active BOOLEAN NOT NULL
+        )",
+    )
+    .execute(&mut conn)
+    .unwrap();
+
+    let new = NewProduct {
+        email: VldText::new("a@example.com").unwrap(),
+        qty: VldInt::new(3).unwrap(),
+        price: VldFloat::new(9.5).unwrap(),
+        active: VldBool::new(true).unwrap(),
+    };
+    diesel::insert_into(products::table)
+        .values(&new)
+        .execute(&mut conn)
+        .unwrap();
+
+    let email = VldText::<EmailFieldSchema>::new("a@example.com").unwrap();
+    let found: Vec<Product> = products::table
+        .filter(products::email.eq(&email))
+        .filter(products::qty.eq(VldInt::<AgeFieldSchema>::new(3).unwrap()))
+        .select(Product::as_select())
+        .load(&mut conn)
+        .unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].email.as_str(), "a@example.com");
+    assert_eq!(found[0].qty.get(), 3);
+    assert_eq!(found[0].price.get(), 9.5);
+    assert!(found[0].active.get());
 }
