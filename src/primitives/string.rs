@@ -88,31 +88,32 @@ fn is_valid_url_strict(s: &str) -> bool {
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return false;
     }
-    let host = match parsed.host_str() {
-        Some(h) => h,
-        None => return false,
-    };
-    if host.eq_ignore_ascii_case("localhost") {
-        return false;
+    // Match on the parsed host: `host_str()` returns IPv6 hosts in brackets
+    // (`[::1]`), which never parsed as an IP, so IPv6 was never checked.
+    fn v4_blocked(v4: std::net::Ipv4Addr) -> bool {
+        v4.is_private()
+            || v4.is_loopback()
+            || v4.is_link_local()
+            || v4.is_unspecified()
+            || v4.is_broadcast()
     }
-    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        match ip {
-            std::net::IpAddr::V4(v4) => {
-                if v4.is_private() || v4.is_loopback() || v4.is_link_local() {
-                    return false;
-                }
-            }
-            std::net::IpAddr::V6(v6) => {
-                let seg0 = v6.segments()[0];
-                let is_link_local = (seg0 & 0xffc0) == 0xfe80; // fe80::/10
-                let is_unique_local = (seg0 & 0xfe00) == 0xfc00; // fc00::/7
-                if v6.is_loopback() || is_link_local || is_unique_local {
-                    return false;
-                }
-            }
+    match parsed.host() {
+        Some(url::Host::Domain(d)) => {
+            let d = d.trim_end_matches('.');
+            !(d.eq_ignore_ascii_case("localhost") || d.to_ascii_lowercase().ends_with(".localhost"))
         }
+        Some(url::Host::Ipv4(v4)) => !v4_blocked(v4),
+        Some(url::Host::Ipv6(v6)) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return !v4_blocked(v4);
+            }
+            let seg0 = v6.segments()[0];
+            let is_link_local = (seg0 & 0xffc0) == 0xfe80; // fe80::/10
+            let is_unique_local = (seg0 & 0xfe00) == 0xfc00; // fc00::/7
+            !(v6.is_loopback() || v6.is_unspecified() || is_link_local || is_unique_local)
+        }
+        None => false,
     }
-    true
 }
 
 #[cfg(feature = "string-advanced")]
@@ -409,7 +410,7 @@ fn is_valid_base64(s: &str) -> bool {
 
 /// Parse exactly `n` ASCII digits from `s`, return the number and remaining slice.
 fn parse_digits(s: &str, n: usize) -> Option<(u32, &str)> {
-    if s.len() < n {
+    if s.len() < n || !s.is_char_boundary(n) {
         return None;
     }
     let (digits, rest) = s.split_at(n);
@@ -509,7 +510,7 @@ fn is_valid_iso_datetime(s: &str) -> bool {
         (&after_t[..pos], &after_t[pos..])
     } else if let Some(pos) = after_t.rfind('+') {
         (&after_t[..pos], &after_t[pos..])
-    } else if let Some(pos) = after_t[1..].rfind('-') {
+    } else if let Some(pos) = after_t.get(1..).and_then(|rest| rest.rfind('-')) {
         // skip first char to avoid matching negative in time itself
         let actual = pos + 1;
         (&after_t[..actual], &after_t[actual..])

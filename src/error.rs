@@ -574,7 +574,7 @@ impl<T: std::fmt::Debug> std::fmt::Display for ParseResult<T> {
 fn truncate_value(value: &serde_json::Value) -> serde_json::Value {
     match value {
         serde_json::Value::String(s) if s.len() > 100 => {
-            serde_json::Value::String(format!("{}...", &s[..97]))
+            serde_json::Value::String(format!("{}...", s.chars().take(97).collect::<String>()))
         }
         serde_json::Value::Array(arr) if arr.len() > 5 => {
             let mut truncated: Vec<serde_json::Value> = arr[..5].to_vec();

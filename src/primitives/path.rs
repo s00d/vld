@@ -144,9 +144,13 @@ impl VldSchema for ZPath {
             } else {
                 base.join(&p)
             };
-            let joined_canon = joined.canonicalize().unwrap_or(joined);
-            let base_canon = base.canonicalize().unwrap_or_else(|_| base.clone());
-            if !joined_canon.starts_with(&base_canon) {
+            // A path that does not exist can't be canonicalized; compare it
+            // lexically (resolving `.`/`..`) so `base/../etc` is rejected.
+            let inside = match (joined.canonicalize(), base.canonicalize()) {
+                (Ok(j), Ok(b)) => j.starts_with(&b),
+                _ => lexical_normalize(&joined).starts_with(lexical_normalize(base)),
+            };
+            if !inside {
                 return Err(VldError::single_with_value(
                     IssueCode::Custom {
                         code: "path_outside_base".to_string(),
@@ -158,4 +162,22 @@ impl VldSchema for ZPath {
         }
         Ok(p)
     }
+}
+
+/// Resolve `.` and `..` components without touching the filesystem.
+fn lexical_normalize(path: &std::path::Path) -> std::path::PathBuf {
+    use std::path::Component;
+    let mut out = std::path::PathBuf::new();
+    for c in path.components() {
+        match c {
+            Component::ParentDir => {
+                if !out.pop() {
+                    out.push("..");
+                }
+            }
+            Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
 }

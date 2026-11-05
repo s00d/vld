@@ -421,12 +421,10 @@ impl VldSchema for ZDateTime {
                     ));
                 }
             }
-            parsed.to_offset(UtcOffset::UTC)
+            parsed
         } else if self.allow_naive {
             match parse_naive_datetime(s) {
-                Some(naive) => naive
-                    .assume_offset(self.naive_offset)
-                    .to_offset(UtcOffset::UTC),
+                Some(naive) => naive.assume_offset(self.naive_offset),
                 None => {
                     return Err(VldError::single_with_value(
                         IssueCode::Custom {
@@ -446,6 +444,18 @@ impl VldSchema for ZDateTime {
                 value,
             ));
         };
+
+        // `to_offset` panics when the UTC instant leaves time's year range
+        // (e.g. 9999-12-31T23:00:00-05:00), so convert with the checked variant.
+        let dt = dt.checked_to_offset(UtcOffset::UTC).ok_or_else(|| {
+            VldError::single_with_value(
+                IssueCode::Custom {
+                    code: "invalid_datetime".to_string(),
+                },
+                format!("Datetime out of range: \"{}\"", s),
+                value,
+            )
+        })?;
 
         let mut errors = VldError::new();
         if let Some((min_dt, msg)) = &self.min {

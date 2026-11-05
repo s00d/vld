@@ -103,7 +103,10 @@ pub fn cookies_to_json(cookie_header: &str) -> serde_json::Value {
             Some((n, v)) => (n.trim(), v.trim()),
             None => (cookie.trim(), ""),
         };
-        map.insert(name.to_string(), coerce_value(value));
+        // First occurrence wins: browsers send the most specific cookie first,
+        // so letting a later duplicate override it enables cookie tossing.
+        map.entry(name.to_string())
+            .or_insert_with(|| coerce_value(value));
     }
 
     serde_json::Value::Object(map)
