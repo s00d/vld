@@ -6,3 +6,4 @@ PUBLISHING.md
 docs.txt
 # Local unification research harness (do not publish / push)
 /scratch/
+.claude/worktrees/
