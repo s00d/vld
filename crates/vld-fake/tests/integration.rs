@@ -1221,3 +1221,128 @@ fn type_array_uses_non_null_type() {
         assert!((5..=6).contains(&n));
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Generated values must pass the very schema they were generated from
+// ═══════════════════════════════════════════════════════════════════════════
+
+fn assert_fakes<S>(s: S)
+where
+    S: vld::schema::VldSchema + vld::json_schema::JsonSchema,
+{
+    let schema = s.json_schema();
+    for _ in 0..200 {
+        let v = fake_value(&schema);
+        assert!(
+            s.parse_value(&v).is_ok(),
+            "schema {schema} produced invalid {v}: {:?}",
+            s.parse_value(&v).err()
+        );
+    }
+}
+
+#[test]
+fn every_core_string_format_is_generated_validly() {
+    let s = vld::string;
+    for schema in [
+        s().email(),
+        s().url(),
+        s().url_strict(),
+        s().uri(),
+        s().uuid(),
+        s().uuid_v1(),
+        s().uuid_v4(),
+        s().uuid_v7(),
+        s().ip(),
+        s().ipv4(),
+        s().ipv6(),
+        s().cidr(),
+        s().mac(),
+        s().hex(),
+        s().slug(),
+        s().color(),
+        s().currency_code(),
+        s().country_code(),
+        s().locale(),
+        s().cron(),
+        s().credit_card(),
+        s().phone(),
+        s().phone_e164_strict(),
+        s().semver(),
+        s().semver_full(),
+        s().jwt(),
+        s().ascii(),
+        s().alpha(),
+        s().alphanumeric(),
+        s().lowercase(),
+        s().uppercase(),
+        s().iso_date(),
+        s().iso_datetime(),
+        s().iso_time(),
+        s().hostname(),
+        s().cuid2(),
+        s().ulid(),
+        s().nanoid(),
+        s().emoji(),
+    ] {
+        assert_fakes(schema);
+    }
+}
+
+#[test]
+fn free_length_formats_respect_min_max_length() {
+    let s = vld::string;
+    for schema in [
+        s().hex().min(40).max(40),
+        s().alpha().min(1).max(3),
+        s().alphanumeric().min(50),
+        s().lowercase().max(2),
+        s().uppercase().min(30).max(31),
+        s().email().min(40),
+        s().ascii().min(3).max(4),
+    ] {
+        assert_fakes(schema);
+    }
+}
+
+#[test]
+fn non_string_formats_are_generated_validly() {
+    assert_fakes(vld::bytes().base64().min_len(4).max_len(6));
+    assert_fakes(vld::bytes().base64url());
+    assert_fakes(vld::bytes().hex().len(3));
+    assert_fakes(vld::decimal());
+    assert_fakes(vld::ip_network());
+    assert_fakes(vld::socket_addr());
+    assert_fakes(vld::path());
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  pattern
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn pattern_is_honoured() {
+    let schema =
+        json!({"type": "string", "pattern": r"^(red|green)/[0-9a-f]{4}$", "maxLength": 10});
+    let re = vld::regex_lite::Regex::new(r"^(red|green)/[0-9a-f]{4}$").unwrap();
+    for _ in 0..100 {
+        let v = fake_value(&schema);
+        let s = v.as_str().unwrap();
+        assert!(re.is_match(s) && s.len() <= 10, "{s}");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Multi-byte strings: lengths count chars, never split a char
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn hint_truncation_is_char_safe() {
+    // CITIES contains "São Paulo"; max(2) used to split 'ã' and panic.
+    let schema = json!({"type": "string", "maxLength": 2, "minLength": 2});
+    let mut gen = FakeGen::new();
+    for _ in 0..2000 {
+        let v = gen.value_with_hint(&schema, Some("city"));
+        assert_eq!(v.as_str().unwrap().chars().count(), 2);
+    }
+}

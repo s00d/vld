@@ -8966,6 +8966,7 @@ name = "vld-fake"
 version = "0.4.6"
 dependencies = [
  "rand 0.10.1",
+ "regex-syntax 0.8.11",
  "serde",
  "serde_json",
  "vld",

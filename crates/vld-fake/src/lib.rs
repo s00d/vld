@@ -52,6 +52,7 @@
 //! ```
 
 mod dict;
+mod regex_gen;
 
 use dict::*;
 use rand::Rng;
@@ -329,10 +330,25 @@ impl<R: Rng> FakeGen<R> {
     // ═══════════════════════════════════════════════════════════════════════
 
     fn gen_string(&mut self, obj: &Map<String, Value>, hint: Option<&str>) -> Value {
-        let format = obj.get("format").and_then(Value::as_str);
+        let (min, max) = len_bounds(obj);
+
+        // 0) `pattern` — generate a string matching the regex
+        if let Some(p) = obj.get("pattern").and_then(Value::as_str) {
+            let mut last = None;
+            for _ in 0..20 {
+                match regex_gen::generate(&mut self.rng, p) {
+                    Some(s) if len_ok(&s, min, max) => return Value::String(s),
+                    Some(s) => last = Some(s),
+                    None => break, // unparsable regex — fall through
+                }
+            }
+            if let Some(s) = last {
+                return Value::String(s);
+            }
+        }
 
         // 1) Explicit JSON Schema format
-        if let Some(fmt) = format {
+        if let Some(fmt) = obj.get("format").and_then(Value::as_str) {
             return Value::String(self.gen_string_format(fmt, obj));
         }
 
@@ -496,28 +512,8 @@ impl<R: Rng> FakeGen<R> {
             _ => None,
         };
 
-        // Check length constraints
-        if let Some(mut s) = result {
-            let min = obj.get("minLength").and_then(Value::as_u64).unwrap_or(0) as usize;
-            let max = obj
-                .get("maxLength")
-                .and_then(Value::as_u64)
-                .map(|v| v as usize);
-
-            // Pad if too short
-            while s.len() < min {
-                s.push('x');
-            }
-            // Truncate if too long
-            if let Some(mx) = max {
-                if s.len() > mx {
-                    s.truncate(mx);
-                }
-            }
-            Some(Value::String(s))
-        } else {
-            None
-        }
+        let (min, max) = len_bounds(obj);
+        result.map(|s| Value::String(fit_len(s, min.unwrap_or(0), max, 'x')))
     }
 
     /// Generate a readable, word-based string that respects `minLength`/`maxLength`.
@@ -580,28 +576,94 @@ impl<R: Rng> FakeGen<R> {
             s = chars.next().unwrap().to_uppercase().chain(chars).collect();
         }
 
-        // Pad if too short
-        while s.len() < min_len {
-            s.push('a');
-        }
-
-        // Truncate if too long
-        if s.len() > max_len {
-            s.truncate(max_len);
-        }
-
-        Value::String(s)
+        Value::String(fit_len(s, min_len, Some(max_len), 'a'))
     }
 
     // ── format-specific generators ──────────────────────────────────────
 
     fn gen_string_format(&mut self, fmt: &str, obj: &Map<String, Value>) -> String {
-        match fmt {
+        let (min, max) = len_bounds(obj);
+
+        // Free-length character-class formats: build exactly `n` chars.
+        let charset: Option<&[u8]> = match fmt {
+            "hex" => Some(HEX),
+            "alpha" => Some(ALPHA),
+            "alphanumeric" => Some(TOKEN_ALPHA),
+            "lowercase" => Some(LOWER_ALPHA),
+            "uppercase" => Some(UPPER_ALPHA),
+            _ => None,
+        };
+        if let Some(cs) = charset {
+            let n = self.pick_len(min, max, 8, 24);
+            return self.gen_chars(cs, n);
+        }
+
+        // Byte-string formats: `minLength`/`maxLength` count decoded bytes.
+        if let Some(enc) = fmt.strip_prefix("byte") {
+            let n = self.pick_len(min, max, 8, 32);
+            let bytes: Vec<u8> = (0..n).map(|_| self.rng.gen()).collect();
+            return match enc {
+                "-hex" => bytes.iter().map(|b| format!("{b:02x}")).collect(),
+                "-base64url" => base64url(&bytes),
+                _ => base64_encode(&bytes),
+            };
+        }
+
+        if fmt == "decimal" {
+            return self.gen_decimal(obj);
+        }
+
+        // Structured formats: regenerate until the length fits.
+        let mut last = None;
+        for _ in 0..20 {
+            let Some(s) = self.gen_format_value(fmt) else {
+                break;
+            };
+            if len_ok(&s, min, max) {
+                return s;
+            }
+            last = Some(s);
+        }
+        match last {
+            // `email` can be padded in the local part without breaking it.
+            Some(s) if fmt == "email" && min.is_some_and(|m| s.chars().count() < m) => {
+                let pad = min.unwrap() - s.chars().count();
+                s.replacen('@', &format!("{}@", "x".repeat(pad)), 1)
+            }
+            Some(s) => s,
+            // Unknown format — readable string within the length bounds.
+            None => match self.gen_readable_string(obj) {
+                Value::String(s) => s,
+                _ => unreachable!(),
+            },
+        }
+    }
+
+    /// Generate a value for a known string `format`; `None` if unknown.
+    fn gen_format_value(&mut self, fmt: &str) -> Option<String> {
+        Some(match fmt {
             "email" => self.gen_email(),
-            "uuid" => self.gen_uuid(),
-            "uri" | "url" => self.gen_url(),
+            "uuid" | "uuid-v4" => self.gen_uuid(),
+            "uuid-v1" => self.gen_uuid_v(b'1'),
+            "uuid-v7" => self.gen_uuid_v(b'7'),
+            "uri" | "url" | "url-strict" => self.gen_url(),
             "ipv4" => self.gen_ipv4(),
             "ipv6" => self.gen_ipv6(),
+            "ip" => {
+                if self.rng.gen_bool(0.5) {
+                    self.gen_ipv4()
+                } else {
+                    self.gen_ipv6()
+                }
+            }
+            "cidr" => {
+                let prefix = self.rng.gen_range(8u8..=32);
+                format!("{}/{prefix}", self.gen_ipv4())
+            }
+            "socket-addr" => {
+                let port = self.rng.gen_range(1024u16..=65535);
+                format!("{}:{port}", self.gen_ipv4())
+            }
             "hostname" => self.gen_hostname(),
             "date" | "iso-date" => self.gen_date(),
             "time" | "iso-time" => self.gen_time(),
@@ -612,38 +674,111 @@ impl<R: Rng> FakeGen<R> {
             "nanoid" => self.gen_nanoid(),
             "emoji" => self.gen_emoji(),
             "phone" => self.gen_phone(),
+            "phone-e164" => {
+                // US numbers with real area codes: valid per libphonenumber.
+                let area = self.pick(&[201u16, 212, 213, 305, 312, 415, 617, 646, 702, 718]);
+                let exchange = self.rng.gen_range(200u16..=999);
+                let line = self.rng.gen_range(1000u16..=9999);
+                format!("+1{area}{exchange}{line}")
+            }
             "credit-card" => self.gen_credit_card(),
             "mac-address" | "mac" => self.gen_mac_address(),
             "color" | "hex-color" => self.gen_hex_color(),
-            "semver" => {
-                let major = self.rng.gen_range(0u8..10);
-                let minor = self.rng.gen_range(0u8..30);
-                let patch = self.rng.gen_range(0u16..100);
-                format!("{major}.{minor}.{patch}")
+            "semver" => self.gen_semver(),
+            "semver-full" => {
+                let v = self.gen_semver();
+                match self.rng.gen_range(0..3) {
+                    0 => format!("{v}-alpha.{}", self.rng.gen_range(1u8..10)),
+                    1 => format!("{v}+build.{}", self.rng.gen_range(1u16..1000)),
+                    _ => v,
+                }
             }
             "slug" => self.gen_slug(),
-            _ => {
-                // Unknown — readable string
-                let min = obj.get("minLength").and_then(Value::as_u64).unwrap_or(1) as usize;
-                let max = obj
-                    .get("maxLength")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(min as u64 + 20) as usize;
-                let target = self.rng.gen_range(min..=max.max(min));
-                let mut s = String::new();
-                while s.len() < target {
-                    if !s.is_empty() {
-                        s.push(' ');
-                    }
-                    let idx = self.rng.gen_range(0..WORDS.len());
-                    s.push_str(WORDS[idx]);
+            "currency-code" => self.pick(CURRENCIES).to_string(),
+            "country-code" => self.pick(LOCALES)[3..].to_string(),
+            "locale" => {
+                let l = self.pick(LOCALES);
+                if self.rng.gen_bool(0.3) {
+                    l[..2].to_string()
+                } else {
+                    l.to_string()
                 }
-                s.truncate(max.max(min));
-                while s.len() < min {
-                    s.push('a');
-                }
-                s
             }
+            "cron" => {
+                let minute = self.rng.gen_range(0u8..60);
+                let hour = self.rng.gen_range(0u8..24);
+                match self.rng.gen_range(0..3) {
+                    0 => format!("{minute} {hour} * * *"),
+                    1 => format!("*/{} * * * *", self.rng.gen_range(1u8..30)),
+                    _ => format!("{minute} {hour} * * 1-5"),
+                }
+            }
+            "jwt" => {
+                let header = base64url(br#"{"alg":"HS256","typ":"JWT"}"#);
+                let payload = base64url(format!(r#"{{"sub":"{}"}}"#, self.next_id()).as_bytes());
+                let sig = self.gen_chars(B64URL_ALPHA, 43);
+                format!("{header}.{payload}.{sig}")
+            }
+            "path" => {
+                let dir = self.pick(WORDS).to_lowercase();
+                let file = self.pick(WORDS).to_lowercase();
+                let ext = self.pick(FILE_EXTENSIONS);
+                format!("/var/data/{dir}/{file}.{ext}")
+            }
+            _ => return None,
+        })
+    }
+
+    /// Pick a length in `[min, max]`, defaulting to `[dmin, dmax]` around
+    /// whichever bound is missing.
+    fn pick_len(
+        &mut self,
+        min: Option<usize>,
+        max: Option<usize>,
+        dmin: usize,
+        dmax: usize,
+    ) -> usize {
+        let lo = min.unwrap_or(dmin.min(max.unwrap_or(dmin)));
+        let hi = max.unwrap_or(lo.max(dmax)).max(lo);
+        self.rng.gen_range(lo..=hi)
+    }
+
+    fn gen_chars(&mut self, charset: &[u8], n: usize) -> String {
+        (0..n)
+            .map(|_| charset[self.rng.gen_range(0..charset.len())] as char)
+            .collect()
+    }
+
+    fn gen_semver(&mut self) -> String {
+        let major = self.rng.gen_range(0u8..10);
+        let minor = self.rng.gen_range(0u8..30);
+        let patch = self.rng.gen_range(0u16..100);
+        format!("{major}.{minor}.{patch}")
+    }
+
+    /// Decimal string honouring vld's `x-minDecimal` / `x-maxDecimal`.
+    fn gen_decimal(&mut self, obj: &Map<String, Value>) -> String {
+        let bound = |k: &str| {
+            obj.get(k).and_then(|v| {
+                v.as_str()
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .or(v.as_f64())
+            })
+        };
+        let lo = bound("x-minDecimal");
+        let hi = bound("x-maxDecimal");
+        let (lo, hi) = match (lo, hi) {
+            (Some(l), Some(h)) => (l, h.max(l)),
+            (Some(l), None) => (l, l + 1000.0),
+            (None, Some(h)) => (h - 1000.0, h),
+            (None, None) => (0.0, 1000.0),
+        };
+        let v = lo + self.rng.gen::<f64>() * (hi - lo);
+        let s = format!("{v:.2}");
+        if s.parse::<f64>().is_ok_and(|r| (lo..=hi).contains(&r)) {
+            s
+        } else {
+            v.to_string()
         }
     }
 
@@ -662,19 +797,20 @@ impl<R: Rng> FakeGen<R> {
     }
 
     fn gen_uuid(&mut self) -> String {
-        let hex = |n: usize, rng: &mut R| -> String {
-            (0..n)
-                .map(|_| HEX[rng.gen_range(0..HEX.len())] as char)
-                .collect()
-        };
+        self.gen_uuid_v(b'4')
+    }
+
+    /// Random UUID with the given version nibble and RFC 4122 variant.
+    fn gen_uuid_v(&mut self, version: u8) -> String {
         format!(
-            "{}-{}-4{}-{}{}-{}",
-            hex(8, &mut self.rng),
-            hex(4, &mut self.rng),
-            hex(3, &mut self.rng),
+            "{}-{}-{}{}-{}{}-{}",
+            self.gen_chars(HEX, 8),
+            self.gen_chars(HEX, 4),
+            version as char,
+            self.gen_chars(HEX, 3),
             HEX_89AB[self.rng.gen_range(0..4)] as char,
-            hex(3, &mut self.rng),
-            hex(12, &mut self.rng),
+            self.gen_chars(HEX, 3),
+            self.gen_chars(HEX, 12),
         )
     }
 
@@ -1595,7 +1731,43 @@ fn luhn_check_digit(digits: &[u8]) -> u8 {
     ((10 - (sum % 10)) % 10) as u8
 }
 
+/// `(minLength, maxLength)` of a string schema.
+fn len_bounds(obj: &Map<String, Value>) -> (Option<usize>, Option<usize>) {
+    let get = |k| obj.get(k).and_then(Value::as_u64).map(|v| v as usize);
+    (get("minLength"), get("maxLength"))
+}
+
+/// Whether `s` (counted in chars, like vld) satisfies the length bounds.
+fn len_ok(s: &str, min: Option<usize>, max: Option<usize>) -> bool {
+    let n = s.chars().count();
+    min.is_none_or(|m| n >= m) && max.is_none_or(|m| n <= m)
+}
+
+/// Pad with `pad` / truncate `s` so its char count lies in `[min, max]`.
+fn fit_len(mut s: String, min: usize, max: Option<usize>, pad: char) -> String {
+    let n = s.chars().count();
+    if n < min {
+        s.extend(std::iter::repeat_n(pad, min - n));
+    }
+    if let Some(mx) = max {
+        if let Some((idx, _)) = s.char_indices().nth(mx) {
+            s.truncate(idx);
+        }
+    }
+    s
+}
+
+fn base64url(data: &[u8]) -> String {
+    base64_encode(data)
+        .trim_end_matches('=')
+        .replace('+', "-")
+        .replace('/', "_")
+}
+
 const LOWER_ALPHA: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
+const UPPER_ALPHA: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ALPHA: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const B64URL_ALPHA: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
 const LOWER_DIGIT: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 const HEX: &[u8] = b"0123456789abcdef";
 const HEX_89AB: &[u8] = b"89ab";
