@@ -128,8 +128,8 @@ fn stream(channel: tauri::ipc::Channel<serde_json::Value>) -> Result<(), VldTaur
 {
   "error": "Validation failed",
   "issues": [
-    { "path": ".name", "message": "String must be at least 2 characters" },
-    { "path": ".email", "message": "Invalid email address" }
+    { "path": "name", "message": "String must be at least 2 characters" },
+    { "path": "email", "message": "Invalid email address" }
   ]
 }
 ```

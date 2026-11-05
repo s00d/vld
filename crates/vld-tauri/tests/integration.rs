@@ -300,3 +300,18 @@ fn vld_event_deref() {
     let inner: &UserUpdate = &event;
     assert_eq!(inner.id, 10);
 }
+
+#[test]
+fn issue_paths_have_no_leading_dot() {
+    let err =
+        validate::<CreateUser>(serde_json::json!({"name": "A", "email": "a@b.co"})).unwrap_err();
+    assert_eq!(err.issues[0].path, "name");
+
+    let e = serde_json::from_value::<VldPayload<CreateUser>>(
+        serde_json::json!({"name": "A", "email": "a@b.co"}),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(e.contains("name: "), "{e}");
+    assert!(!e.contains(".name"), "{e}");
+}

@@ -187,3 +187,21 @@ fn error_is_std_error() {
     let err = validate(&cli).unwrap_err();
     let _: &dyn std::error::Error = &err;
 }
+
+#[derive(Debug, serde::Serialize, Validate)]
+struct SnakeCli {
+    #[vld(vld::number().int().min(1))]
+    max_connections: i64,
+}
+
+#[test]
+fn flag_names_are_kebab_case_without_double_dot() {
+    let err = validate(&SnakeCli { max_connections: 0 }).unwrap_err();
+    assert!(
+        err.message.contains("--max-connections:"),
+        "msg: {}",
+        err.message
+    );
+    assert!(err.format_issues().contains("--max-connections:"));
+    assert!(!err.message.contains("--."), "msg: {}", err.message);
+}
