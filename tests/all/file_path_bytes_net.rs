@@ -108,7 +108,6 @@ fn bytes_string_modes() {
 }
 
 #[test]
-#[ignore = "BUG: bytes().base64url() also accepts the standard alphabet (`+`, `/`): it maps `-`/`_` to `+`/`/` and decodes as standard Base64"]
 fn bytes_base64url_rejects_standard_alphabet() {
     assert!(vld::bytes().base64url().parse_value(&json!("+/8")).is_err());
 }
@@ -133,7 +132,10 @@ fn duration_formats_and_bounds() {
     assert_issue!(
         parse_err(&d, json!(-1)),
         "",
-        IssueCode::TooSmall { origin: SizeOrigin::Duration, .. }
+        IssueCode::TooSmall {
+            origin: SizeOrigin::Duration,
+            ..
+        }
     );
     for bad in [json!("five"), json!(""), json!(null)] {
         assert_issue!(parse_err(&d, bad), "", IssueCode::InvalidType { .. });

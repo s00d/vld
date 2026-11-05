@@ -25,9 +25,11 @@ fn valid_object() {
 fn field_errors_have_field_paths() {
     let err = parse_err(&base(), json!({"name": "", "age": -1}));
     assert_eq!(paths(&err), [".name", ".age"]);
-    // A missing key is read as null.
+    // An absent required key is `missing_field` (a present null is `invalid_type`).
     let err = parse_err(&base(), json!({}));
     assert_eq!(paths(&err), [".name", ".age"]);
+    assert_eq!(codes(&err), ["missing_field", "missing_field"]);
+    let err = parse_err(&base(), json!({"name": null, "age": null}));
     assert_eq!(codes(&err), ["invalid_type", "invalid_type"]);
 }
 

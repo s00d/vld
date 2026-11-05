@@ -114,6 +114,7 @@ async fn extractor_body_error_is_not_413() {
         let req = Request::builder()
             .method(Method::POST)
             .uri(uri)
+            .header("content-type", content_type(uri))
             .body(Body::new(BrokenBody))
             .unwrap();
         let resp = svc.serve(req).await.unwrap();
@@ -131,6 +132,7 @@ async fn extractor_body_over_limit_is_413() {
         let req = Request::builder()
             .method(Method::POST)
             .uri(uri)
+            .header("content-type", content_type(uri))
             .body(Body::from(big.clone()))
             .unwrap();
         let resp = svc.serve(req).await.unwrap();
@@ -143,4 +145,13 @@ async fn extractor_body_over_limit_is_413() {
 async fn extractor_deref() {
     let u = VldJson(User { name: "Al".into() });
     assert_eq!(u.name, "Al");
+}
+
+/// JSON extractors require a JSON Content-Type (415 otherwise).
+fn content_type(uri: &str) -> &'static str {
+    if uri.ends_with("/j") {
+        "application/json"
+    } else {
+        "application/x-www-form-urlencoded"
+    }
 }

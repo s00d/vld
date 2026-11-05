@@ -190,10 +190,13 @@ fn non_identifier_keys_are_quoted() {
 #[test]
 fn default_is_emitted() {
     let schema = vld::number().int().with_default(5);
-    assert_eq!(vld_ts::to_zod(&schema), "z.number().int().default(5)");
+    assert_eq!(
+        vld_ts::to_zod(&schema),
+        "z.number().int().nullish().transform((v) => v ?? 5)"
+    );
     assert_eq!(
         vld_ts::to_valibot(&schema),
-        "v.optional(v.pipe(v.number(), v.integer()), 5)"
+        "v.nullish(v.pipe(v.number(), v.integer()), 5)"
     );
 
     // In an object, a defaulted field is not additionally wrapped in optional.
@@ -202,8 +205,8 @@ fn default_is_emitted() {
         "required": [],
         "properties": {"role": {"type": "string", "default": "user"}}
     });
-    assert!(zod_of(&obj).contains("role: z.string().default(\"user\")\n"));
-    assert!(valibot_of(&obj).contains("role: v.optional(v.string(), \"user\")\n"));
+    assert!(zod_of(&obj).contains("role: z.string().nullish().transform((v) => v ?? \"user\")\n"));
+    assert!(valibot_of(&obj).contains("role: v.nullish(v.string(), \"user\")\n"));
 }
 
 #[test]

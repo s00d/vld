@@ -284,6 +284,7 @@ fn validation_error_body_schema_roundtrip() {
         issues: vec![ValidationIssue {
             path: "name".into(),
             message: "too short".into(),
+            code: "too_small".into(),
         }],
     };
     let json = serde_json::to_value(&body).unwrap();

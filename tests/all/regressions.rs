@@ -74,7 +74,6 @@ fn issue_less_failures_do_not_panic() {
 }
 
 #[test]
-#[ignore = "BUG: intersection (second side), array, set and record treat Err(VldError::new()) from an inner schema as success (they test errors.is_empty())"]
 fn issue_less_failures_are_never_swallowed() {
     assert_eq!(swallowed(), Vec::<&str>::new());
 }

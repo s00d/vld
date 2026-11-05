@@ -62,7 +62,7 @@ fn deep_partial_is_shallow_partial() {
     assert_issue!(
         parse_err(&s, json!({"addr": {}})),
         ".addr.city",
-        IssueCode::InvalidType { .. }
+        IssueCode::MissingField
     );
 }
 

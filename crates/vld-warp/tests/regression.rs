@@ -68,6 +68,7 @@ async fn json_over_limit_is_413() {
     let resp = warp::test::request()
         .method("POST")
         .path("/json")
+        .header("content-type", "application/json")
         .body(r#"{"name":"a-very-long-name"}"#)
         .reply(&routes())
         .await;

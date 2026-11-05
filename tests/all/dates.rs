@@ -288,11 +288,7 @@ backend_suite!(chrono, ::chrono::NaiveDate);
 #[cfg(feature = "jiff")]
 backend_suite!(jiff, ::jiff::civil::Date);
 #[cfg(feature = "time")]
-backend_suite!(
-    time,
-    ::time::Date,
-    #[ignore = "BUG: time backend emits the datetime default as `2024-01-02 03:04:05.0 +00:00:00` (serde-human-readable), not RFC 3339"],
-);
+backend_suite!(time, ::time::Date,);
 
 /// With several backends enabled, each module keeps its own output type.
 #[cfg(all(feature = "chrono", feature = "jiff", feature = "time"))]

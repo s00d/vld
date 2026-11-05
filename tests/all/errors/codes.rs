@@ -123,7 +123,7 @@ fn display_lists_path_message_and_received() {
     assert_eq!(
         err.to_string(),
         ".name: String must be at least 2 characters, received \"a\"\n\
-         .tags[1]: Expected number, received string, received \"x\""
+         .tags[1]: Expected number, received string"
     );
 }
 
