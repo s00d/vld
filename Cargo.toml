@@ -32,6 +32,7 @@ members = [
     "crates/vld-rama",
     "examples/playground",
 ]
+exclude = ["fuzz"]
 resolver = "2"
 
 [workspace.package]

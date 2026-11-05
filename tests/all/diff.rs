@@ -13,10 +13,7 @@ fn obj(prop: Value, required: bool) -> Value {
 
 /// `(path, kind)` of every change.
 fn summary(d: &SchemaDiff) -> Vec<(String, ChangeKind)> {
-    d.changes
-        .iter()
-        .map(|c| (c.path.clone(), c.kind))
-        .collect()
+    d.changes.iter().map(|c| (c.path.clone(), c.kind)).collect()
 }
 
 #[test]
