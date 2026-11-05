@@ -13,6 +13,7 @@ set -euo pipefail
 
 VLD_EXTENDED_FEATURES="chrono,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced"
 JIFF_FEATURES="jiff,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced"
+ALL_DATES_FEATURES="chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced"
 TIME_FEATURES="time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced"
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
@@ -80,6 +81,9 @@ cargo test -p vld --features "${JIFF_FEATURES}" "${PROFILE[@]}"
 echo "==> Test vld time feature matrix"
 cargo test -p vld --features "${TIME_FEATURES}" "${PROFILE[@]}"
 
+echo "==> Test vld with all date backends together"
+cargo test -p vld --features "${ALL_DATES_FEATURES}" "${PROFILE[@]}"
+
 echo "==> Clippy (workspace, default features, all targets)"
 cargo clippy --workspace --all-targets "${PROFILE[@]}" -- -D warnings
 
@@ -91,6 +95,9 @@ cargo clippy -p vld --all-targets --features "${JIFF_FEATURES}" "${PROFILE[@]}" 
 
 echo "==> Clippy (vld time features)"
 cargo clippy -p vld --all-targets --features "${TIME_FEATURES}" "${PROFILE[@]}" -- -D warnings
+
+echo "==> Clippy (vld, all date backends)"
+cargo clippy -p vld --all-targets --features "${ALL_DATES_FEATURES}" "${PROFILE[@]}" -- -D warnings
 
 echo "==> Clippy (integration crates, non-default branches)"
 cargo clippy -p vld-schemars --no-default-features --features schemars-1 --all-targets "${PROFILE[@]}" -- -D warnings

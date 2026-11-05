@@ -1,10 +1,9 @@
-//! `ZDate` / `ZDateTime`, shared by all date backends.
+//! [`ZDate`] / [`ZDateTime`], generic over a [`DateBackend`].
 //!
-//! Backend priority when multiple date features are enabled (e.g. `--all-features`):
-//! `chrono` > `jiff` > `time`. A backend only provides the concrete types and
-//! parsing of an already shape-checked string (see [`super::iso`]); every rule
-//! (accepted formats, bounds, past/future, offsets, messages) lives here, so
-//! all backends accept exactly the same inputs:
+//! A backend only provides the concrete types and parsing of an already
+//! shape-checked string (see `primitives::iso`); every rule (accepted formats,
+//! bounds, past/future, offsets, messages) lives here, so all backends accept
+//! exactly the same inputs:
 //!
 //! - date: `YYYY-MM-DD` (zero-padded, real calendar day);
 //! - datetime: `YYYY-MM-DDTHH:MM:SS[.fraction]` (seconds required, 1-9
@@ -12,35 +11,50 @@
 //!   is *naive* and is accepted only while [`ZDateTime::naive_allowed`] is on.
 
 use serde_json::Value;
+use std::fmt::Display;
+use std::marker::PhantomData;
 
 use crate::error::{issue_error, DateKind, IssueCode, SizeOrigin, ValidationIssue, VldError};
+use crate::primitives::iso::{is_valid_iso_date, split_datetime};
 use crate::schema::VldSchema;
 
-use crate::primitives::iso::{is_valid_iso_date, split_datetime};
+mod sealed {
+    pub trait Sealed {}
+}
+pub(super) use sealed::Sealed;
 
-#[cfg(feature = "chrono")]
-#[path = "chrono.rs"]
-mod backend;
-#[cfg(all(feature = "jiff", not(feature = "chrono")))]
-#[path = "jiff.rs"]
-mod backend;
-#[cfg(all(feature = "time", not(any(feature = "chrono", feature = "jiff"))))]
-#[path = "time.rs"]
-mod backend;
+/// A date library behind [`ZDate`] / [`ZDateTime`]: `vld::chrono::Chrono`,
+/// `vld::jiff::Jiff` or `vld::time::Time`. Sealed.
+pub trait DateBackend: Sealed {
+    /// Calendar date type.
+    type Date: Clone + PartialOrd + Display;
+    /// UTC instant type.
+    type DateTime: Clone + PartialOrd;
 
-use backend::{Date, DateTime};
+    /// Parse a shape-checked `YYYY-MM-DD` string.
+    fn parse_date(s: &str) -> Option<Self::Date>;
+    /// Interpret a shape-checked `YYYY-MM-DDTHH:MM:SS[.frac]` at `offset_seconds`, as UTC.
+    fn naive_to_utc(naive: &str, offset_seconds: i32) -> Option<Self::DateTime>;
+    /// Current UTC date.
+    fn today() -> Self::Date;
+    /// Current instant.
+    fn now() -> Self::DateTime;
+    /// RFC 3339 form (messages, JSON Schema).
+    fn format_datetime(dt: &Self::DateTime) -> String;
+}
 
-fn parse_date(s: &str) -> Option<Date> {
-    is_valid_iso_date(s)
-        .then(|| backend::parse_date(s))
-        .flatten()
+fn parse_date<B: DateBackend>(s: &str) -> Option<B::Date> {
+    is_valid_iso_date(s).then(|| B::parse_date(s)).flatten()
 }
 
 /// Strict datetime parse; `naive_offset` is applied when the input has no offset
 /// (`None` = naive input rejected). Returns the UTC instant and the input offset.
-fn parse_datetime(s: &str, naive_offset: Option<i32>) -> Option<(DateTime, Option<i32>)> {
+fn parse_datetime<B: DateBackend>(
+    s: &str,
+    naive_offset: Option<i32>,
+) -> Option<(B::DateTime, Option<i32>)> {
     let (naive, offset) = split_datetime(s)?;
-    let dt = backend::naive_to_utc(&naive, offset.or(naive_offset)?)?;
+    let dt = B::naive_to_utc(&naive, offset.or(naive_offset)?)?;
     Some((dt, offset))
 }
 
@@ -58,10 +72,6 @@ fn format_offset(offset_seconds: i32) -> String {
     let sign = if offset_seconds >= 0 { '+' } else { '-' };
     let abs = offset_seconds.unsigned_abs();
     format!("{}{:02}:{:02}", sign, abs / 3600, (abs % 3600) / 60)
-}
-
-fn date_error(code: IssueCode, custom: Option<&String>, value: &Value) -> VldError {
-    issue_error(code, custom, value)
 }
 
 /// A bound: the value, its display form (for messages / JSON Schema) and an
@@ -93,6 +103,22 @@ impl<T: PartialOrd> Bounds<T> {
             past: None,
             future: None,
         }
+    }
+
+    fn set_min(&mut self, value: T, display: String) {
+        self.min = Some(Bound {
+            value,
+            display,
+            msg: None,
+        });
+    }
+
+    fn set_max(&mut self, value: T, display: String) {
+        self.max = Some(Bound {
+            value,
+            display,
+            msg: None,
+        });
     }
 
     fn check(&self, v: &T, now: impl FnOnce() -> T, kind: DateKind, value: &Value) -> VldError {
@@ -137,73 +163,74 @@ impl<T: PartialOrd> Bounds<T> {
         }
         errors
     }
+
+    /// `formatMinimum` / `formatMaximum` keywords.
+    #[cfg(feature = "openapi")]
+    fn json_schema(&self, format: &str) -> Value {
+        let mut schema = serde_json::json!({"type": "string", "format": format});
+        if let Some(b) = &self.min {
+            schema["formatMinimum"] = serde_json::json!(b.display);
+        }
+        if let Some(b) = &self.max {
+            schema["formatMaximum"] = serde_json::json!(b.display);
+        }
+        schema
+    }
 }
 
 /// Schema for date validation. Parses strict ISO 8601 dates (`YYYY-MM-DD`)
-/// into the active backend's date type (`chrono::NaiveDate`,
-/// `jiff::civil::Date` or `time::Date`).
+/// into the backend's date type (`chrono::NaiveDate`, `jiff::civil::Date` or
+/// `time::Date`).
 ///
-/// Created via [`vld::date()`](crate::date).
-///
-/// # Example
-/// ```ignore
-/// use vld::prelude::*;
-///
-/// let schema = vld::date().min("2020-01-01").max("2030-12-31");
-/// let d = schema.parse(r#""2024-06-15""#).unwrap();
-/// assert_eq!(d.to_string(), "2024-06-15");
-/// ```
+/// Created via `vld::chrono::date()`, `vld::jiff::date()` or `vld::time::date()`
+/// (or `vld::date()` when exactly one backend is enabled).
 #[derive(Clone)]
-pub struct ZDate {
-    bounds: Bounds<Date>,
+pub struct ZDate<B: DateBackend> {
+    bounds: Bounds<B::Date>,
     custom_type_error: Option<String>,
+    _backend: PhantomData<fn() -> B>,
 }
 
-impl ZDate {
+impl<B: DateBackend> ZDate<B> {
     pub fn new() -> Self {
         Self {
             bounds: Bounds::new(),
             custom_type_error: None,
+            _backend: PhantomData,
         }
     }
 
-    /// Set a custom error message for type/format mismatch.
+    /// Set a custom error message for type mismatch (non-string input).
     pub fn type_error(mut self, msg: impl Into<String>) -> Self {
         self.custom_type_error = Some(msg.into());
         self
     }
 
-    fn literal(date: &str) -> Date {
-        parse_date(date).unwrap_or_else(|| panic!("Invalid date literal: {}", date))
+    fn literal(date: &str) -> B::Date {
+        parse_date::<B>(date).unwrap_or_else(|| panic!("Invalid date literal: {}", date))
     }
 
-    /// Minimum date (inclusive). Accepts `"YYYY-MM-DD"` string.
+    /// Minimum date (inclusive). Accepts `"YYYY-MM-DD"`; panics on an invalid literal.
     pub fn min(self, date: &str) -> Self {
         self.min_date(Self::literal(date))
     }
 
     /// Minimum date (inclusive) from a backend date value.
-    pub fn min_date(mut self, date: Date) -> Self {
-        self.bounds.min = Some(Bound {
-            display: date.to_string(),
-            value: date,
-            msg: None,
-        });
+    pub fn min_date(mut self, date: B::Date) -> Self {
+        let display = date.to_string();
+        self.bounds.set_min(date, display);
         self
     }
 
-    /// Maximum date (inclusive). Accepts `"YYYY-MM-DD"` string.
+    /// Maximum date (inclusive). Accepts `"YYYY-MM-DD"`; panics on an invalid literal.
     pub fn max(self, date: &str) -> Self {
         self.max_date(Self::literal(date))
     }
 
     /// Maximum date (inclusive) from a backend date value.
-    pub fn max_date(mut self, date: Date) -> Self {
-        self.bounds.max = Some(Bound {
-            display: date.to_string(),
-            value: date,
-            msg: None,
-        });
+    pub fn max_date(mut self, date: B::Date) -> Self {
+        let display = date.to_string();
+        self.bounds.set_max(date, display);
         self
     }
 
@@ -230,33 +257,18 @@ impl ZDate {
         self.bounds.future = Some(Some(msg.into()));
         self
     }
-
-    /// Generate a JSON Schema representation.
-    ///
-    /// `min`/`max` are emitted as `formatMinimum`/`formatMaximum`.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({"type": "string", "format": "date"});
-        if let Some(b) = &self.bounds.min {
-            schema["formatMinimum"] = serde_json::json!(b.display);
-        }
-        if let Some(b) = &self.bounds.max {
-            schema["formatMaximum"] = serde_json::json!(b.display);
-        }
-        schema
-    }
 }
 
-impl Default for ZDate {
+impl<B: DateBackend> Default for ZDate<B> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl VldSchema for ZDate {
-    type Output = Date;
+impl<B: DateBackend> VldSchema for ZDate<B> {
+    type Output = B::Date;
 
-    fn parse_value(&self, value: &Value) -> Result<Date, VldError> {
+    fn parse_value(&self, value: &Value) -> Result<B::Date, VldError> {
         let s = value.as_str().ok_or_else(|| {
             crate::primitives::type_error(
                 &self.custom_type_error,
@@ -264,18 +276,15 @@ impl VldSchema for ZDate {
                 value,
             )
         })?;
-        let date = parse_date(s).ok_or_else(|| {
-            date_error(
+        let date = parse_date::<B>(s).ok_or_else(|| {
+            VldError::from_code_with_value(
                 IssueCode::InvalidDate {
                     kind: DateKind::Date,
                 },
-                None,
                 value,
             )
         })?;
-        let errors = self
-            .bounds
-            .check(&date, backend::today, DateKind::Date, value);
+        let errors = self.bounds.check(&date, B::today, DateKind::Date, value);
         if errors.is_empty() {
             Ok(date)
         } else {
@@ -283,6 +292,18 @@ impl VldSchema for ZDate {
         }
     }
 }
+
+/// `{"type": "string", "format": "date"}`; `min`/`max` become
+/// `formatMinimum`/`formatMaximum`.
+#[cfg(feature = "openapi")]
+impl<B: DateBackend> crate::openapi::JsonSchema for ZDate<B> {
+    fn json_schema(&self) -> Value {
+        self.bounds.json_schema("date")
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<B: DateBackend> crate::openapi::CollectNestedSchemas for ZDate<B> {}
 
 /// Offset required by [`ZDateTime::timezone_offset_only`].
 #[derive(Clone)]
@@ -293,7 +314,7 @@ struct RequiredOffset {
 
 impl RequiredOffset {
     fn error(&self, value: &Value) -> VldError {
-        date_error(
+        issue_error(
             IssueCode::InvalidTimezoneOffset {
                 expected: format_offset(self.seconds),
             },
@@ -304,34 +325,29 @@ impl RequiredOffset {
 }
 
 /// Schema for datetime validation. Parses strict RFC 3339 datetimes into the
-/// active backend's UTC instant (`chrono::DateTime<Utc>`, `jiff::Timestamp`
-/// or `time::OffsetDateTime` at UTC).
+/// backend's UTC instant (`chrono::DateTime<Utc>`, `jiff::Timestamp` or
+/// `time::OffsetDateTime` at UTC).
 ///
-/// Created via [`vld::datetime()`](crate::datetime).
+/// Created via `vld::chrono::datetime()`, `vld::jiff::datetime()` or
+/// `vld::time::datetime()` (or `vld::datetime()` when exactly one backend is
+/// enabled).
 ///
 /// Accepts `YYYY-MM-DDTHH:MM:SS[.fraction]` plus `Z` or `±HH:MM`, e.g.
 /// `2024-01-15T10:30:00Z`, `2024-01-15T10:30:00+03:00`,
 /// `2024-01-15T10:30:00.123Z`. Naive input (no offset) is accepted by default
 /// and interpreted in [`naive_timezone_offset`](Self::naive_timezone_offset)
 /// (UTC unless set); see [`naive_allowed`](Self::naive_allowed).
-///
-/// # Example
-/// ```ignore
-/// use vld::prelude::*;
-///
-/// let schema = vld::datetime();
-/// let dt = schema.parse(r#""2024-06-15T12:00:00Z""#).unwrap();
-/// ```
 #[derive(Clone)]
-pub struct ZDateTime {
-    bounds: Bounds<DateTime>,
+pub struct ZDateTime<B: DateBackend> {
+    bounds: Bounds<B::DateTime>,
     allow_naive: bool,
     naive_offset: i32,
     required_timezone_offset: Option<RequiredOffset>,
     custom_type_error: Option<String>,
+    _backend: PhantomData<fn() -> B>,
 }
 
-impl ZDateTime {
+impl<B: DateBackend> ZDateTime<B> {
     pub fn new() -> Self {
         Self {
             bounds: Bounds::new(),
@@ -339,48 +355,43 @@ impl ZDateTime {
             naive_offset: 0,
             required_timezone_offset: None,
             custom_type_error: None,
+            _backend: PhantomData,
         }
     }
 
-    /// Set a custom error message for type/format mismatch.
+    /// Set a custom error message for type mismatch (non-string input).
     pub fn type_error(mut self, msg: impl Into<String>) -> Self {
         self.custom_type_error = Some(msg.into());
         self
     }
 
-    fn literal(dt: &str) -> DateTime {
-        parse_datetime(dt, None)
+    fn literal(dt: &str) -> B::DateTime {
+        parse_datetime::<B>(dt, None)
             .map(|(dt, _)| dt)
             .unwrap_or_else(|| panic!("Invalid datetime literal: {}", dt))
     }
 
-    /// Minimum datetime (inclusive). Accepts RFC 3339 with offset.
+    /// Minimum datetime (inclusive). Accepts RFC 3339 with offset; panics on an invalid literal.
     pub fn min(self, dt: &str) -> Self {
         self.min_datetime(Self::literal(dt))
     }
 
     /// Minimum datetime (inclusive) from a backend UTC datetime.
-    pub fn min_datetime(mut self, dt: DateTime) -> Self {
-        self.bounds.min = Some(Bound {
-            display: backend::format_datetime(&dt),
-            value: dt,
-            msg: None,
-        });
+    pub fn min_datetime(mut self, dt: B::DateTime) -> Self {
+        let display = B::format_datetime(&dt);
+        self.bounds.set_min(dt, display);
         self
     }
 
-    /// Maximum datetime (inclusive). Accepts RFC 3339 with offset.
+    /// Maximum datetime (inclusive). Accepts RFC 3339 with offset; panics on an invalid literal.
     pub fn max(self, dt: &str) -> Self {
         self.max_datetime(Self::literal(dt))
     }
 
     /// Maximum datetime (inclusive) from a backend UTC datetime.
-    pub fn max_datetime(mut self, dt: DateTime) -> Self {
-        self.bounds.max = Some(Bound {
-            display: backend::format_datetime(&dt),
-            value: dt,
-            msg: None,
-        });
+    pub fn max_datetime(mut self, dt: B::DateTime) -> Self {
+        let display = B::format_datetime(&dt);
+        self.bounds.set_max(dt, display);
         self
     }
 
@@ -456,51 +467,35 @@ impl ZDateTime {
         });
         self
     }
-
-    /// Generate a JSON Schema representation.
-    ///
-    /// `min`/`max` are emitted as `formatMinimum`/`formatMaximum`.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({"type": "string", "format": "date-time"});
-        if let Some(b) = &self.bounds.min {
-            schema["formatMinimum"] = serde_json::json!(b.display);
-        }
-        if let Some(b) = &self.bounds.max {
-            schema["formatMaximum"] = serde_json::json!(b.display);
-        }
-        schema
-    }
 }
 
-impl Default for ZDateTime {
+impl<B: DateBackend> Default for ZDateTime<B> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl VldSchema for ZDateTime {
-    type Output = DateTime;
+impl<B: DateBackend> VldSchema for ZDateTime<B> {
+    type Output = B::DateTime;
 
-    fn parse_value(&self, value: &Value) -> Result<DateTime, VldError> {
+    fn parse_value(&self, value: &Value) -> Result<B::DateTime, VldError> {
         let s = value.as_str().ok_or_else(|| {
             crate::primitives::type_error(&self.custom_type_error, "datetime string", value)
         })?;
 
         let naive_offset = (self.allow_naive && self.required_timezone_offset.is_none())
             .then_some(self.naive_offset);
-        let (dt, offset) = parse_datetime(s, naive_offset).ok_or_else(|| {
+        let (dt, offset) = parse_datetime::<B>(s, naive_offset).ok_or_else(|| {
             // A well-formed naive input rejected only because of the offset rule.
             if let (Some(required), Some((_, None))) =
                 (&self.required_timezone_offset, split_datetime(s))
             {
                 return required.error(value);
             }
-            date_error(
+            VldError::from_code_with_value(
                 IssueCode::InvalidDate {
                     kind: DateKind::DateTime,
                 },
-                None,
                 value,
             )
         })?;
@@ -511,9 +506,7 @@ impl VldSchema for ZDateTime {
             }
         }
 
-        let errors = self
-            .bounds
-            .check(&dt, backend::now, DateKind::DateTime, value);
+        let errors = self.bounds.check(&dt, B::now, DateKind::DateTime, value);
         if errors.is_empty() {
             Ok(dt)
         } else {
@@ -521,3 +514,15 @@ impl VldSchema for ZDateTime {
         }
     }
 }
+
+/// `{"type": "string", "format": "date-time"}`; `min`/`max` become
+/// `formatMinimum`/`formatMaximum`.
+#[cfg(feature = "openapi")]
+impl<B: DateBackend> crate::openapi::JsonSchema for ZDateTime<B> {
+    fn json_schema(&self) -> Value {
+        self.bounds.json_schema("date-time")
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<B: DateBackend> crate::openapi::CollectNestedSchemas for ZDateTime<B> {}

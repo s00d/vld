@@ -22,7 +22,11 @@ pub use crate::primitives::{FileStorage, ValidatedFile, ZFile};
 pub use crate::primitives::{
     IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZJsonValue, ZLiteral, ZNumber, ZString,
 };
-#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
+#[cfg(any(
+    all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+    all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+    all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+))]
 pub use crate::primitives::{ZDate, ZDateTime};
 pub use crate::primitives::{ZDuration, ZPath, ZSocketAddr};
 pub use crate::schema::{VldInput, VldParse, VldSchema};

@@ -118,10 +118,6 @@ leaf_schemas!(
     crate::primitives::ZPath,
     crate::primitives::ZEnum,
     crate::primitives::ZAny,
-    #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
-    crate::primitives::ZDate,
-    #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
-    crate::primitives::ZDateTime,
 );
 
 // ---------------------------------------------------------------------------

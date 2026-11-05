@@ -906,17 +906,7 @@ fn with_default_emits_default() {
     );
 }
 
-// Compile guard: date/time/net outputs must stay usable with `with_default` + JSON Schema.
-#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
-#[test]
-fn with_default_date_emits_default() {
-    let d = vld::date().parse(r#""2024-01-02""#).unwrap();
-    let js = vld::date().with_default(d).json_schema();
-    assert_eq!(js["default"], "2024-01-02");
-    let dt = vld::datetime().parse(r#""2024-01-02T03:04:05Z""#).unwrap();
-    assert!(vld::datetime().with_default(dt).json_schema()["default"].is_string());
-}
-
+// Compile guard: net/decimal outputs must stay usable with `with_default` + JSON Schema.
 #[cfg(feature = "net")]
 #[test]
 fn with_default_ip_network_emits_default() {

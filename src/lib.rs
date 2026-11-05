@@ -58,6 +58,14 @@ pub use openapi as json_schema;
 pub use openapi::diff;
 pub use schema::input;
 
+// Date backends: additive, each in its own module.
+#[cfg(feature = "chrono")]
+pub use primitives::date::chrono;
+#[cfg(feature = "jiff")]
+pub use primitives::date::jiff;
+#[cfg(feature = "time")]
+pub use primitives::date::time;
+
 // Re-export serde_json for use in macros
 #[doc(hidden)]
 pub use serde_json;
@@ -215,28 +223,29 @@ pub fn any() -> primitives::ZAny {
     primitives::ZAny::new()
 }
 
-/// Create a date validation schema. Parses ISO 8601 date strings (`YYYY-MM-DD`).
+/// Create a date schema with the only enabled date backend.
 ///
-/// Output type depends on the enabled date backend:
-/// - `chrono` feature → `chrono::NaiveDate`
-/// - `jiff` feature → `jiff::civil::Date`
-/// - `time` feature → `time::Date`
-///
-/// When multiple backends are enabled, priority is: `chrono` > `jiff` > `time`.
-#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
+/// Available only when exactly one of `chrono`, `jiff`, `time` is enabled;
+/// otherwise use `vld::chrono::date()`, `vld::jiff::date()` or
+/// `vld::time::date()` (see [`primitives::date`]).
+#[cfg(any(
+    all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+    all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+    all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+))]
 pub fn date() -> primitives::ZDate {
     primitives::ZDate::new()
 }
 
-/// Create a datetime validation schema. Parses ISO 8601 datetime strings.
+/// Create a datetime schema with the only enabled date backend.
 ///
-/// Output type depends on the enabled date backend:
-/// - `chrono` feature → `chrono::DateTime<chrono::Utc>`
-/// - `jiff` feature → `jiff::Timestamp`
-/// - `time` feature → `time::OffsetDateTime` (UTC)
-///
-/// When multiple backends are enabled, priority is: `chrono` > `jiff` > `time`.
-#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
+/// Available only when exactly one of `chrono`, `jiff`, `time` is enabled;
+/// otherwise use `vld::chrono::datetime()` etc. (see [`primitives::date`]).
+#[cfg(any(
+    all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+    all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+    all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+))]
 pub fn datetime() -> primitives::ZDateTime {
     primitives::ZDateTime::new()
 }
