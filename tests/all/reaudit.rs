@@ -410,6 +410,63 @@ fn f34_object_merge() {
     );
 }
 
+// 27. diff covers more keywords, stricter = breaking.
+#[cfg(feature = "diff")]
+#[test]
+fn f27_diff_keywords() {
+    use vld::diff::{diff_schemas, ChangeKind};
+    let kind = |old: serde_json::Value, new: serde_json::Value| {
+        let d = diff_schemas(&old, &new);
+        assert_eq!(d.changes.len(), 1, "{d}");
+        d.changes[0].kind
+    };
+    use ChangeKind::{Breaking as B, NonBreaking as N};
+    let cases = [
+        (json!({"const": 1}), json!({"const": 2}), B),
+        (json!({}), json!({"const": 2}), B),
+        (json!({"const": 1}), json!({}), N),
+        (json!({"multipleOf": 2}), json!({"multipleOf": 4}), B),
+        (json!({"multipleOf": 4}), json!({"multipleOf": 2}), N),
+        (json!({"multipleOf": 2}), json!({"multipleOf": 3}), B),
+        (json!({"prefixItems": [{}]}), json!({"prefixItems": [{}, {}]}), B),
+        (json!({"prefixItems": [{}, {}]}), json!({"prefixItems": [{}]}), N),
+        (
+            json!({"prefixItems": [{"type": "string"}]}),
+            json!({"prefixItems": [{"type": "number"}]}),
+            B,
+        ),
+        (json!({}), json!({"uniqueItems": true}), B),
+        (json!({"uniqueItems": true}), json!({}), N),
+        (json!({"minProperties": 1}), json!({"minProperties": 2}), B),
+        (json!({"maxProperties": 2}), json!({"maxProperties": 3}), N),
+        (json!({}), json!({"propertyNames": {"pattern": "^a"}}), B),
+        (
+            json!({"propertyNames": {"pattern": "^a"}}),
+            json!({"propertyNames": {}}),
+            N,
+        ),
+        (json!({}), json!({"contains": {"const": 1}}), B),
+        (json!({"minContains": 1}), json!({"minContains": 2}), B),
+        (json!({"maxContains": 3}), json!({"maxContains": 2}), B),
+        (
+            json!({"formatMinimum": "2020-01-01"}),
+            json!({"formatMinimum": "2021-01-01"}),
+            B,
+        ),
+        (
+            json!({"formatMaximum": "2020-01-01"}),
+            json!({"formatMaximum": "2021-01-01"}),
+            N,
+        ),
+        (json!({"x-minDecimal": "1.5"}), json!({"x-minDecimal": "2"}), B),
+        (json!({"x-maxUniqueItems": 5}), json!({"x-maxUniqueItems": 6}), N),
+        (json!({}), json!({"x-past": true}), B),
+    ];
+    for (old, new, want) in cases {
+        assert_eq!(kind(old.clone(), new.clone()), want, "{old} -> {new}");
+    }
+}
+
 // 22. Discriminator values compare numerically (1 == 1.0).
 #[test]
 fn f22_discriminator_numeric_equality() {

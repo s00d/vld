@@ -7,6 +7,11 @@
 //! Schemas (e.g. from `json_schema()` with the `openapi` feature, or any other
 //! source).
 //!
+//! **Direction**: the classification assumes request / input schemas — a
+//! change is breaking when the new schema rejects input the old one accepted
+//! (stricter), non-breaking when it only accepts more. For response schemas
+//! read it the other way round.
+//!
 //! Nullable wrappers (`anyOf`/`oneOf` of `[X, {"type": "null"}]`, as emitted
 //! by `.optional()` / `.nullable()`) are unwrapped and `X` is compared;
 //! gaining `null` is non-breaking, losing it is breaking. `anyOf` / `oneOf` /
@@ -124,10 +129,15 @@ impl fmt::Display for SchemaDiff {
 
 /// Compare two JSON Schemas and return a list of changes.
 ///
-/// The comparison is heuristic and focuses on the most common JSON Schema
-/// properties: `type`, `required`, `properties`, `format`, `minimum`,
-/// `maximum`, `minLength`, `maxLength`, `minItems`, `maxItems`, `enum`, `pattern`,
-/// `items`, `additionalProperties`, `anyOf` / `oneOf` / `allOf` and `$ref`.
+/// The comparison is heuristic and covers: `type`, `required`, `properties`,
+/// `format`, `minimum` / `maximum` (and exclusive), `minLength` /
+/// `maxLength`, `minItems` / `maxItems`, `minProperties` / `maxProperties`,
+/// `minContains` / `maxContains`, `multipleOf`, `const`, `enum`, `pattern`,
+/// `uniqueItems`, `items`, `prefixItems`, `contains`, `propertyNames`,
+/// `additionalProperties`, `formatMinimum` / `formatMaximum`, `anyOf` /
+/// `oneOf` / `allOf`, `$ref`, and the `x-min*` / `x-max*` /
+/// `x-exclusiveMin*` / `x-exclusiveMax*` bounds and `x-past` / `x-future`
+/// flags emitted by `vld`. Stricter = breaking (see the module docs).
 pub fn diff_schemas(old: &Value, new: &Value) -> SchemaDiff {
     let mut changes = Vec::new();
     diff_value(old, new, "", &mut changes);
@@ -193,6 +203,18 @@ fn diff_value(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChan
     diff_numeric_constraint(old, new, path, "maxLength", false, changes);
     diff_numeric_constraint(old, new, path, "minItems", true, changes);
     diff_numeric_constraint(old, new, path, "maxItems", false, changes);
+    diff_numeric_constraint(old, new, path, "minProperties", true, changes);
+    diff_numeric_constraint(old, new, path, "maxProperties", false, changes);
+    diff_numeric_constraint(old, new, path, "minContains", true, changes);
+    diff_numeric_constraint(old, new, path, "maxContains", false, changes);
+    diff_extension_bounds(old, new, path, changes);
+    diff_string_bound(old, new, path, "formatMinimum", true, changes);
+    diff_string_bound(old, new, path, "formatMaximum", false, changes);
+    diff_multiple_of(old, new, path, changes);
+    diff_const(old, new, path, changes);
+    for flag in ["uniqueItems", "x-past", "x-future"] {
+        diff_flag(old, new, path, flag, changes);
+    }
 
     // Format
     if old.get("format") != new.get("format") {
@@ -238,8 +260,213 @@ fn diff_value(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChan
     if let (Some(old_items), Some(new_items)) = (old.get("items"), new.get("items")) {
         diff_value(old_items, new_items, &join_path(path, "items"), changes);
     }
+    diff_prefix_items(old, new, path, changes);
+    diff_subschema(old, new, path, "contains", changes);
+    diff_subschema(old, new, path, "propertyNames", changes);
 
     diff_additional_properties(old, new, path, changes);
+}
+
+fn change(path: &str, key: &str, kind: ChangeKind, description: String) -> SchemaChange {
+    SchemaChange {
+        path: join_path(path, key),
+        kind,
+        description,
+    }
+}
+
+/// Added constraint → breaking, removed → non-breaking.
+fn added_removed(
+    path: &str,
+    key: &str,
+    old: Option<&Value>,
+    new: Option<&Value>,
+    changes: &mut Vec<SchemaChange>,
+) -> bool {
+    match (old, new) {
+        (None, Some(v)) => changes.push(change(
+            path,
+            key,
+            ChangeKind::Breaking,
+            format!("{} constraint added: {}", key, v),
+        )),
+        (Some(v), None) => changes.push(change(
+            path,
+            key,
+            ChangeKind::NonBreaking,
+            format!("{} constraint removed (was {})", key, v),
+        )),
+        _ => return false,
+    }
+    true
+}
+
+/// A sub-schema keyword (`contains`, `propertyNames`): compared recursively.
+fn diff_subschema(
+    old: &Value,
+    new: &Value,
+    path: &str,
+    key: &str,
+    changes: &mut Vec<SchemaChange>,
+) {
+    let (o, n) = (old.get(key), new.get(key));
+    if !added_removed(path, key, o, n, changes) {
+        if let (Some(o), Some(n)) = (o, n) {
+            diff_value(o, n, &join_path(path, key), changes);
+        }
+    }
+}
+
+/// Boolean constraint flags (`uniqueItems`, `x-past`, …): turning on is breaking.
+fn diff_flag(old: &Value, new: &Value, path: &str, key: &str, changes: &mut Vec<SchemaChange>) {
+    let on = |v: &Value| v.get(key) == Some(&Value::Bool(true));
+    if on(old) != on(new) {
+        changes.push(change(
+            path,
+            key,
+            if on(new) {
+                ChangeKind::Breaking
+            } else {
+                ChangeKind::NonBreaking
+            },
+            format!("{} changed from {} to {}", key, on(old), on(new)),
+        ));
+    }
+}
+
+/// `const`: any change narrows to a different value (breaking); removal relaxes.
+fn diff_const(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChange>) {
+    let (o, n) = (old.get("const"), new.get("const"));
+    if o != n && !added_removed(path, "const", o, n, changes) {
+        changes.push(change(
+            path,
+            "const",
+            ChangeKind::Breaking,
+            format!("const changed from {} to {}", fmt_val(o), fmt_val(n)),
+        ));
+    }
+}
+
+/// `multipleOf`: a new divisor that is a multiple of the old one (or unrelated)
+/// is stricter; a divisor of the old one relaxes.
+fn diff_multiple_of(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChange>) {
+    let key = "multipleOf";
+    let (o, n) = (old.get(key), new.get(key));
+    if o == n || added_removed(path, key, o, n, changes) {
+        return;
+    }
+    let (Some(a), Some(b)) = (o.and_then(Value::as_f64), n.and_then(Value::as_f64)) else {
+        return;
+    };
+    let divides = |x: f64, y: f64| {
+        let q = y / x;
+        x != 0.0 && (q - q.round()).abs() <= 1e-9 * q.abs().max(1.0)
+    };
+    let kind = if divides(b, a) {
+        ChangeKind::NonBreaking // every old multiple is still a multiple
+    } else {
+        ChangeKind::Breaking
+    };
+    changes.push(change(
+        path,
+        key,
+        kind,
+        format!("multipleOf changed from {} to {}", a, b),
+    ));
+}
+
+/// `formatMinimum` / `formatMaximum`: ISO 8601 strings, compared as text.
+fn diff_string_bound(
+    old: &Value,
+    new: &Value,
+    path: &str,
+    key: &str,
+    is_lower_bound: bool,
+    changes: &mut Vec<SchemaChange>,
+) {
+    let (o, n) = (old.get(key), new.get(key));
+    if o == n || added_removed(path, key, o, n, changes) {
+        return;
+    }
+    let (Some(a), Some(b)) = (o.and_then(Value::as_str), n.and_then(Value::as_str)) else {
+        return;
+    };
+    let stricter = if is_lower_bound { b > a } else { b < a };
+    changes.push(change(
+        path,
+        key,
+        if stricter {
+            ChangeKind::Breaking
+        } else {
+            ChangeKind::NonBreaking
+        },
+        format!("{} changed from {} to {}", key, a, b),
+    ));
+}
+
+/// `x-min*` / `x-exclusiveMin*` (lower) and `x-max*` / `x-exclusiveMax*`
+/// (upper) bounds; numbers or numeric strings (`x-minDecimal`).
+fn diff_extension_bounds(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChange>) {
+    let keys: BTreeSet<&String> = [old, new]
+        .iter()
+        .filter_map(|v| v.as_object())
+        .flat_map(|o| o.keys())
+        .filter(|k| {
+            ["x-min", "x-max", "x-exclusiveMin", "x-exclusiveMax"]
+                .iter()
+                .any(|p| k.starts_with(p))
+        })
+        .collect();
+    let num = |v: Option<&Value>| {
+        v.and_then(|v| v.as_f64().or_else(|| v.as_str()?.parse().ok()))
+    };
+    for key in keys {
+        let lower = key.starts_with("x-min") || key.starts_with("x-exclusiveMin");
+        let (o, n) = (old.get(key), new.get(key));
+        if o == n || added_removed(path, key, o, n, changes) {
+            continue;
+        }
+        if let (Some(a), Some(b)) = (num(o), num(n)) {
+            let stricter = if lower { b > a } else { b < a };
+            changes.push(change(
+                path,
+                key,
+                if stricter {
+                    ChangeKind::Breaking
+                } else {
+                    ChangeKind::NonBreaking
+                },
+                format!("{} changed from {} to {}", key, a, b),
+            ));
+        }
+    }
+}
+
+/// `prefixItems` (tuples): position by position; extra positions constrain more.
+fn diff_prefix_items(old: &Value, new: &Value, path: &str, changes: &mut Vec<SchemaChange>) {
+    let key = "prefixItems";
+    let (o, n) = (old.get(key), new.get(key));
+    if added_removed(path, key, o, n, changes) {
+        return;
+    }
+    let (Some(o), Some(n)) = (o.and_then(Value::as_array), n.and_then(Value::as_array)) else {
+        return;
+    };
+    let base = join_path(path, key);
+    for (i, (a, b)) in o.iter().zip(n).enumerate() {
+        diff_value(a, b, &format!("{}[{}]", base, i), changes);
+    }
+    if o.len() != n.len() {
+        changes.push(SchemaChange {
+            path: base,
+            kind: if n.len() > o.len() {
+                ChangeKind::Breaking
+            } else {
+                ChangeKind::NonBreaking
+            },
+            description: format!("prefixItems length changed from {} to {}", o.len(), n.len()),
+        });
+    }
 }
 
 /// `anyOf`/`oneOf` of exactly `[X, {"type": "null"}]` (either order) → `(X, true)`.
