@@ -300,6 +300,7 @@ async fn form_missing_fields() {
     let app = test::init_service(App::new().route("/login", web::post().to(form_handler))).await;
     let req = test::TestRequest::post()
         .uri("/login")
+        .insert_header(("content-type", "application/x-www-form-urlencoded"))
         .set_payload("")
         .to_request();
     let resp = test::call_service(&app, req).await;

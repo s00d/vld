@@ -16,7 +16,7 @@ exclude = [".idea/", "tests/", "examples/"]
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
-actix-web = "4"
+actix-web = "4.4"
 serde_json = { workspace = true }
 
 [dev-dependencies]

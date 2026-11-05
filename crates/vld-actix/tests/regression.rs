@@ -81,7 +81,7 @@ async fn path_with_regex_segment() {
 async fn form_too_large_returns_413_json() {
     let app = test::init_service(
         App::new()
-            .app_data(web::PayloadConfig::new(8))
+            .app_data(vld_actix::VldBodyLimit(8))
             .route("/f", web::post().to(form_handler)),
     )
     .await;
@@ -99,7 +99,7 @@ async fn form_too_large_returns_413_json() {
 async fn json_too_large_returns_413_json() {
     let app = test::init_service(
         App::new()
-            .app_data(web::JsonConfig::default().limit(8))
+            .app_data(vld_actix::VldBodyLimit(8))
             .route("/j", web::post().to(json_handler)),
     )
     .await;
@@ -162,4 +162,25 @@ async fn repeated_and_non_ascii_headers() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 200);
     assert_eq!(test::read_body(resp).await, "a, café");
+}
+
+/// The body limit is `VldBodyLimit` (default 2 MiB), not actix's
+/// `JsonConfig` (whose content-type parsing rejected
+/// `application/json;charset`).
+#[actix_rt::test]
+async fn body_limit_can_be_raised_above_default() {
+    let app = test::init_service(
+        App::new()
+            .app_data(vld_actix::VldBodyLimit(4 * 1024 * 1024))
+            .route("/j", web::post().to(json_handler)),
+    )
+    .await;
+    let name = "x".repeat(3 * 1024 * 1024);
+    let req = test::TestRequest::post()
+        .uri("/j")
+        .insert_header(("content-type", "application/json;charset"))
+        .set_payload(format!(r#"{{"name":"{name}"}}"#))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
 }
