@@ -5,7 +5,6 @@ mod bytes;
 mod date;
 #[cfg(feature = "decimal")]
 mod decimal;
-#[cfg(feature = "std")]
 mod duration;
 mod enumeration;
 #[cfg(feature = "file")]
@@ -16,9 +15,7 @@ mod iso;
 mod json_value;
 mod literal;
 mod number;
-#[cfg(feature = "std")]
 mod path;
-#[cfg(feature = "std")]
 mod socket_addr;
 mod string;
 
@@ -29,7 +26,6 @@ pub use bytes::ZBytes;
 pub use date::{ZDate, ZDateTime};
 #[cfg(feature = "decimal")]
 pub use decimal::ZDecimal;
-#[cfg(feature = "std")]
 pub use duration::ZDuration;
 pub use enumeration::ZEnum;
 #[cfg(feature = "file")]
@@ -39,9 +35,7 @@ pub use ip_network::ZIpNetwork;
 pub use json_value::ZJsonValue;
 pub use literal::{IntoLiteral, ZLiteral};
 pub use number::{ZInt, ZNumber};
-#[cfg(feature = "std")]
 pub use path::ZPath;
-#[cfg(feature = "std")]
 pub use socket_addr::ZSocketAddr;
 pub use string::ZString;
 

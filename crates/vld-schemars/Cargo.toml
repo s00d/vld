@@ -27,7 +27,7 @@ serde = { workspace = true }
 regex-lite = "0.1"
 
 [dev-dependencies]
-vld = { workspace = true, features = ["openapi", "serialize", "derive"] }
+vld = { workspace = true, features = ["openapi", "derive"] }
 serde = { workspace = true }
 
 [[example]]

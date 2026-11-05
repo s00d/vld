@@ -341,23 +341,17 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
 
-        ::vld::__vld_if_serialize! {
-            impl #impl_generics #name #ty_generics #where_clause {
-                /// Validate an existing value that can be serialized to JSON.
-                ///
-                /// Requires the `serialize` feature on `vld`.
-                pub fn validate<__VldT: ::vld::serde::Serialize>(
-                    instance: &__VldT,
-                ) -> ::std::result::Result<(), ::vld::error::VldError> {
-                    Self::parse_value(&::vld::__private::to_json(instance)?).map(|_| ())
-                }
+        impl #impl_generics #name #ty_generics #where_clause {
+            /// Validate an existing value that can be serialized to JSON.
+            pub fn validate<__VldT: ::vld::serde::Serialize>(
+                instance: &__VldT,
+            ) -> ::std::result::Result<(), ::vld::error::VldError> {
+                Self::parse_value(&::vld::__private::to_json(instance)?).map(|_| ())
+            }
 
-                /// Shorthand for `validate(instance).is_ok()`.
-                ///
-                /// Requires the `serialize` feature on `vld`.
-                pub fn is_valid<__VldT: ::vld::serde::Serialize>(instance: &__VldT) -> bool {
-                    Self::validate(instance).is_ok()
-                }
+            /// Shorthand for `validate(instance).is_ok()`.
+            pub fn is_valid<__VldT: ::vld::serde::Serialize>(instance: &__VldT) -> bool {
+                Self::validate(instance).is_ok()
             }
         }
 

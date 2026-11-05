@@ -3,7 +3,6 @@
 use serde_json::json;
 use vld::prelude::*;
 
-#[cfg(feature = "std")]
 fn temp_dir(tag: &str) -> std::path::PathBuf {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -40,7 +39,6 @@ fn iso_date_checks_days_in_month_and_timezone() {
 
 // --- 2: ZPath::within cannot be escaped with `..` ---------------------------
 
-#[cfg(feature = "std")]
 #[test]
 fn path_within_rejects_dotdot_escape_for_missing_paths() {
     let base = temp_dir("within");
@@ -346,7 +344,7 @@ fn new_type_error_and_coerce_builders() {
 
 // --- 25: JSON Schema keeps constraints ---------------------------------------
 
-#[cfg(all(feature = "openapi", feature = "std"))]
+#[cfg(feature = "openapi")]
 #[test]
 fn json_schema_emits_strictest_constraints() {
     use vld::json_schema::JsonSchema;
@@ -392,7 +390,6 @@ fn decimal_schema_emits_sign_flags() {
     assert_eq!(js["x-exclusiveMinDecimal"], "0");
 }
 
-#[cfg(feature = "std")]
 #[test]
 fn socket_addr_message_mentions_hostnames() {
     let err = vld::socket_addr().parse(r#""example.com:80""#).unwrap_err();

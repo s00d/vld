@@ -367,7 +367,6 @@ mod derive {
         }
     }
 
-    #[cfg(feature = "serialize")]
     #[test]
     fn derive_generates_validate_and_is_valid() {
         #[derive(serde::Serialize)]

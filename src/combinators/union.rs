@@ -25,8 +25,7 @@ fn union_error(value: &Value, variants: Vec<VldError>) -> VldError {
 
 /// A value that can be one of two types.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
-#[cfg_attr(feature = "deserialize", derive(serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum Either<A, B> {
     Left(A),
     Right(B),
@@ -97,8 +96,7 @@ impl<A: VldSchema, B: VldSchema> VldSchema for ZUnion2<A, B> {
 
 /// A value that can be one of three types.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
-#[cfg_attr(feature = "deserialize", derive(serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum Either3<A, B, C> {
     First(A),
     Second(B),

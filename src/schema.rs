@@ -49,8 +49,6 @@ pub trait VldSchema: Sized {
     /// The value is serialized to JSON via `serde`, then validated.
     /// Returns the parsed output on success.
     ///
-    /// Requires the `serialize` feature.
-    ///
     /// # Example
     /// ```ignore
     /// use vld::prelude::*;
@@ -59,7 +57,6 @@ pub trait VldSchema: Sized {
     /// let data = vec![1, 2, 3];
     /// assert!(schema.validate(&data).is_ok());
     /// ```
-    #[cfg(feature = "serialize")]
     fn validate<T: serde::Serialize>(&self, value: &T) -> Result<Self::Output, VldError> {
         let json = serde_json::to_value(value).map_err(|e| {
             VldError::single(
@@ -72,8 +69,6 @@ pub trait VldSchema: Sized {
 
     /// Check if an existing Rust value passes this schema's validation.
     ///
-    /// Requires the `serialize` feature.
-    ///
     /// # Example
     /// ```ignore
     /// use vld::prelude::*;
@@ -81,7 +76,6 @@ pub trait VldSchema: Sized {
     /// let schema = vld::string().email();
     /// assert!(schema.is_valid(&"user@example.com"));
     /// ```
-    #[cfg(feature = "serialize")]
     fn is_valid<T: serde::Serialize>(&self, value: &T) -> bool {
         self.validate(value).is_ok()
     }

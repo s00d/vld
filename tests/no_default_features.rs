@@ -1,8 +1,6 @@
 //! Tests that the core validation library works with `--no-default-features`.
 //!
 //! These tests must NOT rely on:
-//!   - `std` feature (no Path/PathBuf VldInput, no save_to_file)
-//!   - `serialize` feature (no serde::Serialize bounds, no validate()/is_valid())
 //!   - `openapi` feature (no JsonSchema, no json_schema()/to_openapi_document())
 //!   - `chrono` / `jiff` / `time` features (no ZDate/ZDateTime without one; priority: chrono > jiff > time)
 //!   - `regex` feature (no .regex())

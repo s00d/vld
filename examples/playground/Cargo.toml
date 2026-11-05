@@ -5,9 +5,7 @@ edition.workspace = true
 publish = false
 
 [features]
-default = ["serialize", "deserialize", "openapi", "diff"]
-serialize = ["vld/serialize"]
-deserialize = ["vld/deserialize"]
+default = ["openapi", "diff"]
 openapi = ["vld/openapi"]
 diff = ["vld/diff"]
 

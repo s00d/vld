@@ -14,13 +14,13 @@ categories = ["database", "web-programming"]
 exclude = [".idea/", "tests/", "examples/"]
 
 [dependencies]
-vld = { workspace = true, features = ["serialize"] }
+vld = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 vld-integration-common = { path = "../vld-integration-common", version = "0.4.6" }
 
 [dev-dependencies]
-vld = { workspace = true, features = ["serialize"] }
+vld = { workspace = true }
 
 [[example]]
 name = "surrealdb_basic"

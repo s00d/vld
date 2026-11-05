@@ -1,4 +1,3 @@
-#![cfg(feature = "serialize")]
 
 use vld::prelude::*;
 

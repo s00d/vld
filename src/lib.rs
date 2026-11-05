@@ -67,22 +67,6 @@ pub use serde;
 // instead of the consumer's — eliminating `unexpected_cfgs` warnings.
 // ---------------------------------------------------------------------------
 
-/// Emit the given tokens only when the `serialize` feature is enabled on `vld`.
-#[cfg(feature = "serialize")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_if_serialize {
-    ($($tt:tt)*) => { $($tt)* };
-}
-
-/// No-op: `serialize` feature is disabled.
-#[cfg(not(feature = "serialize"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_if_serialize {
-    ($($tt:tt)*) => {};
-}
-
 /// Emit the given tokens only when the `openapi` feature is enabled on `vld`.
 #[cfg(feature = "openapi")]
 #[doc(hidden)]
@@ -188,7 +172,6 @@ pub fn ip_network() -> primitives::ZIpNetwork {
 /// Create a socket address schema (`std::net::SocketAddr`).
 ///
 /// Requires the `std` feature.
-#[cfg(feature = "std")]
 pub fn socket_addr() -> primitives::ZSocketAddr {
     primitives::ZSocketAddr::new()
 }
@@ -209,7 +192,6 @@ pub fn file() -> primitives::ZFile {
 /// Create a duration validation schema (`std::time::Duration`).
 ///
 /// Requires the `std` feature.
-#[cfg(feature = "std")]
 pub fn duration() -> primitives::ZDuration {
     primitives::ZDuration::new()
 }
@@ -217,7 +199,6 @@ pub fn duration() -> primitives::ZDuration {
 /// Create a path validation schema (`std::path::PathBuf`).
 ///
 /// Requires the `std` feature.
-#[cfg(feature = "std")]
 pub fn path() -> primitives::ZPath {
     primitives::ZPath::new()
 }
@@ -466,7 +447,6 @@ pub mod prelude {
     };
     #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
     pub use crate::primitives::{ZDate, ZDateTime};
-    #[cfg(feature = "std")]
     pub use crate::primitives::{ZDuration, ZPath, ZSocketAddr};
     pub use crate::schema::{VldParse, VldSchema};
 }

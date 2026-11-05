@@ -5,7 +5,7 @@ use crate::error::{IssueCode, VldError};
 /// Trait for types that can be used as input to schema parsing.
 ///
 /// Implemented for JSON strings (`&str`, `String`), raw bytes (`&[u8]`),
-/// file paths (`Path`, `PathBuf` — requires the `std` feature), and
+/// file paths (`Path`, `PathBuf`), and
 /// `serde_json::Value`.
 pub trait VldInput {
     /// Convert this input into a `serde_json::Value`.
@@ -38,7 +38,6 @@ impl VldInput for [u8] {
     }
 }
 
-#[cfg(feature = "std")]
 impl VldInput for std::path::Path {
     fn to_json_value(&self) -> Result<Value, VldError> {
         let content = std::fs::read_to_string(self).map_err(|e| {
@@ -48,7 +47,6 @@ impl VldInput for std::path::Path {
     }
 }
 
-#[cfg(feature = "std")]
 impl VldInput for std::path::PathBuf {
     fn to_json_value(&self) -> Result<Value, VldError> {
         self.as_path().to_json_value()

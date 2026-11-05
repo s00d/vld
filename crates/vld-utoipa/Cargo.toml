@@ -26,7 +26,7 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
-vld = { workspace = true, features = ["openapi", "serialize", "derive"] }
+vld = { workspace = true, features = ["openapi", "derive"] }
 
 [[example]]
 name = "utoipa_basic"

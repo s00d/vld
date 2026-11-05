@@ -107,14 +107,11 @@ leaf_schemas!(
     crate::primitives::ZDecimal,
     #[cfg(feature = "net")]
     crate::primitives::ZIpNetwork,
-    #[cfg(feature = "std")]
     crate::primitives::ZSocketAddr,
     crate::primitives::ZJsonValue,
     #[cfg(feature = "file")]
     crate::primitives::ZFile,
-    #[cfg(feature = "std")]
     crate::primitives::ZDuration,
-    #[cfg(feature = "std")]
     crate::primitives::ZPath,
     crate::primitives::ZEnum,
     crate::primitives::ZAny,

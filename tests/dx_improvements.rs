@@ -514,7 +514,6 @@ mod schema_diffing {
 // 20. WASM / std feature (compile-time check)
 // -----------------------------------------------------------------------
 
-#[cfg(feature = "std")]
 mod wasm_std {
     #[test]
     fn path_input_available_with_std() {

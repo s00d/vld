@@ -225,29 +225,23 @@ macro_rules! schema {
             }
         }
 
-        $crate::__vld_if_serialize! {
-            impl $name {
-                /// Validate an existing Rust value that can be serialized to JSON.
-                ///
-                /// The value is serialized via `serde`, then validated against the
-                /// schema. Returns `Ok(())` on success, `Err(VldError)` with all
-                /// issues on failure.
-                ///
-                /// Requires the `serialize` feature.
-                pub fn validate<__VldT: $crate::serde::Serialize>(
-                    instance: &__VldT,
-                ) -> ::std::result::Result<(), $crate::error::VldError> {
-                    Self::parse_value(&$crate::__private::to_json(instance)?).map(|_| ())
-                }
+        impl $name {
+            /// Validate an existing Rust value that can be serialized to JSON.
+            ///
+            /// The value is serialized via `serde`, then validated against the
+            /// schema. Returns `Ok(())` on success, `Err(VldError)` with all
+            /// issues on failure.
+            pub fn validate<__VldT: $crate::serde::Serialize>(
+                instance: &__VldT,
+            ) -> ::std::result::Result<(), $crate::error::VldError> {
+                Self::parse_value(&$crate::__private::to_json(instance)?).map(|_| ())
+            }
 
-                /// Check if a value is valid against the schema.
-                ///
-                /// Shorthand for `validate(instance).is_ok()`.
-                ///
-                /// Requires the `serialize` feature.
-                pub fn is_valid<__VldT: $crate::serde::Serialize>(instance: &__VldT) -> bool {
-                    Self::validate(instance).is_ok()
-                }
+            /// Check if a value is valid against the schema.
+            ///
+            /// Shorthand for `validate(instance).is_ok()`.
+            pub fn is_valid<__VldT: $crate::serde::Serialize>(instance: &__VldT) -> bool {
+                Self::validate(instance).is_ok()
             }
         }
 
