@@ -1,15 +1,28 @@
 //! # vld-tower — Tower middleware for `vld` validation
 //!
-//! A universal [`tower::Layer`] that validates incoming HTTP JSON request
-//! bodies against a `vld` schema. Works with **any** Tower-compatible
-//! framework: Axum, Hyper, Tonic, Warp, etc.
+//! A universal [`tower::Layer`](tower_layer::Layer) that validates incoming
+//! HTTP JSON request bodies against a `vld` schema. Works with **any**
+//! Tower-compatible framework: Axum, Hyper, Tonic, Warp, etc.
 //!
 //! On **success** the validated struct is stored in
 //! [`http::Request::extensions`] so downstream handlers can retrieve it
 //! without re-parsing. The original body bytes are forwarded as-is.
 //!
-//! On **failure** a `422 Unprocessable Entity` JSON response is returned
-//! immediately — the inner service is never called.
+//! On **failure** a JSON error response is returned immediately — the inner
+//! service is never called:
+//!
+//! | Situation | Status |
+//! |---|---|
+//! | schema validation failed / malformed JSON | 422 |
+//! | body larger than the limit ([`ValidateJsonLayer::with_limit`], default 2 MiB) | 413 |
+//!
+//! Requests whose `Content-Type` is not JSON (`application/json` or
+//! `application/*+json`, case-insensitive) are passed through **untouched**
+//! (body not read). Handlers must therefore treat the validated value as
+//! optional: [`validated`] returns `Option<T>`.
+//!
+//! The inner service receives `Request<`[`ValidatedBody<B>`]`>`: the buffered
+//! bytes for validated JSON requests, the original body otherwise.
 //!
 //! # Quick Start (with Axum)
 //!
@@ -34,12 +47,20 @@
 use bytes::Bytes;
 use http::{Request, Response, StatusCode};
 use http_body::Body;
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt, Either, Full, LengthLimitError, Limited};
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use vld::schema::VldParse;
+use vld_http_common::{is_json_content_type, parse_json_body, VldHttpError, DEFAULT_BODY_LIMIT};
+
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+/// Body type seen by the inner service: `Left` holds the buffered bytes of
+/// a validated JSON request, `Right` the untouched original body of a
+/// non-JSON request.
+pub type ValidatedBody<B> = Either<Full<Bytes>, B>;
 
 // ---------------------------------------------------------------------------
 // Layer
@@ -52,24 +73,30 @@ use vld::schema::VldParse;
 ///
 /// # Behaviour
 ///
-/// 1. Reads the full request body.
-/// 2. Parses as JSON and validates via `T::vld_parse_value()`.
+/// 1. Non-JSON requests are forwarded untouched (body not read).
+/// 2. JSON bodies are read up to the limit (413 beyond it), parsed and
+///    validated via `T::vld_parse_value()`.
 /// 3. **Valid** — inserts `T` into request extensions, re-attaches the
 ///    body bytes, and calls the inner service.
 /// 4. **Invalid** — returns `422 Unprocessable Entity` with a JSON body
 ///    containing the validation errors. The inner service is **not** called.
-///
-/// Requests without `Content-Type: application/json` (or missing content
-/// type) are **passed through** without validation.
 #[derive(Clone)]
 pub struct ValidateJsonLayer<T> {
+    limit: usize,
     _marker: PhantomData<fn() -> T>,
 }
 
 impl<T> ValidateJsonLayer<T> {
-    /// Create a new validation layer.
+    /// Create a new validation layer with the default body limit
+    /// ([`DEFAULT_BODY_LIMIT`], 2 MiB).
     pub fn new() -> Self {
+        Self::with_limit(DEFAULT_BODY_LIMIT)
+    }
+
+    /// Create a new validation layer with a custom body limit in bytes.
+    pub fn with_limit(limit: usize) -> Self {
         Self {
+            limit,
             _marker: PhantomData,
         }
     }
@@ -87,6 +114,7 @@ impl<S, T> tower_layer::Layer<S> for ValidateJsonLayer<T> {
     fn layer(&self, inner: S) -> Self::Service {
         ValidateJsonService {
             inner,
+            limit: self.limit,
             _marker: PhantomData,
         }
     }
@@ -101,25 +129,38 @@ impl<S, T> tower_layer::Layer<S> for ValidateJsonLayer<T> {
 #[derive(Clone)]
 pub struct ValidateJsonService<S, T> {
     inner: S,
+    limit: usize,
     _marker: PhantomData<fn() -> T>,
+}
+
+fn error_response<ResBody: From<Full<Bytes>>>(err: VldHttpError) -> Response<ResBody> {
+    let mut resp = Response::new(ResBody::from(Full::new(Bytes::from(
+        err.body().to_string(),
+    ))));
+    *resp.status_mut() =
+        StatusCode::from_u16(err.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY);
+    resp.headers_mut().insert(
+        http::header::CONTENT_TYPE,
+        http::HeaderValue::from_static("application/json"),
+    );
+    resp
 }
 
 impl<S, T, ReqBody, ResBody> tower_service::Service<Request<ReqBody>> for ValidateJsonService<S, T>
 where
-    S: tower_service::Service<Request<http_body_util::Full<Bytes>>, Response = Response<ResBody>>
+    S: tower_service::Service<Request<ValidatedBody<ReqBody>>, Response = Response<ResBody>>
         + Clone
         + Send
         + 'static,
     S::Future: Send + 'static,
-    S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
-    ReqBody: Body + Send + 'static,
-    ReqBody::Data: Send,
-    ReqBody::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
-    ResBody: From<http_body_util::Full<Bytes>> + Send + 'static,
+    S::Error: Into<BoxError>,
+    ReqBody: Body<Data = Bytes> + Send + 'static,
+    ReqBody::Error: Into<BoxError>,
+    ResBody: From<Full<Bytes>> + Send + 'static,
     T: VldParse + Clone + Send + Sync + 'static,
 {
     type Response = Response<ResBody>;
-    type Error = Box<dyn std::error::Error + Send + Sync>;
+    type Error = BoxError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -130,72 +171,40 @@ where
         let mut inner = self.inner.clone();
         // Swap so `self` is ready for next call (standard Tower pattern)
         std::mem::swap(&mut self.inner, &mut inner);
+        let limit = self.limit;
 
         Box::pin(async move {
             let is_json = req
                 .headers()
                 .get(http::header::CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok())
-                .map(|ct| ct.starts_with("application/json"))
-                .unwrap_or(false);
+                .is_some_and(is_json_content_type);
+
+            let (parts, body) = req.into_parts();
 
             if !is_json {
-                // Pass through non-JSON requests untouched
-                let (parts, body) = req.into_parts();
-                let bytes = body
-                    .collect()
-                    .await
-                    .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?
-                    .to_bytes();
-                let new_req = Request::from_parts(parts, http_body_util::Full::new(bytes));
-                return inner.call(new_req).await.map_err(Into::into);
+                let req = Request::from_parts(parts, Either::Right(body));
+                return inner.call(req).await.map_err(Into::into);
             }
 
-            // Collect body bytes
-            let (parts, body) = req.into_parts();
-            let bytes = body
-                .collect()
-                .await
-                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?
-                .to_bytes();
-
-            // Parse JSON
-            let json_value: serde_json::Value = match serde_json::from_slice(&bytes) {
-                Ok(v) => v,
-                Err(e) => {
-                    let error_body = vld_http_common::format_json_parse_error(&e.to_string());
-                    let resp = Response::builder()
-                        .status(StatusCode::BAD_REQUEST)
-                        .header(http::header::CONTENT_TYPE, "application/json")
-                        .body(ResBody::from(http_body_util::Full::new(Bytes::from(
-                            serde_json::to_vec(&error_body).unwrap_or_default(),
-                        ))))
-                        .unwrap();
-                    return Ok(resp);
+            let bytes = match Limited::new(body, limit).collect().await {
+                Ok(collected) => collected.to_bytes(),
+                Err(e) if e.is::<LengthLimitError>() => {
+                    return Ok(error_response(VldHttpError::payload_too_large()));
                 }
+                Err(e) => return Err(e),
             };
 
-            // Validate with vld
-            match T::vld_parse_value(&json_value) {
-                Ok(validated) => {
-                    let mut new_req = Request::from_parts(parts, http_body_util::Full::new(bytes));
-                    // Store validated struct in extensions
-                    new_req.extensions_mut().insert(validated);
-                    inner.call(new_req).await.map_err(Into::into)
-                }
-                Err(vld_err) => {
-                    let error_body = vld_http_common::format_vld_error(&vld_err);
+            let validated = match parse_json_body(&bytes)
+                .and_then(|v| T::vld_parse_value(&v).map_err(VldHttpError::validation))
+            {
+                Ok(v) => v,
+                Err(e) => return Ok(error_response(e)),
+            };
 
-                    let resp = Response::builder()
-                        .status(StatusCode::UNPROCESSABLE_ENTITY)
-                        .header(http::header::CONTENT_TYPE, "application/json")
-                        .body(ResBody::from(http_body_util::Full::new(Bytes::from(
-                            serde_json::to_vec(&error_body).unwrap_or_default(),
-                        ))))
-                        .unwrap();
-                    Ok(resp)
-                }
-            }
+            let mut req = Request::from_parts(parts, Either::Left(Full::new(bytes)));
+            req.extensions_mut().insert(validated);
+            inner.call(req).await.map_err(Into::into)
         })
     }
 }
@@ -206,33 +215,26 @@ where
 
 /// Extract the validated value from request extensions.
 ///
-/// The [`ValidateJsonService`] middleware stores the parsed and validated
-/// struct in the request's extensions map. Use this function (or
-/// `req.extensions().get::<T>()` directly) to retrieve it.
-///
-/// # Panics
-///
-/// Panics if `T` is not present in extensions (i.e. the middleware was
-/// not applied).
-pub fn validated<T: Clone + Send + Sync + 'static>(req: &Request<impl Body>) -> T {
-    req.extensions()
-        .get::<T>()
-        .expect(
-            "vld-tower: validated value not found in request extensions. \
-                 Make sure ValidateJsonLayer is applied.",
-        )
-        .clone()
+/// Returns `None` when the request was not validated — the layer was not
+/// applied, the type does not match, or the request was not JSON (non-JSON
+/// requests are passed through without validation).
+pub fn validated<T: Clone + Send + Sync + 'static>(req: &Request<impl Body>) -> Option<T> {
+    req.extensions().get::<T>().cloned()
 }
 
 /// Try to extract the validated value from request extensions.
-///
-/// Returns `None` if the middleware was not applied or the value type
-/// doesn't match.
+#[deprecated(
+    since = "0.5.0",
+    note = "use `validated`, which now returns `Option<T>`"
+)]
 pub fn try_validated<T: Clone + Send + Sync + 'static>(req: &Request<impl Body>) -> Option<T> {
-    req.extensions().get::<T>().cloned()
+    validated(req)
 }
 
 /// Prelude — import everything you need.
 pub mod prelude {
-    pub use crate::{try_validated, validated, ValidateJsonLayer, ValidateJsonService};
+    #[allow(deprecated)]
+    pub use crate::try_validated;
+    pub use crate::{validated, ValidateJsonLayer, ValidateJsonService, ValidatedBody};
+    pub use vld::prelude::*;
 }
