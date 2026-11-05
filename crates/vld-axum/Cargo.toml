@@ -22,6 +22,7 @@ bytes = "1"
 http = "1"
 
 [dev-dependencies]
+vld-http-common = { workspace = true, features = ["conformance"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 hyper = "1"
 tower = { version = "0.5", features = ["util"] }

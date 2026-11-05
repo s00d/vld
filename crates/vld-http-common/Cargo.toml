@@ -13,6 +13,10 @@ keywords = ["validation", "http", "helpers", "vld"]
 categories = ["web-programming"]
 exclude = [".idea/"]
 
+[features]
+# Test support: shared HTTP conformance suite for the adapter crates.
+conformance = []
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }

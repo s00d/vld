@@ -20,6 +20,7 @@ rama = { version = "0.4", default-features = false, features = ["http"] }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+vld-http-common = { workspace = true, features = ["conformance"] }
 vld = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serde = { workspace = true }
