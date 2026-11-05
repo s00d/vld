@@ -13,10 +13,19 @@ pub mod __private {
 }
 
 /// Validate `{"value": v}` against schema `S` (used by the column wrappers).
+///
+/// The wrapped scalars never serialize to `null` except a non-finite float
+/// (`NaN` / `±inf`), which is rejected with `not_finite` instead of being
+/// checked as a missing value.
 #[doc(hidden)]
 pub fn check_value<S: vld::schema::VldParse>(
     v: serde_json::Value,
 ) -> Result<(), vld::error::VldError> {
+    if v.is_null() {
+        return Err(vld::error::VldError::from_code(
+            vld::error::IssueCode::NotFinite,
+        ));
+    }
     S::vld_parse_value(&serde_json::json!({ "value": v })).map(|_| ())
 }
 
@@ -82,6 +91,13 @@ macro_rules! __vld_db_validated {
         ///
         /// `T` must be `serde::Serialize` so it can be converted to JSON for
         /// validation. Serializes transparently as the inner value.
+        ///
+        /// **The original `T` is stored, not the schema's parsed output**:
+        /// defaults, transforms and coercions of `S` (`with_default`,
+        /// `trim()`, `coerce()`, …) are checked against but never applied to
+        /// the stored value. Normalize `T` yourself (or parse with `S` and
+        /// build `T` from its output) when the stored value must be the
+        /// normalized one.
         pub struct Validated<S, T> {
             inner: T,
             _schema: ::std::marker::PhantomData<S>,

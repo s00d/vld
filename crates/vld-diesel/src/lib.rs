@@ -61,10 +61,12 @@ vld_integration_common::__vld_db_wrappers! {
     int: [
         #[derive(diesel::expression::AsExpression, diesel::deserialize::FromSqlRow)]
         #[diesel(sql_type = diesel::sql_types::BigInt)]
+        #[diesel(sql_type = diesel::sql_types::Integer)]
     ]
     float: [
         #[derive(diesel::expression::AsExpression, diesel::deserialize::FromSqlRow)]
         #[diesel(sql_type = diesel::sql_types::Double)]
+        #[diesel(sql_type = diesel::sql_types::Float)]
     ]
     bool: [
         #[derive(diesel::expression::AsExpression, diesel::deserialize::FromSqlRow)]
@@ -170,7 +172,8 @@ diesel_delegate!(VldInt, i64, i64, diesel::sql_types::BigInt);
 diesel_delegate!(VldFloat, f64, f64, diesel::sql_types::Double);
 diesel_delegate!(VldBool, bool, bool, diesel::sql_types::Bool);
 
-// FromSql for Integer (i32) — useful when the DB column is INTEGER.
+// FromSql for Integer (i32) — for INTEGER columns (`VldInt` is also
+// `AsExpression<Integer>`; writing checks the value fits an i32).
 impl<S, DB> diesel::deserialize::FromSql<diesel::sql_types::Integer, DB> for VldInt<S>
 where
     DB: diesel::backend::Backend,
@@ -182,6 +185,111 @@ where
         let v =
             <i32 as diesel::deserialize::FromSql<diesel::sql_types::Integer, DB>>::from_sql(bytes)?;
         Ok(Self::new_unchecked(v))
+    }
+}
+
+// FromSql for Float (f32 / REAL): widened through its shortest decimal form,
+// so `0.1f32` reads back as `0.1`, not `0.10000000149011612`.
+impl<S, DB> diesel::deserialize::FromSql<diesel::sql_types::Float, DB> for VldFloat<S>
+where
+    DB: diesel::backend::Backend,
+    f32: diesel::deserialize::FromSql<diesel::sql_types::Float, DB>,
+{
+    fn from_sql(
+        bytes: <DB as diesel::backend::Backend>::RawValue<'_>,
+    ) -> diesel::deserialize::Result<Self> {
+        let v =
+            <f32 as diesel::deserialize::FromSql<diesel::sql_types::Float, DB>>::from_sql(bytes)?;
+        Ok(Self::new_unchecked(widen_f32(v)))
+    }
+}
+
+/// `f32` → `f64` keeping the decimal value the `f32` prints as.
+fn widen_f32(v: f32) -> f64 {
+    v.to_string().parse().unwrap_or(f64::from(v))
+}
+
+/// `i64` → `i32` for an INTEGER column, failing instead of truncating.
+fn narrow_int(v: i64) -> Result<i32, Box<dyn std::error::Error + Send + Sync>> {
+    i32::try_from(v).map_err(|_| format!("{v} does not fit an INTEGER (i32) column").into())
+}
+
+/// `f64` → `f32` for a REAL / FLOAT column, failing when out of `f32` range.
+fn narrow_float(v: f64) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
+    let f = v as f32;
+    if v.is_finite() && !f.is_finite() {
+        return Err(format!("{v} does not fit a FLOAT (f32) column").into());
+    }
+    Ok(f)
+}
+
+// ToSql for Integer / Float: a checked narrowing written per backend (diesel's
+// generic `ToSql` borrows the value for the whole query, which a narrowed
+// temporary cannot provide).
+#[cfg(feature = "sqlite")]
+mod sqlite_narrow {
+    use super::*;
+    use diesel::serialize::{IsNull, Output, ToSql};
+    use diesel::sqlite::Sqlite;
+
+    impl<S> ToSql<diesel::sql_types::Integer, Sqlite> for VldInt<S> {
+        fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Sqlite>) -> diesel::serialize::Result {
+            out.set_value(narrow_int(self.value)?);
+            Ok(IsNull::No)
+        }
+    }
+
+    impl<S> ToSql<diesel::sql_types::Float, Sqlite> for VldFloat<S> {
+        fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Sqlite>) -> diesel::serialize::Result {
+            // SQLite stores REAL as a double: keep the f64.
+            narrow_float(self.value)?;
+            out.set_value(self.value);
+            Ok(IsNull::No)
+        }
+    }
+}
+
+#[cfg(feature = "postgres")]
+mod pg_narrow {
+    use super::*;
+    use diesel::pg::Pg;
+    use diesel::serialize::{IsNull, Output, ToSql};
+    use std::io::Write;
+
+    impl<S> ToSql<diesel::sql_types::Integer, Pg> for VldInt<S> {
+        fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> diesel::serialize::Result {
+            out.write_all(&narrow_int(self.value)?.to_be_bytes())?;
+            Ok(IsNull::No)
+        }
+    }
+
+    impl<S> ToSql<diesel::sql_types::Float, Pg> for VldFloat<S> {
+        fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> diesel::serialize::Result {
+            out.write_all(&narrow_float(self.value)?.to_be_bytes())?;
+            Ok(IsNull::No)
+        }
+    }
+}
+
+#[cfg(feature = "mysql")]
+mod mysql_narrow {
+    use super::*;
+    use diesel::mysql::Mysql;
+    use diesel::serialize::{IsNull, Output, ToSql};
+    use std::io::Write;
+
+    impl<S> ToSql<diesel::sql_types::Integer, Mysql> for VldInt<S> {
+        fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Mysql>) -> diesel::serialize::Result {
+            out.write_all(&narrow_int(self.value)?.to_ne_bytes())?;
+            Ok(IsNull::No)
+        }
+    }
+
+    impl<S> ToSql<diesel::sql_types::Float, Mysql> for VldFloat<S> {
+        fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Mysql>) -> diesel::serialize::Result {
+            out.write_all(&narrow_float(self.value)?.to_ne_bytes())?;
+            Ok(IsNull::No)
+        }
     }
 }
 

@@ -18,9 +18,14 @@ Validate data **before** inserting into the database. Provides:
 | `validate_row::<Schema, _>(&row)` | Validate data loaded from DB |
 | `Validated<Schema, T>` | Wrapper that guarantees `T` passes `Schema` |
 | `VldText<S>` | Validated `String` column type (`Text`) |
-| `VldInt<S>` | Validated `i64` column type (`BigInt`; also reads `Integer`) |
-| `VldFloat<S>` | Validated `f64` column type (`Double`) |
+| `VldInt<S>` | Validated `i64` column type (`BigInt`, or `Integer` — writing checks the value fits an `i32`) |
+| `VldFloat<S>` | Validated `f64` column type (`Double`, or `Float` / REAL — read back through its decimal form, so `0.1` stays `0.1`) |
 | `VldBool<S>` | Validated `bool` column type (`Bool`) |
+
+> `Validated::new` validates `T` but stores the **original** value: defaults,
+> transforms and coercions of the schema (`with_default`, `trim()`, `coerce()`, …)
+> are not applied to what gets stored. `VldFloat::new(f64::NAN)` / `±inf` is
+> rejected (`not_finite`) instead of being checked as `null`.
 
 ## Installation
 

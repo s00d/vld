@@ -548,3 +548,91 @@ fn wrappers_in_insertable_queryable_and_filter() {
     assert_eq!(found[0].price.get(), 9.5);
     assert!(found[0].active.get());
 }
+
+// ---------------------------------------------------------------------------
+// 0.5.0 re-audit: INTEGER / REAL columns, NaN
+// ---------------------------------------------------------------------------
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct AnyIntSchema {
+        pub value: i64 => vld::number().int(),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct OptFloatSchema {
+        pub value: Option<f64> => vld::number().optional(),
+    }
+}
+
+diesel::table! {
+    narrow (id) {
+        id -> Integer,
+        n -> Integer,
+        r -> Float,
+    }
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = narrow)]
+struct NewNarrow {
+    n: VldInt<AnyIntSchema>,
+    r: VldFloat<PriceFieldSchema>,
+}
+
+#[derive(Queryable, Selectable, Debug)]
+#[diesel(table_name = narrow)]
+struct Narrow {
+    #[allow(dead_code)]
+    id: i32,
+    n: VldInt<AnyIntSchema>,
+    r: VldFloat<PriceFieldSchema>,
+}
+
+#[test]
+fn int_and_float_wrappers_on_integer_and_real_columns() {
+    let mut conn = SqliteConnection::establish(":memory:").unwrap();
+    diesel::sql_query(
+        "CREATE TABLE narrow (id INTEGER PRIMARY KEY AUTOINCREMENT, n INTEGER NOT NULL, r REAL NOT NULL)",
+    )
+    .execute(&mut conn)
+    .unwrap();
+
+    let row = NewNarrow {
+        n: VldInt::new(7).unwrap(),
+        r: VldFloat::new(0.1).unwrap(),
+    };
+    diesel::insert_into(narrow::table)
+        .values(&row)
+        .execute(&mut conn)
+        .unwrap();
+    let found: Vec<Narrow> = narrow::table
+        .filter(narrow::n.eq(VldInt::<AnyIntSchema>::new(7).unwrap()))
+        .select(Narrow::as_select())
+        .load(&mut conn)
+        .unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].n.get(), 7);
+    assert_eq!(found[0].r.get(), 0.1);
+
+    // Out of i32 range: an error, not a truncated value.
+    let too_big = NewNarrow {
+        n: VldInt::new(i64::from(i32::MAX) + 1).unwrap(),
+        r: VldFloat::new(1.0).unwrap(),
+    };
+    assert!(diesel::insert_into(narrow::table)
+        .values(&too_big)
+        .execute(&mut conn)
+        .is_err());
+}
+
+#[test]
+fn nan_is_rejected_explicitly() {
+    // NaN serializes as JSON null; it must not pass as "missing".
+    let err = VldFloat::<OptFloatSchema>::new(f64::NAN).unwrap_err();
+    assert!(err.to_string().to_lowercase().contains("finite"), "{err}");
+    assert!(VldFloat::<OptFloatSchema>::new(f64::INFINITY).is_err());
+    assert!(VldFloat::<OptFloatSchema>::new(1.5).is_ok());
+}
