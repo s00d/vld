@@ -46,10 +46,14 @@ where
 {
     fn json_schema(&self) -> Value {
         let mut schema = self.inner_schema().json_schema();
-        if let (Some(obj), Ok(default)) = (
-            schema.as_object_mut(),
-            serde_json::to_value(self.default_value()),
-        ) {
+        // ponytail: only date schemas override `output_json`; a wrapper
+        // between them and `with_default` (e.g. `describe`) falls back to serde.
+        let default = self
+            .inner_schema()
+            .output_json(self.default_value())
+            .map(Ok)
+            .unwrap_or_else(|| serde_json::to_value(self.default_value()));
+        if let (Some(obj), Ok(default)) = (schema.as_object_mut(), default) {
             obj.insert("default".to_string(), default);
         }
         schema
