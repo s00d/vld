@@ -142,7 +142,9 @@ fn validate_record_valid() {
         email: "charlie@example.com".into(),
         age: 40,
     };
-    assert!(validate_record::<PersonSchema, _>(&p).is_ok());
+    #[allow(deprecated)]
+    let r = validate_record::<PersonSchema, _>(&p);
+    assert!(r.is_ok());
 }
 
 #[test]
