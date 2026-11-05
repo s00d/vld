@@ -8,6 +8,7 @@
 //! # Quick Start (config-rs)
 //!
 //! ```rust,no_run
+//! # #[cfg(feature = "config-rs")] {
 //! use vld::prelude::*;
 //! use vld_config::from_config;
 //!
@@ -21,12 +22,15 @@
 //!
 //! let config = config::Config::builder()
 //!     .add_source(config::File::with_name("config"))
-//!     .add_source(config::Environment::with_prefix("APP"))
+//!     // Env values are strings; `try_parsing(true)` turns APP_PORT=8080 into a
+//!     // number so it passes `number().int()`.
+//!     .add_source(config::Environment::with_prefix("APP").try_parsing(true))
 //!     .build()
 //!     .unwrap();
 //!
 //! let settings: AppSettings = from_config(&config).unwrap();
 //! println!("Listening on {}:{}", settings.host, settings.port);
+//! # }
 //! ```
 //!
 //! # Quick Start (figment)
@@ -73,7 +77,14 @@ impl fmt::Display for VldConfigError {
     }
 }
 
-impl std::error::Error for VldConfigError {}
+impl std::error::Error for VldConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            VldConfigError::Validation(err) => Some(err),
+            VldConfigError::Source(_) => None,
+        }
+    }
+}
 
 impl From<vld::error::VldError> for VldConfigError {
     fn from(err: vld::error::VldError) -> Self {

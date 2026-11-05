@@ -50,7 +50,8 @@ vld::schema! {
 
 let config = config::Config::builder()
     .add_source(config::File::with_name("config"))
-    .add_source(config::Environment::with_prefix("APP"))
+    // Env values are strings: enable `try_parsing` so APP_PORT=8080 is a number.
+    .add_source(config::Environment::with_prefix("APP").try_parsing(true))
     .build()
     .unwrap();
 
