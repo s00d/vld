@@ -641,7 +641,8 @@ fn nested_schema_registered_in_generator_definitions() {
     let mut gen = schemars::SchemaGenerator::default();
     let schema = <SchemarsCompany as schemars::JsonSchema>::json_schema(&mut gen);
     let props = schema.get("properties").unwrap();
-    assert_eq!(props["hq"]["$ref"], "#/components/schemas/SchemarsAddr");
+    // Refs follow the generator's definitions path (default `$defs`).
+    assert_eq!(props["hq"]["$ref"], "#/$defs/SchemarsAddr");
 
     let defs = gen.definitions();
     assert!(

@@ -1,10 +1,21 @@
 use serde_json::Value;
 use vld::error::{IssueCode, PathSegment, ValidationIssue, VldError};
 
+/// Max `$ref` hops on one value — guards self-referencing schemas like `{"$ref": "#"}`.
+const MAX_REF_DEPTH: usize = 64;
+
+/// Root schema (for `$ref` resolution) plus current `$ref` nesting depth.
+#[derive(Clone, Copy)]
+pub(crate) struct Ctx<'a> {
+    pub root: &'a Value,
+    pub depth: usize,
+}
+
 pub(crate) fn validate_value_against_schema(
     schema: &Value,
     value: &Value,
     path: &[PathSegment],
+    cx: Ctx,
 ) -> Result<(), VldError> {
     // Boolean schema: true = accept all, false = reject all
     if let Some(b) = schema.as_bool() {
@@ -28,6 +39,37 @@ pub(crate) fn validate_value_against_schema(
     };
 
     let mut errors = VldError::new();
+
+    // $ref (siblings still apply, as in draft 2019-09+)
+    if let Some(reference) = schema_obj.get("$ref").and_then(|r| r.as_str()) {
+        match resolve_ref(cx.root, reference) {
+            Some(target) if cx.depth < MAX_REF_DEPTH => {
+                let inner = Ctx {
+                    depth: cx.depth + 1,
+                    ..cx
+                };
+                if let Err(e) = validate_value_against_schema(target, value, path, inner) {
+                    errors = errors.merge(e);
+                }
+            }
+            Some(_) => errors.issues.push(make_issue(
+                path,
+                IssueCode::Custom {
+                    code: "ref_depth".into(),
+                },
+                format!("$ref nesting too deep at {}", reference),
+                Some(value),
+            )),
+            None => errors.issues.push(make_issue(
+                path,
+                IssueCode::Custom {
+                    code: "invalid_ref".into(),
+                },
+                format!("Unresolvable $ref in schema: {}", reference),
+                Some(value),
+            )),
+        }
+    }
 
     // enum
     if let Some(enum_values) = schema_obj.get("enum").and_then(|e| e.as_array()) {
@@ -104,19 +146,19 @@ pub(crate) fn validate_value_against_schema(
 
     // Array constraints
     if let Some(arr) = value.as_array() {
-        validate_array(schema_obj, arr, path, &mut errors);
+        validate_array(schema_obj, arr, path, &mut errors, cx);
     }
 
     // Object constraints
     if let Some(obj) = value.as_object() {
-        validate_object(schema_obj, obj, path, &mut errors);
+        validate_object(schema_obj, obj, path, &mut errors, cx);
     }
 
     // oneOf
     if let Some(one_of) = schema_obj.get("oneOf").and_then(|v| v.as_array()) {
         let matches: usize = one_of
             .iter()
-            .filter(|s| validate_value_against_schema(s, value, path).is_ok())
+            .filter(|s| validate_value_against_schema(s, value, path, cx).is_ok())
             .count();
         if matches != 1 {
             errors.issues.push(make_issue(
@@ -137,7 +179,7 @@ pub(crate) fn validate_value_against_schema(
     if let Some(any_of) = schema_obj.get("anyOf").and_then(|v| v.as_array()) {
         let matches = any_of
             .iter()
-            .any(|s| validate_value_against_schema(s, value, path).is_ok());
+            .any(|s| validate_value_against_schema(s, value, path, cx).is_ok());
         if !matches {
             errors.issues.push(make_issue(
                 path,
@@ -153,7 +195,7 @@ pub(crate) fn validate_value_against_schema(
     // allOf
     if let Some(all_of) = schema_obj.get("allOf").and_then(|v| v.as_array()) {
         for sub_schema in all_of {
-            if let Err(e) = validate_value_against_schema(sub_schema, value, path) {
+            if let Err(e) = validate_value_against_schema(sub_schema, value, path, cx) {
                 errors = errors.merge(e);
             }
         }
@@ -161,7 +203,7 @@ pub(crate) fn validate_value_against_schema(
 
     // not
     if let Some(not_schema) = schema_obj.get("not") {
-        if validate_value_against_schema(not_schema, value, path).is_ok() {
+        if validate_value_against_schema(not_schema, value, path, cx).is_ok() {
             errors.issues.push(make_issue(
                 path,
                 IssueCode::Custom { code: "not".into() },
@@ -189,8 +231,9 @@ fn validate_string(
         None => return,
     };
 
+    let len = s.chars().count() as u64;
     if let Some(min) = schema.get("minLength").and_then(|v| v.as_u64()) {
-        if (s.len() as u64) < min {
+        if len < min {
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooSmall {
@@ -204,7 +247,7 @@ fn validate_string(
     }
 
     if let Some(max) = schema.get("maxLength").and_then(|v| v.as_u64()) {
-        if (s.len() as u64) > max {
+        if len > max {
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooBig {
@@ -218,24 +261,25 @@ fn validate_string(
     }
 
     if let Some(pattern) = schema.get("pattern").and_then(|v| v.as_str()) {
-        if let Ok(re) = regex_lite::Regex::new(pattern) {
-            if !re.is_match(s) {
-                errors.issues.push(make_issue(
-                    path,
-                    IssueCode::InvalidString {
-                        validation: vld::error::StringValidation::Regex,
-                    },
-                    format!("String does not match pattern: {}", pattern),
-                    Some(value),
-                ));
-            }
+        match regex_lite::Regex::new(pattern) {
+            Ok(re) if re.is_match(s) => {}
+            Ok(_) => errors.issues.push(make_issue(
+                path,
+                IssueCode::InvalidString {
+                    validation: vld::error::StringValidation::Regex,
+                },
+                format!("String does not match pattern: {}", pattern),
+                Some(value),
+            )),
+            Err(_) => errors.issues.push(invalid_pattern(path, pattern)),
         }
     }
 
     if let Some(format) = schema.get("format").and_then(|v| v.as_str()) {
         let valid = match format {
             "email" => s.contains('@') && s.contains('.'),
-            "uri" | "url" => s.starts_with("http://") || s.starts_with("https://"),
+            "uri" => is_uri(s),
+            "url" => s.starts_with("http://") || s.starts_with("https://"),
             "url-strict" => s.starts_with("http://") || s.starts_with("https://"),
             "uuid" => s.len() == 36 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-'),
             "uuid-v1" | "uuid-v4" | "uuid-v7" => {
@@ -335,7 +379,7 @@ fn validate_number(
     }
 
     if let Some(multiple) = schema.get("multipleOf").and_then(|v| v.as_f64()) {
-        if multiple != 0.0 && (n % multiple).abs() > f64::EPSILON {
+        if multiple > 0.0 && !is_multiple_of(n, multiple) {
             errors.issues.push(make_issue(
                 path,
                 IssueCode::Custom {
@@ -353,6 +397,7 @@ fn validate_array(
     arr: &[Value],
     path: &[PathSegment],
     errors: &mut VldError,
+    cx: Ctx,
 ) {
     if let Some(min) = schema.get("minItems").and_then(|v| v.as_u64()) {
         if (arr.len() as u64) < min {
@@ -382,13 +427,21 @@ fn validate_array(
         }
     }
 
-    if let Some(items_schema) = schema.get("items") {
-        for (i, item) in arr.iter().enumerate() {
-            let mut item_path = path.to_vec();
-            item_path.push(PathSegment::Index(i));
-            if let Err(e) = validate_value_against_schema(items_schema, item, &item_path) {
-                *errors = std::mem::take(errors).merge(e);
-            }
+    // Tuple items: `prefixItems` (2020-12) or array-form `items` (draft-07).
+    let (prefix, rest): (&[Value], Option<&Value>) =
+        match (schema.get("prefixItems"), schema.get("items")) {
+            (Some(Value::Array(p)), items) => (p, items),
+            (_, Some(Value::Array(p))) => (p, schema.get("additionalItems")),
+            (_, items) => (&[], items),
+        };
+    for (i, item) in arr.iter().enumerate() {
+        let Some(item_schema) = prefix.get(i).or(rest) else {
+            break;
+        };
+        let mut item_path = path.to_vec();
+        item_path.push(PathSegment::Index(i));
+        if let Err(e) = validate_value_against_schema(item_schema, item, &item_path, cx) {
+            *errors = std::mem::take(errors).merge(e);
         }
     }
 
@@ -418,6 +471,7 @@ fn validate_object(
     obj: &serde_json::Map<String, Value>,
     path: &[PathSegment],
     errors: &mut VldError,
+    cx: Ctx,
 ) {
     // required
     if let Some(required) = schema.get("required").and_then(|v| v.as_array()) {
@@ -437,15 +491,49 @@ fn validate_object(
         }
     }
 
-    // properties
-    if let Some(properties) = schema.get("properties").and_then(|v| v.as_object()) {
-        for (prop_name, prop_schema) in properties {
-            if let Some(prop_value) = obj.get(prop_name) {
-                let mut prop_path = path.to_vec();
-                prop_path.push(PathSegment::Field(prop_name.clone()));
-                if let Err(e) = validate_value_against_schema(prop_schema, prop_value, &prop_path) {
-                    *errors = std::mem::take(errors).merge(e);
+    // properties / patternProperties / additionalProperties
+    let properties = schema.get("properties").and_then(|v| v.as_object());
+    let mut patterns = Vec::new();
+    for (p, sub) in schema
+        .get("patternProperties")
+        .and_then(|v| v.as_object())
+        .into_iter()
+        .flatten()
+    {
+        match regex_lite::Regex::new(p) {
+            Ok(re) => patterns.push((re, sub)),
+            Err(_) => errors.issues.push(invalid_pattern(path, p)),
+        }
+    }
+    let additional = schema.get("additionalProperties");
+
+    for (key, prop_value) in obj {
+        let mut prop_path = path.to_vec();
+        prop_path.push(PathSegment::Field(key.clone()));
+        let mut subs: Vec<&Value> = properties.and_then(|p| p.get(key)).into_iter().collect();
+        subs.extend(
+            patterns
+                .iter()
+                .filter(|(re, _)| re.is_match(key))
+                .map(|(_, sub)| *sub),
+        );
+        if subs.is_empty() {
+            match additional {
+                Some(Value::Bool(false)) => {
+                    errors.issues.push(make_issue(
+                        &prop_path,
+                        IssueCode::UnrecognizedField,
+                        format!("Unrecognized field '{}'", key),
+                        Some(prop_value),
+                    ));
                 }
+                Some(sub @ Value::Object(_)) => subs.push(sub),
+                _ => {}
+            }
+        }
+        for sub in subs {
+            if let Err(e) = validate_value_against_schema(sub, prop_value, &prop_path, cx) {
+                *errors = std::mem::take(errors).merge(e);
             }
         }
     }
@@ -481,6 +569,68 @@ fn validate_object(
 }
 
 // ========================= Helpers ===========================================
+
+fn invalid_pattern(path: &[PathSegment], pattern: &str) -> ValidationIssue {
+    make_issue(
+        path,
+        IssueCode::Custom {
+            code: "invalid_pattern".into(),
+        },
+        format!("Invalid pattern in schema: {}", pattern),
+        None,
+    )
+}
+
+/// Resolve a local `$ref` (`#` or `#/json/pointer`) against the root schema.
+fn resolve_ref<'a>(root: &'a Value, reference: &str) -> Option<&'a Value> {
+    let pointer = reference.strip_prefix('#')?;
+    if pointer.is_empty() {
+        return Some(root);
+    }
+    // schemars percent-encodes definition names inside refs.
+    root.pointer(&percent_decode(pointer))
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = bytes
+            .get(i + 1..i + 3)
+            .and_then(|h| std::str::from_utf8(h).ok())
+            .and_then(|h| u8::from_str_radix(h, 16).ok());
+        match (bytes[i], hex) {
+            (b'%', Some(b)) => {
+                out.push(b);
+                i += 3;
+            }
+            (b, _) => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// RFC 3986 URI: `scheme ":" rest`, scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ).
+fn is_uri(s: &str) -> bool {
+    let Some((scheme, rest)) = s.split_once(':') else {
+        return false;
+    };
+    let mut chars = scheme.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+        && !rest.is_empty()
+        && !s.contains(char::is_whitespace)
+}
+
+/// `n` is a multiple of `m`, tolerant to float rounding (e.g. 0.3 / 0.1).
+fn is_multiple_of(n: f64, m: f64) -> bool {
+    let q = n / m;
+    (q - q.round()).abs() <= 1e-9 * q.abs().max(1.0)
+}
 
 fn type_matches(value: &Value, types: &[&str]) -> bool {
     types.iter().any(|t| match *t {
