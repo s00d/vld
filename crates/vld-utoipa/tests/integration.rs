@@ -385,7 +385,7 @@ fn roundtrip_optional_schema() {
     let json = serde_json::to_value(&utoipa_schema).unwrap();
 
     // optional produces oneOf
-    assert!(json["oneOf"].is_array());
+    assert!(union(&json).is_array());
 }
 
 #[test]
@@ -402,7 +402,7 @@ fn roundtrip_full_struct() {
     assert_eq!(json["properties"]["name"]["minLength"], 2);
     assert_eq!(json["properties"]["name"]["maxLength"], 50);
     assert_eq!(json["properties"]["email"]["format"], "email");
-    assert!(json["properties"]["age"]["oneOf"].is_array());
+    assert!(union(&json["properties"]["age"]).is_array());
 }
 
 vld::schema! {
@@ -490,15 +490,16 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
     assert_eq!(js["properties"]["title"]["maxLength"], 120);
     assert_eq!(js["properties"]["priority"]["type"], "string");
     assert!(js["properties"]["priority"].get("oneOf").is_none());
-    assert!(js["properties"]["labels"]["oneOf"].is_array());
-    assert!(js["properties"]["due_at"]["oneOf"].is_array());
+    assert!(js["properties"]["priority"].get("anyOf").is_none());
+    assert!(union(&js["properties"]["labels"]).is_array());
+    assert!(union(&js["properties"]["due_at"]).is_array());
     assert_eq!(js["properties"]["due_at"]["description"], "ISO date");
-    assert!(js["properties"]["reporter"]["oneOf"].is_array());
+    assert!(union(&js["properties"]["reporter"]).is_array());
     assert_eq!(
         js["properties"]["reporter"]["description"],
         "reporter email"
     );
-    assert!(js["properties"]["meta"]["oneOf"].is_array());
+    assert!(union(&js["properties"]["meta"]).is_array());
     assert_eq!(js["properties"]["meta"]["description"], "freeform");
 
     let utoipa_json = serde_json::to_value(json_schema_to_schema(&js)).unwrap();
@@ -508,8 +509,8 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
         vec!["title", "body", "reporter"]
     );
     assert_eq!(utoipa_json["properties"]["title"]["minLength"], 3);
-    assert!(utoipa_json["properties"]["labels"]["oneOf"].is_array());
-    assert!(utoipa_json["properties"]["reporter"]["oneOf"].is_array());
+    assert!(union(&utoipa_json["properties"]["labels"]).is_array());
+    assert!(union(&utoipa_json["properties"]["reporter"]).is_array());
 
     // ToSchema path must keep the same required matrix
     let schema_json = serde_json::to_value(CreateTicket::schema()).unwrap();
@@ -526,10 +527,10 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
         "derive: optional/nullish/default omitted, nullable kept"
     );
     assert_eq!(derive_js["properties"]["title"]["description"], "title");
-    assert!(derive_js["properties"]["body"]["oneOf"].is_array());
+    assert!(union(&derive_js["properties"]["body"]).is_array());
     assert_eq!(derive_js["properties"]["priority"]["type"], "string");
-    assert!(derive_js["properties"]["assignee"]["oneOf"].is_array());
-    assert!(derive_js["properties"]["cursor"]["oneOf"].is_array());
+    assert!(union(&derive_js["properties"]["assignee"]).is_array());
+    assert!(union(&derive_js["properties"]["cursor"]).is_array());
 
     let derive_utoipa = serde_json::to_value(DerivePatchTicket::schema()).unwrap();
     assert_eq!(utoipa_required(&derive_utoipa), vec!["title", "cursor"]);
@@ -589,7 +590,7 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
         !req.contains(&"streetNumberAddition"),
         "optional camelCase field must be omitted from required: {req:?}"
     );
-    assert!(renamed["properties"]["streetNumberAddition"]["oneOf"].is_array());
+    assert!(union(&renamed["properties"]["streetNumberAddition"]).is_array());
 }
 
 // ---- Nested schema tests ----
@@ -715,7 +716,7 @@ fn transitive_nested_schemas_auto_registered() {
 
     let child_js = ScheduleDayItem::json_schema();
     assert_eq!(
-        child_js["properties"]["breaks"]["oneOf"][0]["items"]["$ref"],
+        union(&child_js["properties"]["breaks"])[0]["items"]["$ref"],
         "#/components/schemas/ScheduleBreakItem"
     );
 
@@ -932,5 +933,14 @@ mod legacy_migration {
         assert!(matches!(params[0].parameter_in, ParameterIn::Query));
         let schema_json = serde_json::to_value(params[0].schema.as_ref().unwrap()).unwrap();
         assert_eq!(schema_json["minimum"], 1);
+    }
+}
+
+/// Core emits `anyOf` for optional/nullable/union (older core: `oneOf`).
+fn union(v: &serde_json::Value) -> &serde_json::Value {
+    if v["anyOf"].is_array() {
+        &v["anyOf"]
+    } else {
+        &v["oneOf"]
     }
 }
