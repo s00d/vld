@@ -24,32 +24,47 @@
 //! assert_eq!(user.age, None);
 //! ```
 //!
-//! ## The `std` feature
+//! ## Module map
 //!
-//! `vld` always links the Rust standard library; `std` (on by default) is
-//! **not** a `no_std` switch. It only gates the std-specific schemas
-//! (`duration()`, `path()`, `socket_addr()`) and file helpers
-//! (`ParseResult::save_to_file`, file-path input).
+//! - [`mod@schema`] — the [`VldSchema`](schema::VldSchema) trait, [`VldParse`](schema::VldParse),
+//!   [`DynSchema`](schema::DynSchema), input sources and nested schemas
+//! - [`error`] — [`VldError`](error::VldError), [`IssueCode`](error::IssueCode),
+//!   formatting ([`error::format`]) and translations ([`error::i18n`])
+//! - [`primitives`], [`collections`], [`combinators`], [`modifiers`], [`mod@object`] — schema types
+//! - `openapi` (feature `openapi`) — JSON Schema / OpenAPI generation and schema diffs
+//! - [`prelude`] — everything needed for day-to-day use
 
 pub mod collections;
 pub mod combinators;
-#[cfg(feature = "diff")]
-pub mod diff;
 pub mod error;
-pub mod format;
-pub mod i18n;
-pub mod input;
-#[cfg(feature = "openapi")]
-pub mod json_schema;
 mod macros;
 pub mod modifiers;
 pub mod object;
+#[cfg(feature = "openapi")]
+pub mod openapi;
+pub mod prelude;
 pub mod primitives;
 pub mod schema;
 
 #[doc(hidden)]
 #[path = "private.rs"]
 pub mod __private;
+
+// Old module paths (pre-0.5), kept as aliases.
+pub use error::{format, i18n};
+#[cfg(feature = "openapi")]
+pub use openapi as json_schema;
+#[cfg(feature = "diff")]
+pub use openapi::diff;
+pub use schema::input;
+
+// Date backends: additive, each in its own module.
+#[cfg(feature = "chrono")]
+pub use primitives::date::chrono;
+#[cfg(feature = "jiff")]
+pub use primitives::date::jiff;
+#[cfg(feature = "time")]
+pub use primitives::date::time;
 
 // Re-export serde_json for use in macros
 #[doc(hidden)]
@@ -58,85 +73,6 @@ pub use serde_json;
 // Re-export serde for DynSchema users
 #[doc(hidden)]
 pub use serde;
-
-// ---------------------------------------------------------------------------
-// Feature-gate helper macros.
-//
-// These are conditionally compiled based on **vld's** features, so when a
-// foreign crate invokes `vld::schema!`, the check uses vld's features
-// instead of the consumer's — eliminating `unexpected_cfgs` warnings.
-// ---------------------------------------------------------------------------
-
-/// Emit the given tokens only when the `serialize` feature is enabled on `vld`.
-#[cfg(feature = "serialize")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_if_serialize {
-    ($($tt:tt)*) => { $($tt)* };
-}
-
-/// No-op: `serialize` feature is disabled.
-#[cfg(not(feature = "serialize"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_if_serialize {
-    ($($tt:tt)*) => {};
-}
-
-/// Emit the given tokens only when the `openapi` feature is enabled on `vld`.
-#[cfg(feature = "openapi")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_if_openapi {
-    ($($tt:tt)*) => { $($tt)* };
-}
-
-/// No-op: `openapi` feature is disabled.
-#[cfg(not(feature = "openapi"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_if_openapi {
-    ($($tt:tt)*) => {};
-}
-
-#[cfg(feature = "openapi")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_nested_schema_fn {
-    ($ty:ty) => {
-        Some(<$ty>::json_schema as fn() -> $crate::serde_json::Value)
-    };
-}
-
-#[cfg(not(feature = "openapi"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_nested_schema_fn {
-    ($ty:ty) => {
-        None
-    };
-}
-
-#[cfg(feature = "openapi")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_nested_collect_fn {
-    ($ty:ty) => {
-        Some(
-            <$ty>::__vld_collect_nested_schemas
-                as fn(&mut ::std::vec::Vec<$crate::json_schema::NestedSchemaEntry>),
-        )
-    };
-}
-
-#[cfg(not(feature = "openapi"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vld_nested_collect_fn {
-    ($ty:ty) => {
-        None
-    };
-}
 
 // Re-export regex_lite when the `regex` feature is enabled
 #[cfg(feature = "regex")]
@@ -186,9 +122,6 @@ pub fn ip_network() -> primitives::ZIpNetwork {
 }
 
 /// Create a socket address schema (`std::net::SocketAddr`).
-///
-/// Requires the `std` feature.
-#[cfg(feature = "std")]
 pub fn socket_addr() -> primitives::ZSocketAddr {
     primitives::ZSocketAddr::new()
 }
@@ -207,17 +140,11 @@ pub fn file() -> primitives::ZFile {
 }
 
 /// Create a duration validation schema (`std::time::Duration`).
-///
-/// Requires the `std` feature.
-#[cfg(feature = "std")]
 pub fn duration() -> primitives::ZDuration {
     primitives::ZDuration::new()
 }
 
 /// Create a path validation schema (`std::path::PathBuf`).
-///
-/// Requires the `std` feature.
-#[cfg(feature = "std")]
 pub fn path() -> primitives::ZPath {
     primitives::ZPath::new()
 }
@@ -267,37 +194,6 @@ where
     schema::NestedSchema::new_named(f, name, json_schema_fn, collect_nested_fn)
 }
 
-/// Create a named nested schema with `$ref` generation and full JSON Schema.
-///
-/// Works with types from [`schema!`] and `#[derive(Validate)]`. The component
-/// name is the type as written, sanitized to `[A-Za-z0-9._-]`
-/// (`Page<User>` → `Page_User_`).
-///
-/// ```ignore
-/// vld::schema! {
-///     pub struct User {
-///         pub address: Address => vld::nested!(Address),
-///     }
-/// }
-/// ```
-#[macro_export]
-macro_rules! nested {
-    ($ty:ty) => {
-        $crate::nested_named(
-            {
-                static __VLD_NAME: ::std::sync::OnceLock<::std::string::String> =
-                    ::std::sync::OnceLock::new();
-                __VLD_NAME
-                    .get_or_init(|| $crate::__private::component_name(stringify!($ty)))
-                    .as_str()
-            },
-            <$ty>::parse_value,
-            $crate::__vld_nested_schema_fn!($ty),
-            $crate::__vld_nested_collect_fn!($ty),
-        )
-    };
-}
-
 /// Create a literal value schema. Validates exact match.
 ///
 /// ```
@@ -327,28 +223,29 @@ pub fn any() -> primitives::ZAny {
     primitives::ZAny::new()
 }
 
-/// Create a date validation schema. Parses ISO 8601 date strings (`YYYY-MM-DD`).
+/// Create a date schema with the only enabled date backend.
 ///
-/// Output type depends on the enabled date backend:
-/// - `chrono` feature → `chrono::NaiveDate`
-/// - `jiff` feature → `jiff::civil::Date`
-/// - `time` feature → `time::Date`
-///
-/// When multiple backends are enabled, priority is: `chrono` > `jiff` > `time`.
-#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
+/// Available only when exactly one of `chrono`, `jiff`, `time` is enabled;
+/// otherwise use `vld::chrono::date()`, `vld::jiff::date()` or
+/// `vld::time::date()` (see [`primitives::date`]).
+#[cfg(any(
+    all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+    all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+    all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+))]
 pub fn date() -> primitives::ZDate {
     primitives::ZDate::new()
 }
 
-/// Create a datetime validation schema. Parses ISO 8601 datetime strings.
+/// Create a datetime schema with the only enabled date backend.
 ///
-/// Output type depends on the enabled date backend:
-/// - `chrono` feature → `chrono::DateTime<chrono::Utc>`
-/// - `jiff` feature → `jiff::Timestamp`
-/// - `time` feature → `time::OffsetDateTime` (UTC)
-///
-/// When multiple backends are enabled, priority is: `chrono` > `jiff` > `time`.
-#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
+/// Available only when exactly one of `chrono`, `jiff`, `time` is enabled;
+/// otherwise use `vld::chrono::datetime()` etc. (see [`primitives::date`]).
+#[cfg(any(
+    all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+    all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+    all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+))]
 pub fn datetime() -> primitives::ZDateTime {
     primitives::ZDateTime::new()
 }
@@ -433,40 +330,4 @@ where
     S: schema::VldSchema,
 {
     combinators::ZPreprocess::new(preprocessor, schema)
-}
-
-// ---------------------------------------------------------------------------
-// Prelude
-// ---------------------------------------------------------------------------
-
-/// Common imports for working with `vld`.
-pub mod prelude {
-    pub use crate::collections::{ZArray, ZMap, ZRecord, ZSet};
-    pub use crate::combinators::{
-        Either, Either3, ZCatch, ZCustom, ZDescribe, ZDiscriminatedUnion, ZIntersection, ZLazy,
-        ZMessage, ZPipe, ZPreprocess, ZRefine, ZSuperRefine, ZTransform, ZUnion2, ZUnion3,
-    };
-    pub use crate::error::{
-        FieldResult, IssueBuilder, IssueCode, ParseResult, PathSegment, ValidationIssue, VldError,
-    };
-    pub use crate::format::{flatten_error, prettify_error, treeify_error};
-    pub use crate::input::VldInput;
-    #[cfg(feature = "openapi")]
-    pub use crate::json_schema::JsonSchema;
-    pub use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
-    pub use crate::object::ZObject;
-    #[cfg(feature = "decimal")]
-    pub use crate::primitives::ZDecimal;
-    #[cfg(feature = "net")]
-    pub use crate::primitives::ZIpNetwork;
-    #[cfg(feature = "file")]
-    pub use crate::primitives::{FileStorage, ValidatedFile, ZFile};
-    pub use crate::primitives::{
-        IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZInt, ZJsonValue, ZLiteral, ZNumber, ZString,
-    };
-    #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
-    pub use crate::primitives::{ZDate, ZDateTime};
-    #[cfg(feature = "std")]
-    pub use crate::primitives::{ZDuration, ZPath, ZSocketAddr};
-    pub use crate::schema::{VldParse, VldSchema};
 }

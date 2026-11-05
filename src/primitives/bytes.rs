@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{IssueCode, PathSegment, VldError};
+use crate::error::{FormatKind, IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 fn b64_value(b: u8) -> Option<u8> {
@@ -14,7 +14,7 @@ fn b64_value(b: u8) -> Option<u8> {
     }
 }
 
-pub(super) fn decode_base64(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn decode_base64(s: &str) -> Option<Vec<u8>> {
     let bytes = s.as_bytes();
     if bytes.is_empty() || bytes.len() % 4 != 0 {
         return None;
@@ -152,12 +152,137 @@ impl ZBytes {
         self.string_mode = BytesStringMode::Hex;
         self
     }
+}
 
-    /// JSON Schema. In string modes `minLength`/`maxLength` describe the
-    /// *encoded* string length (Base64: `4*ceil(n/3)` padded; Base64URL may be
-    /// unpadded; hex: `2n`, plus an optional `0x` prefix).
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
+impl Default for ZBytes {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl VldSchema for ZBytes {
+    type Output = Vec<u8>;
+
+    fn parse_value(&self, value: &Value) -> Result<Vec<u8>, VldError> {
+        let type_err = || {
+            let expected = if self.string_mode != BytesStringMode::Off {
+                "bytes array or encoded string"
+            } else {
+                "bytes array"
+            };
+            crate::primitives::type_error(&self.custom_type_error, expected, value)
+        };
+
+        let bytes = match value {
+            Value::Array(arr) => {
+                let mut out = Vec::with_capacity(arr.len());
+                for (i, item) in arr.iter().enumerate() {
+                    let n = item.as_u64().ok_or_else(|| {
+                        crate::primitives::type_error(
+                            &self.custom_type_error,
+                            "byte (integer 0..=255)",
+                            item,
+                        )
+                        .with_prefix(PathSegment::Index(i))
+                    })?;
+                    if n > 255 {
+                        return Err(VldError::from_code_with_value(
+                            IssueCode::TooBig {
+                                origin: SizeOrigin::Number,
+                                maximum: 255.into(),
+                                inclusive: true,
+                            },
+                            item,
+                        )
+                        .with_prefix(PathSegment::Index(i)));
+                    }
+                    out.push(n as u8);
+                }
+                out
+            }
+            Value::String(s) if self.string_mode != BytesStringMode::Off => {
+                match self.string_mode {
+                    BytesStringMode::Base64 => decode_base64(s).ok_or_else(|| {
+                        VldError::from_code_with_value(
+                            IssueCode::InvalidFormat {
+                                format: FormatKind::Base64,
+                            },
+                            value,
+                        )
+                    })?,
+                    BytesStringMode::Base64Url => decode_base64_url(s).ok_or_else(|| {
+                        VldError::from_code_with_value(
+                            IssueCode::InvalidFormat {
+                                format: FormatKind::Base64Url,
+                            },
+                            value,
+                        )
+                    })?,
+                    BytesStringMode::Hex => decode_hex(s).ok_or_else(|| {
+                        VldError::from_code_with_value(
+                            IssueCode::InvalidFormat {
+                                format: FormatKind::Hex,
+                            },
+                            value,
+                        )
+                    })?,
+                    BytesStringMode::Off => return Err(type_err()),
+                }
+            }
+            _ => return Err(type_err()),
+        };
+
+        let mut errors = VldError::new();
+        if let Some(min) = self.min_len {
+            if bytes.len() < min {
+                errors.push_code_with_value(
+                    IssueCode::TooSmall {
+                        origin: SizeOrigin::Bytes,
+                        minimum: min.into(),
+                        inclusive: true,
+                    },
+                    value,
+                );
+            }
+        }
+        if let Some(max) = self.max_len {
+            if bytes.len() > max {
+                errors.push_code_with_value(
+                    IssueCode::TooBig {
+                        origin: SizeOrigin::Bytes,
+                        maximum: max.into(),
+                        inclusive: true,
+                    },
+                    value,
+                );
+            }
+        }
+        if let Some(exact) = self.exact_len {
+            if bytes.len() != exact {
+                errors.push_code_with_value(
+                    IssueCode::InvalidLength {
+                        origin: SizeOrigin::Bytes,
+                        expected: exact,
+                    },
+                    value,
+                );
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(bytes)
+        } else {
+            Err(errors)
+        }
+    }
+}
+
+/// JSON Schema. In string modes `minLength`/`maxLength` describe the
+/// *encoded* string length (Base64: `4*ceil(n/3)` padded; Base64URL may be
+/// unpadded; hex: `2n`, plus an optional `0x` prefix).
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZBytes {
+    fn json_schema(&self) -> serde_json::Value {
         let mins = [self.min_len, self.exact_len].into_iter().flatten();
         let maxs = [self.max_len, self.exact_len].into_iter().flatten();
         let padded = |n: usize| n.div_ceil(3) * 4;
@@ -187,129 +312,5 @@ impl ZBytes {
     }
 }
 
-impl Default for ZBytes {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl VldSchema for ZBytes {
-    type Output = Vec<u8>;
-
-    fn parse_value(&self, value: &Value) -> Result<Vec<u8>, VldError> {
-        let type_err = || {
-            let expected = if self.string_mode != BytesStringMode::Off {
-                "bytes array or encoded string"
-            } else {
-                "bytes array"
-            };
-            super::type_error(&self.custom_type_error, expected, expected, value)
-        };
-
-        let bytes = match value {
-            Value::Array(arr) => {
-                let mut out = Vec::with_capacity(arr.len());
-                for (i, item) in arr.iter().enumerate() {
-                    let n = item.as_u64().ok_or_else(|| {
-                        super::type_error(
-                            &self.custom_type_error,
-                            "byte (integer 0..=255)",
-                            "byte (integer 0..=255)",
-                            item,
-                        )
-                        .with_prefix(PathSegment::Index(i))
-                    })?;
-                    if n > 255 {
-                        return Err(VldError::single_with_value(
-                            IssueCode::TooBig {
-                                maximum: 255.0,
-                                inclusive: true,
-                            },
-                            "Byte value must be in range 0..=255",
-                            item,
-                        )
-                        .with_prefix(PathSegment::Index(i)));
-                    }
-                    out.push(n as u8);
-                }
-                out
-            }
-            Value::String(s) if self.string_mode != BytesStringMode::Off => {
-                match self.string_mode {
-                    BytesStringMode::Base64 => decode_base64(s).ok_or_else(|| {
-                        VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "invalid_base64".to_string(),
-                            },
-                            "Invalid Base64 byte string",
-                            value,
-                        )
-                    })?,
-                    BytesStringMode::Base64Url => decode_base64_url(s).ok_or_else(|| {
-                        VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "invalid_base64url".to_string(),
-                            },
-                            "Invalid Base64URL byte string",
-                            value,
-                        )
-                    })?,
-                    BytesStringMode::Hex => decode_hex(s).ok_or_else(|| {
-                        VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "invalid_hex".to_string(),
-                            },
-                            "Invalid hex byte string",
-                            value,
-                        )
-                    })?,
-                    BytesStringMode::Off => return Err(type_err()),
-                }
-            }
-            _ => return Err(type_err()),
-        };
-
-        let mut errors = VldError::new();
-        if let Some(min) = self.min_len {
-            if bytes.len() < min {
-                errors.push_with_value(
-                    IssueCode::TooSmall {
-                        minimum: min as f64,
-                        inclusive: true,
-                    },
-                    format!("Bytes length must be at least {}", min),
-                    value,
-                );
-            }
-        }
-        if let Some(max) = self.max_len {
-            if bytes.len() > max {
-                errors.push_with_value(
-                    IssueCode::TooBig {
-                        maximum: max as f64,
-                        inclusive: true,
-                    },
-                    format!("Bytes length must be at most {}", max),
-                    value,
-                );
-            }
-        }
-        if let Some(exact) = self.exact_len {
-            if bytes.len() != exact {
-                errors.push_with_value(
-                    IssueCode::Custom {
-                        code: "invalid_length".to_string(),
-                    },
-                    format!("Bytes length must be exactly {}", exact),
-                    value,
-                );
-            }
-        }
-
-        if errors.is_empty() {
-            Ok(bytes)
-        } else {
-            Err(errors)
-        }
-    }
-}
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZBytes {}

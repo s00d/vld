@@ -89,17 +89,13 @@ impl IntoLiteral for bool {
 /// Numbers compare by value: `literal(1.0)` accepts `1`, `literal(5i64)` accepts `5.0`.
 pub struct ZLiteral<T: IntoLiteral> {
     expected_value: Value,
-    display: String,
     _phantom: std::marker::PhantomData<T>,
 }
 
 impl<T: IntoLiteral> ZLiteral<T> {
     pub fn new(expected: T) -> Self {
-        let expected_value = expected.to_json_value();
-        let display = expected.display();
         Self {
-            expected_value,
-            display,
+            expected_value: expected.to_json_value(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -114,23 +110,27 @@ impl<T: IntoLiteral> VldSchema for ZLiteral<T> {
     type Output = T::Output;
 
     fn parse_value(&self, value: &Value) -> Result<T::Output, VldError> {
-        if super::json_eq(value, &self.expected_value) {
-            T::extract(value).ok_or_else(|| {
-                VldError::single(
-                    IssueCode::Custom {
-                        code: "invalid_literal".to_string(),
+        super::json_eq(value, &self.expected_value)
+            .then(|| T::extract(value))
+            .flatten()
+            .ok_or_else(|| {
+                VldError::from_code_with_value(
+                    IssueCode::InvalidLiteral {
+                        expected: self.expected_value.clone(),
                     },
-                    format!("Expected literal {}", self.display),
+                    value,
                 )
             })
-        } else {
-            Err(VldError::single_with_value(
-                IssueCode::Custom {
-                    code: "invalid_literal".to_string(),
-                },
-                format!("Expected literal {}, received {:?}", self.display, value),
-                value,
-            ))
-        }
     }
 }
+
+/// `{"const": <literal>}`.
+#[cfg(feature = "openapi")]
+impl<T: IntoLiteral> crate::openapi::JsonSchema for ZLiteral<T> {
+    fn json_schema(&self) -> Value {
+        serde_json::json!({ "const": self.expected_value })
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<T: IntoLiteral> crate::openapi::CollectNestedSchemas for ZLiteral<T> {}

@@ -11,9 +11,10 @@ set -euo pipefail
 # Disk: use profile `ci` (no debuginfo / no incremental) and a dedicated
 # target dir so a full matrix does not stuff 20–30G into the IDE `target/`.
 
-VLD_EXTENDED_FEATURES="chrono,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced"
-JIFF_FEATURES="jiff,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced"
-TIME_FEATURES="time,derive,serialize,openapi,diff,decimal,net,file,string-advanced,file-advanced"
+VLD_EXTENDED_FEATURES="chrono,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced"
+JIFF_FEATURES="jiff,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced"
+ALL_DATES_FEATURES="chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced"
+TIME_FEATURES="time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced"
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT_DIR}/target/ci}"
@@ -70,10 +71,9 @@ cargo test -p vld-config --no-default-features --features "config-rs,figment" "$
 
 echo "==> Test vld feature matrix"
 cargo test -p vld --no-default-features "${PROFILE[@]}"
-cargo test -p vld --no-default-features --features serialize "${PROFILE[@]}"
 cargo test -p vld --no-default-features --features openapi "${PROFILE[@]}"
 cargo test -p vld --no-default-features --features diff "${PROFILE[@]}"
-cargo test -p vld --no-default-features --features "serialize,openapi,diff" "${PROFILE[@]}"
+cargo test -p vld --no-default-features --features regex "${PROFILE[@]}"
 cargo test -p vld --features "${VLD_EXTENDED_FEATURES}" "${PROFILE[@]}"
 
 echo "==> Test vld jiff feature matrix"
@@ -81,6 +81,9 @@ cargo test -p vld --features "${JIFF_FEATURES}" "${PROFILE[@]}"
 
 echo "==> Test vld time feature matrix"
 cargo test -p vld --features "${TIME_FEATURES}" "${PROFILE[@]}"
+
+echo "==> Test vld with all date backends together"
+cargo test -p vld --features "${ALL_DATES_FEATURES}" "${PROFILE[@]}"
 
 echo "==> Clippy (workspace, default features, all targets)"
 cargo clippy --workspace --all-targets "${PROFILE[@]}" -- -D warnings
@@ -93,6 +96,9 @@ cargo clippy -p vld --all-targets --features "${JIFF_FEATURES}" "${PROFILE[@]}" 
 
 echo "==> Clippy (vld time features)"
 cargo clippy -p vld --all-targets --features "${TIME_FEATURES}" "${PROFILE[@]}" -- -D warnings
+
+echo "==> Clippy (vld, all date backends)"
+cargo clippy -p vld --all-targets --features "${ALL_DATES_FEATURES}" "${PROFILE[@]}" -- -D warnings
 
 echo "==> Clippy (integration crates, non-default branches)"
 cargo clippy -p vld-schemars --no-default-features --features schemars-1 --all-targets "${PROFILE[@]}" -- -D warnings

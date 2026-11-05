@@ -1,4 +1,6 @@
 mod default_val;
+#[cfg(feature = "openapi")]
+mod json_schema;
 
 pub use default_val::ZDefault;
 

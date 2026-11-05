@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
+use crate::error::{value_type_name, IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 /// Schema for validating JSON objects as key-value records.
@@ -43,32 +43,6 @@ impl<V: VldSchema> ZRecord<V> {
         self.max_keys = Some(n);
         self
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn value_schema_ref(&self) -> &V {
-        &self.value_schema
-    }
-
-    /// Generate a JSON Schema (called by [`JsonSchema`](crate::json_schema::JsonSchema) trait impl).
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema_inner(&self) -> serde_json::Value
-    where
-        V: crate::json_schema::JsonSchema,
-    {
-        let mut schema = serde_json::json!({
-            "type": "object",
-            "additionalProperties": self.value_schema.json_schema(),
-        });
-        crate::primitives::length_schema(
-            &mut schema,
-            ("minProperties", "maxProperties"),
-            self.min_keys,
-            self.max_keys,
-        );
-        schema
-    }
 }
 
 impl<V: VldSchema> VldSchema for ZRecord<V> {
@@ -76,38 +50,31 @@ impl<V: VldSchema> VldSchema for ZRecord<V> {
 
     fn parse_value(&self, value: &Value) -> Result<HashMap<String, V::Output>, VldError> {
         let obj = value.as_object().ok_or_else(|| {
-            VldError::single(
-                IssueCode::InvalidType {
-                    expected: "object".to_string(),
-                    received: value_type_name(value),
-                },
-                format!("Expected object, received {}", value_type_name(value)),
-            )
+            VldError::from_code(IssueCode::InvalidType {
+                expected: "object".to_string(),
+                received: value_type_name(value),
+            })
         })?;
 
         let mut errors = VldError::new();
 
         if let Some(min) = self.min_keys {
             if obj.len() < min {
-                errors.push(
-                    IssueCode::TooSmall {
-                        minimum: min as f64,
-                        inclusive: true,
-                    },
-                    format!("Record must have at least {} keys", min),
-                );
+                errors.push_code(IssueCode::TooSmall {
+                    origin: SizeOrigin::Record,
+                    minimum: min.into(),
+                    inclusive: true,
+                });
             }
         }
 
         if let Some(max) = self.max_keys {
             if obj.len() > max {
-                errors.push(
-                    IssueCode::TooBig {
-                        maximum: max as f64,
-                        inclusive: true,
-                    },
-                    format!("Record must have at most {} keys", max),
-                );
+                errors.push_code(IssueCode::TooBig {
+                    origin: SizeOrigin::Record,
+                    maximum: max.into(),
+                    inclusive: true,
+                });
             }
         }
 
@@ -129,5 +96,35 @@ impl<V: VldSchema> VldSchema for ZRecord<V> {
         } else {
             Err(errors)
         }
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<V> crate::openapi::JsonSchema for ZRecord<V>
+where
+    V: VldSchema + crate::openapi::JsonSchema,
+{
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({
+            "type": "object",
+            "additionalProperties": self.value_schema.json_schema(),
+        });
+        crate::primitives::length_schema(
+            &mut schema,
+            ("minProperties", "maxProperties"),
+            self.min_keys,
+            self.max_keys,
+        );
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<V> crate::openapi::CollectNestedSchemas for ZRecord<V>
+where
+    V: VldSchema + crate::openapi::CollectNestedSchemas,
+{
+    fn collect_nested_schemas(&self, out: &mut Vec<crate::schema::NestedSchemaEntry>) {
+        self.value_schema.collect_nested_schemas(out);
     }
 }

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::VldError;
 use crate::schema::VldSchema;
 
 /// Intersection of two schemas: input must satisfy both.
@@ -57,14 +57,6 @@ impl<A: VldSchema, B: VldSchema> VldSchema for ZIntersection<A, B> {
 
         match first_result {
             Some(v) if errors.is_empty() => Ok(v),
-            // The first schema can fail without reporting an issue.
-            None if errors.is_empty() => Err(VldError::single_with_value(
-                IssueCode::Custom {
-                    code: "invalid_intersection".to_string(),
-                },
-                "Input did not satisfy the intersection",
-                value,
-            )),
             _ => Err(errors),
         }
     }

@@ -59,12 +59,9 @@ where
     fn parse_value(&self, value: &Value) -> Result<B::Output, VldError> {
         let intermediate = self.first.parse_value(value)?;
         let json = serde_json::to_value(&intermediate).map_err(|e| {
-            VldError::single(
-                IssueCode::Custom {
-                    code: "pipe_serialize".to_string(),
-                },
-                format!("Failed to serialize intermediate value in pipe: {}", e),
-            )
+            VldError::from_code(IssueCode::SerializeError {
+                detail: e.to_string(),
+            })
         })?;
         self.second.parse_value(&json)
     }

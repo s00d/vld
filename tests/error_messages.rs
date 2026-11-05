@@ -142,7 +142,8 @@ fn string_msg_variants_work() {
 #[test]
 fn issue_code_key_and_params() {
     let code = IssueCode::TooSmall {
-        minimum: 5.0,
+        origin: vld::error::SizeOrigin::String,
+        minimum: 5.0.into(),
         inclusive: true,
     };
     assert_eq!(code.key(), "too_small");

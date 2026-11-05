@@ -1228,7 +1228,7 @@ fn type_array_uses_non_null_type() {
 
 fn assert_fakes<S>(s: S)
 where
-    S: vld::schema::VldSchema + vld::json_schema::JsonSchema,
+    S: vld::schema::VldSchema + vld::openapi::JsonSchema,
 {
     let schema = s.json_schema();
     for _ in 0..200 {

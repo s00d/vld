@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
+use crate::error::{value_type_name, IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 /// Canonical text form for duplicate detection: object keys sorted, integral
@@ -115,20 +115,116 @@ impl<T: VldSchema> ZArray<T> {
         self.unique = true;
         self
     }
+}
 
-    #[allow(dead_code)]
-    pub(crate) fn element_schema(&self) -> &T {
-        &self.element
+impl<T: VldSchema> VldSchema for ZArray<T> {
+    type Output = Vec<T::Output>;
+
+    fn parse_value(&self, value: &Value) -> Result<Vec<T::Output>, VldError> {
+        let arr = value.as_array().ok_or_else(|| {
+            VldError::from_code(IssueCode::InvalidType {
+                expected: "array".to_string(),
+                received: value_type_name(value),
+            })
+        })?;
+
+        let mut errors = VldError::new();
+
+        // Length checks
+        if let Some(min) = self.min_len {
+            if arr.len() < min {
+                errors.push_code(IssueCode::TooSmall {
+                    origin: SizeOrigin::Array,
+                    minimum: min.into(),
+                    inclusive: true,
+                });
+            }
+        }
+
+        if let Some(max) = self.max_len {
+            if arr.len() > max {
+                errors.push_code(IssueCode::TooBig {
+                    origin: SizeOrigin::Array,
+                    maximum: max.into(),
+                    inclusive: true,
+                });
+            }
+        }
+
+        if let Some(exact) = self.exact_len {
+            if arr.len() != exact {
+                errors.push_code(IssueCode::InvalidLength {
+                    origin: SizeOrigin::Array,
+                    expected: exact,
+                });
+            }
+        }
+
+        if self.unique {
+            let mut seen = std::collections::HashSet::new();
+            for (i, item) in arr.iter().enumerate() {
+                if !seen.insert(canonical(item)) {
+                    errors = errors.merge(
+                        VldError::from_code_with_value(IssueCode::NotUnique, item)
+                            .with_prefix(PathSegment::Index(i)),
+                    );
+                }
+            }
+        }
+
+        if let Some(ref contains) = self.contains {
+            let count = arr
+                .iter()
+                .filter(|v| crate::primitives::json_eq(v, contains))
+                .count();
+            match self.min_contains {
+                None if count == 0 => errors.push_code(IssueCode::MissingContains),
+                Some(min_contains) if count < min_contains => {
+                    errors.push_code(IssueCode::TooSmall {
+                        origin: SizeOrigin::Contains,
+                        minimum: min_contains.into(),
+                        inclusive: true,
+                    })
+                }
+                _ => {}
+            }
+            if let Some(max_contains) = self.max_contains {
+                if count > max_contains {
+                    errors.push_code(IssueCode::TooBig {
+                        origin: SizeOrigin::Contains,
+                        maximum: max_contains.into(),
+                        inclusive: true,
+                    });
+                }
+            }
+        }
+
+        // Validate each element
+        let mut results = Vec::with_capacity(arr.len());
+
+        for (i, item) in arr.iter().enumerate() {
+            match self.element.parse_value(item) {
+                Ok(v) => results.push(v),
+                Err(e) => {
+                    errors = errors.merge(e.with_prefix(PathSegment::Index(i)));
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(results)
+        } else {
+            Err(errors)
+        }
     }
+}
 
-    /// Generate a JSON Schema (called by [`JsonSchema`](crate::json_schema::JsonSchema) trait impl).
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema_inner(&self) -> serde_json::Value
-    where
-        T: crate::json_schema::JsonSchema,
-    {
+#[cfg(feature = "openapi")]
+impl<T> crate::openapi::JsonSchema for ZArray<T>
+where
+    T: VldSchema + crate::openapi::JsonSchema,
+{
+    fn json_schema(&self) -> serde_json::Value {
         let mut schema = serde_json::json!({
             "type": "array",
             "items": self.element.json_schema(),
@@ -155,132 +251,12 @@ impl<T: VldSchema> ZArray<T> {
     }
 }
 
-impl<T: VldSchema> VldSchema for ZArray<T> {
-    type Output = Vec<T::Output>;
-
-    fn parse_value(&self, value: &Value) -> Result<Vec<T::Output>, VldError> {
-        let arr = value.as_array().ok_or_else(|| {
-            VldError::single(
-                IssueCode::InvalidType {
-                    expected: "array".to_string(),
-                    received: value_type_name(value),
-                },
-                format!("Expected array, received {}", value_type_name(value)),
-            )
-        })?;
-
-        let mut errors = VldError::new();
-
-        // Length checks
-        if let Some(min) = self.min_len {
-            if arr.len() < min {
-                errors.push(
-                    IssueCode::TooSmall {
-                        minimum: min as f64,
-                        inclusive: true,
-                    },
-                    format!("Array must have at least {} elements", min),
-                );
-            }
-        }
-
-        if let Some(max) = self.max_len {
-            if arr.len() > max {
-                errors.push(
-                    IssueCode::TooBig {
-                        maximum: max as f64,
-                        inclusive: true,
-                    },
-                    format!("Array must have at most {} elements", max),
-                );
-            }
-        }
-
-        if let Some(exact) = self.exact_len {
-            if arr.len() != exact {
-                errors.push(
-                    IssueCode::Custom {
-                        code: "invalid_length".to_string(),
-                    },
-                    format!("Array must have exactly {} elements", exact),
-                );
-            }
-        }
-
-        if self.unique {
-            let mut seen = std::collections::HashSet::new();
-            for (i, item) in arr.iter().enumerate() {
-                if !seen.insert(canonical(item)) {
-                    errors = errors.merge(
-                        VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "not_unique".to_string(),
-                            },
-                            "Array items must be unique",
-                            item,
-                        )
-                        .with_prefix(PathSegment::Index(i)),
-                    );
-                }
-            }
-        }
-
-        if let Some(ref contains) = self.contains {
-            let count = arr
-                .iter()
-                .filter(|v| crate::primitives::json_eq(v, contains))
-                .count();
-            match self.min_contains {
-                None if count == 0 => errors.push(
-                    IssueCode::Custom {
-                        code: "missing_contains".to_string(),
-                    },
-                    "Array must contain required value",
-                ),
-                Some(min_contains) if count < min_contains => errors.push(
-                    IssueCode::TooSmall {
-                        minimum: min_contains as f64,
-                        inclusive: true,
-                    },
-                    format!(
-                        "Array must contain required value at least {} time(s)",
-                        min_contains
-                    ),
-                ),
-                _ => {}
-            }
-            if let Some(max_contains) = self.max_contains {
-                if count > max_contains {
-                    errors.push(
-                        IssueCode::TooBig {
-                            maximum: max_contains as f64,
-                            inclusive: true,
-                        },
-                        format!(
-                            "Array must contain required value at most {} time(s)",
-                            max_contains
-                        ),
-                    );
-                }
-            }
-        }
-
-        // Validate each element
-        let mut results = Vec::with_capacity(arr.len());
-
-        for (i, item) in arr.iter().enumerate() {
-            match self.element.parse_value(item) {
-                Ok(v) => results.push(v),
-                Err(e) => {
-                    errors = errors.merge(e.with_prefix(PathSegment::Index(i)));
-                }
-            }
-        }
-
-        if errors.is_empty() {
-            Ok(results)
-        } else {
-            Err(errors)
-        }
+#[cfg(feature = "openapi")]
+impl<T> crate::openapi::CollectNestedSchemas for ZArray<T>
+where
+    T: VldSchema + crate::openapi::CollectNestedSchemas,
+{
+    fn collect_nested_schemas(&self, out: &mut Vec<crate::schema::NestedSchemaEntry>) {
+        self.element.collect_nested_schemas(out);
     }
 }

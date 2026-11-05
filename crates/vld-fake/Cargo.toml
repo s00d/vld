@@ -21,4 +21,4 @@ rand = "0.10"
 regex-syntax = { version = "0.8", default-features = false, features = ["std", "unicode"] }
 
 [dev-dependencies]
-vld = { workspace = true, features = ["openapi", "serialize", "chrono", "regex", "string-advanced", "decimal", "net"] }
+vld = { workspace = true, features = ["openapi", "chrono", "regex", "string-advanced", "decimal", "net"] }

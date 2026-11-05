@@ -56,19 +56,17 @@ vld = "0.4"
 
 ### Optional Features
 
-Default build enables only `std`. Optional features:
+No features are enabled by default (serde / `serde_json` are always on). Optional features:
 
 | Feature           | Description                                                                                                                                                         |
 |-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `serialize`       | Adds `#[derive(Serialize)]` on error/result types, enables `VldSchema::validate()`/`is_valid()`, `ParseResult::save_to_file()`/`to_json_string()`/`to_json_value()` |
-| `deserialize`     | Adds `#[derive(Deserialize)]` on error/result types                                                                                                                 |
-| `openapi`         | Enables `JsonSchema` trait, `to_json_schema()`, `json_schema()`, `to_openapi_document()`, `field_schema()`                                                        |
-| `diff`            | Schema diffing — compare two JSON Schemas to detect breaking vs non-breaking changes                                                                                |
+| `openapi`         | `vld::openapi`: `JsonSchema` trait (`json_schema()`), `to_openapi_document()`                                                                                       |
+| `diff`            | Schema diffing (implies `openapi`)                                                                                                                                  |
 | `regex`           | Custom regex patterns via `.regex()` (uses `regex-lite`)                                                                                                            |
 | `derive`          | `#[derive(Validate)]` procedural macro                                                                                                                              |
-| `chrono`          | `ZDate` / `ZDateTime` with `chrono` parsing (`NaiveDate`, `DateTime<Utc>`)                                                                                        |
-| `jiff`            | Same `ZDate` / `ZDateTime` API with [jiff](https://docs.rs/jiff) parsing (`civil::Date`, `Timestamp`). Alternative to `chrono`.                                   |
-| `time`            | Same API with [time](https://docs.rs/time) parsing (`time::Date`, `time::OffsetDateTime` UTC). Alternative to `chrono` / `jiff`.                                  |
+| `chrono`          | `vld::chrono::{date(), datetime(), ZDate, ZDateTime}` (`NaiveDate`, `DateTime<Utc>`) |
+| `jiff`            | `vld::jiff::{...}` with [jiff](https://docs.rs/jiff) (`civil::Date`, `Timestamp`) |
+| `time`            | `vld::time::{...}` with [time](https://docs.rs/time) (`time::Date`, `time::OffsetDateTime` UTC) |
 | `decimal`         | Enables decimal schema (`vld::decimal()`) backed by `rust_decimal`                                                                                                  |
 | `net`             | Enables network schema (`vld::ip_network()`) backed by `ipnet`                                                                                                      |
 | `file`            | Enables file schema (`vld::file()`) and basic file checks (size/extensions/media type)                                                                             |
@@ -79,7 +77,7 @@ Enable features as needed:
 
 ```toml
 [dependencies]
-vld = { version = "0.4", features = ["serialize", "openapi"] }
+vld = { version = "0.5", features = ["openapi"] }
 ```
 
 ### Basic Usage
@@ -207,7 +205,7 @@ let price = vld::decimal()
     .non_negative();
 ```
 
-### Duration (std feature)
+### Duration
 
 ```rust
 let timeout = vld::duration()
@@ -216,7 +214,7 @@ let timeout = vld::duration()
 // accepts: 10, "10s", "250ms", "PT10S"
 ```
 
-### Path (std feature)
+### Path
 
 ```rust
 let cfg = vld::path().exists().file().absolute();
@@ -253,14 +251,14 @@ vld::bytes()
 let price = vld::decimal().min("0.00").max("99999.99").non_negative();
 ```
 
-### Duration (std feature)
+### Duration
 
 ```rust
 let timeout = vld::duration().min_secs(1).max_secs(30);
 // accepts: 10, "10s", "250ms", "PT10S"
 ```
 
-### Path (std feature)
+### Path
 
 ```rust
 let cfg = vld::path().exists().file().absolute();
@@ -296,9 +294,9 @@ vld::any()  // accepts any JSON value
 
 ### Date / Datetime (`chrono`, `jiff`, or `time` feature)
 
-Enable **one** backend in production: `chrono`, `jiff`, or `time`. The builder API is the same (`vld::date()`, `vld::datetime()`). If multiple flags are on (e.g. `--all-features`), priority is **`chrono` > `jiff` > `time`**.
+Backends are additive: each feature adds its own module (`vld::chrono`, `vld::jiff`, `vld::time`) with the same API (`date()`, `datetime()`, `ZDate`, `ZDateTime`), and all can be enabled together. When **exactly one** backend is enabled, `vld::date()` / `vld::datetime()` and `prelude::{ZDate, ZDateTime}` are shortcuts for it; libraries should use the backend modules, since another crate may enable a second backend.
 
-| Feature | `vld::date()` output | `vld::datetime()` output |
+| Feature | `date()` output | `datetime()` output |
 |---------|----------------------|-------------------------|
 | `chrono` | `chrono::NaiveDate` | `chrono::DateTime<chrono::Utc>` |
 | `jiff` | `jiff::civil::Date` | `jiff::Timestamp` |
@@ -323,8 +321,8 @@ vld::datetime().naive_timezone_offset(3 * 3600);
 ```rust
 vld::schema! {
     pub struct Event {
-        pub date: chrono::NaiveDate => vld::date().min("2020-01-01"),
-        pub at: chrono::DateTime<chrono::Utc> => vld::datetime(),
+        pub date: chrono::NaiveDate => vld::chrono::date().min("2020-01-01"),
+        pub at: chrono::DateTime<chrono::Utc> => vld::chrono::datetime(),
     }
 }
 ```
@@ -334,8 +332,8 @@ vld::schema! {
 ```rust
 vld::schema! {
     pub struct Event {
-        pub date: jiff::civil::Date => vld::date().min("2020-01-01"),
-        pub at: jiff::Timestamp => vld::datetime().past(),
+        pub date: jiff::civil::Date => vld::jiff::date().min("2020-01-01"),
+        pub at: jiff::Timestamp => vld::jiff::datetime().past(),
     }
 }
 ```
@@ -345,13 +343,13 @@ vld::schema! {
 ```rust
 vld::schema! {
     pub struct Event {
-        pub date: time::Date => vld::date().min("2020-01-01"),
-        pub at: time::OffsetDateTime => vld::datetime().past(),
+        pub date: time::Date => vld::time::date().min("2020-01-01"),
+        pub at: time::OffsetDateTime => vld::time::datetime().past(),
     }
 }
 ```
 
-### File (std feature)
+### File (`file` feature)
 
 ```rust
 // In-memory mode (default): path + metadata + bytes
@@ -805,8 +803,6 @@ User::parse(b"{\"name\": \"Alex\", \"email\": \"a@b.com\"}" as &[u8])?;
 
 ## Validate Existing Rust Values
 
-> Requires the `serialize` feature.
-
 Instead of only parsing JSON, you can validate any existing Rust value using
 `.validate()` and `.is_valid()`. The value is serialized to JSON internally,
 then validated against the schema.
@@ -983,8 +979,8 @@ each property:
 
 ```rust
 let js = vld::object()
-    .field_schema("email", vld::string().email().min(5))
-    .field_schema("score", vld::number().min(0.0).max(100.0))
+    .field("email", vld::string().email().min(5))
+    .field("score", vld::number().min(0.0).max(100.0))
     .strict()
     .json_schema();
 // {"type": "object", "properties": {"email": {...}, "score": {...}}, ...}

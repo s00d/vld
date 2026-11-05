@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{value_type_name, FileTypeKind, IssueCode, SizeOrigin, VldError};
 use crate::primitives::path::{outside_base_error, resolve_within};
 use crate::schema::VldSchema;
 #[cfg(feature = "file-advanced")]
@@ -276,26 +276,6 @@ impl ZFile {
     pub fn parse_path(&self, path: impl AsRef<Path>) -> Result<ValidatedFile, VldError> {
         self.parse_value(&Value::String(path.as_ref().to_string_lossy().to_string()))
     }
-
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        let mut schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": { "type": "string" },
-                "size": { "type": "integer", "minimum": 0 },
-                "mediaType": { "type": ["string", "null"] }
-            },
-            "required": ["path", "size"]
-        });
-        if let Some(min) = self.min_size {
-            schema["properties"]["size"]["minimum"] = serde_json::json!(min);
-        }
-        if let Some(max) = self.max_size {
-            schema["properties"]["size"]["maximum"] = serde_json::json!(max);
-        }
-        schema
-    }
 }
 
 impl Default for ZFile {
@@ -316,32 +296,55 @@ fn extract_path(value: &Value) -> Result<&str, VldError> {
     match value {
         Value::String(s) => Ok(s.as_str()),
         Value::Object(obj) => obj.get("path").and_then(Value::as_str).ok_or_else(|| {
-            VldError::single_with_value(
+            VldError::from_code_with_value(
                 IssueCode::InvalidType {
                     expected: "string or object with {path: string}".to_string(),
                     received: value_type_name(value),
                 },
-                "Expected file path string or object with `path` field",
                 value,
             )
         }),
-        _ => Err(VldError::single_with_value(
+        _ => Err(VldError::from_code_with_value(
             IssueCode::InvalidType {
                 expected: "string or object with {path: string}".to_string(),
                 received: value_type_name(value),
             },
-            "Expected file path string or object with `path` field",
             value,
         )),
     }
 }
 
-fn file_err(code: &str, msg: impl Into<String>, value: &Value) -> VldError {
-    VldError::single_with_value(
-        IssueCode::Custom {
-            code: code.to_string(),
+fn file_err(code: IssueCode, value: &Value) -> VldError {
+    VldError::from_code_with_value(code, value)
+}
+
+fn not_allowed(kind: FileTypeKind, actual: &str, allowed: &[String], value: &Value) -> VldError {
+    file_err(
+        IssueCode::FileTypeNotAllowed {
+            kind,
+            actual: actual.to_string(),
+            allowed: allowed.to_vec(),
         },
-        msg,
+        value,
+    )
+}
+
+fn denied(kind: FileTypeKind, actual: &str, value: &Value) -> VldError {
+    file_err(
+        IssueCode::FileTypeDenied {
+            kind,
+            actual: actual.to_string(),
+        },
+        value,
+    )
+}
+
+#[cfg(feature = "file-advanced")]
+fn checksum_mismatch(algorithm: &str, value: &Value) -> VldError {
+    file_err(
+        IssueCode::ChecksumMismatch {
+            algorithm: algorithm.to_string(),
+        },
         value,
     )
 }
@@ -377,22 +380,22 @@ impl ZFile {
 
     fn check_size(&self, size: u64, value: &Value) -> Result<(), VldError> {
         if let Some(min) = self.min_size.filter(|&m| size < m) {
-            return Err(VldError::single_with_value(
+            return Err(VldError::from_code_with_value(
                 IssueCode::TooSmall {
-                    minimum: min as f64,
+                    origin: SizeOrigin::File,
+                    minimum: min.into(),
                     inclusive: true,
                 },
-                format!("File size must be at least {} bytes", min),
                 value,
             ));
         }
         if let Some(max) = self.max_size.filter(|&m| size > m) {
-            return Err(VldError::single_with_value(
+            return Err(VldError::from_code_with_value(
                 IssueCode::TooBig {
-                    maximum: max as f64,
+                    origin: SizeOrigin::File,
+                    maximum: max.into(),
                     inclusive: true,
                 },
-                format!("File size must be at most {} bytes", max),
                 value,
             ));
         }
@@ -408,47 +411,43 @@ impl ZFile {
             .and_then(|r| r.into_dimensions().ok())
             .ok_or_else(|| {
                 file_err(
-                    "invalid_image",
-                    "Unable to decode image for dimension checks",
+                    IssueCode::InvalidFormat {
+                        format: crate::error::FormatKind::Image,
+                    },
                     value,
                 )
             })?;
-        let checks = [
-            (
-                self.min_width.filter(|&m| w < m),
-                "image_width_too_small",
-                "width",
-                ">=",
-            ),
-            (
-                self.max_width.filter(|&m| w > m),
-                "image_width_too_big",
-                "width",
-                "<=",
-            ),
-            (
-                self.min_height.filter(|&m| h < m),
-                "image_height_too_small",
-                "height",
-                ">=",
-            ),
-            (
-                self.max_height.filter(|&m| h > m),
-                "image_height_too_big",
-                "height",
-                "<=",
-            ),
-        ];
-        for (failed, code, dim, op) in checks {
-            if let Some(bound) = failed {
-                return Err(file_err(
-                    code,
-                    format!("Image {} must be {} {}", dim, op, bound),
-                    value,
-                ));
-            }
+        let small = |origin, bound: u32| IssueCode::TooSmall {
+            origin,
+            minimum: bound.into(),
+            inclusive: true,
+        };
+        let big = |origin, bound: u32| IssueCode::TooBig {
+            origin,
+            maximum: bound.into(),
+            inclusive: true,
+        };
+        let failure = [
+            self.min_width
+                .filter(|&m| w < m)
+                .map(|m| small(SizeOrigin::ImageWidth, m)),
+            self.max_width
+                .filter(|&m| w > m)
+                .map(|m| big(SizeOrigin::ImageWidth, m)),
+            self.min_height
+                .filter(|&m| h < m)
+                .map(|m| small(SizeOrigin::ImageHeight, m)),
+            self.max_height
+                .filter(|&m| h > m)
+                .map(|m| big(SizeOrigin::ImageHeight, m)),
+        ]
+        .into_iter()
+        .flatten()
+        .next();
+        match failure {
+            Some(code) => Err(file_err(code, value)),
+            None => Ok(()),
         }
-        Ok(())
     }
 }
 
@@ -458,7 +457,7 @@ impl VldSchema for ZFile {
     fn parse_value(&self, value: &Value) -> Result<ValidatedFile, VldError> {
         let path_str = extract_path(value).map_err(|e| {
             if self.custom_type_error.is_some() {
-                super::type_error(&self.custom_type_error, "file path", "file path", value)
+                crate::primitives::type_error(&self.custom_type_error, "file path", value)
             } else {
                 e
             }
@@ -488,21 +487,15 @@ impl VldSchema for ZFile {
         if !self.allowed_extensions.is_empty()
             && !self.allowed_extensions.iter().any(|allowed| allowed == ext)
         {
-            return Err(file_err(
-                "invalid_file_extension",
-                format!(
-                    "File extension must be one of: {}",
-                    self.allowed_extensions.join(", ")
-                ),
+            return Err(not_allowed(
+                FileTypeKind::Extension,
+                ext,
+                &self.allowed_extensions,
                 value,
             ));
         }
         if self.denied_extensions.iter().any(|deny| deny == ext) {
-            return Err(file_err(
-                "denied_file_extension",
-                format!("File extension `{}` is denied", ext),
-                value,
-            ));
+            return Err(denied(FileTypeKind::Extension, ext, value));
         }
 
         // Size and content come from the same open handle (no stat/read race),
@@ -535,8 +528,9 @@ impl VldSchema for ZFile {
         if !self.allowed_media_types.is_empty() {
             let mt = media_type.as_deref().ok_or_else(|| {
                 file_err(
-                    "unknown_media_type",
-                    "Unable to detect file media type",
+                    IssueCode::FileTypeUnknown {
+                        kind: FileTypeKind::MediaType,
+                    },
                     value,
                 )
             })?;
@@ -545,13 +539,10 @@ impl VldSchema for ZFile {
                 .iter()
                 .any(|allowed| media_matches(mt, allowed))
             {
-                return Err(file_err(
-                    "invalid_media_type",
-                    format!(
-                        "File media type `{}` is not allowed (expected one of: {})",
-                        mt,
-                        self.allowed_media_types.join(", ")
-                    ),
+                return Err(not_allowed(
+                    FileTypeKind::MediaType,
+                    mt,
+                    &self.allowed_media_types,
                     value,
                 ));
             }
@@ -562,40 +553,30 @@ impl VldSchema for ZFile {
                 .iter()
                 .any(|deny| media_matches(mt, deny))
             {
-                return Err(file_err(
-                    "denied_media_type",
-                    format!("File media type `{}` is denied", mt),
-                    value,
-                ));
+                return Err(denied(FileTypeKind::MediaType, mt, value));
             }
         }
         if !self.allowed_magic_types.is_empty() {
             let kind = magic_type.as_deref().ok_or_else(|| {
                 file_err(
-                    "unknown_magic_type",
-                    "Unable to detect file magic type",
+                    IssueCode::FileTypeUnknown {
+                        kind: FileTypeKind::MagicType,
+                    },
                     value,
                 )
             })?;
             if !self.allowed_magic_types.iter().any(|a| a == kind) {
-                return Err(file_err(
-                    "invalid_magic_type",
-                    format!(
-                        "File magic type `{}` is not allowed (expected one of: {})",
-                        kind,
-                        self.allowed_magic_types.join(", ")
-                    ),
+                return Err(not_allowed(
+                    FileTypeKind::MagicType,
+                    kind,
+                    &self.allowed_magic_types,
                     value,
                 ));
             }
         }
         if let Some(kind) = magic_type.as_deref() {
             if self.denied_magic_types.iter().any(|d| d == kind) {
-                return Err(file_err(
-                    "denied_magic_type",
-                    format!("File magic type `{}` is denied", kind),
-                    value,
-                ));
+                return Err(denied(FileTypeKind::MagicType, kind, value));
             }
         }
 
@@ -603,16 +584,12 @@ impl VldSchema for ZFile {
         if let (true, Some(bytes)) = (self.needs_content_checks(), loaded_bytes.as_deref()) {
             if let Some(expected) = &self.sha256_hex {
                 if &digest_to_hex(Sha256::digest(bytes)) != expected {
-                    return Err(file_err(
-                        "sha256_mismatch",
-                        "SHA-256 checksum mismatch",
-                        value,
-                    ));
+                    return Err(checksum_mismatch("SHA-256", value));
                 }
             }
             if let Some(expected) = &self.md5_hex {
                 if &digest_to_hex(Md5::digest(bytes)) != expected {
-                    return Err(file_err("md5_mismatch", "MD5 checksum mismatch", value));
+                    return Err(checksum_mismatch("MD5", value));
                 }
             }
             if self.needs_dimensions() {
@@ -621,9 +598,7 @@ impl VldSchema for ZFile {
             if self.require_exif {
                 exif::Reader::new()
                     .read_from_container(&mut std::io::Cursor::new(bytes))
-                    .map_err(|_| {
-                        file_err("missing_exif", "Image must contain EXIF metadata", value)
-                    })?;
+                    .map_err(|_| file_err(IssueCode::MissingExif, value))?;
             }
         }
 
@@ -640,3 +615,28 @@ impl VldSchema for ZFile {
         })
     }
 }
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZFile {
+    fn json_schema(&self) -> serde_json::Value {
+        let mut schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": { "type": "string" },
+                "size": { "type": "integer", "minimum": 0 },
+                "mediaType": { "type": ["string", "null"] }
+            },
+            "required": ["path", "size"]
+        });
+        if let Some(min) = self.min_size {
+            schema["properties"]["size"]["minimum"] = serde_json::json!(min);
+        }
+        if let Some(max) = self.max_size {
+            schema["properties"]["size"]["maximum"] = serde_json::json!(max);
+        }
+        schema
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZFile {}

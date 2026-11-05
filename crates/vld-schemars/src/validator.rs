@@ -237,7 +237,8 @@ fn validate_string(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooSmall {
-                    minimum: min as f64,
+                    origin: vld::error::SizeOrigin::String,
+                    minimum: (min as f64).into(),
                     inclusive: true,
                 },
                 format!("String must be at least {} characters", min),
@@ -251,7 +252,8 @@ fn validate_string(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooBig {
-                    maximum: max as f64,
+                    origin: vld::error::SizeOrigin::String,
+                    maximum: (max as f64).into(),
                     inclusive: true,
                 },
                 format!("String must be at most {} characters", max),
@@ -327,7 +329,8 @@ fn validate_number(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooSmall {
-                    minimum: min,
+                    origin: vld::error::SizeOrigin::Number,
+                    minimum: min.into(),
                     inclusive: true,
                 },
                 format!("Value must be >= {}", min),
@@ -341,7 +344,8 @@ fn validate_number(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooBig {
-                    maximum: max,
+                    origin: vld::error::SizeOrigin::Number,
+                    maximum: max.into(),
                     inclusive: true,
                 },
                 format!("Value must be <= {}", max),
@@ -355,7 +359,8 @@ fn validate_number(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooSmall {
-                    minimum: ex_min,
+                    origin: vld::error::SizeOrigin::Number,
+                    minimum: ex_min.into(),
                     inclusive: false,
                 },
                 format!("Value must be > {}", ex_min),
@@ -369,7 +374,8 @@ fn validate_number(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooBig {
-                    maximum: ex_max,
+                    origin: vld::error::SizeOrigin::Number,
+                    maximum: ex_max.into(),
                     inclusive: false,
                 },
                 format!("Value must be < {}", ex_max),
@@ -404,7 +410,8 @@ fn validate_array(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooSmall {
-                    minimum: min as f64,
+                    origin: vld::error::SizeOrigin::Array,
+                    minimum: (min as f64).into(),
                     inclusive: true,
                 },
                 format!("Array must have at least {} items", min),
@@ -418,7 +425,8 @@ fn validate_array(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooBig {
-                    maximum: max as f64,
+                    origin: vld::error::SizeOrigin::Array,
+                    maximum: (max as f64).into(),
                     inclusive: true,
                 },
                 format!("Array must have at most {} items", max),
@@ -544,7 +552,8 @@ fn validate_object(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooSmall {
-                    minimum: min as f64,
+                    origin: vld::error::SizeOrigin::Object,
+                    minimum: (min as f64).into(),
                     inclusive: true,
                 },
                 format!("Object must have at least {} properties", min),
@@ -558,7 +567,8 @@ fn validate_object(
             errors.issues.push(make_issue(
                 path,
                 IssueCode::TooBig {
-                    maximum: max as f64,
+                    origin: vld::error::SizeOrigin::Object,
+                    maximum: (max as f64).into(),
                     inclusive: true,
                 },
                 format!("Object must have at most {} properties", max),

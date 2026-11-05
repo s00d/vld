@@ -86,7 +86,7 @@ fn const_becomes_single_enum() {
 
 #[test]
 fn record_from_vld_keeps_value_type() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let s = vld::record(vld::number().int()).json_schema();
     let out = conv(s);
     assert_eq!(out["additionalProperties"]["type"], "integer");

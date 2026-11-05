@@ -41,16 +41,6 @@ impl Default for ZBoolean {
     }
 }
 
-impl ZBoolean {
-    /// Generate a JSON Schema representation.
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        serde_json::json!({"type": "boolean"})
-    }
-}
-
 impl VldSchema for ZBoolean {
     type Output = bool;
 
@@ -72,12 +62,22 @@ impl VldSchema for ZBoolean {
                 )),
             },
             Value::Number(n) if self.coerce => Ok(n.as_f64() != Some(0.0)),
-            _ => Err(super::type_error(
+            _ => Err(crate::primitives::type_error(
                 &self.custom_type_error,
-                "boolean",
                 "boolean",
                 value,
             )),
         }
     }
 }
+
+/// Generate a JSON Schema representation.
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZBoolean {
+    fn json_schema(&self) -> serde_json::Value {
+        serde_json::json!({"type": "boolean"})
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZBoolean {}

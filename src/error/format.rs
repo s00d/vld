@@ -6,9 +6,7 @@ use crate::error::VldError;
 ///
 /// - `form_errors`: top-level errors (no path)
 /// - `field_errors`: errors grouped by top-level field name
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
-#[cfg_attr(feature = "deserialize", derive(serde::Deserialize))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FlatError {
     pub form_errors: Vec<String>,
     pub field_errors: HashMap<String, Vec<String>>,
@@ -50,9 +48,7 @@ pub fn flatten_error(error: &VldError) -> FlatError {
 }
 
 /// Tree-based error structure, mirrors the schema shape.
-#[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
-#[cfg_attr(feature = "deserialize", derive(serde::Deserialize))]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct ErrorTree {
     pub errors: Vec<String>,
     pub properties: HashMap<String, ErrorTree>,

@@ -7,13 +7,7 @@ use crate::schema::VldSchema;
 /// (with the received value) followed by each variant's own issues, their
 /// messages prefixed with `[variant N]` (paths are kept).
 fn union_error(value: &Value, variants: Vec<VldError>) -> VldError {
-    let mut err = VldError::single_with_value(
-        IssueCode::Custom {
-            code: "invalid_union".to_string(),
-        },
-        "Input did not match any variant of the union",
-        value,
-    );
+    let mut err = VldError::from_code_with_value(IssueCode::InvalidUnion, value);
     for (i, e) in variants.into_iter().enumerate() {
         for mut issue in e.issues {
             issue.message = format!("[variant {}] {}", i + 1, issue.message);
@@ -24,9 +18,7 @@ fn union_error(value: &Value, variants: Vec<VldError>) -> VldError {
 }
 
 /// A value that can be one of two types.
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
-#[cfg_attr(feature = "deserialize", derive(serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Either<A, B> {
     Left(A),
     Right(B),
@@ -96,9 +88,7 @@ impl<A: VldSchema, B: VldSchema> VldSchema for ZUnion2<A, B> {
 }
 
 /// A value that can be one of three types.
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
-#[cfg_attr(feature = "deserialize", derive(serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Either3<A, B, C> {
     First(A),
     Second(B),

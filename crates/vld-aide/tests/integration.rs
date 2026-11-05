@@ -245,7 +245,7 @@ fn derive_rename_all_camel_case_schema() {
 #[test]
 fn roundtrip_string_schema() {
     let vld_schema = vld::string().min(3).max(100).email();
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld_schema.json_schema();
 
     let schemars_schema = vld_to_schemars(&js);
@@ -258,7 +258,7 @@ fn roundtrip_string_schema() {
 #[test]
 fn roundtrip_number_schema() {
     let vld_schema = vld::number().min(0.0).max(100.0);
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld_schema.json_schema();
 
     let schemars_schema = vld_to_schemars(&js);
@@ -333,8 +333,8 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
     let js = AideCreateTicket::json_schema();
     assert_eq!(
         aide_required(&js),
-        vec!["title", "body", "reporter"],
-        "nullable stays required; optional/nullish/default omitted"
+        vec!["title", "body"],
+        "optional/nullable/nullish/default omitted"
     );
     assert_eq!(js["properties"]["title"]["description"], "ticket title");
     assert_eq!(js["properties"]["title"]["maxLength"], 120);
@@ -353,16 +353,13 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
     assert_eq!(schemars.get("type").unwrap(), "object");
     assert_eq!(
         aide_required(&serde_json::to_value(&schemars).unwrap()),
-        vec!["title", "body", "reporter"]
+        vec!["title", "body"]
     );
 
     let mut gen = schemars::SchemaGenerator::default();
     let generated = <AideCreateTicket as JsonSchema>::json_schema(&mut gen);
     let generated_json = serde_json::to_value(&generated).unwrap();
-    assert_eq!(
-        aide_required(&generated_json),
-        vec!["title", "body", "reporter"]
-    );
+    assert_eq!(aide_required(&generated_json), vec!["title", "body"]);
     assert_eq!(generated_json["properties"]["title"]["minLength"], 3);
     assert!(union(&generated_json["properties"]["labels"]).is_array());
     assert!(union(&generated_json["properties"]["reporter"]).is_array());
@@ -370,8 +367,8 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
     let derive_js = AideDerivePatch::json_schema();
     assert_eq!(
         aide_required(&derive_js),
-        vec!["title", "cursor"],
-        "derive: optional/nullish/default omitted, nullable kept"
+        vec!["title"],
+        "derive: optional/nullable/nullish/default omitted"
     );
     assert!(union(&derive_js["properties"]["body"]).is_array());
     assert_eq!(derive_js["properties"]["priority"]["type"], "string");
@@ -381,7 +378,7 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
     let mut gen2 = schemars::SchemaGenerator::default();
     let derive_generated = <AideDerivePatch as JsonSchema>::json_schema(&mut gen2);
     let derive_json = serde_json::to_value(&derive_generated).unwrap();
-    assert_eq!(aide_required(&derive_json), vec!["title", "cursor"]);
+    assert_eq!(aide_required(&derive_json), vec!["title"]);
     assert_eq!(derive_json["properties"]["title"]["description"], "title");
     assert_eq!(derive_json["properties"]["cursor"]["description"], "cursor");
 }

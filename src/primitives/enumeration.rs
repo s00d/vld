@@ -42,42 +42,34 @@ impl ZEnum {
     }
 }
 
-impl ZEnum {
-    /// Generate a JSON Schema representation.
-    ///
-    /// Requires the `openapi` feature.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        serde_json::json!({"type": "string", "enum": self.variants})
-    }
-}
-
 impl VldSchema for ZEnum {
     type Output = String;
 
     fn parse_value(&self, value: &Value) -> Result<String, VldError> {
-        let s = value
-            .as_str()
-            .ok_or_else(|| super::type_error(&self.custom_type_error, "string", "string", value))?;
+        let s = value.as_str().ok_or_else(|| {
+            crate::primitives::type_error(&self.custom_type_error, "string", value)
+        })?;
 
         if self.variants.iter().any(|v| v == s) {
             Ok(s.to_string())
         } else {
-            Err(VldError::single_with_value(
-                IssueCode::Custom {
-                    code: "invalid_enum_value".to_string(),
+            Err(VldError::from_code_with_value(
+                IssueCode::InvalidEnumValue {
+                    options: self.variants.clone(),
                 },
-                format!(
-                    "Invalid enum value: \"{}\". Expected one of: {}",
-                    s,
-                    self.variants
-                        .iter()
-                        .map(|v| format!("\"{}\"", v))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
                 value,
             ))
         }
     }
 }
+
+/// Generate a JSON Schema representation.
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZEnum {
+    fn json_schema(&self) -> serde_json::Value {
+        serde_json::json!({"type": "string", "enum": self.variants})
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZEnum {}

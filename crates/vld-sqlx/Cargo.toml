@@ -22,7 +22,7 @@ mysql = ["sqlx08?/mysql", "sqlx09?/mysql"]
 sqlite = ["sqlx08?/sqlite", "sqlx09?/sqlite"]
 
 [dependencies]
-vld = { workspace = true, features = ["serialize"] }
+vld = { workspace = true }
 sqlx08 = { package = "sqlx", version = "0.8", default-features = false, optional = true }
 sqlx09 = { package = "sqlx", version = "0.9", default-features = false, optional = true }
 serde = { workspace = true }

@@ -371,7 +371,6 @@ fn decimal_basic() {
     assert!(d.parse_value(&json!("0.99")).is_err());
 }
 
-#[cfg(feature = "std")]
 #[test]
 fn duration_and_path_basic() {
     use std::fs;
@@ -405,7 +404,7 @@ fn duration_and_path_basic() {
     let _ = fs::remove_dir_all(outside_dir);
 }
 
-#[cfg(all(feature = "net", feature = "std"))]
+#[cfg(feature = "net")]
 #[test]
 fn ip_network_socket_addr_json_value() {
     let net = vld::ip_network().ipv4_only();

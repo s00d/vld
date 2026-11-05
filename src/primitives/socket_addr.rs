@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::net::SocketAddr;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::{FormatKind, IssueCode, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 /// Schema for socket addresses (`ipv4:port` / `[ipv6]:port`; hostnames are
@@ -36,14 +36,6 @@ impl ZSocketAddr {
         self.max_port = Some(p);
         self
     }
-
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "string",
-            "format": "socket-addr"
-        })
-    }
 }
 
 impl Default for ZSocketAddr {
@@ -57,43 +49,37 @@ impl VldSchema for ZSocketAddr {
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            super::type_error(
-                &self.custom_type_error,
-                "string (socket address)",
-                "socket address string",
-                value,
-            )
+            crate::primitives::type_error(&self.custom_type_error, "socket address string", value)
         })?;
         let addr = s.parse::<SocketAddr>().map_err(|_| {
-            VldError::single_with_value(
-                IssueCode::Custom {
-                    code: "invalid_socket_addr".to_string(),
+            VldError::from_code_with_value(
+                IssueCode::InvalidFormat {
+                    format: FormatKind::SocketAddr,
                 },
-                "Invalid socket address (expected `ipv4:port` or `[ipv6]:port`; hostnames are not resolved)",
                 value,
             )
         })?;
         let port = addr.port();
         if let Some(min) = self.min_port {
             if port < min {
-                return Err(VldError::single_with_value(
+                return Err(VldError::from_code_with_value(
                     IssueCode::TooSmall {
-                        minimum: min as f64,
+                        origin: SizeOrigin::Port,
+                        minimum: min.into(),
                         inclusive: true,
                     },
-                    format!("Port must be at least {}", min),
                     value,
                 ));
             }
         }
         if let Some(max) = self.max_port {
             if port > max {
-                return Err(VldError::single_with_value(
+                return Err(VldError::from_code_with_value(
                     IssueCode::TooBig {
-                        maximum: max as f64,
+                        origin: SizeOrigin::Port,
+                        maximum: max.into(),
                         inclusive: true,
                     },
-                    format!("Port must be at most {}", max),
                     value,
                 ));
             }
@@ -101,3 +87,16 @@ impl VldSchema for ZSocketAddr {
         Ok(addr)
     }
 }
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZSocketAddr {
+    fn json_schema(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "string",
+            "format": "socket-addr"
+        })
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZSocketAddr {}

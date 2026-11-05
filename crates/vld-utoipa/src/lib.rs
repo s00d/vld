@@ -324,7 +324,7 @@ pub fn json_schema_to_params(value: &Value, parameter_in: ParameterIn) -> Vec<Pa
         .collect()
 }
 
-/// Map a parameter location hint from [`vld::json_schema::OpenApiParameterIn`] to utoipa.
+/// Map a parameter location hint from [`vld::openapi::OpenApiParameterIn`] to utoipa.
 pub fn parameter_in_from_str(s: &str) -> Option<ParameterIn> {
     match s {
         "query" => Some(ParameterIn::Query),
@@ -336,7 +336,7 @@ pub fn parameter_in_from_str(s: &str) -> Option<ParameterIn> {
 }
 
 #[doc(hidden)]
-pub fn resolve_parameter_in_with_override<T: vld::json_schema::OpenApiParameterIn>(
+pub fn resolve_parameter_in_with_override<T: vld::openapi::OpenApiParameterIn>(
     parameter_in_provider: impl FnOnce() -> Option<ParameterIn>,
     override_hint: Option<ParameterIn>,
 ) -> Option<ParameterIn> {
@@ -346,7 +346,7 @@ pub fn resolve_parameter_in_with_override<T: vld::json_schema::OpenApiParameterI
 }
 
 #[doc(hidden)]
-pub fn resolve_parameter_in<T: vld::json_schema::OpenApiParameterIn>(
+pub fn resolve_parameter_in<T: vld::openapi::OpenApiParameterIn>(
     parameter_in_provider: impl FnOnce() -> Option<ParameterIn>,
 ) -> Option<ParameterIn> {
     resolve_parameter_in_with_override::<T>(parameter_in_provider, None)
@@ -536,7 +536,7 @@ macro_rules! __impl_to_schema_legacy {
 
 #[doc(hidden)]
 pub trait __VldNestedSchemasFallback {
-    fn __vld_nested_schemas() -> Vec<vld::json_schema::NestedSchemaEntry> {
+    fn __vld_nested_schemas() -> Vec<vld::openapi::NestedSchemaEntry> {
         Vec::new()
     }
 }

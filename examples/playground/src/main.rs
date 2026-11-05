@@ -647,13 +647,13 @@ fn main() {
     let str_schema = vld::string().min(2).max(50).email();
     println!(
         "string: {}",
-        serde_json::to_string_pretty(&str_schema.to_json_schema()).unwrap()
+        serde_json::to_string_pretty(&str_schema.json_schema()).unwrap()
     );
 
     let num_schema = vld::number().int().min(0).max(100);
     println!(
         "int: {}",
-        serde_json::to_string_pretty(&num_schema.to_json_schema()).unwrap()
+        serde_json::to_string_pretty(&num_schema.json_schema()).unwrap()
     );
 
     let obj_schema = vld::object()
@@ -688,8 +688,8 @@ fn main() {
 
     // Object with field_schema — includes nested field schemas
     let obj_js = vld::object()
-        .field_schema("email", vld::string().email().min(5))
-        .field_schema("score", vld::number().min(0.0).max(100.0))
+        .field("email", vld::string().email().min(5))
+        .field("score", vld::number().min(0.0).max(100.0))
         .strict()
         .json_schema();
     println!("[4] Object with field schemas:");
@@ -719,7 +719,7 @@ fn main() {
     println!("{}", serde_json::to_string_pretty(&openapi_doc).unwrap());
 
     // Multi-schema OpenAPI document
-    let multi_doc = vld::json_schema::to_openapi_document_multi(&[
+    let multi_doc = vld::openapi::to_openapi_document_multi(&[
         ("User", User::json_schema()),
         ("Address", Address::json_schema()),
     ]);

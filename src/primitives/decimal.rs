@@ -1,9 +1,8 @@
-use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use serde_json::Value;
 use std::str::FromStr;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::{FormatKind, IssueCode, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 fn parse_literal(value: &str) -> Decimal {
@@ -144,12 +143,106 @@ impl ZDecimal {
             }
         })
     }
+}
 
-    /// JSON Schema: a `decimal`-format string with `x-minDecimal` /
-    /// `x-exclusiveMinDecimal` (strictest lower bound, sign flags included),
-    /// `x-maxDecimal` / `x-exclusiveMaxDecimal` and `x-multipleOfDecimal`.
-    #[cfg(feature = "openapi")]
-    pub fn to_json_schema(&self) -> serde_json::Value {
+impl Default for ZDecimal {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn too_small(bound: Decimal, inclusive: bool, value: &Value) -> VldError {
+    VldError::from_code_with_value(
+        IssueCode::TooSmall {
+            origin: SizeOrigin::Decimal,
+            minimum: Value::String(bound.to_string()),
+            inclusive,
+        },
+        value,
+    )
+}
+
+fn too_big(bound: Decimal, inclusive: bool, value: &Value) -> VldError {
+    VldError::from_code_with_value(
+        IssueCode::TooBig {
+            origin: SizeOrigin::Decimal,
+            maximum: Value::String(bound.to_string()),
+            inclusive,
+        },
+        value,
+    )
+}
+
+impl VldSchema for ZDecimal {
+    type Output = Decimal;
+
+    fn parse_value(&self, value: &Value) -> Result<Decimal, VldError> {
+        let s = match value {
+            Value::String(s) => s.clone(),
+            // serde_json prints some floats in exponent form (`1e-7`, `1e30`).
+            Value::Number(n) => n.to_string(),
+            _ => {
+                return Err(crate::primitives::type_error(
+                    &self.custom_type_error,
+                    "decimal as string or number",
+                    value,
+                ))
+            }
+        };
+        let n = parse_decimal(&s).ok_or_else(|| {
+            VldError::from_code_with_value(
+                IssueCode::InvalidFormat {
+                    format: FormatKind::Decimal,
+                },
+                value,
+            )
+        })?;
+
+        if let Some(min) = self.min.filter(|m| n < *m) {
+            return Err(too_small(min, true, value));
+        }
+        if let Some(max) = self.max.filter(|m| n > *m) {
+            return Err(too_big(max, true, value));
+        }
+        if let Some(gt) = self.gt.filter(|g| n <= *g) {
+            return Err(too_small(gt, false, value));
+        }
+        if let Some(lt) = self.lt.filter(|l| n >= *l) {
+            return Err(too_big(lt, false, value));
+        }
+        if let Some(m) = self.multiple_of {
+            if m.is_zero() || !n.checked_rem(m).is_some_and(|r| r.is_zero()) {
+                return Err(VldError::from_code_with_value(
+                    IssueCode::NotMultipleOf {
+                        divisor: Value::String(m.to_string()),
+                    },
+                    value,
+                ));
+            }
+        }
+        let zero = Decimal::ZERO;
+        if self.positive && n <= zero {
+            return Err(too_small(zero, false, value));
+        }
+        if self.negative && n >= zero {
+            return Err(too_big(zero, false, value));
+        }
+        if self.non_negative && n < zero {
+            return Err(too_small(zero, true, value));
+        }
+        if self.non_positive && n > zero {
+            return Err(too_big(zero, true, value));
+        }
+        Ok(n)
+    }
+}
+
+/// JSON Schema: a `decimal`-format string with `x-minDecimal` /
+/// `x-exclusiveMinDecimal` (strictest lower bound, sign flags included),
+/// `x-maxDecimal` / `x-exclusiveMaxDecimal` and `x-multipleOfDecimal`.
+#[cfg(feature = "openapi")]
+impl crate::openapi::JsonSchema for ZDecimal {
+    fn json_schema(&self) -> serde_json::Value {
         let mut schema = serde_json::json!({
             "type": "string",
             "format": "decimal"
@@ -177,135 +270,5 @@ impl ZDecimal {
     }
 }
 
-impl Default for ZDecimal {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-fn too_small(bound: Decimal, inclusive: bool, msg: String, value: &Value) -> VldError {
-    VldError::single_with_value(
-        IssueCode::TooSmall {
-            minimum: bound.to_f64().unwrap_or(0.0),
-            inclusive,
-        },
-        msg,
-        value,
-    )
-}
-
-fn too_big(bound: Decimal, inclusive: bool, msg: String, value: &Value) -> VldError {
-    VldError::single_with_value(
-        IssueCode::TooBig {
-            maximum: bound.to_f64().unwrap_or(0.0),
-            inclusive,
-        },
-        msg,
-        value,
-    )
-}
-
-fn custom(code: &str, msg: &str, value: &Value) -> VldError {
-    VldError::single_with_value(
-        IssueCode::Custom {
-            code: code.to_string(),
-        },
-        msg,
-        value,
-    )
-}
-
-impl VldSchema for ZDecimal {
-    type Output = Decimal;
-
-    fn parse_value(&self, value: &Value) -> Result<Decimal, VldError> {
-        let s = match value {
-            Value::String(s) => s.clone(),
-            // serde_json prints some floats in exponent form (`1e-7`, `1e30`).
-            Value::Number(n) => n.to_string(),
-            _ => {
-                return Err(super::type_error(
-                    &self.custom_type_error,
-                    "decimal",
-                    "decimal as string or number",
-                    value,
-                ))
-            }
-        };
-        let n = parse_decimal(&s).ok_or_else(|| {
-            custom(
-                "invalid_decimal",
-                &format!("Invalid decimal value: {}", s),
-                value,
-            )
-        })?;
-
-        if let Some(min) = self.min.filter(|m| n < *m) {
-            return Err(too_small(
-                min,
-                true,
-                format!("Decimal must be at least {}", min),
-                value,
-            ));
-        }
-        if let Some(max) = self.max.filter(|m| n > *m) {
-            return Err(too_big(
-                max,
-                true,
-                format!("Decimal must be at most {}", max),
-                value,
-            ));
-        }
-        if let Some(gt) = self.gt.filter(|g| n <= *g) {
-            return Err(too_small(
-                gt,
-                false,
-                format!("Decimal must be greater than {}", gt),
-                value,
-            ));
-        }
-        if let Some(lt) = self.lt.filter(|l| n >= *l) {
-            return Err(too_big(
-                lt,
-                false,
-                format!("Decimal must be less than {}", lt),
-                value,
-            ));
-        }
-        if let Some(m) = self.multiple_of {
-            if m.is_zero() || !n.checked_rem(m).is_some_and(|r| r.is_zero()) {
-                return Err(custom(
-                    "not_multiple_of",
-                    &format!("Decimal must be a multiple of {}", m),
-                    value,
-                ));
-            }
-        }
-        let sign_checks = [
-            (
-                self.positive && n <= Decimal::ZERO,
-                "not_positive",
-                "Decimal must be positive",
-            ),
-            (
-                self.negative && n >= Decimal::ZERO,
-                "not_negative",
-                "Decimal must be negative",
-            ),
-            (
-                self.non_negative && n < Decimal::ZERO,
-                "not_non_negative",
-                "Decimal must be non-negative",
-            ),
-            (
-                self.non_positive && n > Decimal::ZERO,
-                "not_non_positive",
-                "Decimal must be non-positive",
-            ),
-        ];
-        if let Some((_, code, msg)) = sign_checks.into_iter().find(|(failed, ..)| *failed) {
-            return Err(custom(code, msg, value));
-        }
-        Ok(n)
-    }
-}
+#[cfg(feature = "openapi")]
+impl crate::openapi::CollectNestedSchemas for ZDecimal {}

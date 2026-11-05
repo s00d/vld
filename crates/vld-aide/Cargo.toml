@@ -25,7 +25,7 @@ vld-schemars = { path = "../vld-schemars", version = "0.4.6", default-features =
 [dev-dependencies]
 serde_json = { workspace = true }
 serde = { workspace = true }
-vld = { workspace = true, features = ["openapi", "serialize", "derive"] }
+vld = { workspace = true, features = ["openapi", "derive"] }
 
 [[example]]
 name = "aide_basic"

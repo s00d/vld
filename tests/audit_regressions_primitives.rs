@@ -3,7 +3,6 @@
 use serde_json::json;
 use vld::prelude::*;
 
-#[cfg(feature = "std")]
 fn temp_dir(tag: &str) -> std::path::PathBuf {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -40,7 +39,6 @@ fn iso_date_checks_days_in_month_and_timezone() {
 
 // --- 2: ZPath::within cannot be escaped with `..` ---------------------------
 
-#[cfg(feature = "std")]
 #[test]
 fn path_within_rejects_dotdot_escape_for_missing_paths() {
     let base = temp_dir("within");
@@ -166,7 +164,7 @@ fn array_contains_and_unique() {
 #[cfg(feature = "openapi")]
 #[test]
 fn array_contains_schema_uses_const() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld::array(vld::number()).contains(5).json_schema();
     assert_eq!(js["contains"], json!({"const": 5}));
     let js = vld::array(vld::number()).min_contains(2).json_schema();
@@ -193,7 +191,12 @@ fn decimal_scientific_bounds_and_new_checks() {
 
     let err = vld::decimal().min("0.5").parse("0.1").unwrap_err();
     match &err.issues[0].code {
-        IssueCode::TooSmall { minimum, .. } => assert_eq!(*minimum, 0.5),
+        IssueCode::TooSmall {
+            origin, minimum, ..
+        } => {
+            assert_eq!(*origin, vld::error::SizeOrigin::Decimal);
+            assert_eq!(*minimum, serde_json::json!("0.5"));
+        }
         other => panic!("unexpected code {:?}", other),
     }
     let s = vld::decimal().gt("1").lt("2").multiple_of("0.25");
@@ -215,7 +218,7 @@ fn bytes_bad_element_has_index_path() {
 #[cfg(feature = "openapi")]
 #[test]
 fn bytes_string_schema_uses_encoded_length() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld::bytes().base64().len(4).json_schema();
     assert_eq!(js["minLength"], 8);
     assert_eq!(js["maxLength"], 8);
@@ -229,10 +232,21 @@ fn bytes_string_schema_uses_encoded_length() {
 fn i18n_exclusive_bounds_say_greater_than() {
     let err = vld::number().positive().parse("0").unwrap_err();
     let tr = vld::i18n::translate_error(&err, &vld::i18n::english());
-    assert_eq!(tr.issues[0].message, "Value must be greater than 0");
+    assert_eq!(tr.issues[0].message, "Number must be greater than 0");
     let err = vld::number().min(3.0).parse("1").unwrap_err();
     let tr = vld::i18n::translate_error(&err, &vld::i18n::english());
-    assert_eq!(tr.issues[0].message, "Value must be at least 3");
+    assert_eq!(tr.issues[0].message, "Number must be at least 3");
+    // A resolver with only the generic keys still distinguishes exclusive bounds.
+    let generic = vld::i18n::FnResolver::new(|k| match k {
+        "too_small" => Some("at least {minimum}".into()),
+        "too_small_exclusive" => Some("more than {minimum}".into()),
+        _ => None,
+    });
+    let err = vld::number().positive().parse("0").unwrap_err();
+    assert_eq!(
+        vld::i18n::translate_error(&err, &generic).issues[0].message,
+        "more than 0"
+    );
 }
 
 // --- 19: map duplicates -----------------------------------------------------
@@ -241,7 +255,7 @@ fn i18n_exclusive_bounds_say_greater_than() {
 fn map_duplicate_key_is_error() {
     let m = vld::map(vld::string(), vld::number());
     let err = m.parse(r#"[["a", 1], ["a", 2]]"#).unwrap_err();
-    assert_eq!(err.issues[0].code.key(), "duplicate_map_key");
+    assert_eq!(err.issues[0].code, IssueCode::DuplicateKey);
     assert_eq!(err.issues[0].path[0].to_string(), "[1]");
 }
 
@@ -346,10 +360,10 @@ fn new_type_error_and_coerce_builders() {
 
 // --- 25: JSON Schema keeps constraints ---------------------------------------
 
-#[cfg(all(feature = "openapi", feature = "std"))]
+#[cfg(feature = "openapi")]
 #[test]
 fn json_schema_emits_strictest_constraints() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
 
     let js = vld::number().min(5.0).min(0.0).json_schema();
     assert_eq!(js["minimum"], 5.0);
@@ -387,12 +401,11 @@ fn json_schema_emits_strictest_constraints() {
 #[cfg(all(feature = "openapi", feature = "decimal"))]
 #[test]
 fn decimal_schema_emits_sign_flags() {
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
     let js = vld::decimal().positive().json_schema();
     assert_eq!(js["x-exclusiveMinDecimal"], "0");
 }
 
-#[cfg(feature = "std")]
 #[test]
 fn socket_addr_message_mentions_hostnames() {
     let err = vld::socket_addr().parse(r#""example.com:80""#).unwrap_err();

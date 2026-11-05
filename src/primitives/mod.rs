@@ -2,10 +2,9 @@ mod any;
 mod boolean;
 mod bytes;
 #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
-mod date;
+pub mod date;
 #[cfg(feature = "decimal")]
 mod decimal;
-#[cfg(feature = "std")]
 mod duration;
 mod enumeration;
 #[cfg(feature = "file")]
@@ -16,20 +15,22 @@ mod iso;
 mod json_value;
 mod literal;
 mod number;
-#[cfg(feature = "std")]
 mod path;
-#[cfg(feature = "std")]
 mod socket_addr;
 mod string;
 
 pub use any::ZAny;
 pub use boolean::ZBoolean;
 pub use bytes::ZBytes;
-#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
-pub use date::{ZDate, ZDateTime};
+// Shortcut aliases, only when exactly one date backend is enabled.
+#[cfg(all(feature = "chrono", not(feature = "jiff"), not(feature = "time")))]
+pub use date::chrono::{ZDate, ZDateTime};
+#[cfg(all(feature = "jiff", not(feature = "chrono"), not(feature = "time")))]
+pub use date::jiff::{ZDate, ZDateTime};
+#[cfg(all(feature = "time", not(feature = "chrono"), not(feature = "jiff")))]
+pub use date::time::{ZDate, ZDateTime};
 #[cfg(feature = "decimal")]
 pub use decimal::ZDecimal;
-#[cfg(feature = "std")]
 pub use duration::ZDuration;
 pub use enumeration::ZEnum;
 #[cfg(feature = "file")]
@@ -39,36 +40,22 @@ pub use ip_network::ZIpNetwork;
 pub use json_value::ZJsonValue;
 pub use literal::{IntoLiteral, ZLiteral};
 pub use number::{ZInt, ZNumber};
-#[cfg(feature = "std")]
 pub use path::ZPath;
-#[cfg(feature = "std")]
 pub use socket_addr::ZSocketAddr;
 pub use string::ZString;
 
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{issue_error, value_type_name, IssueCode, VldError};
 
-/// Build the standard "invalid type" error, honouring a `.type_error(...)` override.
-///
-/// `expected` goes into [`IssueCode::InvalidType`]; `label` is used in the
-/// default message `Expected {label}, received {type}`.
-pub(crate) fn type_error(
-    custom: &Option<String>,
-    expected: &str,
-    label: &str,
-    value: &Value,
-) -> VldError {
-    let received = value_type_name(value);
-    let msg = custom
-        .clone()
-        .unwrap_or_else(|| format!("Expected {}, received {}", label, received));
-    VldError::single_with_value(
+/// Build the standard `invalid_type` error, honouring a `.type_error(...)` override.
+pub(crate) fn type_error(custom: &Option<String>, expected: &str, value: &Value) -> VldError {
+    issue_error(
         IssueCode::InvalidType {
             expected: expected.to_string(),
-            received,
+            received: value_type_name(value),
         },
-        msg,
+        custom.as_ref(),
         value,
     )
 }

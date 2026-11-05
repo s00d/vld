@@ -143,7 +143,6 @@ fn parse_lenient_not_object() {
 
 // ---- File helpers ----
 
-#[cfg(feature = "std")]
 fn temp_test_dir(label: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "vld_{label}_{}_{}",
@@ -157,7 +156,6 @@ fn temp_test_dir(label: &str) -> std::path::PathBuf {
     dir
 }
 
-#[cfg(feature = "std")]
 fn cleanup_temp_dir(dir: &std::path::Path) {
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -183,7 +181,6 @@ fn parse_result_valid_and_error_fields() {
     assert!(valid.iter().any(|f| f.name == "email"));
 }
 
-#[cfg(feature = "serialize")]
 #[test]
 fn parse_result_to_json_string() {
     let input = json!({
@@ -200,7 +197,6 @@ fn parse_result_to_json_string() {
     assert!(json_str.contains("a@b.com"));
 }
 
-#[cfg(feature = "serialize")]
 #[test]
 fn parse_result_to_json_value() {
     let input = json!({
@@ -216,7 +212,6 @@ fn parse_result_to_json_value() {
     assert_eq!(val["name"], "Alex");
 }
 
-#[cfg(all(feature = "serialize", feature = "std"))]
 #[test]
 fn parse_result_save_to_file() {
     let input = json!({
@@ -290,7 +285,6 @@ fn parse_result_display() {
 
 // ---- File input ----
 
-#[cfg(feature = "std")]
 #[test]
 fn parse_from_file_path() {
     let dir = temp_test_dir("input");
@@ -303,7 +297,6 @@ fn parse_from_file_path() {
     cleanup_temp_dir(&dir);
 }
 
-#[cfg(feature = "std")]
 #[test]
 fn parse_lenient_from_file() {
     let dir = temp_test_dir("input2");
@@ -322,7 +315,6 @@ fn parse_lenient_from_file() {
     cleanup_temp_dir(&dir);
 }
 
-#[cfg(feature = "std")]
 #[test]
 fn parse_missing_file() {
     let path = std::path::Path::new("/tmp/vld_nonexistent_file.json");

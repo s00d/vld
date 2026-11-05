@@ -2,11 +2,43 @@
 //! `#[derive(Validate)]`. Not public API: may change in any release.
 
 use serde_json::{Map, Value};
+use std::any::Any;
+use std::sync::OnceLock;
 
-use crate::error::{FieldResult, PathSegment, VldError};
+use crate::error::{PathSegment, VldError};
+use crate::object::FieldResult;
 use crate::schema::VldSchema;
 
-pub use crate::error::expect_object;
+/// Lazily built, process-wide schema used by `schema!` / `#[derive(Validate)]`
+/// so field schemas (and their regexes) are built once, not on every parse.
+///
+/// One cell per schema expression (a `static` inside the generated code);
+/// never used in generic code, where a `static` would be shared between
+/// instantiations.
+pub struct SchemaCell(OnceLock<Box<dyn Any + Send + Sync>>);
+
+impl SchemaCell {
+    #[allow(clippy::new_without_default)]
+    pub const fn new() -> Self {
+        Self(OnceLock::new())
+    }
+
+    /// The cached schema, built by `init` on first use.
+    pub fn get<T: Any + Send + Sync>(&'static self, init: impl FnOnce() -> T) -> &'static T {
+        self.0
+            .get_or_init(|| Box::new(init()))
+            .downcast_ref::<T>()
+            .expect("vld: one SchemaCell per schema expression")
+    }
+}
+
+/// Lazily computed JSON Schema of a non-generic `schema!` / derive struct.
+pub type JsonSchemaCell = OnceLock<Value>;
+
+/// Return the value as a JSON object, or an `invalid_type` error.
+pub fn expect_object(value: &Value) -> Result<&Map<String, Value>, VldError> {
+    crate::error::expect_object(value)
+}
 
 static NULL: Value = Value::Null;
 
@@ -47,7 +79,9 @@ where
     FieldResult {
         name: key.to_string(),
         input: input.clone(),
-        result: crate::object::DynSchema::dyn_parse(schema, input),
+        result: schema
+            .parse_value(input)
+            .and_then(|v| crate::schema::to_json_value(&v)),
     }
 }
 
@@ -81,10 +115,9 @@ where
 /// Serialize a value for `validate()` / `is_valid()`.
 pub fn to_json<T: serde::Serialize + ?Sized>(instance: &T) -> Result<Value, VldError> {
     serde_json::to_value(instance).map_err(|e| {
-        VldError::single(
-            crate::error::IssueCode::ParseError,
-            format!("Serialization error: {}", e),
-        )
+        VldError::from_code(crate::error::IssueCode::SerializeError {
+            detail: e.to_string(),
+        })
     })
 }
 
@@ -139,5 +172,5 @@ pub fn openapi_document(
             all.push((n, f()));
         }
     }
-    crate::json_schema::to_openapi_document_multi(&all)
+    crate::openapi::to_openapi_document_multi(&all)
 }

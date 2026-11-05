@@ -109,7 +109,7 @@ fn impl_rules_supports_rename() {
 #[cfg(feature = "openapi")]
 mod openapi {
     use super::*;
-    use vld::json_schema::JsonSchema;
+    use vld::openapi::JsonSchema;
 
     vld::schema! {
         #[derive(Debug, serde::Serialize)]
@@ -150,8 +150,8 @@ mod openapi {
 
     #[test]
     fn zobject_collects_nested_schemas() {
-        use vld::json_schema::CollectNestedSchemas;
-        let obj = vld::object().field_schema("home", vld::nested!(Address).optional());
+        use vld::openapi::CollectNestedSchemas;
+        let obj = vld::object().field("home", vld::nested!(Address).optional());
         let mut out = Vec::new();
         obj.collect_nested_schemas(&mut out);
         assert_eq!(out.len(), 1);
@@ -172,7 +172,7 @@ mod openapi {
     #[test]
     fn field_optional_schema_allows_null() {
         let js = vld::object()
-            .field_optional("n", vld::object().field_schema("x", vld::string()))
+            .field_optional("n", vld::object().field("x", vld::string()))
             .to_json_schema();
         assert_eq!(js["properties"]["n"]["anyOf"][1], json!({"type": "null"}));
     }
@@ -215,7 +215,7 @@ mod openapi {
 
     #[test]
     fn param_in_tolerates_extra_args() {
-        use vld::json_schema::OpenApiParameterIn;
+        use vld::openapi::OpenApiParameterIn;
         assert_eq!(QueryWithExtras::parameter_in(), Some("query"));
         assert_eq!(HeaderLast::parameter_in(), Some("header"));
     }
@@ -367,7 +367,6 @@ mod derive {
         }
     }
 
-    #[cfg(feature = "serialize")]
     #[test]
     fn derive_generates_validate_and_is_valid() {
         #[derive(serde::Serialize)]

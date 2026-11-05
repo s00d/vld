@@ -46,7 +46,7 @@ fn main() {
     // Direct conversion from vld schema value
     println!("\n--- Direct vld_to_schemars conversion ---");
     let vld_schema = vld::string().min(5).max(255).email();
-    use vld::json_schema::JsonSchema as VldJsonSchema;
+    use vld::openapi::JsonSchema as VldJsonSchema;
     let js = vld_schema.json_schema();
     let schemars_schema = vld_to_schemars(&js);
     println!(
