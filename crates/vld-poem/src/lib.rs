@@ -159,7 +159,11 @@ pub struct VldPath<T>(pub T);
 
 impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldPath<T> {
     async fn from_request(req: &'a Request, _body: &mut RequestBody) -> Result<Self> {
-        let params = req.params::<Vec<(String, String)>>().unwrap_or_default();
+        // `Request::params` parses the *query string*; route parameters come from
+        // `path_params` (the router's match params).
+        let params = req
+            .path_params::<std::collections::BTreeMap<String, String>>()
+            .unwrap_or_default();
         validate(&path_params_to_json(
             params.iter().map(|(k, v)| (k.as_str(), v.as_str())),
         ))
