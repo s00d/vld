@@ -8885,11 +8885,10 @@ dependencies = [
 name = "vld-aide"
 version = "0.4.6"
 dependencies = [
- "schemars 0.9.0",
- "schemars 1.2.1",
  "serde",
  "serde_json",
  "vld",
+ "vld-schemars",
 ]
 
 [[package]]

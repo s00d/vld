@@ -409,10 +409,19 @@ impl_json_schema!(AideOrder);
 
 #[test]
 fn nested_schema_ref_in_schemars() {
-    let mut gen = schemars::SchemaGenerator::default();
+    // aide-style generator: definitions under #/components/schemas/
+    let mut gen = schemars::generate::SchemaSettings::draft07()
+        .with(|s| s.definitions_path = "#/components/schemas/".into())
+        .into_generator();
     let schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut gen);
     let props = schema.get("properties").unwrap();
     assert_eq!(props["address"]["$ref"], "#/components/schemas/AideAddress");
+
+    // default generator: refs follow its definitions path
+    let mut gen = schemars::SchemaGenerator::default();
+    let schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut gen);
+    let props = schema.get("properties").unwrap();
+    assert_eq!(props["address"]["$ref"], "#/$defs/AideAddress");
 }
 
 #[test]
