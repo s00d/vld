@@ -537,3 +537,45 @@ async fn vld_int_decodes_small_integer_columns() {
     let b: VldInt<AgeFieldSchema> = row.try_get("b").unwrap();
     assert_eq!((a.get(), b.get()), (30, 7));
 }
+
+// ========================= 0.5.0 re-audit =====================================
+
+/// A validation failure is an encode-side error, not a protocol error.
+#[test]
+fn validation_error_maps_to_encode() {
+    let e = VldText::<EmailFieldSchema>::new("bad").unwrap_err();
+    let sqlx_err: sqlx::Error = e.into();
+    assert!(matches!(sqlx_err, sqlx::Error::Encode(_)), "{sqlx_err:?}");
+}
+
+#[test]
+fn vld_float_rejects_nan() {
+    vld::schema! {
+        #[derive(Debug)]
+        pub struct OptFloat {
+            pub value: Option<f64> => vld::number().optional(),
+        }
+    }
+    assert!(VldFloat::<OptFloat>::new(f64::NAN).is_err());
+    assert!(VldFloat::<OptFloat>::new(2.5).is_ok());
+}
+
+#[tokio::test]
+async fn vld_float_round_trips_through_real_column() {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    sqlx::query("CREATE TABLE f (r REAL NOT NULL)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO f (r) VALUES (?)")
+        .bind(VldFloat::<PriceFieldSchema>::new(0.1).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let row = sqlx::query("SELECT r FROM f")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let r: VldFloat<PriceFieldSchema> = row.try_get("r").unwrap();
+    assert_eq!(r.get(), 0.1);
+}
