@@ -62,6 +62,8 @@ where
 
         let mut result = HashSet::new();
         let mut errors = VldError::new();
+        // An inner `Err` may carry no issues: track failure, not issue count.
+        let mut failed = false;
 
         for (i, item) in arr.iter().enumerate() {
             match self.element.parse_value(item) {
@@ -69,6 +71,7 @@ where
                     result.insert(v);
                 }
                 Err(e) => {
+                    failed = true;
                     errors = errors.merge(e.with_prefix(PathSegment::Index(i)));
                 }
             }
@@ -94,7 +97,7 @@ where
             }
         }
 
-        if errors.is_empty() {
+        if errors.is_empty() && !failed {
             Ok(result)
         } else {
             Err(errors)

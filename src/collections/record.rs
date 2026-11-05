@@ -133,6 +133,8 @@ where
         })?;
 
         let mut errors = VldError::new();
+        // An inner `Err` may carry no issues: track failure, not issue count.
+        let mut failed = false;
 
         if let Some(min) = self.min_keys {
             if obj.len() < min {
@@ -162,6 +164,7 @@ where
             match (k, v) {
                 (Ok(k), Ok(v)) => result.extend(std::iter::once((k, v))),
                 (k, v) => {
+                    failed = true;
                     for e in [k.err(), v.err()].into_iter().flatten() {
                         errors = errors.merge(e.with_prefix(PathSegment::Field(key.clone())));
                     }
@@ -169,7 +172,7 @@ where
             }
         }
 
-        if errors.is_empty() {
+        if errors.is_empty() && !failed {
             Ok(result)
         } else {
             Err(errors)

@@ -348,7 +348,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
                 #( #parse_lets )*
 
-                if !__vld_errors.is_empty() {
+                // A field may fail with an issue-less error: check the values too.
+                if !__vld_errors.is_empty() #( || #field_idents.is_none() )* {
                     return ::std::result::Result::Err(__vld_errors);
                 }
 

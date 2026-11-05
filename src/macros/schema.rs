@@ -205,7 +205,8 @@ macro_rules! schema {
                         );
                 )*
 
-                if !__vld_errors.is_empty() {
+                // A field may fail with an issue-less error: check the values too.
+                if !__vld_errors.is_empty() $(|| $field_name.is_none())* {
                     return ::std::result::Result::Err(__vld_errors);
                 }
 
