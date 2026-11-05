@@ -47,7 +47,7 @@ pub(crate) fn is_valid_base64(s: &str) -> bool {
 
 /// Base64URL (`-` / `_` alphabet), padding optional.
 pub(crate) fn is_valid_base64url(s: &str) -> bool {
-    !s.contains(['+', '/']) && crate::primitives::bytes::decode_base64_url(s).is_some()
+    crate::primitives::bytes::decode_base64_url(s).is_some()
 }
 
 /// A complete JSON document.
