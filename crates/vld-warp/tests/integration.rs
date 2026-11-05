@@ -165,19 +165,19 @@ async fn json_malformed() {
         .body("not json at all")
         .reply(&routes_with_recovery())
         .await;
-    assert_eq!(resp.status(), 400);
+    assert_eq!(resp.status(), 422);
 }
 
 #[tokio::test]
-async fn json_missing_content_length_is_411() {
-    // content_length_limit rejects missing CL as LengthRequired — must not map to 404.
+async fn json_missing_content_length_is_not_411() {
+    // No Content-Length and an empty body: streamed read, empty body is invalid JSON.
     let resp = warp::test::request()
         .method("POST")
         .path("/users")
         .header("content-type", "application/json")
         .reply(&routes_with_recovery())
         .await;
-    assert_eq!(resp.status(), 411);
+    assert_eq!(resp.status(), 422);
 }
 
 // ---------------------------------------------------------------------------
@@ -286,13 +286,14 @@ async fn path_multi_invalid() {
 
 #[tokio::test]
 async fn path_multi_wrong_segment_count() {
-    // Only 1 segment instead of 2 → not found
+    // Only 1 segment instead of 2: no route matches. The POST /users route
+    // rejects every GET with MethodNotAllowed, which warp ranks above 404.
     let resp = warp::test::request()
         .method("GET")
         .path("/posts/7")
         .reply(&routes_with_recovery())
         .await;
-    assert_eq!(resp.status(), 404);
+    assert_eq!(resp.status(), 405);
 }
 
 // ---------------------------------------------------------------------------
