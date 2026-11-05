@@ -11,8 +11,9 @@ Redis integration for [`vld`](https://crates.io/crates/vld).
 
 ## Version features
 
-- `redis-0_32` (default)
+- `redis-0` (default, redis 0.32+)
 - `redis-1`
+- `aio` — async wrapper `AsyncRedisConn` / `impl_to_redis_async!` over `redis::aio::ConnectionLike` (enables redis `tokio-comp`)
 
 ## Overview
 
@@ -24,6 +25,30 @@ After rebinding, `conn` becomes a validating wrapper:
 
 - built-in auto-conversion methods: `set/get`, `mset/mget`, `hset/hget`, `lpush/rpush/lpop/rpop`, `sadd/smembers`, `zadd/zrange`, `publish`
 - all other native Redis methods remain available through deref to inner connection
+
+**Shadowing:** the validating methods above shadow the `redis::Commands` (and
+`redis::AsyncCommands`) methods with the same name — `conn.get(k)` is always the
+validating JSON `get`. To call the native command, go through the trait on the
+inner connection:
+
+```rust
+let raw: Option<String> = redis::Commands::get(&mut *conn, "user:1")?;
+```
+
+The selected `redis` crate is re-exported as `vld_redis::redis`.
+
+## Async
+
+With the `aio` feature, `impl_to_redis_async!(conn)` wraps any
+`redis::aio::ConnectionLike` (e.g. `MultiplexedConnection`) into
+`AsyncRedisConn`, with the same methods as `async fn`s:
+
+```rust
+let conn = client.get_multiplexed_async_connection().await?;
+impl_to_redis_async!(conn);
+conn.set("user:1", &user).await?;
+let loaded: Option<UserSchema> = conn.get("user:1").await?;
+```
 
 ## Installation
 

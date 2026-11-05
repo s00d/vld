@@ -4,6 +4,7 @@
 //! cargo run -p vld-redis --example redis_basic
 
 use vld_redis::prelude::*;
+use vld_redis::redis;
 
 vld::schema! {
     #[derive(Debug, serde::Serialize)]
