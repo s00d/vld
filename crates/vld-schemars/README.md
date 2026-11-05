@@ -40,8 +40,8 @@ field, use [vld-utoipa](../vld-utoipa/README.md) (`#[into_params(parameter_in = 
 
 ```toml
 [dependencies]
-vld = { version = "0.4", features = ["openapi"] }
-vld-schemars = "0.4"
+vld = { version = "0.5", features = ["openapi"] }
+vld-schemars = "0.5"
 ```
 
 ## Quick Start

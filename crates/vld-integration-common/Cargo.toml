@@ -8,6 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 description = "Shared helpers for vld integration crates (internal)"
 documentation = "https://docs.rs/vld-integration-common"
+readme = "README.md"
 keywords = ["validation", "vld", "helpers"]
 categories = ["parsing"]
 exclude = [".idea/"]

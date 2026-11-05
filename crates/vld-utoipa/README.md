@@ -17,15 +17,15 @@ for JSON bodies and for query/path parameters, with no duplicate schema definiti
 
 ```toml
 [dependencies]
-vld = { version = "0.4", features = ["openapi"] }
-vld-utoipa = "0.4"   # default: utoipa 5.x
+vld = { version = "0.5", features = ["openapi"] }
+vld-utoipa = "0.5"   # default: utoipa 5.x
 utoipa = "5"
 ```
 
 utoipa 6.x:
 
 ```toml
-vld-utoipa = { version = "0.4", default-features = false, features = ["utoipa-6"] }
+vld-utoipa = { version = "0.5", default-features = false, features = ["utoipa-6"] }
 utoipa = "6"
 ```
 
@@ -107,8 +107,8 @@ This lets you use standard Rust struct syntax with serde attributes like
 
 ```toml
 [dependencies]
-vld = { version = "0.4", features = ["derive", "openapi"] }
-vld-utoipa = "0.4"
+vld = { version = "0.5", features = ["derive", "openapi"] }
+vld-utoipa = "0.5"
 utoipa = "5"
 ```
 

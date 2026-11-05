@@ -33,7 +33,7 @@ sea-orm = { version = "1", default-features = false, optional = true }
 sea-orm2 = { package = "sea-orm", version = "2", default-features = false, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-vld-integration-common = { path = "../vld-integration-common", version = "0.4.6" }
+vld-integration-common = { workspace = true }
 
 [dev-dependencies]
 vld = { workspace = true }

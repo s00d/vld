@@ -10,8 +10,8 @@ No direct dependency on `leptos` — works with any Leptos version (0.6, 0.7, 0.
 
 ```toml
 [dependencies]
-vld = "0.4"
-vld-leptos = "0.4"
+vld = "0.5"
+vld-leptos = "0.5"
 leptos = "0.7"  # or your version
 ```
 

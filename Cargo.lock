@@ -8011,6 +8011,7 @@ dependencies = [
  "pluralizer",
  "proc-macro2",
  "quote",
+ "sea-bae",
  "syn 2.0.119",
  "unicode-ident",
 ]
@@ -8027,6 +8028,7 @@ dependencies = [
  "ordered-float",
  "rust_decimal",
  "serde_json",
+ "time",
  "uuid",
 ]
 
@@ -8042,6 +8044,7 @@ dependencies = [
  "rust_decimal",
  "sea-query-derive",
  "serde_json",
+ "time",
  "uuid",
 ]
 
@@ -8057,6 +8060,7 @@ dependencies = [
  "sea-query 0.32.7",
  "serde_json",
  "sqlx 0.8.6",
+ "time",
  "uuid",
 ]
 
@@ -8538,6 +8542,7 @@ dependencies = [
  "sha2 0.10.9",
  "smallvec",
  "thiserror",
+ "time",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -8576,6 +8581,7 @@ dependencies = [
  "sha2 0.10.9",
  "smallvec",
  "thiserror",
+ "time",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -8701,6 +8707,7 @@ dependencies = [
  "sqlx-core 0.8.6",
  "stringprep",
  "thiserror",
+ "time",
  "tracing",
  "uuid",
  "whoami 1.6.1",
@@ -8732,6 +8739,7 @@ dependencies = [
  "sha2 0.11.1",
  "sqlx-core 0.9.0",
  "thiserror",
+ "time",
  "tracing",
  "uuid",
 ]
@@ -8773,6 +8781,7 @@ dependencies = [
  "sqlx-core 0.8.6",
  "stringprep",
  "thiserror",
+ "time",
  "tracing",
  "uuid",
  "whoami 1.6.1",
@@ -8813,6 +8822,7 @@ dependencies = [
  "sqlx-core 0.9.0",
  "stringprep",
  "thiserror",
+ "time",
  "tracing",
  "uuid",
  "whoami 2.1.3",
@@ -8839,6 +8849,7 @@ dependencies = [
  "serde_urlencoded",
  "sqlx-core 0.8.6",
  "thiserror",
+ "time",
  "tracing",
  "url",
  "uuid",
@@ -8865,6 +8876,7 @@ dependencies = [
  "serde",
  "sqlx-core 0.9.0",
  "thiserror",
+ "time",
  "tracing",
  "url",
  "uuid",
@@ -10093,6 +10105,7 @@ dependencies = [
  "sea-orm 2.0.4",
  "serde",
  "serde_json",
+ "time",
  "tokio",
  "vld",
  "vld-integration-common",
@@ -10168,6 +10181,7 @@ name = "vld-ts"
 version = "0.4.6"
 dependencies = [
  "insta",
+ "regex-lite",
  "serde_json",
  "vld",
 ]

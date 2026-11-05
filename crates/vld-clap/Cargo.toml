@@ -15,7 +15,7 @@ exclude = [".idea/", "tests/", "examples/"]
 
 [dependencies]
 vld = { workspace = true, features = ["derive"] }
-vld-integration-common = { path = "../vld-integration-common", version = "0.4.6" }
+vld-integration-common = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 clap = { version = "4", default-features = false, features = ["std"] }

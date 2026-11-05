@@ -5,6 +5,9 @@
 
 # vld-surrealdb
 
+> **SDK-agnostic: no `surrealdb` dependency** — validation works on the JSON /
+> `serde` values you pass to any SurrealDB SDK.
+
 [SurrealDB](https://surrealdb.com/) integration for the [vld](https://crates.io/crates/vld) validation library.
 
 ## Overview
@@ -31,8 +34,8 @@ making `vld` validation a perfect fit.
 
 ```toml
 [dependencies]
-vld = "0.4"
-vld-surrealdb = "0.4"
+vld = "0.5"
+vld-surrealdb = "0.5"
 surrealdb = "2"   # or "3" — vld-surrealdb works with any version
 ```
 

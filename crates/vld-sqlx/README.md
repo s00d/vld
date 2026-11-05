@@ -34,8 +34,8 @@ is written), so `?` works inside functions returning `sqlx::Error`.
 
 ```toml
 [dependencies]
-vld-sqlx = "0.4"
-vld = { version = "0.4", features = ["serialize"] }
+vld-sqlx = "0.5"
+vld = "0.5"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 ```
 

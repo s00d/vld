@@ -7,6 +7,11 @@
 
 # vld-aide
 
+> **Alias of [`vld-schemars`](https://crates.io/crates/vld-schemars) for aide users.**
+> This crate re-exports `impl_json_schema!`, `vld_to_schemars` and `schemars` from
+> `vld-schemars`; it has no `aide` dependency (add `aide` yourself). Use `vld-schemars`
+> directly for the full API (validator, introspection, `to_openapi3`).
+
 [aide](https://docs.rs/aide) / [schemars](https://docs.rs/schemars) integration for the [vld](https://crates.io/crates/vld) validation library.
 
 ## Version features
@@ -28,8 +33,8 @@ output to `schemars::Schema`, making your validated types usable with `aide::axu
 
 ```toml
 [dependencies]
-vld = { version = "0.4", features = ["openapi"] }
-vld-aide = "0.4"
+vld = { version = "0.5", features = ["openapi"] }
+vld-aide = "0.5"
 aide = { version = "0.15", features = ["axum"] }
 ```
 
