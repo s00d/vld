@@ -6,12 +6,14 @@ use crate::combinators::{
 use crate::error::VldError;
 use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
 
+mod coerced;
 mod dyn_schema;
 pub mod input;
 mod nested;
 
 pub(crate) use dyn_schema::to_json_value;
 
+pub use coerced::parse_coerced;
 pub use dyn_schema::DynSchema;
 pub use input::VldInput;
 pub use nested::{NestedSchema, NestedSchemaCollectFn, NestedSchemaEntry};
@@ -35,6 +37,15 @@ pub trait VldSchema: Sized {
 
     /// Parse and validate a `serde_json::Value`.
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError>;
+
+    /// The JSON form of an output value, when it differs from its `serde`
+    /// form (e.g. `time` datetimes serialize as non-RFC 3339 text). Used for
+    /// the JSON Schema `default` of `.with_default(...)`; `None` means use
+    /// `serde_json::to_value`.
+    #[doc(hidden)]
+    fn output_json(&self, _output: &Self::Output) -> Option<Value> {
+        None
+    }
 
     /// Parse from any supported input (JSON string, file path, `serde_json::Value`, etc.)
     fn parse<I: VldInput + ?Sized>(&self, input: &I) -> Result<Self::Output, VldError> {

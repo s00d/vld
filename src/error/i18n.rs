@@ -104,6 +104,9 @@ impl<F: Fn(&str) -> Option<String>> MessageResolver for FnResolver<F> {
 /// first template found is filled with [`IssueCode::params()`]. Without any
 /// match the original message is kept.
 ///
+/// Type names in `invalid_type` messages are translated through the keys
+/// `type.<name>` (`type.string`, `type.null`, …) when the resolver has them.
+///
 /// Exclusive bounds (`gt()`, `lt()`, `positive()`, …) use the
 /// `"too_small_exclusive"` / `"too_big_exclusive"` keys, so an inclusive
 /// "at least" template is never applied to a "greater than" check.
@@ -113,7 +116,18 @@ pub fn translate_issue(issue: &ValidationIssue, resolver: &dyn MessageResolver) 
         .message_keys()
         .iter()
         .find_map(|k| resolver.resolve(k))
-        .map(|template| issue.code.render(&template))
+        .map(|template| {
+            // Type names (`{expected}` / `{received}` of `invalid_type`) are
+            // looked up as `type.<name>`.
+            issue
+                .code
+                .render_with(&template, |name, value| match (&issue.code, name) {
+                    (crate::error::IssueCode::InvalidType { .. }, "expected" | "received") => {
+                        resolver.resolve(&format!("type.{value}"))
+                    }
+                    _ => None,
+                })
+        })
         .unwrap_or_else(|| issue.message.clone());
     ValidationIssue {
         code: issue.code.clone(),
@@ -408,113 +422,63 @@ pub fn english() -> MapResolver {
     )
 }
 
-/// Create a [`MapResolver`] with Russian messages.
+fn table(t: &[(&str, &str)]) -> MapResolver {
+    MapResolver::new(
+        t.iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+    )
+}
+
+/// Create a [`MapResolver`] with Russian messages (every English key, plus
+/// `type.<name>` translations of the `{expected}` / `{received}` type names).
 pub fn russian() -> MapResolver {
-    let mut m = HashMap::new();
-    m.insert(
-        "invalid_type".into(),
-        "Ожидалось {expected}, получено {received}".into(),
-    );
-    m.insert(
-        "too_small".into(),
-        "Значение должно быть не менее {minimum}".into(),
-    );
-    m.insert(
-        "too_big".into(),
-        "Значение должно быть не более {maximum}".into(),
-    );
-    m.insert(
-        "too_small_exclusive".into(),
-        "Значение должно быть больше {minimum}".into(),
-    );
-    m.insert(
-        "too_big_exclusive".into(),
-        "Значение должно быть меньше {maximum}".into(),
-    );
-    m.insert(
-        "invalid_string".into(),
-        "Некорректное значение ({validation})".into(),
-    );
-    m.insert("not_int".into(), "Ожидалось целое число".into());
-    m.insert("not_finite".into(), "Число должно быть конечным".into());
-    m.insert(
-        "missing_field".into(),
-        "Обязательное поле отсутствует".into(),
-    );
-    m.insert("unrecognized_field".into(), "Неизвестное поле".into());
-    m.insert("parse_error".into(), "Ошибка разбора входных данных".into());
-    MapResolver::new(m)
+    table(super::i18n_langs::RUSSIAN)
 }
 
-/// Create a [`MapResolver`] with German messages.
+/// Create a [`MapResolver`] with German messages (every English key, plus
+/// `type.<name>` translations).
 pub fn german() -> MapResolver {
-    let mut m = HashMap::new();
-    m.insert(
-        "invalid_type".into(),
-        "{expected} erwartet, {received} erhalten".into(),
-    );
-    m.insert(
-        "too_small".into(),
-        "Wert muss mindestens {minimum} sein".into(),
-    );
-    m.insert(
-        "too_big".into(),
-        "Wert darf höchstens {maximum} sein".into(),
-    );
-    m.insert(
-        "too_small_exclusive".into(),
-        "Wert muss größer als {minimum} sein".into(),
-    );
-    m.insert(
-        "too_big_exclusive".into(),
-        "Wert muss kleiner als {maximum} sein".into(),
-    );
-    m.insert(
-        "invalid_string".into(),
-        "Ungültiger Wert ({validation})".into(),
-    );
-    m.insert("not_int".into(), "Ganzzahl erwartet".into());
-    m.insert("not_finite".into(), "Zahl muss endlich sein".into());
-    m.insert("missing_field".into(), "Pflichtfeld fehlt".into());
-    m.insert("unrecognized_field".into(), "Unbekanntes Feld".into());
-    m.insert(
-        "parse_error".into(),
-        "Eingabe konnte nicht verarbeitet werden".into(),
-    );
-    MapResolver::new(m)
+    table(super::i18n_langs::GERMAN)
 }
 
-/// Create a [`MapResolver`] with Spanish messages.
+/// Create a [`MapResolver`] with Spanish messages (every English key, plus
+/// `type.<name>` translations).
 pub fn spanish() -> MapResolver {
-    let mut m = HashMap::new();
-    m.insert(
-        "invalid_type".into(),
-        "Se esperaba {expected}, se recibió {received}".into(),
-    );
-    m.insert(
-        "too_small".into(),
-        "El valor debe ser al menos {minimum}".into(),
-    );
-    m.insert(
-        "too_big".into(),
-        "El valor debe ser como máximo {maximum}".into(),
-    );
-    m.insert(
-        "too_small_exclusive".into(),
-        "El valor debe ser mayor que {minimum}".into(),
-    );
-    m.insert(
-        "too_big_exclusive".into(),
-        "El valor debe ser menor que {maximum}".into(),
-    );
-    m.insert(
-        "invalid_string".into(),
-        "Valor inválido ({validation})".into(),
-    );
-    m.insert("not_int".into(), "Se esperaba un número entero".into());
-    m.insert("not_finite".into(), "El número debe ser finito".into());
-    m.insert("missing_field".into(), "Campo obligatorio faltante".into());
-    m.insert("unrecognized_field".into(), "Campo no reconocido".into());
-    m.insert("parse_error".into(), "Error al procesar la entrada".into());
-    MapResolver::new(m)
+    table(super::i18n_langs::SPANISH)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn placeholders(s: &str) -> Vec<String> {
+        let mut v: Vec<String> = s
+            .split('{')
+            .skip(1)
+            .filter_map(|p| p.split_once('}').map(|(n, _)| n.to_string()))
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn every_language_covers_every_english_key() {
+        for (name, t) in [
+            ("russian", super::super::i18n_langs::RUSSIAN),
+            ("german", super::super::i18n_langs::GERMAN),
+            ("spanish", super::super::i18n_langs::SPANISH),
+        ] {
+            let keys: std::collections::HashSet<&str> = t.iter().map(|(k, _)| *k).collect();
+            assert_eq!(keys.len(), t.len(), "{name}: duplicate key");
+            for (key, en) in ENGLISH {
+                let tr = t
+                    .iter()
+                    .find(|(k, _)| k == key)
+                    .map(|(_, v)| *v)
+                    .unwrap_or_else(|| panic!("{name}: missing `{key}`"));
+                assert_eq!(placeholders(tr), placeholders(en), "{name}: `{key}`");
+            }
+        }
+    }
 }

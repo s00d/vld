@@ -35,6 +35,14 @@
 //!     println!("Valid! {:?}", cli);
 //! }
 //! ```
+//!
+//! # Flag names in errors
+//!
+//! [`validate_cli`] and [`validate_or_exit`] (for `clap::Parser` /
+//! `CommandFactory` types) name each argument the way clap does:
+//! `#[arg(long = "out")] output_file` is `--out`, a positional `input` is
+//! `<INPUT>`. [`validate`] works on any `Serialize` struct and guesses
+//! `--kebab-case` from the field name.
 
 use std::fmt;
 use vld::schema::VldParse;
@@ -68,13 +76,15 @@ impl VldClapError {
         std::process::exit(2);
     }
 
-    /// Format each issue on its own line, prefixed with `--field`.
+    /// Format each issue on its own line, prefixed with the flag name
+    /// (as in [`message`](Self::message)).
     pub fn format_issues(&self) -> String {
         match &self.source {
-            ErrorSource::Validation(e) => e
-                .issues
-                .iter()
-                .map(|i| format!("  {}", issue_line(i)))
+            ErrorSource::Validation(_) => self
+                .message
+                .lines()
+                .skip(1)
+                .map(|l| format!("  {}", l.trim_start()))
                 .collect::<Vec<_>>()
                 .join("\n"),
             ErrorSource::Serialization(msg) => format!("  {}", msg),
@@ -101,22 +111,62 @@ impl std::error::Error for VldClapError {
 // Core validation functions
 // ---------------------------------------------------------------------------
 
-/// `--flag-name: message`, using clap's default kebab-case flag names
-/// (`max_connections` -> `--max-connections`, nested `user.email` -> `--user.email`).
-fn issue_line(i: &vld::error::ValidationIssue) -> String {
-    let field = vld_integration_common::format_path(&i.path).replace('_', "-");
-    if field.is_empty() {
-        i.message.clone()
-    } else {
-        format!("--{}: {}", field, i.message)
-    }
+/// `--flag-name: message`. With a clap `Command` the field's argument is
+/// looked up (`--out`, `-o`, `<INPUT>`); otherwise clap's default kebab-case
+/// flag name is assumed (`max_connections` -> `--max-connections`, nested
+/// `user.email` -> `--user.email`).
+fn issue_line(i: &vld::error::ValidationIssue, cmd: Option<&clap::Command>) -> String {
+    use vld::error::PathSegment;
+    let arg = match (i.path.first(), cmd) {
+        (Some(PathSegment::Field(id)), Some(cmd)) => {
+            cmd.get_arguments().find(|a| a.get_id() == id.as_str())
+        }
+        _ => None,
+    };
+    let field = match arg {
+        Some(arg) => {
+            let rest = vld_integration_common::format_path(&i.path[1..]);
+            let name = if let Some(long) = arg.get_long() {
+                format!("--{long}")
+            } else if let Some(short) = arg.get_short() {
+                format!("-{short}")
+            } else {
+                let value = arg
+                    .get_value_names()
+                    .and_then(|v| v.first())
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| arg.get_id().as_str().to_uppercase());
+                format!("<{value}>")
+            };
+            format!(
+                "{name}{}",
+                if rest.is_empty() {
+                    String::new()
+                } else {
+                    format!(".{rest}")
+                }
+            )
+        }
+        None => {
+            let field = vld_integration_common::format_path(&i.path).replace('_', "-");
+            if field.is_empty() {
+                return i.message.clone();
+            }
+            format!("--{field}")
+        }
+    };
+    format!("{}: {}", field, i.message)
 }
 
 fn make_error(e: vld::error::VldError) -> VldClapError {
+    make_error_for(e, None)
+}
+
+fn make_error_for(e: vld::error::VldError, cmd: Option<&clap::Command>) -> VldClapError {
     let summary = e
         .issues
         .iter()
-        .map(issue_line)
+        .map(|i| issue_line(i, cmd))
         .collect::<Vec<_>>()
         .join("\n       ");
     VldClapError {
@@ -160,9 +210,24 @@ where
     T::vld_parse_value(&json).map(|_| ()).map_err(make_error)
 }
 
+/// Like [`validate`], for a clap `Parser`: errors name each argument as
+/// clap does (`#[arg(long = "out")]` → `--out`, positional → `<INPUT>`).
+pub fn validate_cli<T>(args: &T) -> Result<(), VldClapError>
+where
+    T: VldParse + serde::Serialize + clap::CommandFactory,
+{
+    match validate(args) {
+        Err(VldClapError {
+            source: ErrorSource::Validation(e),
+            ..
+        }) => Err(make_error_for(e, Some(&T::command()))),
+        other => other,
+    }
+}
+
 /// Validate and exit on failure — convenience wrapper.
 ///
-/// Calls [`validate`] and, on error, prints the error to stderr
+/// Calls [`validate_cli`] and, on error, prints the error to stderr
 /// and exits with code 2.
 ///
 /// ```rust,ignore
@@ -172,9 +237,9 @@ where
 /// ```
 pub fn validate_or_exit<T>(args: &T)
 where
-    T: VldParse + serde::Serialize,
+    T: VldParse + serde::Serialize + clap::CommandFactory,
 {
-    if let Err(e) = validate(args) {
+    if let Err(e) = validate_cli(args) {
         e.exit();
     }
 }
@@ -213,7 +278,7 @@ where
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        validate, validate_json, validate_or_exit, validate_with_schema, VldClapError,
+        validate, validate_cli, validate_json, validate_or_exit, validate_with_schema, VldClapError,
     };
     pub use vld::prelude::*;
 }

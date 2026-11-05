@@ -59,8 +59,9 @@ fn main() {
 
 | Function | Description |
 |----------|-------------|
-| `validate(args)` | Validate a struct with `#[derive(Validate)]` + `Serialize` |
-| `validate_or_exit(args)` | Validate; print error & exit(2) on failure |
+| `validate(args)` | Validate a struct with `#[derive(Validate)]` + `Serialize` (flags guessed as `--kebab-case`) |
+| `validate_cli(args)` | Same for a clap `Parser`: errors use clap's real names (`#[arg(long = "out")]` → `--out`, positional → `<INPUT>`) |
+| `validate_or_exit(args)` | `validate_cli`; print error & exit(2) on failure (needs `clap::Parser`) |
 | `validate_with_schema::<S, T>(args)` | Validate `T: Serialize` against a separate schema `S` |
 | `validate_json::<S>(json)` | Validate raw JSON |
 

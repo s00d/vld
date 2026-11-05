@@ -4,6 +4,8 @@
 //! data against `vld` schemas and returns `422 Unprocessable Entity` with
 //! structured JSON errors on failure (malformed JSON/form bodies included),
 //! and `413 Payload Too Large` when a body exceeds Rocket's limit.
+//! `VldJson` requires a JSON `Content-Type` (`application/json` or
+//! `application/*+json`) and answers `415 Unsupported Media Type` otherwise.
 //!
 //! # Extractors
 //!
@@ -40,8 +42,8 @@ use rocket::request::{FromRequest, Outcome, Request};
 use rocket::serde::json::Json;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_form_body, path_params_to_json, query_string_to_json,
-    VldHttpError, DEFAULT_BODY_LIMIT,
+    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, path_params_to_json,
+    query_string_to_json, require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
 };
 
 // ---------------------------------------------------------------------------
@@ -64,7 +66,7 @@ fn validate<T: VldParse>(
     req: &Request<'_>,
     value: &serde_json::Value,
 ) -> Result<T, (Status, serde_json::Value)> {
-    T::vld_parse_value(value).map_err(|e| fail(req, VldHttpError::validation(e)))
+    parse_coerced(value).map_err(|e| fail(req, VldHttpError::validation(e)))
 }
 
 fn to_outcome<S>(r: Result<S, (Status, serde_json::Value)>) -> Outcome<S, serde_json::Value> {
@@ -91,7 +93,8 @@ fn to_data_outcome<'r, S>(
 ///
 /// Reads the request body as JSON, validates via `T::vld_parse_value()`,
 /// and returns `422` with error details on failure (`413` when the body
-/// exceeds Rocket's `json` limit).
+/// exceeds Rocket's `json` limit, `415` when the `Content-Type` is missing
+/// or not `application/json` / `application/*+json`).
 #[derive(Debug, Clone)]
 pub struct VldJson<T>(pub T);
 
@@ -100,6 +103,9 @@ impl<'r, T: VldParse + Send + 'static> FromData<'r> for VldJson<T> {
     type Error = serde_json::Value;
 
     async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> DataOutcome<'r, Self> {
+        if let Err(e) = require_json_content_type(req.headers().get_one("Content-Type")) {
+            return DataOutcome::Error(fail(req, e));
+        }
         let value = match <Json<serde_json::Value> as FromData<'r>>::from_data(req, data).await {
             DataOutcome::Success(json) => json.into_inner(),
             DataOutcome::Error((status, _)) if status == Status::PayloadTooLarge => {
@@ -113,7 +119,11 @@ impl<'r, T: VldParse + Send + 'static> FromData<'r> for VldJson<T> {
             }
             DataOutcome::Forward(f) => return DataOutcome::Forward(f),
         };
-        to_data_outcome(validate(req, &value).map(VldJson))
+        to_data_outcome(
+            T::vld_parse_value(&value)
+                .map(VldJson)
+                .map_err(|e| fail(req, VldHttpError::validation(e))),
+        )
     }
 }
 

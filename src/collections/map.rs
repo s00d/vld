@@ -60,6 +60,8 @@ where
 
         let mut result = HashMap::new();
         let mut errors = VldError::new();
+        // An inner `Err` may carry no issues: track failure, not issue count.
+        let mut failed = false;
 
         for (i, item) in arr.iter().enumerate() {
             let pair = item.as_array().filter(|a| a.len() == 2);
@@ -68,6 +70,7 @@ where
                     let k = match self.key_schema.parse_value(&pair[0]) {
                         Ok(k) => Some(k),
                         Err(e) => {
+                            failed = true;
                             errors = errors.merge(e.with_prefix(PathSegment::Index(i)));
                             None
                         }
@@ -75,6 +78,7 @@ where
                     let v = match self.value_schema.parse_value(&pair[1]) {
                         Ok(v) => Some(v),
                         Err(e) => {
+                            failed = true;
                             errors = errors.merge(e.with_prefix(PathSegment::Index(i)));
                             None
                         }
@@ -104,7 +108,7 @@ where
             }
         }
 
-        if errors.is_empty() {
+        if errors.is_empty() && !failed {
             Ok(result)
         } else {
             Err(errors)

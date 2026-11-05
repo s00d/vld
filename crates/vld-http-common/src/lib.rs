@@ -13,9 +13,18 @@
 //! - Query strings and form bodies: repeated keys (`a=1&a=2`) and `a[]=1`
 //!   become arrays; `?flag` and `?x=` become `""`.
 //! - Values are coerced with [`coerce_value`], which never loses information.
+//! - Coerced sources are validated with [`parse_coerced`]: a coerced number /
+//!   boolean is turned back into text where the schema expects a string
+//!   (`?q=123` into `vld::string()` is `"123"`), and a single value is
+//!   wrapped into an array where the schema expects one (`?tags=a`).
+//! - JSON body extractors require a JSON `Content-Type` (`application/json`
+//!   or `application/*+json`, see [`is_json_content_type`]); a missing or
+//!   different type is **415** `{"error": "Unsupported Media Type", "message": ...}`.
 //! - Malformed bodies (JSON, non-UTF-8 forms) → **422** with the
 //!   [`ValidationErrorBody`] shape; oversized bodies → **413**
 //!   `{"error": "Payload too large"}`.
+
+pub use vld::schema::parse_coerced;
 
 /// Default max request body size (2 MiB — same as axum `DefaultBodyLimit`).
 ///
@@ -234,6 +243,16 @@ pub fn is_json_content_type(content_type: &str) -> bool {
         || (essence.starts_with("application/") && essence.ends_with("+json"))
 }
 
+/// Check the `Content-Type` of a JSON body: `Ok` for JSON media types
+/// ([`is_json_content_type`]), otherwise a **415** error (also when the
+/// header is missing or not valid UTF-8).
+pub fn require_json_content_type(content_type: Option<&str>) -> Result<(), VldHttpError> {
+    match content_type {
+        Some(ct) if is_json_content_type(ct) => Ok(()),
+        _ => Err(VldHttpError::unsupported_media_type()),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Shared error type
 // ---------------------------------------------------------------------------
@@ -244,6 +263,7 @@ pub fn is_json_content_type(content_type: &str) -> bool {
 /// |---|---|---|
 /// | [`validation`](Self::validation) / [`parse`](Self::parse) | 422 | [`ValidationErrorBody`] |
 /// | [`payload_too_large`](Self::payload_too_large) | 413 | [`ErrorBody`] |
+/// | [`unsupported_media_type`](Self::unsupported_media_type) | 415 | [`ErrorWithMessage`] |
 ///
 /// Adapters only convert [`status`](Self::status) and [`body`](Self::body)
 /// into their framework's response type.
@@ -281,7 +301,21 @@ impl VldHttpError {
         }
     }
 
-    /// HTTP status code (422 or 413).
+    /// 415 — a JSON body was sent without a JSON `Content-Type`.
+    ///
+    /// [`error`](Self::error) holds a single `ParseError` issue with
+    /// [`UNSUPPORTED_MEDIA_TYPE_MESSAGE`].
+    pub fn unsupported_media_type() -> Self {
+        Self {
+            status: 415,
+            error: vld::error::VldError::single(
+                vld::error::IssueCode::ParseError,
+                UNSUPPORTED_MEDIA_TYPE_MESSAGE,
+            ),
+        }
+    }
+
+    /// HTTP status code (422, 413 or 415).
     pub fn status(&self) -> u16 {
         self.status
     }
@@ -298,10 +332,10 @@ impl VldHttpError {
 
     /// JSON response body for this error.
     pub fn body(&self) -> serde_json::Value {
-        if self.status == 413 {
-            format_payload_too_large()
-        } else {
-            format_vld_error(&self.error)
+        match self.status {
+            413 => format_payload_too_large(),
+            415 => format_unsupported_media_type(),
+            _ => format_vld_error(&self.error),
         }
     }
 }
@@ -314,10 +348,10 @@ impl From<vld::error::VldError> for VldHttpError {
 
 impl std::fmt::Display for VldHttpError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.status == 413 {
-            f.write_str("Payload too large")
-        } else {
-            write!(f, "Validation failed: {}", self.error)
+        match self.status {
+            413 => f.write_str("Payload too large"),
+            415 => f.write_str("Unsupported Media Type"),
+            _ => write!(f, "Validation failed: {}", self.error),
         }
     }
 }
@@ -374,11 +408,14 @@ vld::schema! {
 }
 
 vld::schema! {
-    /// A single validation issue: `{ "path": "...", "message": "..." }`.
+    /// A single validation issue:
+    /// `{ "path": "...", "message": "...", "code": "..." }` (`code` is
+    /// [`IssueCode::key()`](vld::error::IssueCode::key)).
     #[derive(Debug, Clone, Serialize)]
     pub struct ValidationIssue {
         pub path: String    => vld::string(),
         pub message: String => vld::string(),
+        pub code: String    => vld::string(),
     }
 }
 
@@ -432,6 +469,7 @@ pub fn format_issues(err: &vld::error::VldError) -> Vec<ValidationIssue> {
         .map(|i| ValidationIssue {
             path: format_path(&i.path),
             message: i.message.clone(),
+            code: i.code.key().to_string(),
         })
         .collect()
 }
@@ -525,6 +563,21 @@ pub fn format_utf8_error() -> serde_json::Value {
 /// Internally constructs an [`ErrorBody`] and serializes it.
 pub fn format_payload_too_large() -> serde_json::Value {
     format_generic_error("Payload too large")
+}
+
+/// Message of the 415 body and error.
+pub const UNSUPPORTED_MEDIA_TYPE_MESSAGE: &str =
+    "Expected Content-Type: application/json (or application/*+json)";
+
+/// Build the JSON error body for a non-JSON `Content-Type`.
+///
+/// Returns `{ "error": "Unsupported Media Type", "message": "Expected Content-Type: ..." }`.
+pub fn format_unsupported_media_type() -> serde_json::Value {
+    serde_json::to_value(ErrorWithMessage {
+        error: "Unsupported Media Type".into(),
+        message: UNSUPPORTED_MEDIA_TYPE_MESSAGE.into(),
+    })
+    .expect("ErrorWithMessage serialization cannot fail")
 }
 
 /// Build a generic JSON error body with a custom error string.

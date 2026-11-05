@@ -74,6 +74,8 @@ Validated values are stored as `Validated<T>` in Rama `Extensions`. Non-JSON req
 (anything but `application/json` / `application/*+json`) are passed through untouched, so
 `validated` returns `None` for them. JSON bodies over the limit (default 2 MiB) get `413`.
 
+JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
 ## Extractors vs Layer
 
 - **Handlers / routers** → extractors (`VldJson`, …)

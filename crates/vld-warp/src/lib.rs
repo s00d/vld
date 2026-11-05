@@ -18,7 +18,9 @@
 //! | [`vld_cookie::<T>()`] | Cookie values |
 //!
 //! Use [`handle_rejection`] with `.recover()` to turn rejections into JSON:
-//! validation / malformed body → 422, body over the limit → 413, plus the
+//! validation / malformed body → 422, body over the limit → 413, `vld_json`
+//! without a JSON `Content-Type` (`application/json` or `application/*+json`)
+//! → 415 ([`UnsupportedJsonMediaType`]), plus the
 //! usual warp rejections (404, 405, 400, 411, 415) and 500 for anything
 //! unknown.
 
@@ -27,8 +29,9 @@ use futures_util::{Stream, StreamExt};
 use std::convert::Infallible;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
-    percent_decode, query_string_to_json, VldHttpError,
+    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
+    path_params_to_json, percent_decode, query_string_to_json, require_json_content_type,
+    VldHttpError,
 };
 use warp::http::StatusCode;
 use warp::reject::Reject;
@@ -53,6 +56,12 @@ pub struct ValidationFailed {
 }
 impl Reject for ValidationFailed {}
 
+/// Rejection when [`vld_json`] gets a missing or non-JSON `Content-Type`
+/// (answered with 415 by [`handle_rejection`]).
+#[derive(Debug)]
+pub struct UnsupportedJsonMediaType;
+impl Reject for UnsupportedJsonMediaType {}
+
 /// Rejection when a request body exceeds the filter's size limit (413).
 #[derive(Debug)]
 pub struct BodyTooLarge;
@@ -68,8 +77,9 @@ fn reject_http(e: VldHttpError) -> Rejection {
     }
 }
 
+/// Validate a value coerced from text (query, path, form, headers, cookies).
 fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, Rejection> {
-    T::vld_parse_value(value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+    parse_coerced(value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
 }
 
 /// Read the whole body, streaming, up to `limit` bytes. Works without a
@@ -139,14 +149,22 @@ pub fn vld_json<T: VldParse + Send + 'static>(
 pub fn vld_json_limit<T: VldParse + Send + 'static>(
     limit: u64,
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
-    limited_body(limit).and_then(|bytes: Bytes| async move {
-        let value = parse_json_body(&bytes).map_err(|e| {
-            warp::reject::custom(InvalidJson {
-                message: e.error().issues[0].message.clone(),
-            })
-        })?;
-        validate(&value)
-    })
+    warp::header::optional::<String>("content-type")
+        .and_then(|ct: Option<String>| async move {
+            require_json_content_type(ct.as_deref())
+                .map_err(|_| warp::reject::custom(UnsupportedJsonMediaType))
+        })
+        .untuple_one()
+        .and(limited_body(limit))
+        .and_then(|bytes: Bytes| async move {
+            let value = parse_json_body(&bytes).map_err(|e| {
+                warp::reject::custom(InvalidJson {
+                    message: e.error().issues[0].message.clone(),
+                })
+            })?;
+            T::vld_parse_value(&value)
+                .map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -195,6 +213,7 @@ pub fn vld_query<T: VldParse + Send + 'static>(
 /// |---|---|
 /// | [`ValidationFailed`], [`InvalidJson`] | 422 (validation body) |
 /// | [`BodyTooLarge`], `PayloadTooLarge` | 413 |
+/// | [`UnsupportedJsonMediaType`] | 415 (`{"error": "Unsupported Media Type", "message": ...}`) |
 /// | `MethodNotAllowed` | 405 |
 /// | `UnsupportedMediaType` | 415 |
 /// | `LengthRequired` | 411 |
@@ -228,6 +247,11 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> 
         (
             StatusCode::PAYLOAD_TOO_LARGE,
             vld_http_common::format_payload_too_large(),
+        )
+    } else if err.find::<UnsupportedJsonMediaType>().is_some() {
+        (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            vld_http_common::format_unsupported_media_type(),
         )
     } else if err.is_not_found() {
         (
@@ -480,7 +504,7 @@ pub mod prelude {
     pub use crate::{
         handle_rejection, validate_path_params, vld_cookie, vld_form, vld_form_limit, vld_headers,
         vld_json, vld_json_limit, vld_param, vld_path, vld_query, BodyTooLarge, InvalidJson,
-        ValidationFailed,
+        UnsupportedJsonMediaType, ValidationFailed,
     };
     pub use vld::prelude::*;
 }

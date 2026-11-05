@@ -256,6 +256,11 @@ impl<T: IntType> ZInteger<T> {
             },
             _ => self.inner.extract_number(value)? as i128,
         };
+        Ok(i)
+    }
+
+    /// Reject `i` outside the type range (`u8`: `0..=255`).
+    fn type_range(&self, i: i128, value: &Value) -> Result<(), VldError> {
         if i < T::MIN {
             return Err(VldError::from_code_with_value(
                 IssueCode::TooSmall {
@@ -276,7 +281,7 @@ impl<T: IntType> ZInteger<T> {
                 value,
             ));
         }
-        Ok(i)
+        Ok(())
     }
 }
 
@@ -285,7 +290,9 @@ impl<T: IntType> VldSchema for ZInteger<T> {
 
     fn parse_value(&self, value: &Value) -> Result<T, VldError> {
         let n = self.extract_int(value)?;
+        // User bounds first: `u8().max(150)` reports 150, not 255, for 300.
         self.inner.validate(Num::I(n), value)?;
+        self.type_range(n, value)?;
         Ok(T::from_i128(n))
     }
 }

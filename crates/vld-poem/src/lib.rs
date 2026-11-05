@@ -3,7 +3,9 @@
 //! Validation extractors for [Poem](https://docs.rs/poem). Validates request
 //! data against `vld` schemas and returns `422 Unprocessable Entity` with
 //! structured JSON errors on failure (`413 Payload Too Large` when a body
-//! exceeds [`DEFAULT_BODY_LIMIT`], 2 MiB).
+//! exceeds [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT), 2 MiB).
+//! `VldJson` requires a JSON `Content-Type` (`application/json` or
+//! `application/*+json`) and answers `415 Unsupported Media Type` otherwise.
 //!
 //! # Extractors
 //!
@@ -23,7 +25,7 @@ use std::fmt;
 use vld::schema::VldParse;
 use vld_http_common::{
     cookies_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
-    query_string_to_json, VldHttpError, DEFAULT_BODY_LIMIT,
+    query_string_to_json, require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
 };
 
 // ---------------------------------------------------------------------------
@@ -85,8 +87,9 @@ fn reject(e: VldHttpError) -> poem::Error {
     VldPoemError::from(e).into()
 }
 
+/// Validate a value coerced from text (query, path, form, headers, cookies).
 fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T> {
-    T::vld_parse_value(value).map_err(|e| VldPoemError::from(e).into())
+    vld_http_common::parse_coerced(value).map_err(|e| VldPoemError::from(e).into())
 }
 
 async fn read_limited_body(body: &mut RequestBody) -> Result<impl AsRef<[u8]>> {
@@ -110,9 +113,12 @@ async fn read_limited_body(body: &mut RequestBody) -> Result<impl AsRef<[u8]>> {
 pub struct VldJson<T>(pub T);
 
 impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldJson<T> {
-    async fn from_request(_req: &'a Request, body: &mut RequestBody) -> Result<Self> {
+    async fn from_request(req: &'a Request, body: &mut RequestBody) -> Result<Self> {
+        require_json_content_type(req.content_type()).map_err(reject)?;
         let bytes = read_limited_body(body).await?;
-        validate(&parse_json_body(bytes.as_ref()).map_err(reject)?).map(VldJson)
+        T::vld_parse_value(&parse_json_body(bytes.as_ref()).map_err(reject)?)
+            .map(VldJson)
+            .map_err(|e| VldPoemError::from(e).into())
     }
 }
 

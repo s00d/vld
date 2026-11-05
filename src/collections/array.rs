@@ -129,6 +129,8 @@ impl<T: VldSchema> VldSchema for ZArray<T> {
         })?;
 
         let mut errors = VldError::new();
+        // An inner `Err` may carry no issues: track failure, not issue count.
+        let mut failed = false;
 
         // Length checks
         if let Some(min) = self.min_len {
@@ -206,12 +208,13 @@ impl<T: VldSchema> VldSchema for ZArray<T> {
             match self.element.parse_value(item) {
                 Ok(v) => results.push(v),
                 Err(e) => {
+                    failed = true;
                     errors = errors.merge(e.with_prefix(PathSegment::Index(i)));
                 }
             }
         }
 
-        if errors.is_empty() {
+        if errors.is_empty() && !failed {
             Ok(results)
         } else {
             Err(errors)

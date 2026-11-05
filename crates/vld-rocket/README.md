@@ -24,6 +24,8 @@ All extractors return `422 Unprocessable Entity` with a JSON error body on valid
 or malformed input (invalid JSON, non-UTF-8 form), and `413 Payload Too Large` when the body
 exceeds Rocket's `limits.json` / `limits.form` (`form` falls back to 2 MiB if unset).
 
+JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
 Rocket requires every `<param>` to be a handler argument as well, so declare them next to
 `VldPath<T>` (e.g. `fn get(id: &str, p: VldPath<UserPath>)`).
 

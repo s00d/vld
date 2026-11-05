@@ -281,10 +281,16 @@ impl<R: Rng> FakeGen<R> {
             .or_else(|| obj.get("anyOf"))
             .and_then(Value::as_array)
         {
-            let concrete: Vec<&Value> = variants
+            let mut concrete: Vec<&Value> = variants
                 .iter()
                 .filter(|v| v.get("type").and_then(Value::as_str) != Some("null"))
                 .collect();
+            // A bare `{"type":"string"}` branch usually stands for a textual
+            // form validated beyond JSON Schema (e.g. `vld::duration()`'s
+            // `"PT15S"`): prefer the other branches when there are any.
+            if concrete.iter().any(|v| !is_bare_string(v)) {
+                concrete.retain(|v| !is_bare_string(v));
+            }
             if !concrete.is_empty() {
                 let idx = self.rng.gen_range(0..concrete.len());
                 return self.value_with_hint(concrete[idx], hint);
@@ -297,8 +303,12 @@ impl<R: Rng> FakeGen<R> {
         }
 
         // ---- allOf ----
+        // With a sibling `type` the allOf only adds constraints (e.g. extra
+        // string patterns), handled by the type's generator.
         if let Some(all) = obj.get("allOf").and_then(Value::as_array) {
-            return self.merge_all_of(all);
+            if !obj.contains_key("type") {
+                return self.merge_all_of(all);
+            }
         }
 
         // ---- type-based dispatch ----
@@ -332,17 +342,21 @@ impl<R: Rng> FakeGen<R> {
     fn gen_string(&mut self, obj: &Map<String, Value>, hint: Option<&str>) -> Value {
         let (min, max) = len_bounds(obj);
 
-        // 0) `pattern` — generate a string matching the regex
-        if let Some(p) = obj.get("pattern").and_then(Value::as_str) {
-            let mut last = None;
-            for _ in 0..20 {
-                match regex_gen::generate(&mut self.rng, p) {
-                    Some(s) if len_ok(&s, min, max) => return Value::String(s),
-                    Some(s) => last = Some(s),
-                    None => break, // unparsable regex — fall through
-                }
-            }
-            if let Some(s) = last {
+        // 0) `pattern` (plus further patterns in `allOf`) — generate a match
+        let patterns: Vec<&str> = obj
+            .get("pattern")
+            .into_iter()
+            .chain(
+                obj.get("allOf")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|s| s.get("pattern")),
+            )
+            .filter_map(Value::as_str)
+            .collect();
+        if !patterns.is_empty() {
+            if let Some(s) = self.gen_patterned(&patterns, min, max) {
                 return Value::String(s);
             }
         }
@@ -361,6 +375,74 @@ impl<R: Rng> FakeGen<R> {
 
         // 3) Fallback: readable word-based text
         self.gen_readable_string(obj)
+    }
+
+    /// A string matching every pattern within the length bounds (best
+    /// effort: the last candidate when nothing fits; `None` when a pattern
+    /// does not parse).
+    fn gen_patterned(
+        &mut self,
+        patterns: &[&str],
+        min: Option<usize>,
+        max: Option<usize>,
+    ) -> Option<String> {
+        // Only literals (`starts_with` / `ends_with` / `contains`): compose
+        // prefix + contained parts + filler + suffix.
+        let lits: Option<Vec<regex_gen::Literal>> =
+            patterns.iter().map(|p| regex_gen::literal(p)).collect();
+        if let Some(lits) = lits {
+            let (mut head, mut mid, mut tail) = (String::new(), String::new(), String::new());
+            for l in lits {
+                match l {
+                    regex_gen::Literal::Prefix(p) if p.len() > head.len() => head = p,
+                    regex_gen::Literal::Suffix(s) if s.len() > tail.len() => tail = s,
+                    regex_gen::Literal::Contains(c) => mid.push_str(&c),
+                    _ => {}
+                }
+            }
+            let fixed = head.chars().count() + mid.chars().count() + tail.chars().count();
+            let n = self.pick_len(min, max, fixed + 3, fixed + 10);
+            let filler = self.gen_chars(LOWER_ALPHA, n.saturating_sub(fixed));
+            return Some(format!("{head}{mid}{filler}{tail}"));
+        }
+
+        let regexes: Vec<vld::regex_lite::Regex> = patterns
+            .iter()
+            .filter_map(|p| vld::regex_lite::Regex::new(p).ok())
+            .collect();
+        // Generate from the non-literal patterns; literal prefixes / suffixes
+        // are also tried overlaid on each candidate.
+        let (mut head, mut tail) = (String::new(), String::new());
+        let mut bases = Vec::new();
+        for p in patterns {
+            match regex_gen::literal(p) {
+                Some(regex_gen::Literal::Prefix(h)) => head = h,
+                Some(regex_gen::Literal::Suffix(t)) => tail = t,
+                _ => bases.push(*p),
+            }
+        }
+        let overlay = |s: &str| -> String {
+            let chars: Vec<char> = s.chars().collect();
+            let (h, t) = (head.chars().count(), tail.chars().count());
+            let mid: String = chars
+                .get(h.min(chars.len())..chars.len().saturating_sub(t).max(h.min(chars.len())))
+                .map(|c| c.iter().collect())
+                .unwrap_or_default();
+            format!("{head}{mid}{tail}")
+        };
+        let mut last = None;
+        // ponytail: generate-and-test; rare intersections of complex
+        // patterns can miss, then the last candidate is returned.
+        for i in 0..50 {
+            let s = regex_gen::generate(&mut self.rng, bases[i % bases.len()])?;
+            for c in [overlay(&s), s] {
+                if len_ok(&c, min, max) && regexes.iter().all(|r| r.is_match(&c)) {
+                    return Some(c);
+                }
+                last = Some(c);
+            }
+        }
+        last
     }
 
     /// Try to generate a realistic value based on the JSON property name.
@@ -633,6 +715,20 @@ impl<R: Rng> FakeGen<R> {
             return self.gen_decimal(obj);
         }
 
+        // Unpadded Base64URL text: `n` chars encode `3n/4` bytes, `n % 4 != 1`.
+        if fmt == "base64url" {
+            let mut n = self.pick_len(min, max, 8, 32);
+            if n % 4 == 1 {
+                n = if max.is_none_or(|m| n < m) {
+                    n + 1
+                } else {
+                    n - 1
+                };
+            }
+            let bytes: Vec<u8> = (0..n * 3 / 4).map(|_| self.rng.gen()).collect();
+            return base64url(&bytes);
+        }
+
         // Structured formats: regenerate until the length fits.
         let mut last = None;
         for _ in 0..20 {
@@ -649,6 +745,11 @@ impl<R: Rng> FakeGen<R> {
             Some(s) if fmt == "email" && min.is_some_and(|m| s.chars().count() < m) => {
                 let pad = min.unwrap() - s.chars().count();
                 s.replacen('@', &format!("{}@", "x".repeat(pad)), 1)
+            }
+            // Too long: shortest form `<local>@ex.io`.
+            Some(_) if fmt == "email" && max.is_some_and(|m| m >= 7) => {
+                let local = self.gen_chars(LOWER_ALPHA, (max.unwrap() - 6).min(8));
+                format!("{local}@ex.io")
             }
             Some(s) => s,
             // Unknown format — readable string within the length bounds.
@@ -689,6 +790,19 @@ impl<R: Rng> FakeGen<R> {
             "time" | "iso-time" => self.gen_time(),
             "date-time" | "iso-datetime" => self.gen_datetime(),
             "base64" => self.gen_base64(),
+            "json" => match self.rng.gen_range(0..4) {
+                0 => self.rng.gen_range(0..1000).to_string(),
+                1 => json!([self.rng.gen_range(0..100), self.pick(WORDS)]).to_string(),
+                2 => json!(self.pick(WORDS)).to_string(),
+                _ => {
+                    let mut m = Map::new();
+                    m.insert(
+                        self.pick(WORDS).to_lowercase(),
+                        json!(self.rng.gen_range(0..100)),
+                    );
+                    Value::Object(m).to_string()
+                }
+            },
             "cuid2" => self.gen_cuid2(),
             "ulid" => self.gen_ulid(),
             "nanoid" => self.gen_nanoid(),
@@ -1066,22 +1180,27 @@ impl<R: Rng> FakeGen<R> {
     // ═══════════════════════════════════════════════════════════════════════
 
     fn gen_integer(&mut self, obj: &Map<String, Value>, hint: Option<&str>) -> Value {
-        let f = |k: &str| obj.get(k).and_then(Value::as_f64);
+        // i128 covers the whole i64 and u64 ranges exactly.
+        let int = |k: &str, round_up: bool| -> Option<i128> {
+            let v = obj.get(k)?;
+            v.as_i64()
+                .map(i128::from)
+                .or_else(|| v.as_u64().map(i128::from))
+                .or_else(|| {
+                    let f = v.as_f64()?;
+                    Some((if round_up { f.ceil() } else { f.floor() }) as i128)
+                })
+        };
         // Smallest / largest integer satisfying the (exclusive) bounds.
-        let lo = f("minimum")
-            .map(f64::ceil)
-            .or_else(|| f("exclusiveMinimum").map(|v| v.floor() + 1.0));
-        let hi = f("maximum")
-            .map(f64::floor)
-            .or_else(|| f("exclusiveMaximum").map(|v| v.ceil() - 1.0));
-        let to_i = |v: f64| v.clamp(i64::MIN as f64, i64::MAX as f64) as i64;
-        let (lo, hi) = (lo.map(to_i), hi.map(to_i));
+        let lo = int("minimum", true).or_else(|| int("exclusiveMinimum", false).map(|v| v + 1));
+        let hi = int("maximum", false).or_else(|| int("exclusiveMaximum", true).map(|v| v - 1));
 
         // A realistic range for known field names, when the schema leaves
         // one side open and the two ranges overlap.
         let hinted = hint
             .and_then(int_hint_range)
             .filter(|_| lo.is_none() || hi.is_none())
+            .map(|(hl, hh)| (i128::from(hl), i128::from(hh)))
             .map(|(hl, hh)| (lo.map_or(hl, |l| l.max(hl)), hi.map_or(hh, |h| h.min(hh))))
             .filter(|(l, h)| l <= h);
 
@@ -1094,25 +1213,25 @@ impl<R: Rng> FakeGen<R> {
         };
         if lo > hi {
             // Unsatisfiable range — best effort, never panic.
-            return json!(lo);
+            return int_json(lo);
         }
 
         let m = obj
             .get("multipleOf")
             .and_then(Value::as_f64)
             .filter(|m| *m >= 1.0 && m.fract() == 0.0)
-            .map(|m| m as i64);
+            .map(|m| m as i128);
         if let Some(m) = m {
             // k * m within [lo, hi]
-            let k_lo = lo.div_euclid(m) + i64::from(lo.rem_euclid(m) != 0);
+            let k_lo = lo.div_euclid(m) + i128::from(lo.rem_euclid(m) != 0);
             let k_hi = hi.div_euclid(m);
             if k_lo <= k_hi {
-                return json!(self.rng.gen_range(k_lo..=k_hi) * m);
+                return int_json(self.rng.gen_range(k_lo..=k_hi) * m);
             }
-            return json!(k_lo.saturating_mul(m));
+            return int_json(k_lo.saturating_mul(m));
         }
 
-        json!(self.rng.gen_range(lo..=hi))
+        int_json(self.rng.gen_range(lo..=hi))
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1142,7 +1261,8 @@ impl<R: Rng> FakeGen<R> {
         let (lo, hi) = match (lo, hi) {
             (Some(l), Some(h)) => (l, h),
             (Some(l), None) => (l, l.max(0.0) + 1000.0),
-            (None, Some(h)) => (if h >= 0.0 { 0.0 } else { h - 1000.0 }, h),
+            // `negative()` (`exclusiveMaximum: 0`) needs room below 0.
+            (None, Some(h)) => (if h > 0.0 { 0.0 } else { h - 1000.0 }, h),
             (None, None) => (0.0, 1000.0),
         };
         let in_range = |v: f64| {
@@ -1366,12 +1486,30 @@ impl<R: Rng> FakeGen<R> {
         }
 
         // additionalProperties with a schema
+        // within minProperties / maxProperties, keys from `propertyNames`.
         if let Some(additional) = obj.get("additionalProperties") {
             if additional.is_object() {
-                let extra_count = self.rng.gen_range(0..3usize);
-                for _ in 0..extra_count {
-                    let key = format!("{}_{}", self.pick(WORDS), self.next_id());
-                    result.insert(key, self.value(additional));
+                let count = |k: &str| obj.get(k).and_then(Value::as_u64).map(|v| v as usize);
+                let lo = count("minProperties")
+                    .unwrap_or(0)
+                    .saturating_sub(result.len());
+                let hi = count("maxProperties")
+                    .map_or(lo.max(2), |m| m.saturating_sub(result.len()))
+                    .max(lo);
+                let extra_count = self.rng.gen_range(lo..=hi);
+                let names = obj.get("propertyNames");
+                let mut attempts = 0;
+                let target = result.len() + extra_count;
+                while result.len() < target && attempts < extra_count * 20 + 20 {
+                    attempts += 1;
+                    let key = match names.map(|n| self.value(n)) {
+                        Some(Value::String(k)) => k,
+                        _ => format!("{}_{}", self.pick(WORDS), self.next_id()),
+                    };
+                    if !result.contains_key(&key) {
+                        let v = self.value(additional);
+                        result.insert(key, v);
+                    }
                 }
             }
         }
@@ -1753,6 +1891,33 @@ fn int_hint_range(hint: &str) -> Option<(i64, i64)> {
 }
 
 /// `(minLength, maxLength)` of a string schema.
+/// JSON number for an integer (i64 / u64 exactly, beyond that as float).
+fn int_json(v: i128) -> Value {
+    i64::try_from(v)
+        .map(Value::from)
+        .or_else(|_| u64::try_from(v).map(Value::from))
+        .unwrap_or_else(|_| json!(v as f64))
+}
+
+/// `{"type":"string"}` without any constraint that shapes the value.
+fn is_bare_string(schema: &Value) -> bool {
+    let Some(o) = schema.as_object() else {
+        return false;
+    };
+    o.get("type").and_then(Value::as_str) == Some("string")
+        && [
+            "format",
+            "pattern",
+            "enum",
+            "const",
+            "minLength",
+            "maxLength",
+            "allOf",
+        ]
+        .iter()
+        .all(|k| !o.contains_key(*k))
+}
+
 fn len_bounds(obj: &Map<String, Value>) -> (Option<usize>, Option<usize>) {
     let get = |k| obj.get(k).and_then(Value::as_u64).map(|v| v as usize);
     (get("minLength"), get("maxLength"))

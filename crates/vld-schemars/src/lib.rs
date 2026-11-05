@@ -622,8 +622,19 @@ pub fn __vld_json_schema(
     let path = &gen.settings().definitions_path;
     let path = path.strip_prefix('#').unwrap_or(path);
     let prefix = format!("#{}/", path.strip_suffix('/').unwrap_or(path));
+    let oas3 = gen
+        .settings()
+        .meta_schema
+        .as_deref()
+        .is_some_and(|m| m.contains("/oas/3.0"));
+    if oas3 {
+        to_openapi3(&mut root);
+    }
     for (name, schema_fn) in nested {
         let mut schema = schema_fn();
+        if oas3 {
+            to_openapi3(&mut schema);
+        }
         rewrite_refs(&mut schema, &prefix);
         gen.definitions_mut()
             .entry(name.to_string())
@@ -631,6 +642,89 @@ pub fn __vld_json_schema(
     }
     rewrite_refs(&mut root, &prefix);
     vld_to_schemars(&root)
+}
+
+/// Rewrite vld's JSON Schema (2020-12) into the OpenAPI 3.0 dialect, applied
+/// when the generator uses `SchemaSettings::openapi3()`:
+///
+/// - tuples (`prefixItems` + `items: false`) become `items: {anyOf: [...]}`
+///   with the existing `minItems` / `maxItems`;
+/// - `null` branches of `anyOf` / `oneOf` and `"null"` in a `type` array
+///   become `nullable: true` (a lone remaining `$ref` is wrapped in `allOf`);
+/// - a schema that only allows `null` becomes `{"nullable": true}`.
+///
+/// Doing it here keeps schemars' own OpenAPI 3.0 transforms from producing
+/// `additionalItems` or `{"enum": [null], "nullable": true}`.
+pub fn to_openapi3(value: &mut Value) {
+    match value {
+        Value::Array(items) => items.iter_mut().for_each(to_openapi3),
+        Value::Object(map) => {
+            if let Some(Value::Array(prefix)) = map.remove("prefixItems") {
+                let items = match <[Value; 1]>::try_from(prefix) {
+                    Ok([one]) => one,
+                    Err(many) => serde_json::json!({ "anyOf": many }),
+                };
+                map.insert("items".into(), items);
+            }
+
+            if let Some(Value::Array(types)) = map.get("type") {
+                let rest: Vec<Value> = types.iter().filter(|t| *t != "null").cloned().collect();
+                if rest.len() < types.len() {
+                    map.insert("nullable".into(), Value::Bool(true));
+                    match <[Value; 1]>::try_from(rest) {
+                        Ok([one]) => map.insert("type".into(), one),
+                        Err(rest) if rest.is_empty() => map.remove("type"),
+                        Err(rest) => map.insert("type".into(), Value::Array(rest)),
+                    };
+                }
+            }
+
+            for key in ["anyOf", "oneOf"] {
+                let Some(Value::Array(branches)) = map.get(key) else {
+                    continue;
+                };
+                let rest: Vec<Value> = branches
+                    .iter()
+                    .filter(|b| !is_null_schema(b))
+                    .cloned()
+                    .collect();
+                if rest.len() == branches.len() {
+                    continue;
+                }
+                map.remove(key);
+                map.insert("nullable".into(), Value::Bool(true));
+                match <[Value; 1]>::try_from(rest) {
+                    Ok([Value::Object(one)]) if !one.contains_key("$ref") => {
+                        for (k, v) in one {
+                            map.entry(k).or_insert(v);
+                        }
+                    }
+                    Ok([one]) => {
+                        map.insert("allOf".into(), Value::Array(vec![one]));
+                    }
+                    Err(rest) if rest.is_empty() => {}
+                    Err(rest) => {
+                        map.insert(key.into(), Value::Array(rest));
+                    }
+                }
+            }
+
+            if is_null_schema(&Value::Object(map.clone())) {
+                map.clear();
+                map.insert("nullable".into(), Value::Bool(true));
+            }
+            // Children last: null branches must still look like `null` above.
+            map.values_mut().for_each(to_openapi3);
+        }
+        _ => {}
+    }
+}
+
+/// `{"type": "null"}`, `{"const": null}` or `{"enum": [null]}`.
+fn is_null_schema(v: &Value) -> bool {
+    v.get("type").is_some_and(|t| t == "null")
+        || v.get("const").is_some_and(Value::is_null)
+        || v.get("enum") == Some(&serde_json::json!([null]))
 }
 
 /// Point local refs (`#/components/schemas/X`, `#/$defs/X`, `#/definitions/X`)

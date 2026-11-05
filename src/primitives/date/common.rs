@@ -283,6 +283,10 @@ impl<B: DateBackend> Default for ZDate<B> {
 impl<B: DateBackend> VldSchema for ZDate<B> {
     type Output = B::Date;
 
+    fn output_json(&self, o: &B::Date) -> Option<Value> {
+        Some(Value::String(o.to_string()))
+    }
+
     fn parse_value(&self, value: &Value) -> Result<B::Date, VldError> {
         let s = value.as_str().ok_or_else(|| {
             crate::primitives::type_error(
@@ -493,6 +497,10 @@ impl<B: DateBackend> Default for ZDateTime<B> {
 impl<B: DateBackend> VldSchema for ZDateTime<B> {
     type Output = B::DateTime;
 
+    fn output_json(&self, o: &B::DateTime) -> Option<Value> {
+        Some(Value::String(B::format_datetime(o)))
+    }
+
     fn parse_value(&self, value: &Value) -> Result<B::DateTime, VldError> {
         let s = value.as_str().ok_or_else(|| {
             crate::primitives::type_error(&self.custom_type_error, "datetime string", value)
@@ -611,6 +619,10 @@ impl<B: DateBackend> Default for ZTime<B> {
 
 impl<B: DateBackend> VldSchema for ZTime<B> {
     type Output = B::Time;
+
+    fn output_json(&self, o: &B::Time) -> Option<Value> {
+        Some(Value::String(B::format_time(o)))
+    }
 
     fn parse_value(&self, value: &Value) -> Result<B::Time, VldError> {
         let s = value.as_str().ok_or_else(|| {

@@ -192,6 +192,8 @@ macro_rules! impl_rules {
                 #[allow(unused_imports)]
                 use $crate::schema::VldSchema as _;
                 let mut __vld_errors = $crate::error::VldError::new();
+                #[allow(unused_mut)]
+                let mut __vld_failed = false;
 
                 $(
                     {
@@ -214,6 +216,7 @@ macro_rules! impl_rules {
                             ),
                         };
                         if let ::std::result::Result::Err(e) = __vld_result {
+                            __vld_failed = true;
                             __vld_errors.issues.extend(
                                 e.with_prefix($crate::error::PathSegment::Field(
                                     ::std::string::String::from(__vld_key),
@@ -224,7 +227,7 @@ macro_rules! impl_rules {
                     }
                 )*
 
-                if __vld_errors.is_empty() {
+                if !__vld_failed {
                     ::std::result::Result::Ok(())
                 } else {
                     ::std::result::Result::Err(__vld_errors)

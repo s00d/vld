@@ -13,7 +13,9 @@
 //!
 //! All extractors return **422 Unprocessable Entity** on validation failure
 //! or malformed input, and **413 Payload Too Large** when the body exceeds
-//! the limit.
+//! the limit. [`VldJson`] requires a JSON `Content-Type` (`application/json`
+//! or `application/*+json`) and answers **415 Unsupported Media Type**
+//! otherwise.
 //!
 //! # Body limits
 //!
@@ -78,8 +80,8 @@ use ntex::web::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use std::fmt;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_form_body, path_params_to_json, query_string_to_json,
-    VldHttpError,
+    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, path_params_to_json,
+    query_string_to_json, require_json_content_type, VldHttpError,
 };
 
 // ============================= Error / Rejection =============================
@@ -137,8 +139,9 @@ fn payload_error(e: PayloadError, what: &str) -> VldNtexError {
     }
 }
 
+/// Validate a value coerced from text (query, path, form, headers, cookies).
 fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, VldNtexError> {
-    T::vld_parse_value(value).map_err(VldNtexError::from)
+    parse_coerced(value).map_err(VldNtexError::from)
 }
 
 // ============================= Version glue ==================================
@@ -257,13 +260,20 @@ pub struct VldJson<T>(pub T);
 
 impl<T: VldParse> VldJson<T> {
     async fn extract(req: &HttpRequest, payload: &mut Payload) -> Result<Self, VldNtexError> {
+        require_json_content_type(
+            req.headers()
+                .get(ntex::http::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+        )?;
         let json_value = compat::read_json(req, payload).await.map_err(|e| match e {
             JsonPayloadError::Overflow => VldHttpError::payload_too_large().into(),
             JsonPayloadError::Payload(p) => payload_error(p, "JSON parse error"),
             other => VldNtexError::from(VldHttpError::parse(format!("JSON parse error: {other}"))),
         })?;
 
-        validate(&json_value).map(VldJson)
+        T::vld_parse_value(&json_value)
+            .map(VldJson)
+            .map_err(VldNtexError::from)
     }
 }
 

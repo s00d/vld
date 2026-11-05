@@ -305,6 +305,8 @@ impl VldSchema for ZObject {
 
         let mut result = Map::new();
         let mut errors = VldError::new();
+        // An inner `Err` may carry no issues: track failure, not issue count.
+        let mut failed = false;
 
         if let Some(min) = self.min_keys {
             if obj.len() < min {
@@ -328,11 +330,19 @@ impl VldSchema for ZObject {
         // Validate defined fields
         for field in &self.fields {
             let field_value = obj.get(&field.name).unwrap_or(&Value::Null);
-            match field.schema.dyn_parse(field_value) {
+            let parsed = field.schema.dyn_parse(field_value).map_err(|e| {
+                if obj.contains_key(&field.name) {
+                    e
+                } else {
+                    crate::error::absent_field_error(e)
+                }
+            });
+            match parsed {
                 Ok(v) => {
                     result.insert(field.name.clone(), v);
                 }
                 Err(e) => {
+                    failed = true;
                     errors = errors.merge(e.with_prefix(PathSegment::Field(field.name.clone())));
                 }
             }
@@ -354,6 +364,7 @@ impl VldSchema for ZObject {
                         result.insert((*key).clone(), v);
                     }
                     Err(e) => {
+                        failed = true;
                         errors = errors.merge(e.with_prefix(PathSegment::Field((*key).clone())));
                     }
                 }
@@ -385,13 +396,14 @@ impl VldSchema for ZObject {
             if *cond_val == rule.condition_value {
                 let target_val = obj.get(&rule.target_field).unwrap_or(&Value::Null);
                 if let Err(e) = rule.schema.dyn_parse(target_val) {
+                    failed = true;
                     errors =
                         errors.merge(e.with_prefix(PathSegment::Field(rule.target_field.clone())));
                 }
             }
         }
 
-        if errors.is_empty() {
+        if errors.is_empty() && !failed {
             Ok(result)
         } else {
             Err(errors)

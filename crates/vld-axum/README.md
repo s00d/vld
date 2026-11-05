@@ -24,6 +24,8 @@ Provides 6 extractors that validate request data using `vld` schemas **before** 
 
 On validation failure (and for malformed bodies) all extractors return **422 Unprocessable Entity** with a JSON body describing every issue; bodies over the size limit return **413** `{"error":"Payload too large"}`.
 
+JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
 ## Installation
 
 ```toml
