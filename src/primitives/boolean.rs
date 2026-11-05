@@ -72,9 +72,8 @@ impl VldSchema for ZBoolean {
                 )),
             },
             Value::Number(n) if self.coerce => Ok(n.as_f64() != Some(0.0)),
-            _ => Err(super::type_error(
+            _ => Err(crate::primitives::type_error(
                 &self.custom_type_error,
-                "boolean",
                 "boolean",
                 value,
             )),

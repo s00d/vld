@@ -3,7 +3,9 @@
 use serde_json::Value;
 
 use crate::error::{IssueCode, VldError};
-use crate::schema::{DynSchema, VldSchema};
+use crate::schema::DynSchema;
+#[cfg(feature = "openapi")]
+use crate::schema::VldSchema;
 
 #[cfg(feature = "openapi")]
 /// Wrapper that stores a schema implementing both `DynSchema` and `JsonSchema`.

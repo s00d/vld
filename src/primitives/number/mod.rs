@@ -1,6 +1,5 @@
 //! Number schemas: [`ZNumber`] (`f64`) and [`ZInt`] (`i64`) share one check list.
 
-#[cfg(feature = "openapi")]
 use serde_json::Value;
 use std::cmp::Ordering;
 
@@ -10,7 +9,7 @@ mod int;
 pub use float::ZNumber;
 pub use int::ZInt;
 
-use crate::error::IssueCode;
+use crate::error::{IssueCode, SizeOrigin};
 
 pub(super) const MAX_SAFE: i64 = 9_007_199_254_740_991;
 
@@ -37,7 +36,6 @@ impl Num {
         }
     }
 
-    #[cfg(feature = "openapi")]
     pub(super) fn json(self) -> Value {
         match self {
             Num::F(f) => serde_json::json!(f),
@@ -73,7 +71,8 @@ pub(super) enum Kind {
 #[derive(Clone)]
 pub(super) struct NumberCheck {
     pub(super) kind: Kind,
-    pub(super) msg: String,
+    /// Custom message; `None` renders the default for the issue code.
+    pub(super) msg: Option<String>,
 }
 
 impl Kind {
@@ -118,11 +117,6 @@ impl Kind {
 
     /// `None` when `n` passes, otherwise the issue code.
     pub(super) fn failure(self, n: Num) -> Option<IssueCode> {
-        let custom = |code: &str| {
-            Some(IssueCode::Custom {
-                code: code.to_string(),
-            })
-        };
         match self {
             Kind::Finite => match n {
                 Num::F(f) if !f.is_finite() => Some(IssueCode::NotFinite),
@@ -132,7 +126,7 @@ impl Kind {
                 if is_multiple_of(n, v) {
                     None
                 } else {
-                    custom("not_multiple_of")
+                    Some(IssueCode::NotMultipleOf { divisor: v.json() })
                 }
             }
             Kind::Safe => {
@@ -143,7 +137,7 @@ impl Kind {
                 if ok {
                     None
                 } else {
-                    custom("not_safe")
+                    Some(IssueCode::NotSafeInteger)
                 }
             }
             _ => {
@@ -154,7 +148,8 @@ impl Kind {
                     );
                     if !ok {
                         return Some(IssueCode::TooSmall {
-                            minimum: b.as_f64(),
+                            origin: SizeOrigin::Number,
+                            minimum: b.json(),
                             inclusive: !excl,
                         });
                     }
@@ -166,7 +161,8 @@ impl Kind {
                     );
                     if !ok {
                         return Some(IssueCode::TooBig {
-                            maximum: b.as_f64(),
+                            origin: SizeOrigin::Number,
+                            maximum: b.json(),
                             inclusive: !excl,
                         });
                     }

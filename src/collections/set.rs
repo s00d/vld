@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::collections::HashSet;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
+use crate::error::{value_type_name, IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 /// Schema for validating a JSON array into a `HashSet` (unique elements).
@@ -85,13 +85,10 @@ where
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let arr = value.as_array().ok_or_else(|| {
-            VldError::single(
-                IssueCode::InvalidType {
-                    expected: "array".to_string(),
-                    received: value_type_name(value),
-                },
-                format!("Expected array, received {}", value_type_name(value)),
-            )
+            VldError::from_code(IssueCode::InvalidType {
+                expected: "array".to_string(),
+                received: value_type_name(value),
+            })
         })?;
 
         let mut result = HashSet::new();
@@ -110,25 +107,21 @@ where
 
         if let Some(min) = self.min_size {
             if result.len() < min {
-                errors.push(
-                    IssueCode::TooSmall {
-                        minimum: min as f64,
-                        inclusive: true,
-                    },
-                    format!("Set must have at least {} unique elements", min),
-                );
+                errors.push_code(IssueCode::TooSmall {
+                    origin: SizeOrigin::Set,
+                    minimum: min.into(),
+                    inclusive: true,
+                });
             }
         }
 
         if let Some(max) = self.max_size {
             if result.len() > max {
-                errors.push(
-                    IssueCode::TooBig {
-                        maximum: max as f64,
-                        inclusive: true,
-                    },
-                    format!("Set must have at most {} unique elements", max),
-                );
+                errors.push_code(IssueCode::TooBig {
+                    origin: SizeOrigin::Set,
+                    maximum: max.into(),
+                    inclusive: true,
+                });
             }
         }
 

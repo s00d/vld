@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::{FormatKind, IssueCode, VldError};
 use crate::schema::VldSchema;
 
 #[derive(Clone)]
@@ -56,37 +56,29 @@ impl VldSchema for ZIpNetwork {
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            super::type_error(
-                &self.custom_type_error,
-                "string (cidr)",
-                "CIDR string",
-                value,
-            )
+            crate::primitives::type_error(&self.custom_type_error, "CIDR string", value)
         })?;
         let net = s.parse::<ipnet::IpNet>().map_err(|_| {
-            VldError::single_with_value(
-                IssueCode::Custom {
-                    code: "invalid_ip_network".to_string(),
+            VldError::from_code_with_value(
+                IssueCode::InvalidFormat {
+                    format: FormatKind::IpNetwork,
                 },
-                "Invalid IP network/CIDR",
                 value,
             )
         })?;
         if self.must_be_ipv4 && !matches!(net, ipnet::IpNet::V4(_)) {
-            return Err(VldError::single_with_value(
-                IssueCode::Custom {
-                    code: "not_ipv4_network".to_string(),
+            return Err(VldError::from_code_with_value(
+                IssueCode::InvalidFormat {
+                    format: FormatKind::Ipv4Network,
                 },
-                "Expected IPv4 network",
                 value,
             ));
         }
         if self.must_be_ipv6 && !matches!(net, ipnet::IpNet::V6(_)) {
-            return Err(VldError::single_with_value(
-                IssueCode::Custom {
-                    code: "not_ipv6_network".to_string(),
+            return Err(VldError::from_code_with_value(
+                IssueCode::InvalidFormat {
+                    format: FormatKind::Ipv6Network,
                 },
-                "Expected IPv6 network",
                 value,
             ));
         }

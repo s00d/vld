@@ -68,11 +68,10 @@ pub(crate) fn resolve_within(base: &Path, p: &Path) -> Option<PathBuf> {
 }
 
 pub(crate) fn outside_base_error(base: &Path, value: &Value) -> VldError {
-    VldError::single_with_value(
-        IssueCode::Custom {
-            code: "path_outside_base".to_string(),
+    VldError::from_code_with_value(
+        IssueCode::PathOutsideBase {
+            base: base.display().to_string(),
         },
-        format!("Path must be within base directory: {}", base.display()),
         value,
     )
 }
@@ -166,30 +165,19 @@ impl VldSchema for ZPath {
 
     fn parse_value(&self, value: &Value) -> Result<PathBuf, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            super::type_error(
-                &self.custom_type_error,
-                "string (path)",
-                "path string",
-                value,
-            )
+            crate::primitives::type_error(&self.custom_type_error, "path string", value)
         })?;
         let mut p = PathBuf::from(s);
 
         if self.must_be_absolute && !p.is_absolute() {
-            return Err(VldError::single_with_value(
-                IssueCode::Custom {
-                    code: "path_not_absolute".to_string(),
-                },
-                "Path must be absolute",
+            return Err(VldError::from_code_with_value(
+                IssueCode::PathNotAbsolute,
                 value,
             ));
         }
         if self.must_be_relative && p.is_absolute() {
-            return Err(VldError::single_with_value(
-                IssueCode::Custom {
-                    code: "path_not_relative".to_string(),
-                },
-                "Path must be relative",
+            return Err(VldError::from_code_with_value(
+                IssueCode::PathNotRelative,
                 value,
             ));
         }

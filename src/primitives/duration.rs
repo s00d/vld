@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::time::Duration;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::{IssueCode, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 fn parse_duration_string(s: &str) -> Option<Duration> {
@@ -95,9 +95,8 @@ impl VldSchema for ZDuration {
             _ => None,
         }
         .ok_or_else(|| {
-            super::type_error(
+            crate::primitives::type_error(
                 &self.custom_type_error,
-                "duration",
                 "duration as integer seconds or string (`PT15S`, `10s`, `250ms`)",
                 value,
             )
@@ -105,24 +104,24 @@ impl VldSchema for ZDuration {
 
         if let Some(min) = self.min {
             if d < min {
-                return Err(VldError::single_with_value(
+                return Err(VldError::from_code_with_value(
                     IssueCode::TooSmall {
-                        minimum: min.as_secs_f64(),
+                        origin: SizeOrigin::Duration,
+                        minimum: min.as_secs_f64().into(),
                         inclusive: true,
                     },
-                    format!("Duration must be at least {}s", min.as_secs_f64()),
                     value,
                 ));
             }
         }
         if let Some(max) = self.max {
             if d > max {
-                return Err(VldError::single_with_value(
+                return Err(VldError::from_code_with_value(
                     IssueCode::TooBig {
-                        maximum: max.as_secs_f64(),
+                        origin: SizeOrigin::Duration,
+                        maximum: max.as_secs_f64().into(),
                         inclusive: true,
                     },
-                    format!("Duration must be at most {}s", max.as_secs_f64()),
                     value,
                 ));
             }

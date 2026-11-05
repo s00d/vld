@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::VldError;
+use crate::error::{ValidationIssue, VldError};
 use crate::schema::VldSchema;
 
 mod checks;
@@ -43,11 +43,8 @@ impl ZString {
         }
     }
 
-    fn push(mut self, kind: Kind, msg: impl Into<String>) -> Self {
-        self.checks.push(StringCheck {
-            kind,
-            msg: msg.into(),
-        });
+    fn push(mut self, kind: Kind, msg: Option<String>) -> Self {
+        self.checks.push(StringCheck { kind, msg });
         self
     }
 
@@ -92,7 +89,7 @@ impl ZString {
     {
         for check in &mut self.checks {
             if let Some(msg) = f(check.kind.key()) {
-                check.msg = msg;
+                check.msg = Some(msg);
             }
         }
         self
@@ -100,32 +97,32 @@ impl ZString {
 
     /// Minimum string length in characters (inclusive).
     pub fn min(self, len: usize) -> Self {
-        self.min_msg(len, format!("String must be at least {} characters", len))
+        self.push(Kind::Min(len), None)
     }
 
     /// Minimum string length with custom message.
     pub fn min_msg(self, len: usize, msg: impl Into<String>) -> Self {
-        self.push(Kind::Min(len), msg)
+        self.push(Kind::Min(len), Some(msg.into()))
     }
 
     /// Maximum string length in characters (inclusive).
     pub fn max(self, len: usize) -> Self {
-        self.max_msg(len, format!("String must be at most {} characters", len))
+        self.push(Kind::Max(len), None)
     }
 
     /// Maximum string length with custom message.
     pub fn max_msg(self, len: usize, msg: impl Into<String>) -> Self {
-        self.push(Kind::Max(len), msg)
+        self.push(Kind::Max(len), Some(msg.into()))
     }
 
     /// Exact string length in characters.
     pub fn len(self, len: usize) -> Self {
-        self.len_msg(len, format!("String must be exactly {} characters", len))
+        self.push(Kind::Len(len), None)
     }
 
     /// Exact string length with custom message.
     pub fn len_msg(self, len: usize, msg: impl Into<String>) -> Self {
-        self.push(Kind::Len(len), msg)
+        self.push(Kind::Len(len), Some(msg.into()))
     }
 
     /// Must match the given regex (emitted as JSON Schema `pattern`).
@@ -133,7 +130,7 @@ impl ZString {
     /// Requires the `regex` feature.
     #[cfg(feature = "regex")]
     pub fn regex(self, re: regex_lite::Regex) -> Self {
-        self.regex_msg(re, "String does not match pattern")
+        self.push(Kind::Regex(re), None)
     }
 
     /// Must match the given regex, with custom message.
@@ -141,53 +138,47 @@ impl ZString {
     /// Requires the `regex` feature.
     #[cfg(feature = "regex")]
     pub fn regex_msg(self, re: regex_lite::Regex, msg: impl Into<String>) -> Self {
-        self.push(Kind::Regex(re), msg)
+        self.push(Kind::Regex(re), Some(msg.into()))
     }
 
     /// Must start with the given prefix.
     pub fn starts_with(self, prefix: impl Into<String>) -> Self {
-        let p = prefix.into();
-        let msg = format!("String must start with \"{}\"", p);
-        self.starts_with_msg(p, msg)
+        self.push(Kind::StartsWith(prefix.into()), None)
     }
 
     /// Must start with the given prefix, with custom message.
     pub fn starts_with_msg(self, prefix: impl Into<String>, msg: impl Into<String>) -> Self {
-        self.push(Kind::StartsWith(prefix.into()), msg)
+        self.push(Kind::StartsWith(prefix.into()), Some(msg.into()))
     }
 
     /// Must end with the given suffix.
     pub fn ends_with(self, suffix: impl Into<String>) -> Self {
-        let s = suffix.into();
-        let msg = format!("String must end with \"{}\"", s);
-        self.ends_with_msg(s, msg)
+        self.push(Kind::EndsWith(suffix.into()), None)
     }
 
     /// Must end with the given suffix, with custom message.
     pub fn ends_with_msg(self, suffix: impl Into<String>, msg: impl Into<String>) -> Self {
-        self.push(Kind::EndsWith(suffix.into()), msg)
+        self.push(Kind::EndsWith(suffix.into()), Some(msg.into()))
     }
 
     /// Must contain the given substring.
     pub fn contains(self, sub: impl Into<String>) -> Self {
-        let s = sub.into();
-        let msg = format!("String must contain \"{}\"", s);
-        self.contains_msg(s, msg)
+        self.push(Kind::Contains(sub.into()), None)
     }
 
     /// Must contain the given substring, with custom message.
     pub fn contains_msg(self, sub: impl Into<String>, msg: impl Into<String>) -> Self {
-        self.push(Kind::Contains(sub.into()), msg)
+        self.push(Kind::Contains(sub.into()), Some(msg.into()))
     }
 
     /// Must not be empty.
     pub fn non_empty(self) -> Self {
-        self.non_empty_msg("String must not be empty")
+        self.push(Kind::NonEmpty, None)
     }
 
     /// Must not be empty, with custom message.
     pub fn non_empty_msg(self, msg: impl Into<String>) -> Self {
-        self.push(Kind::NonEmpty, msg)
+        self.push(Kind::NonEmpty, Some(msg.into()))
     }
 
     /// Trim whitespace before validation.
@@ -278,8 +269,7 @@ impl VldSchema for ZString {
     type Output = String;
 
     fn parse_value(&self, value: &Value) -> Result<String, VldError> {
-        let type_err =
-            || crate::primitives::type_error(&self.custom_type_error, "string", "string", value);
+        let type_err = || crate::primitives::type_error(&self.custom_type_error, "string", value);
 
         let mut s = match value {
             Value::String(s) => s.clone(),
@@ -296,11 +286,17 @@ impl VldSchema for ZString {
             };
         }
 
-        let str_val = Value::String(s.clone());
+        // The (transformed) string is reported as the received value; built
+        // only once something fails.
+        let mut received: Option<Value> = None;
         let mut errors = VldError::new();
         for check in &self.checks {
             if let Some(code) = check.kind.failure(&s) {
-                errors.push_with_value(code, check.msg.clone(), &str_val);
+                let received = received.get_or_insert_with(|| Value::String(s.clone()));
+                errors.issues.push(
+                    ValidationIssue::with_override(code, check.msg.as_ref())
+                        .with_received(received),
+                );
             }
         }
 

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
+use crate::error::{value_type_name, IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 macro_rules! impl_tuple_schema {
@@ -10,20 +10,14 @@ macro_rules! impl_tuple_schema {
 
             fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
                 let arr = value.as_array().ok_or_else(|| {
-                    VldError::single(
-                        IssueCode::InvalidType {
+                    VldError::from_code(IssueCode::InvalidType {
                             expected: "array".to_string(),
                             received: value_type_name(value),
-                        },
-                        format!("Expected array (tuple), received {}", value_type_name(value)),
-                    )
+                        })
                 })?;
 
                 if arr.len() != $count {
-                    return Err(VldError::single(
-                        IssueCode::Custom { code: "invalid_tuple_length".to_string() },
-                        format!("Expected tuple of {} elements, received {}", $count, arr.len()),
-                    ));
+                    return Err(VldError::from_code(IssueCode::InvalidLength { origin: SizeOrigin::Tuple, expected: $count }));
                 }
 
                 let mut __errors = VldError::new();
@@ -39,13 +33,8 @@ macro_rules! impl_tuple_schema {
                 )+
 
                 match ($($v,)+) {
-                    ($(Some($v),)+) if __errors.is_empty() => Ok(($($v,)+)),
-                    _ if !__errors.is_empty() => Err(__errors),
-                    // An element schema failed without reporting an issue.
-                    _ => Err(VldError::single(
-                        IssueCode::Custom { code: "invalid_tuple".to_string() },
-                        "Invalid tuple element",
-                    )),
+                    ($(Some($v),)+) => Ok(($($v,)+)),
+                    _ => Err(__errors),
                 }
             }
         }

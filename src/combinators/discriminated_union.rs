@@ -68,23 +68,19 @@ impl VldSchema for ZDiscriminatedUnion {
 
     fn parse_value(&self, value: &Value) -> Result<Value, VldError> {
         let obj = value.as_object().ok_or_else(|| {
-            VldError::single_with_value(
+            VldError::from_code_with_value(
                 IssueCode::InvalidType {
                     expected: "object".to_string(),
                     received: value_type_name(value),
                 },
-                format!("Expected object, received {}", value_type_name(value)),
                 value,
             )
         })?;
         let at_disc = |e: VldError| e.with_prefix(PathSegment::Field(self.discriminator.clone()));
 
-        let disc_value = obj.get(&self.discriminator).ok_or_else(|| {
-            at_disc(VldError::single(
-                IssueCode::MissingField,
-                format!("Missing discriminator field \"{}\"", self.discriminator),
-            ))
-        })?;
+        let disc_value = obj
+            .get(&self.discriminator)
+            .ok_or_else(|| at_disc(VldError::from_code(IssueCode::MissingField)))?;
 
         for variant in &self.variants {
             if *disc_value == variant.discriminator_value {
@@ -92,21 +88,13 @@ impl VldSchema for ZDiscriminatedUnion {
             }
         }
 
-        let known: Vec<String> = self
+        let options = self
             .variants
             .iter()
-            .map(|v| format!("{}", v.discriminator_value))
+            .map(|v| v.discriminator_value.clone())
             .collect();
-
-        Err(at_disc(VldError::single_with_value(
-            IssueCode::Custom {
-                code: "invalid_discriminator".to_string(),
-            },
-            format!(
-                "Invalid discriminator value {}. Expected one of: {}",
-                disc_value,
-                known.join(", ")
-            ),
+        Err(at_disc(VldError::from_code_with_value(
+            IssueCode::InvalidDiscriminator { options },
             disc_value,
         )))
     }

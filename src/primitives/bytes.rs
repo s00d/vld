@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{IssueCode, PathSegment, VldError};
+use crate::error::{FormatKind, IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 fn b64_value(b: u8) -> Option<u8> {
@@ -203,7 +203,7 @@ impl VldSchema for ZBytes {
             } else {
                 "bytes array"
             };
-            super::type_error(&self.custom_type_error, expected, expected, value)
+            crate::primitives::type_error(&self.custom_type_error, expected, value)
         };
 
         let bytes = match value {
@@ -211,21 +211,20 @@ impl VldSchema for ZBytes {
                 let mut out = Vec::with_capacity(arr.len());
                 for (i, item) in arr.iter().enumerate() {
                     let n = item.as_u64().ok_or_else(|| {
-                        super::type_error(
+                        crate::primitives::type_error(
                             &self.custom_type_error,
-                            "byte (integer 0..=255)",
                             "byte (integer 0..=255)",
                             item,
                         )
                         .with_prefix(PathSegment::Index(i))
                     })?;
                     if n > 255 {
-                        return Err(VldError::single_with_value(
+                        return Err(VldError::from_code_with_value(
                             IssueCode::TooBig {
-                                maximum: 255.0,
+                                origin: SizeOrigin::Number,
+                                maximum: 255.into(),
                                 inclusive: true,
                             },
-                            "Byte value must be in range 0..=255",
                             item,
                         )
                         .with_prefix(PathSegment::Index(i)));
@@ -237,29 +236,26 @@ impl VldSchema for ZBytes {
             Value::String(s) if self.string_mode != BytesStringMode::Off => {
                 match self.string_mode {
                     BytesStringMode::Base64 => decode_base64(s).ok_or_else(|| {
-                        VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "invalid_base64".to_string(),
+                        VldError::from_code_with_value(
+                            IssueCode::InvalidFormat {
+                                format: FormatKind::Base64,
                             },
-                            "Invalid Base64 byte string",
                             value,
                         )
                     })?,
                     BytesStringMode::Base64Url => decode_base64_url(s).ok_or_else(|| {
-                        VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "invalid_base64url".to_string(),
+                        VldError::from_code_with_value(
+                            IssueCode::InvalidFormat {
+                                format: FormatKind::Base64Url,
                             },
-                            "Invalid Base64URL byte string",
                             value,
                         )
                     })?,
                     BytesStringMode::Hex => decode_hex(s).ok_or_else(|| {
-                        VldError::single_with_value(
-                            IssueCode::Custom {
-                                code: "invalid_hex".to_string(),
+                        VldError::from_code_with_value(
+                            IssueCode::InvalidFormat {
+                                format: FormatKind::Hex,
                             },
-                            "Invalid hex byte string",
                             value,
                         )
                     })?,
@@ -272,35 +268,35 @@ impl VldSchema for ZBytes {
         let mut errors = VldError::new();
         if let Some(min) = self.min_len {
             if bytes.len() < min {
-                errors.push_with_value(
+                errors.push_code_with_value(
                     IssueCode::TooSmall {
-                        minimum: min as f64,
+                        origin: SizeOrigin::Bytes,
+                        minimum: min.into(),
                         inclusive: true,
                     },
-                    format!("Bytes length must be at least {}", min),
                     value,
                 );
             }
         }
         if let Some(max) = self.max_len {
             if bytes.len() > max {
-                errors.push_with_value(
+                errors.push_code_with_value(
                     IssueCode::TooBig {
-                        maximum: max as f64,
+                        origin: SizeOrigin::Bytes,
+                        maximum: max.into(),
                         inclusive: true,
                     },
-                    format!("Bytes length must be at most {}", max),
                     value,
                 );
             }
         }
         if let Some(exact) = self.exact_len {
             if bytes.len() != exact {
-                errors.push_with_value(
-                    IssueCode::Custom {
-                        code: "invalid_length".to_string(),
+                errors.push_code_with_value(
+                    IssueCode::InvalidLength {
+                        origin: SizeOrigin::Bytes,
+                        expected: exact,
                     },
-                    format!("Bytes length must be exactly {}", exact),
                     value,
                 );
             }

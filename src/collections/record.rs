@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
+use crate::error::{value_type_name, IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 /// Schema for validating JSON objects as key-value records.
@@ -76,38 +76,31 @@ impl<V: VldSchema> VldSchema for ZRecord<V> {
 
     fn parse_value(&self, value: &Value) -> Result<HashMap<String, V::Output>, VldError> {
         let obj = value.as_object().ok_or_else(|| {
-            VldError::single(
-                IssueCode::InvalidType {
-                    expected: "object".to_string(),
-                    received: value_type_name(value),
-                },
-                format!("Expected object, received {}", value_type_name(value)),
-            )
+            VldError::from_code(IssueCode::InvalidType {
+                expected: "object".to_string(),
+                received: value_type_name(value),
+            })
         })?;
 
         let mut errors = VldError::new();
 
         if let Some(min) = self.min_keys {
             if obj.len() < min {
-                errors.push(
-                    IssueCode::TooSmall {
-                        minimum: min as f64,
-                        inclusive: true,
-                    },
-                    format!("Record must have at least {} keys", min),
-                );
+                errors.push_code(IssueCode::TooSmall {
+                    origin: SizeOrigin::Record,
+                    minimum: min.into(),
+                    inclusive: true,
+                });
             }
         }
 
         if let Some(max) = self.max_keys {
             if obj.len() > max {
-                errors.push(
-                    IssueCode::TooBig {
-                        maximum: max as f64,
-                        inclusive: true,
-                    },
-                    format!("Record must have at most {} keys", max),
-                );
+                errors.push_code(IssueCode::TooBig {
+                    origin: SizeOrigin::Record,
+                    maximum: max.into(),
+                    inclusive: true,
+                });
             }
         }
 

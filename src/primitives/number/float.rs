@@ -1,7 +1,8 @@
 use serde_json::Value;
+#[cfg(feature = "openapi")]
 use std::cmp::Ordering;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::{issue_error, IssueCode, ValidationIssue, VldError};
 use crate::schema::VldSchema;
 
 use super::{Kind, Num, NumberCheck, ZInt};
@@ -36,11 +37,8 @@ impl ZNumber {
         }
     }
 
-    fn push(mut self, kind: Kind, msg: impl Into<String>) -> Self {
-        self.checks.push(NumberCheck {
-            kind,
-            msg: msg.into(),
-        });
+    fn push(mut self, kind: Kind) -> Self {
+        self.checks.push(NumberCheck { kind, msg: None });
         self
     }
 
@@ -80,33 +78,30 @@ impl ZNumber {
     {
         for check in &mut self.checks {
             if let Some(msg) = f(check.kind.key()) {
-                check.msg = msg;
+                check.msg = Some(msg);
             }
         }
         self
     }
 
     pub(super) fn min_n(self, v: Num) -> Self {
-        self.push(Kind::Min(v), format!("Number must be at least {}", v))
+        self.push(Kind::Min(v))
     }
 
     pub(super) fn max_n(self, v: Num) -> Self {
-        self.push(Kind::Max(v), format!("Number must be at most {}", v))
+        self.push(Kind::Max(v))
     }
 
     pub(super) fn gt_n(self, v: Num) -> Self {
-        self.push(Kind::Gt(v), format!("Number must be greater than {}", v))
+        self.push(Kind::Gt(v))
     }
 
     pub(super) fn lt_n(self, v: Num) -> Self {
-        self.push(Kind::Lt(v), format!("Number must be less than {}", v))
+        self.push(Kind::Lt(v))
     }
 
     pub(super) fn multiple_of_n(self, v: Num) -> Self {
-        self.push(
-            Kind::MultipleOf(v),
-            format!("Number must be a multiple of {}", v),
-        )
+        self.push(Kind::MultipleOf(v))
     }
 
     /// Minimum value (inclusive). Alias: `gte`.
@@ -141,27 +136,27 @@ impl ZNumber {
 
     /// Must be positive (> 0).
     pub fn positive(self) -> Self {
-        self.push(Kind::Positive, "Number must be positive")
+        self.push(Kind::Positive)
     }
 
     /// Must be negative (< 0).
     pub fn negative(self) -> Self {
-        self.push(Kind::Negative, "Number must be negative")
+        self.push(Kind::Negative)
     }
 
     /// Must be non-negative (>= 0).
     pub fn non_negative(self) -> Self {
-        self.push(Kind::NonNegative, "Number must be non-negative")
+        self.push(Kind::NonNegative)
     }
 
     /// Must be non-positive (<= 0).
     pub fn non_positive(self) -> Self {
-        self.push(Kind::NonPositive, "Number must be non-positive")
+        self.push(Kind::NonPositive)
     }
 
     /// Must be finite (not NaN or infinity).
     pub fn finite(self) -> Self {
-        self.push(Kind::Finite, "Number must be finite")
+        self.push(Kind::Finite)
     }
 
     /// Must be a multiple of the given value.
@@ -174,10 +169,7 @@ impl ZNumber {
 
     /// Must be within JavaScript's safe integer range (`-(2^53 - 1)` to `2^53 - 1`).
     pub fn safe(self) -> Self {
-        self.push(
-            Kind::Safe,
-            "Number must be a safe integer (-(2^53-1) to 2^53-1)",
-        )
+        self.push(Kind::Safe)
     }
 
     /// Convert to integer validation. Returns `ZInt` with `Output = i64`.
@@ -194,20 +186,16 @@ impl ZNumber {
     }
 
     fn type_err(&self, value: &Value) -> VldError {
-        crate::primitives::type_error(&self.custom_type_error, "number", "number", value)
+        crate::primitives::type_error(&self.custom_type_error, "number", value)
     }
 
-    fn coerce_err(&self, s: &str, value: &Value) -> VldError {
-        let msg = self
-            .custom_type_error
-            .clone()
-            .unwrap_or_else(|| format!("Cannot coerce \"{}\" to number", s));
-        VldError::single_with_value(
+    fn coerce_err(&self, value: &Value) -> VldError {
+        issue_error(
             IssueCode::InvalidType {
                 expected: "number".to_string(),
                 received: "string".to_string(),
             },
-            msg,
+            self.custom_type_error.as_ref(),
             value,
         )
     }
@@ -219,7 +207,7 @@ impl ZNumber {
                 .parse::<f64>()
                 .ok()
                 .filter(|f| f.is_finite())
-                .ok_or_else(|| self.coerce_err(s, value)),
+                .ok_or_else(|| self.coerce_err(value)),
             Value::Bool(b) if self.coerce => Ok(if *b { 1.0 } else { 0.0 }),
             _ => Err(self.type_err(value)),
         }
@@ -229,7 +217,9 @@ impl ZNumber {
         let mut errors = VldError::new();
         for check in &self.checks {
             if let Some(code) = check.kind.failure(n) {
-                errors.push_with_value(code, check.msg.clone(), value);
+                errors.issues.push(
+                    ValidationIssue::with_override(code, check.msg.as_ref()).with_received(value),
+                );
             }
         }
         if errors.is_empty() {

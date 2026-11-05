@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::{issue_error, IssueCode, SizeOrigin, VldError};
 use crate::schema::VldSchema;
 
 use super::{Num, ZNumber};
@@ -145,11 +145,7 @@ impl ZInt {
     }
 
     fn not_int(&self, value: &Value) -> VldError {
-        let msg = self
-            .custom_int_error
-            .clone()
-            .unwrap_or_else(|| "Expected integer, received float".to_string());
-        VldError::single_with_value(IssueCode::NotInt, msg, value)
+        issue_error(IssueCode::NotInt, self.custom_int_error.as_ref(), value)
     }
 
     fn int_from_f64(&self, f: f64, value: &Value) -> Result<i64, VldError> {
@@ -189,16 +185,18 @@ impl ZInt {
 fn out_of_range(negative: bool, value: &Value) -> VldError {
     let code = if negative {
         IssueCode::TooSmall {
-            minimum: i64::MIN as f64,
+            origin: SizeOrigin::Number,
+            minimum: i64::MIN.into(),
             inclusive: true,
         }
     } else {
         IssueCode::TooBig {
-            maximum: i64::MAX as f64,
+            origin: SizeOrigin::Number,
+            maximum: i64::MAX.into(),
             inclusive: true,
         }
     };
-    VldError::single_with_value(code, "Integer is out of the i64 range", value)
+    VldError::from_code_with_value(code, value)
 }
 
 impl VldSchema for ZInt {

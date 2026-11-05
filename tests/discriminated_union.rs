@@ -42,7 +42,8 @@ fn unknown_variant() {
 #[test]
 fn missing_discriminator_field() {
     let err = animal_schema().parse(r#"{"name":"x"}"#).unwrap_err();
-    assert!(err.issues[0].message.contains("discriminator"));
+    assert_eq!(err.issues[0].code, vld::error::IssueCode::MissingField);
+    assert_eq!(err.issues[0].path[0].to_string(), ".type");
 }
 
 #[test]

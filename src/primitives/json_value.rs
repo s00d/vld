@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::{IssueCode, PathSegment, VldError};
 use crate::schema::VldSchema;
 
 #[derive(Clone)]
@@ -89,48 +89,38 @@ impl VldSchema for ZJsonValue {
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         if self.require_object && !value.is_object() {
-            return Err(super::type_error(
+            return Err(crate::primitives::type_error(
                 &self.custom_type_error,
-                "object",
                 "object JSON value",
                 value,
             ));
         }
         if self.require_array && !value.is_array() {
-            return Err(super::type_error(
+            return Err(crate::primitives::type_error(
                 &self.custom_type_error,
-                "array",
                 "array JSON value",
                 value,
             ));
         }
         if !self.required_keys.is_empty() {
             let obj = value.as_object().ok_or_else(|| {
-                super::type_error(
+                crate::primitives::type_error(
                     &self.custom_type_error,
-                    "object",
                     "object (required keys need an object)",
                     value,
                 )
             })?;
             for k in &self.required_keys {
                 if !obj.contains_key(k) {
-                    return Err(VldError::single_with_value(
-                        IssueCode::MissingField,
-                        format!("Missing required key `{}`", k),
-                        value,
-                    ));
+                    return Err(VldError::from_code(IssueCode::MissingField)
+                        .with_prefix(PathSegment::Field(k.clone())));
                 }
             }
         }
         if let Some(max_depth) = self.max_depth {
-            let d = depth(value);
-            if d > max_depth {
-                return Err(VldError::single_with_value(
-                    IssueCode::Custom {
-                        code: "json_depth_exceeded".to_string(),
-                    },
-                    format!("JSON depth {} exceeds max {}", d, max_depth),
+            if depth(value) > max_depth {
+                return Err(VldError::from_code_with_value(
+                    IssueCode::JsonTooDeep { max_depth },
                     value,
                 ));
             }

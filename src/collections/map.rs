@@ -52,16 +52,10 @@ where
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
         let arr = value.as_array().ok_or_else(|| {
-            VldError::single(
-                IssueCode::InvalidType {
-                    expected: "array".to_string(),
-                    received: value_type_name(value),
-                },
-                format!(
-                    "Expected array of [key, value] pairs, received {}",
-                    value_type_name(value)
-                ),
-            )
+            VldError::from_code(IssueCode::InvalidType {
+                expected: "array".to_string(),
+                received: value_type_name(value),
+            })
         })?;
 
         let mut result = HashMap::new();
@@ -89,11 +83,8 @@ where
                         match result.entry(k) {
                             Entry::Occupied(_) => {
                                 errors = errors.merge(
-                                    VldError::single_with_value(
-                                        IssueCode::Custom {
-                                            code: "duplicate_map_key".to_string(),
-                                        },
-                                        "Duplicate map key",
+                                    VldError::from_code_with_value(
+                                        IssueCode::DuplicateKey,
                                         &pair[0],
                                     )
                                     .with_prefix(PathSegment::Index(i)),
@@ -106,12 +97,7 @@ where
                     }
                 }
                 None => {
-                    let mut e = VldError::single(
-                        IssueCode::Custom {
-                            code: "invalid_map_entry".to_string(),
-                        },
-                        "Each Map entry must be a [key, value] array of length 2",
-                    );
+                    let mut e = VldError::from_code(IssueCode::InvalidMapEntry);
                     e = e.with_prefix(PathSegment::Index(i));
                     errors = errors.merge(e);
                 }

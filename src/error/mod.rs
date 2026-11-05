@@ -1,16 +1,71 @@
 //! Validation errors: [`VldError`], [`ValidationIssue`], [`IssueCode`].
+//!
+//! Every issue carries a machine-readable [`IssueCode`] and a `message`. The
+//! default message is rendered from the English template table
+//! ([`i18n::english()`]) using [`IssueCode::message_keys()`] and
+//! [`IssueCode::params()`]; per-check overrides (`*_msg` builders,
+//! `.message()`, `type_error()`) replace it. [`i18n::translate_error`]
+//! re-renders messages with another table.
+//!
+//! # Issue codes
+//!
+//! | Variant | `key()` | Template keys (specific → generic) | Params |
+//! |---|---|---|---|
+//! | `InvalidType` | `invalid_type` | `invalid_type` | `expected`, `received` |
+//! | `TooSmall` | `too_small` | `too_small.<origin>`, `too_small` (exclusive: `too_small_exclusive[.<origin>]`) | `origin`, `minimum`, `inclusive` |
+//! | `TooBig` | `too_big` | `too_big.<origin>`, `too_big` (exclusive: `too_big_exclusive[.<origin>]`) | `origin`, `maximum`, `inclusive` |
+//! | `InvalidLength` | `invalid_length` | `invalid_length.<origin>` | `origin`, `expected` |
+//! | `InvalidString` | `invalid_string` | `invalid_string.<validation>` | `validation` (+ `prefix` / `suffix` / `substring`) |
+//! | `InvalidFormat` | `invalid_format` | `invalid_format.<format>` | `format` |
+//! | `InvalidDate` | `invalid_date` | `invalid_date.<kind>` | `kind` |
+//! | `InvalidTimezoneOffset` | `invalid_timezone_offset` | — | `expected` |
+//! | `NotInPast` | `not_in_past` | `not_in_past.<kind>` | `kind` |
+//! | `NotInFuture` | `not_in_future` | `not_in_future.<kind>` | `kind` |
+//! | `NotInt` | `not_int` | — | — |
+//! | `NotFinite` | `not_finite` | — | — |
+//! | `NotMultipleOf` | `not_multiple_of` | — | `divisor` |
+//! | `NotSafeInteger` | `not_safe_integer` | — | — |
+//! | `InvalidLiteral` | `invalid_literal` | — | `expected` |
+//! | `InvalidEnumValue` | `invalid_enum_value` | — | `options` |
+//! | `InvalidUnion` | `invalid_union` | — | — |
+//! | `InvalidDiscriminator` | `invalid_discriminator` | — | `options` |
+//! | `NotUnique` | `not_unique` | — | — |
+//! | `MissingContains` | `missing_contains` | — | — |
+//! | `DuplicateKey` | `duplicate_key` | — | — |
+//! | `InvalidMapEntry` | `invalid_map_entry` | — | — |
+//! | `MissingField` | `missing_field` | — | — |
+//! | `UnrecognizedField` | `unrecognized_field` | — | — |
+//! | `PathOutsideBase` | `path_outside_base` | — | `base` |
+//! | `PathNotAbsolute` | `path_not_absolute` | — | — |
+//! | `PathNotRelative` | `path_not_relative` | — | — |
+//! | `JsonTooDeep` | `json_too_deep` | — | `max_depth` |
+//! | `FileTypeNotAllowed` | `file_type_not_allowed` | — | `kind`, `actual`, `allowed` |
+//! | `FileTypeDenied` | `file_type_denied` | — | `kind`, `actual` |
+//! | `FileTypeUnknown` | `file_type_unknown` | — | `kind` |
+//! | `ChecksumMismatch` | `checksum_mismatch` | — | `algorithm` |
+//! | `MissingExif` | `missing_exif` | — | — |
+//! | `SerializeError` | `serialize_error` | — | `detail` |
+//! | `IoError` | `io_error` | — | — |
+//! | `ParseError` | `parse_error` | — | — |
+//! | `Custom` | the user code | `<code>`, `custom` | `code` |
+//!
+//! Origins ([`SizeOrigin::key`]): `string`, `number`, `decimal`, `array`,
+//! `tuple`, `set`, `record`, `object`, `bytes`, `date`, `datetime`,
+//! `duration`, `file`, `image_width`, `image_height`, `port`, `contains`.
 
 use std::fmt;
 
 mod builder;
+mod code;
 pub mod format;
 pub mod i18n;
 
 pub use crate::object::{FieldResult, ParseResult};
 pub use builder::IssueBuilder;
+pub use code::{DateKind, FileTypeKind, FormatKind, IssueCode, SizeOrigin, StringValidation};
 
 /// A segment in a validation error path.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PathSegment {
     /// Object field name.
     Field(String),
@@ -27,70 +82,6 @@ impl fmt::Display for PathSegment {
     }
 }
 
-/// Type of string validation that failed.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum StringValidation {
-    Email,
-    Url,
-    UrlStrict,
-    Uri,
-    Uuid,
-    UuidV1,
-    UuidV4,
-    UuidV7,
-    Ip,
-    Slug,
-    Color,
-    Currency,
-    CountryCode,
-    Locale,
-    Cron,
-    Regex,
-    StartsWith,
-    EndsWith,
-    Ipv4,
-    Ipv6,
-    Cidr,
-    Mac,
-    Hex,
-    CreditCard,
-    Phone,
-    PhoneE164,
-    Semver,
-    SemverFull,
-    Jwt,
-    Ascii,
-    Alpha,
-    Alphanumeric,
-    Lowercase,
-    Uppercase,
-    Base64,
-    IsoDate,
-    IsoDatetime,
-    IsoTime,
-    Hostname,
-    Cuid2,
-    Ulid,
-    Nanoid,
-    Emoji,
-}
-
-/// Validation issue code — describes what went wrong.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum IssueCode {
-    InvalidType { expected: String, received: String },
-    TooSmall { minimum: f64, inclusive: bool },
-    TooBig { maximum: f64, inclusive: bool },
-    InvalidString { validation: StringValidation },
-    NotInt,
-    NotFinite,
-    MissingField,
-    UnrecognizedField,
-    IoError,
-    ParseError,
-    Custom { code: String },
-}
-
 /// A single validation issue with path, message and received value.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ValidationIssue {
@@ -99,6 +90,38 @@ pub struct ValidationIssue {
     pub path: Vec<PathSegment>,
     /// The value that was received (if available).
     pub received: Option<serde_json::Value>,
+}
+
+impl ValidationIssue {
+    /// Issue with the default English message for `code`, no path, no value.
+    pub fn new(code: IssueCode) -> Self {
+        Self {
+            message: code.default_message(),
+            code,
+            path: vec![],
+            received: None,
+        }
+    }
+
+    /// Replace the message.
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = message.into();
+        self
+    }
+
+    /// Attach the received value (large strings / arrays are truncated).
+    pub fn with_received(mut self, value: &serde_json::Value) -> Self {
+        self.received = Some(truncate_value(value));
+        self
+    }
+}
+
+impl From<ValidationIssue> for VldError {
+    fn from(issue: ValidationIssue) -> Self {
+        Self {
+            issues: vec![issue],
+        }
+    }
 }
 
 /// Collection of validation errors.
@@ -115,16 +138,19 @@ impl VldError {
         Self { issues: vec![] }
     }
 
+    /// Error with a single issue and its default English message.
+    pub fn from_code(code: IssueCode) -> Self {
+        ValidationIssue::new(code).into()
+    }
+
+    /// Error with a single issue, its default English message and the received value.
+    pub fn from_code_with_value(code: IssueCode, received: &serde_json::Value) -> Self {
+        ValidationIssue::new(code).with_received(received).into()
+    }
+
     /// Create an error with a single issue (no received value).
     pub fn single(code: IssueCode, message: impl Into<String>) -> Self {
-        Self {
-            issues: vec![ValidationIssue {
-                code,
-                message: message.into(),
-                path: vec![],
-                received: None,
-            }],
-        }
+        ValidationIssue::new_raw(code, message.into()).into()
     }
 
     /// Create an error with a single issue and the received value.
@@ -133,14 +159,9 @@ impl VldError {
         message: impl Into<String>,
         received: &serde_json::Value,
     ) -> Self {
-        Self {
-            issues: vec![ValidationIssue {
-                code,
-                message: message.into(),
-                path: vec![],
-                received: Some(truncate_value(received)),
-            }],
-        }
+        ValidationIssue::new_raw(code, message.into())
+            .with_received(received)
+            .into()
     }
 
     /// Prepend a path segment to all issues (used for nested objects/arrays).
@@ -164,12 +185,8 @@ impl VldError {
 
     /// Push a single issue (no received value).
     pub fn push(&mut self, code: IssueCode, message: impl Into<String>) {
-        self.issues.push(ValidationIssue {
-            code,
-            message: message.into(),
-            path: vec![],
-            received: None,
-        });
+        self.issues
+            .push(ValidationIssue::new_raw(code, message.into()));
     }
 
     /// Push a single issue with the received value.
@@ -179,13 +196,50 @@ impl VldError {
         message: impl Into<String>,
         received: &serde_json::Value,
     ) {
-        self.issues.push(ValidationIssue {
-            code,
-            message: message.into(),
-            path: vec![],
-            received: Some(truncate_value(received)),
-        });
+        self.issues
+            .push(ValidationIssue::new_raw(code, message.into()).with_received(received));
     }
+
+    /// Push a single issue with its default English message.
+    pub fn push_code(&mut self, code: IssueCode) {
+        self.issues.push(ValidationIssue::new(code));
+    }
+
+    /// Push a single issue with its default English message and the received value.
+    pub fn push_code_with_value(&mut self, code: IssueCode, received: &serde_json::Value) {
+        self.issues
+            .push(ValidationIssue::new(code).with_received(received));
+    }
+}
+
+impl ValidationIssue {
+    fn new_raw(code: IssueCode, message: String) -> Self {
+        Self {
+            code,
+            message,
+            path: vec![],
+            received: None,
+        }
+    }
+
+    /// Issue with `custom` as message when set, else the default message.
+    pub(crate) fn with_override(code: IssueCode, custom: Option<&String>) -> Self {
+        match custom {
+            Some(msg) => Self::new_raw(code, msg.clone()),
+            None => Self::new(code),
+        }
+    }
+}
+
+/// Error with one issue: `custom` message (or the default) plus the received value.
+pub(crate) fn issue_error(
+    code: IssueCode,
+    custom: Option<&String>,
+    received: &serde_json::Value,
+) -> VldError {
+    ValidationIssue::with_override(code, custom)
+        .with_received(received)
+        .into()
 }
 
 impl Default for VldError {
@@ -215,55 +269,6 @@ impl fmt::Display for VldError {
 
 impl std::error::Error for VldError {}
 
-impl IssueCode {
-    /// Stable string key for this error code. Useful for i18n and error mapping.
-    pub fn key(&self) -> &str {
-        match self {
-            IssueCode::InvalidType { .. } => "invalid_type",
-            IssueCode::TooSmall { .. } => "too_small",
-            IssueCode::TooBig { .. } => "too_big",
-            IssueCode::InvalidString { .. } => "invalid_string",
-            IssueCode::NotInt => "not_int",
-            IssueCode::NotFinite => "not_finite",
-            IssueCode::MissingField => "missing_field",
-            IssueCode::UnrecognizedField => "unrecognized_field",
-            IssueCode::IoError => "io_error",
-            IssueCode::ParseError => "parse_error",
-            IssueCode::Custom { code } => code,
-        }
-    }
-
-    /// Extract key-value parameters from this error code for message formatting.
-    ///
-    /// Useful for i18n: format templates like `"Must be at least {minimum}"`.
-    pub fn params(&self) -> Vec<(&str, String)> {
-        match self {
-            IssueCode::InvalidType { expected, received } => {
-                vec![
-                    ("expected", expected.clone()),
-                    ("received", received.clone()),
-                ]
-            }
-            IssueCode::TooSmall { minimum, inclusive } => {
-                vec![
-                    ("minimum", minimum.to_string()),
-                    ("inclusive", inclusive.to_string()),
-                ]
-            }
-            IssueCode::TooBig { maximum, inclusive } => {
-                vec![
-                    ("maximum", maximum.to_string()),
-                    ("inclusive", inclusive.to_string()),
-                ]
-            }
-            IssueCode::InvalidString { validation } => {
-                vec![("validation", format!("{:?}", validation))]
-            }
-            _ => vec![],
-        }
-    }
-}
-
 /// Returns the JSON type name for a value.
 pub(crate) fn value_type_name(value: &serde_json::Value) -> String {
     match value {
@@ -285,14 +290,10 @@ pub(crate) fn expect_object(
     value: &serde_json::Value,
 ) -> Result<&serde_json::Map<String, serde_json::Value>, VldError> {
     value.as_object().ok_or_else(|| {
-        let received = value_type_name(value);
-        VldError::single(
-            IssueCode::InvalidType {
-                expected: "object".to_string(),
-                received: received.clone(),
-            },
-            format!("Expected object, received {}", received),
-        )
+        VldError::from_code(IssueCode::InvalidType {
+            expected: "object".to_string(),
+            received: value_type_name(value),
+        })
     })
 }
 

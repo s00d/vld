@@ -1,9 +1,11 @@
 use serde_json::{Map, Value};
 
-use crate::error::{IssueCode, PathSegment, VldError};
+use crate::error::{IssueCode, PathSegment, SizeOrigin, VldError};
 use crate::schema::{DynSchema, VldSchema};
 
-use super::field::{JsonSchemaField, OptionalDynSchema, RequiredDynSchema};
+#[cfg(feature = "openapi")]
+use super::field::JsonSchemaField;
+use super::field::{OptionalDynSchema, RequiredDynSchema};
 
 struct ObjectField {
     name: String,
@@ -364,24 +366,20 @@ impl VldSchema for ZObject {
 
         if let Some(min) = self.min_keys {
             if obj.len() < min {
-                errors.push(
-                    IssueCode::TooSmall {
-                        minimum: min as f64,
-                        inclusive: true,
-                    },
-                    format!("Object must contain at least {} keys", min),
-                );
+                errors.push_code(IssueCode::TooSmall {
+                    origin: SizeOrigin::Object,
+                    minimum: min.into(),
+                    inclusive: true,
+                });
             }
         }
         if let Some(max) = self.max_keys {
             if obj.len() > max {
-                errors.push(
-                    IssueCode::TooBig {
-                        maximum: max as f64,
-                        inclusive: true,
-                    },
-                    format!("Object must contain at most {} keys", max),
-                );
+                errors.push_code(IssueCode::TooBig {
+                    origin: SizeOrigin::Object,
+                    maximum: max.into(),
+                    inclusive: true,
+                });
             }
         }
 

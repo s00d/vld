@@ -41,28 +41,16 @@ pub use string::ZString;
 
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{issue_error, value_type_name, IssueCode, VldError};
 
-/// Build the standard "invalid type" error, honouring a `.type_error(...)` override.
-///
-/// `expected` goes into [`IssueCode::InvalidType`]; `label` is used in the
-/// default message `Expected {label}, received {type}`.
-pub(crate) fn type_error(
-    custom: &Option<String>,
-    expected: &str,
-    label: &str,
-    value: &Value,
-) -> VldError {
-    let received = value_type_name(value);
-    let msg = custom
-        .clone()
-        .unwrap_or_else(|| format!("Expected {}, received {}", label, received));
-    VldError::single_with_value(
+/// Build the standard `invalid_type` error, honouring a `.type_error(...)` override.
+pub(crate) fn type_error(custom: &Option<String>, expected: &str, value: &Value) -> VldError {
+    issue_error(
         IssueCode::InvalidType {
             expected: expected.to_string(),
-            received,
+            received: value_type_name(value),
         },
-        msg,
+        custom.as_ref(),
         value,
     )
 }

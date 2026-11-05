@@ -13,7 +13,7 @@
 
 use serde_json::Value;
 
-use crate::error::{IssueCode, VldError};
+use crate::error::{issue_error, DateKind, IssueCode, SizeOrigin, ValidationIssue, VldError};
 use crate::schema::VldSchema;
 
 use crate::primitives::iso::{is_valid_iso_date, split_datetime};
@@ -60,27 +60,29 @@ fn format_offset(offset_seconds: i32) -> String {
     format!("{}{:02}:{:02}", sign, abs / 3600, (abs % 3600) / 60)
 }
 
-fn custom(code: &str, msg: &str, value: &Value) -> VldError {
-    VldError::single_with_value(
-        IssueCode::Custom {
-            code: code.to_string(),
-        },
-        msg,
-        value,
-    )
+fn date_error(code: IssueCode, custom: Option<&String>, value: &Value) -> VldError {
+    issue_error(code, custom, value)
 }
 
-/// Bounds shared by `ZDate` and `ZDateTime`.
-///
-/// Out-of-range values report `Custom { code: "date_too_small" | "date_too_big" }`
-/// (instead of `TooSmall`/`TooBig`, whose numeric `minimum`/`maximum` cannot
-/// hold a date), so translated messages never show a bogus `0` bound.
+/// A bound: the value, its display form (for messages / JSON Schema) and an
+/// optional custom message.
+#[derive(Clone)]
+struct Bound<T> {
+    value: T,
+    display: String,
+    msg: Option<String>,
+}
+
+/// Bounds shared by `ZDate` and `ZDateTime`. Out-of-range values report
+/// `TooSmall` / `TooBig` (origin `Date` / `DateTime`, bound as a string);
+/// past/future checks report `NotInPast` / `NotInFuture`.
 #[derive(Clone)]
 struct Bounds<T> {
-    min: Option<(T, String)>,
-    max: Option<(T, String)>,
-    past: Option<String>,
-    future: Option<String>,
+    min: Option<Bound<T>>,
+    max: Option<Bound<T>>,
+    /// `Some(custom message)` when the check is on.
+    past: Option<Option<String>>,
+    future: Option<Option<String>>,
 }
 
 impl<T: PartialOrd> Bounds<T> {
@@ -93,28 +95,44 @@ impl<T: PartialOrd> Bounds<T> {
         }
     }
 
-    fn check(&self, v: &T, now: impl FnOnce() -> T, kind: &str, value: &Value) -> VldError {
-        let mut errors = VldError::new();
-        let mut push = |code: String, msg: &String| {
-            errors.push_with_value(IssueCode::Custom { code }, msg.clone(), value)
+    fn check(&self, v: &T, now: impl FnOnce() -> T, kind: DateKind, value: &Value) -> VldError {
+        let origin = match kind {
+            DateKind::Date => SizeOrigin::Date,
+            DateKind::DateTime => SizeOrigin::DateTime,
         };
-        if let Some((min, msg)) = &self.min {
-            if v < min {
-                push("date_too_small".into(), msg);
-            }
+        let mut errors = VldError::new();
+        let mut push = |code, msg: Option<&String>| {
+            errors
+                .issues
+                .push(ValidationIssue::with_override(code, msg).with_received(value))
+        };
+        if let Some(min) = self.min.as_ref().filter(|b| *v < b.value) {
+            push(
+                IssueCode::TooSmall {
+                    origin,
+                    minimum: Value::String(min.display.clone()),
+                    inclusive: true,
+                },
+                min.msg.as_ref(),
+            );
         }
-        if let Some((max, msg)) = &self.max {
-            if v > max {
-                push("date_too_big".into(), msg);
-            }
+        if let Some(max) = self.max.as_ref().filter(|b| *v > b.value) {
+            push(
+                IssueCode::TooBig {
+                    origin,
+                    maximum: Value::String(max.display.clone()),
+                    inclusive: true,
+                },
+                max.msg.as_ref(),
+            );
         }
         if self.past.is_some() || self.future.is_some() {
             let now = now();
             if let Some(msg) = self.past.as_ref().filter(|_| *v >= now) {
-                push(format!("not_past_{}", kind), msg);
+                push(IssueCode::NotInPast { kind }, msg.as_ref());
             }
             if let Some(msg) = self.future.as_ref().filter(|_| *v <= now) {
-                push(format!("not_future_{}", kind), msg);
+                push(IssueCode::NotInFuture { kind }, msg.as_ref());
             }
         }
         errors
@@ -166,8 +184,11 @@ impl ZDate {
 
     /// Minimum date (inclusive) from a backend date value.
     pub fn min_date(mut self, date: Date) -> Self {
-        let msg = format!("Date must be on or after {}", date);
-        self.bounds.min = Some((date, msg));
+        self.bounds.min = Some(Bound {
+            display: date.to_string(),
+            value: date,
+            msg: None,
+        });
         self
     }
 
@@ -178,30 +199,35 @@ impl ZDate {
 
     /// Maximum date (inclusive) from a backend date value.
     pub fn max_date(mut self, date: Date) -> Self {
-        let msg = format!("Date must be on or before {}", date);
-        self.bounds.max = Some((date, msg));
+        self.bounds.max = Some(Bound {
+            display: date.to_string(),
+            value: date,
+            msg: None,
+        });
         self
     }
 
     /// Date must be in the past (before today, UTC).
-    pub fn past(self) -> Self {
-        self.past_msg("Date must be in the past")
+    pub fn past(mut self) -> Self {
+        self.bounds.past = Some(None);
+        self
     }
 
     /// Date must be in the past (before today), with custom message.
     pub fn past_msg(mut self, msg: impl Into<String>) -> Self {
-        self.bounds.past = Some(msg.into());
+        self.bounds.past = Some(Some(msg.into()));
         self
     }
 
     /// Date must be in the future (after today, UTC).
-    pub fn future(self) -> Self {
-        self.future_msg("Date must be in the future")
+    pub fn future(mut self) -> Self {
+        self.bounds.future = Some(None);
+        self
     }
 
     /// Date must be in the future (after today), with custom message.
     pub fn future_msg(mut self, msg: impl Into<String>) -> Self {
-        self.bounds.future = Some(msg.into());
+        self.bounds.future = Some(Some(msg.into()));
         self
     }
 
@@ -211,11 +237,11 @@ impl ZDate {
     #[cfg(feature = "openapi")]
     pub fn to_json_schema(&self) -> serde_json::Value {
         let mut schema = serde_json::json!({"type": "string", "format": "date"});
-        if let Some((d, _)) = &self.bounds.min {
-            schema["formatMinimum"] = serde_json::json!(d.to_string());
+        if let Some(b) = &self.bounds.min {
+            schema["formatMinimum"] = serde_json::json!(b.display);
         }
-        if let Some((d, _)) = &self.bounds.max {
-            schema["formatMaximum"] = serde_json::json!(d.to_string());
+        if let Some(b) = &self.bounds.max {
+            schema["formatMaximum"] = serde_json::json!(b.display);
         }
         schema
     }
@@ -234,24 +260,46 @@ impl VldSchema for ZDate {
         let s = value.as_str().ok_or_else(|| {
             crate::primitives::type_error(
                 &self.custom_type_error,
-                "string (date)",
                 "date string (YYYY-MM-DD)",
                 value,
             )
         })?;
         let date = parse_date(s).ok_or_else(|| {
-            custom(
-                "invalid_date",
-                &format!("Invalid date format: expected YYYY-MM-DD, got \"{}\"", s),
+            date_error(
+                IssueCode::InvalidDate {
+                    kind: DateKind::Date,
+                },
+                None,
                 value,
             )
         })?;
-        let errors = self.bounds.check(&date, backend::today, "date", value);
+        let errors = self
+            .bounds
+            .check(&date, backend::today, DateKind::Date, value);
         if errors.is_empty() {
             Ok(date)
         } else {
             Err(errors)
         }
+    }
+}
+
+/// Offset required by [`ZDateTime::timezone_offset_only`].
+#[derive(Clone)]
+struct RequiredOffset {
+    seconds: i32,
+    msg: Option<String>,
+}
+
+impl RequiredOffset {
+    fn error(&self, value: &Value) -> VldError {
+        date_error(
+            IssueCode::InvalidTimezoneOffset {
+                expected: format_offset(self.seconds),
+            },
+            self.msg.as_ref(),
+            value,
+        )
     }
 }
 
@@ -279,7 +327,7 @@ pub struct ZDateTime {
     bounds: Bounds<DateTime>,
     allow_naive: bool,
     naive_offset: i32,
-    required_timezone_offset: Option<(i32, String)>,
+    required_timezone_offset: Option<RequiredOffset>,
     custom_type_error: Option<String>,
 }
 
@@ -313,11 +361,11 @@ impl ZDateTime {
 
     /// Minimum datetime (inclusive) from a backend UTC datetime.
     pub fn min_datetime(mut self, dt: DateTime) -> Self {
-        let msg = format!(
-            "Datetime must be on or after {}",
-            backend::format_datetime(&dt)
-        );
-        self.bounds.min = Some((dt, msg));
+        self.bounds.min = Some(Bound {
+            display: backend::format_datetime(&dt),
+            value: dt,
+            msg: None,
+        });
         self
     }
 
@@ -328,33 +376,35 @@ impl ZDateTime {
 
     /// Maximum datetime (inclusive) from a backend UTC datetime.
     pub fn max_datetime(mut self, dt: DateTime) -> Self {
-        let msg = format!(
-            "Datetime must be on or before {}",
-            backend::format_datetime(&dt)
-        );
-        self.bounds.max = Some((dt, msg));
+        self.bounds.max = Some(Bound {
+            display: backend::format_datetime(&dt),
+            value: dt,
+            msg: None,
+        });
         self
     }
 
     /// Datetime must be in the past.
-    pub fn past(self) -> Self {
-        self.past_msg("Datetime must be in the past")
+    pub fn past(mut self) -> Self {
+        self.bounds.past = Some(None);
+        self
     }
 
     /// Datetime must be in the past, with custom message.
     pub fn past_msg(mut self, msg: impl Into<String>) -> Self {
-        self.bounds.past = Some(msg.into());
+        self.bounds.past = Some(Some(msg.into()));
         self
     }
 
     /// Datetime must be in the future.
-    pub fn future(self) -> Self {
-        self.future_msg("Datetime must be in the future")
+    pub fn future(mut self) -> Self {
+        self.bounds.future = Some(None);
+        self
     }
 
     /// Datetime must be in the future, with custom message.
     pub fn future_msg(mut self, msg: impl Into<String>) -> Self {
-        self.bounds.future = Some(msg.into());
+        self.bounds.future = Some(Some(msg.into()));
         self
     }
 
@@ -390,17 +440,20 @@ impl ZDateTime {
     ///
     /// # Panics
     /// If `|offset_seconds| >= 86400`.
-    pub fn timezone_offset_only(self, offset_seconds: i32) -> Self {
-        let msg = format!(
-            "Timezone offset must be {}",
-            format_offset(check_offset(offset_seconds))
-        );
-        self.timezone_offset_only_msg(offset_seconds, msg)
+    pub fn timezone_offset_only(mut self, offset_seconds: i32) -> Self {
+        self.required_timezone_offset = Some(RequiredOffset {
+            seconds: check_offset(offset_seconds),
+            msg: None,
+        });
+        self
     }
 
     /// Same as [`timezone_offset_only`](Self::timezone_offset_only), with custom message.
     pub fn timezone_offset_only_msg(mut self, offset_seconds: i32, msg: impl Into<String>) -> Self {
-        self.required_timezone_offset = Some((check_offset(offset_seconds), msg.into()));
+        self.required_timezone_offset = Some(RequiredOffset {
+            seconds: check_offset(offset_seconds),
+            msg: Some(msg.into()),
+        });
         self
     }
 
@@ -410,11 +463,11 @@ impl ZDateTime {
     #[cfg(feature = "openapi")]
     pub fn to_json_schema(&self) -> serde_json::Value {
         let mut schema = serde_json::json!({"type": "string", "format": "date-time"});
-        if let Some((d, _)) = &self.bounds.min {
-            schema["formatMinimum"] = serde_json::json!(backend::format_datetime(d));
+        if let Some(b) = &self.bounds.min {
+            schema["formatMinimum"] = serde_json::json!(b.display);
         }
-        if let Some((d, _)) = &self.bounds.max {
-            schema["formatMaximum"] = serde_json::json!(backend::format_datetime(d));
+        if let Some(b) = &self.bounds.max {
+            schema["formatMaximum"] = serde_json::json!(b.display);
         }
         schema
     }
@@ -431,37 +484,36 @@ impl VldSchema for ZDateTime {
 
     fn parse_value(&self, value: &Value) -> Result<DateTime, VldError> {
         let s = value.as_str().ok_or_else(|| {
-            crate::primitives::type_error(
-                &self.custom_type_error,
-                "string (datetime)",
-                "datetime string",
-                value,
-            )
+            crate::primitives::type_error(&self.custom_type_error, "datetime string", value)
         })?;
 
         let naive_offset = (self.allow_naive && self.required_timezone_offset.is_none())
             .then_some(self.naive_offset);
         let (dt, offset) = parse_datetime(s, naive_offset).ok_or_else(|| {
             // A well-formed naive input rejected only because of the offset rule.
-            if let (Some((_, msg)), Some((_, None))) =
+            if let (Some(required), Some((_, None))) =
                 (&self.required_timezone_offset, split_datetime(s))
             {
-                return custom("invalid_timezone_offset", msg, value);
+                return required.error(value);
             }
-            custom(
-                "invalid_datetime",
-                &format!("Invalid datetime format: \"{}\"", s),
+            date_error(
+                IssueCode::InvalidDate {
+                    kind: DateKind::DateTime,
+                },
+                None,
                 value,
             )
         })?;
 
-        if let Some((required, msg)) = &self.required_timezone_offset {
-            if offset != Some(*required) {
-                return Err(custom("invalid_timezone_offset", msg, value));
+        if let Some(required) = &self.required_timezone_offset {
+            if offset != Some(required.seconds) {
+                return Err(required.error(value));
             }
         }
 
-        let errors = self.bounds.check(&dt, backend::now, "datetime", value);
+        let errors = self
+            .bounds
+            .check(&dt, backend::now, DateKind::DateTime, value);
         if errors.is_empty() {
             Ok(dt)
         } else {

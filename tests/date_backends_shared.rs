@@ -69,7 +69,15 @@ fn date_bounds_report_real_bound() {
         .min("2024-01-01")
         .parse(r#""2023-01-01""#)
         .unwrap_err();
-    assert_eq!(err.issues[0].code.key(), "date_too_small");
+    assert_eq!(
+        err.issues[0].code,
+        vld::error::IssueCode::TooSmall {
+            origin: vld::error::SizeOrigin::Date,
+            minimum: serde_json::json!("2024-01-01"),
+            inclusive: true,
+        }
+    );
+    assert!(err.issues[0].message.contains("2024-01-01"));
     let tr = vld::i18n::translate_error(&err, &vld::i18n::english());
     assert!(tr.issues[0].message.contains("2024-01-01"));
 
@@ -77,6 +85,11 @@ fn date_bounds_report_real_bound() {
         .max("2024-01-01T00:00:00Z")
         .parse(r#""2025-01-01T00:00:00Z""#)
         .unwrap_err();
-    assert_eq!(err.issues[0].code.key(), "date_too_big");
+    match &err.issues[0].code {
+        vld::error::IssueCode::TooBig { origin, .. } => {
+            assert_eq!(*origin, vld::error::SizeOrigin::DateTime)
+        }
+        other => panic!("unexpected code {:?}", other),
+    }
     assert!(err.issues[0].message.contains("2024-01-01"));
 }

@@ -53,16 +53,13 @@ impl<'a> IssueBuilder<'a> {
     }
 
     /// Finish building and push the issue into the parent `VldError`.
+    ///
+    /// Without [`message`](Self::message) the default message for the code is used.
     pub fn finish(self) {
-        let msg = self
-            .message
-            .unwrap_or_else(|| format!("Validation error: {}", self.code.key()));
-        self.errors.issues.push(ValidationIssue {
-            code: self.code,
-            message: msg,
-            path: self.path,
-            received: self.received,
-        });
+        let mut issue = ValidationIssue::with_override(self.code, self.message.as_ref());
+        issue.path = self.path;
+        issue.received = self.received;
+        self.errors.issues.push(issue);
     }
 }
 

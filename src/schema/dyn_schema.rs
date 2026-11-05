@@ -41,12 +41,9 @@ where
     fn dyn_parse(&self, value: &Value) -> Result<Value, VldError> {
         let result = self.parse_value(value)?;
         serde_json::to_value(&result).map_err(|e| {
-            VldError::single(
-                IssueCode::Custom {
-                    code: "serialize".to_string(),
-                },
-                format!("Failed to serialize validated value: {}", e),
-            )
+            VldError::from_code(IssueCode::SerializeError {
+                detail: e.to_string(),
+            })
         })
     }
 }

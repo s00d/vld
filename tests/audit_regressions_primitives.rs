@@ -191,7 +191,12 @@ fn decimal_scientific_bounds_and_new_checks() {
 
     let err = vld::decimal().min("0.5").parse("0.1").unwrap_err();
     match &err.issues[0].code {
-        IssueCode::TooSmall { minimum, .. } => assert_eq!(*minimum, 0.5),
+        IssueCode::TooSmall {
+            origin, minimum, ..
+        } => {
+            assert_eq!(*origin, vld::error::SizeOrigin::Decimal);
+            assert_eq!(*minimum, serde_json::json!("0.5"));
+        }
         other => panic!("unexpected code {:?}", other),
     }
     let s = vld::decimal().gt("1").lt("2").multiple_of("0.25");
@@ -227,10 +232,21 @@ fn bytes_string_schema_uses_encoded_length() {
 fn i18n_exclusive_bounds_say_greater_than() {
     let err = vld::number().positive().parse("0").unwrap_err();
     let tr = vld::i18n::translate_error(&err, &vld::i18n::english());
-    assert_eq!(tr.issues[0].message, "Value must be greater than 0");
+    assert_eq!(tr.issues[0].message, "Number must be greater than 0");
     let err = vld::number().min(3.0).parse("1").unwrap_err();
     let tr = vld::i18n::translate_error(&err, &vld::i18n::english());
-    assert_eq!(tr.issues[0].message, "Value must be at least 3");
+    assert_eq!(tr.issues[0].message, "Number must be at least 3");
+    // A resolver with only the generic keys still distinguishes exclusive bounds.
+    let generic = vld::i18n::FnResolver::new(|k| match k {
+        "too_small" => Some("at least {minimum}".into()),
+        "too_small_exclusive" => Some("more than {minimum}".into()),
+        _ => None,
+    });
+    let err = vld::number().positive().parse("0").unwrap_err();
+    assert_eq!(
+        vld::i18n::translate_error(&err, &generic).issues[0].message,
+        "more than 0"
+    );
 }
 
 // --- 19: map duplicates -----------------------------------------------------
@@ -239,7 +255,7 @@ fn i18n_exclusive_bounds_say_greater_than() {
 fn map_duplicate_key_is_error() {
     let m = vld::map(vld::string(), vld::number());
     let err = m.parse(r#"[["a", 1], ["a", 2]]"#).unwrap_err();
-    assert_eq!(err.issues[0].code.key(), "duplicate_map_key");
+    assert_eq!(err.issues[0].code, IssueCode::DuplicateKey);
     assert_eq!(err.issues[0].path[0].to_string(), "[1]");
 }
 
