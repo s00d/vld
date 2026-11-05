@@ -13,12 +13,12 @@ Validate data **before** inserting into the database. Provides:
 | Feature | Description |
 |---------|-------------|
 | `validate_insert::<Schema, _>(&value)` | Standalone validation before INSERT |
-| `validate_update::<Schema, _>(&value)` | Standalone validation before UPDATE |
+| `validate_update::<Schema, _>(&value)` | Deprecated alias of `validate_insert` |
 | `validate_row::<Schema, _>(&row)` | Validate data loaded from DB |
 | `validate_rows::<Schema, _>(&rows)` | Batch validate with row index on error |
 | `Validated<Schema, T>` | Wrapper that guarantees `T` passes `Schema` |
 | `VldText<S>` | Validated `String` column — SQLx `Type`/`Encode`/`Decode` |
-| `VldInt<S>` | Validated `i64` column — SQLx `Type`/`Encode`/`Decode` |
+| `VldInt<S>` | Validated `i64` column — SQLx `Type`/`Encode`/`Decode`; also decodes INT4/INT2 (SMALLINT, INTEGER) columns |
 | `VldFloat<S>` | Validated `f64` column — SQLx `Type`/`Encode`/`Decode` |
 | `VldBool<S>` | Validated `bool` column — SQLx `Type`/`Encode`/`Decode` |
 

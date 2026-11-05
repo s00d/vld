@@ -9116,6 +9116,7 @@ dependencies = [
  "sqlx 0.9.0",
  "tokio",
  "vld",
+ "vld-integration-common",
 ]
 
 [[package]]

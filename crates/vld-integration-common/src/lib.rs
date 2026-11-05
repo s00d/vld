@@ -6,6 +6,7 @@
 
 use vld::error::{PathSegment, VldError};
 
+pub mod db;
 pub mod form;
 
 /// Format a validation path as a clean dotted path: `user.email`, `items[0].name`.
