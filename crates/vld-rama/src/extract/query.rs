@@ -6,7 +6,10 @@ use vld_http_common::query_string_to_json;
 
 /// Rama extractor that validates **URL query parameters**.
 ///
-/// Values are coerced: `"42"` → number, `"true"`/`"false"` → boolean, empty → null.
+/// See [`vld_http_common::parse_query_string`]: repeated keys and `a[]`
+/// become arrays, values are coerced losslessly (`"42"` → number,
+/// `"true"`/`"false"` → boolean, `?flag` / `?x=` → `""`, `"01234"` stays a
+/// string).
 pub struct VldQuery<T>(pub T);
 
 impl<T, State> FromPartsStateRefPair<State> for VldQuery<T>

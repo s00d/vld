@@ -1,16 +1,17 @@
 use std::future::Future;
 
 use crate::rejection::VldRejection;
-use rama::http::body::util::BodyExt;
 use rama::http::service::web::extract::{FromRequest, FromRequestBody};
-use rama::http::{Body, Method, Request};
+use rama::http::{header, Body, Request};
 use vld::schema::VldParse;
-use vld_http_common::{parse_form_body, query_string_to_json, DEFAULT_BODY_LIMIT};
+use vld_http_common::{parse_form_body, require_form_content_type};
 
-/// Rama extractor that validates **URL-encoded form bodies**.
+/// Rama extractor that validates **URL-encoded form bodies**
+/// (`application/x-www-form-urlencoded`, 415 otherwise).
 ///
-/// For `GET`, the query string is used. For other methods, the body is parsed
-/// as `application/x-www-form-urlencoded` (413 beyond [`DEFAULT_BODY_LIMIT`]).
+/// Only the body is read — never the query string, whatever the method
+/// (use [`VldQuery`](crate::VldQuery) for that). Bodies above the
+/// [`VldBodyLimit`](crate::VldBodyLimit) extension (default 2 MiB) are 413.
 pub struct VldForm<T>(pub T);
 
 impl<T> FromRequest for VldForm<T>
@@ -35,28 +36,17 @@ where
         parts: &rama::http::request::Parts,
         body: Body,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send + 'static {
-        let query_string = (parts.method == Method::GET).then(|| {
+        let content_type = require_form_content_type(
             parts
-                .uri
-                .query()
-                .map(|q| q.as_encoded_str().into_owned())
-                .unwrap_or_default()
-        });
-
+                .headers
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+        );
+        let limit = super::body_limit(parts);
         async move {
-            let value = match query_string {
-                Some(qs) => query_string_to_json(&qs),
-                None => {
-                    let bytes = body
-                        .limited(DEFAULT_BODY_LIMIT)
-                        .collect()
-                        .await
-                        .map_err(|e| VldRejection::from_body_error(&e))?
-                        .to_bytes();
-                    parse_form_body(&bytes)?
-                }
-            };
-
+            content_type?;
+            let bytes = super::read_body(body, limit).await?;
+            let value = parse_form_body(&bytes)?;
             let parsed =
                 vld_http_common::parse_coerced::<T>(&value).map_err(VldRejection::from_vld)?;
             Ok(VldForm(parsed))
