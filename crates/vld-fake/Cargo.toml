@@ -14,7 +14,7 @@ categories = ["development-tools::testing", "parsing"]
 exclude = [".idea/", "tests/"]
 
 [dependencies]
-vld = { workspace = true, features = ["openapi"] }
+vld = { workspace = true, features = ["openapi", "regex"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rand = "0.10"

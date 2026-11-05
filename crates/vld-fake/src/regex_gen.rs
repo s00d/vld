@@ -17,6 +17,39 @@ pub(crate) fn generate<R: rand::Rng>(rng: &mut R, pattern: &str) -> Option<Strin
     Some(out)
 }
 
+/// A pattern that is only a literal, anchored or not (what vld emits for
+/// `starts_with` / `ends_with` / `contains`).
+#[derive(Debug, PartialEq)]
+pub(crate) enum Literal {
+    Prefix(String),
+    Suffix(String),
+    Contains(String),
+}
+
+/// Classify `pattern` as a [`Literal`], or `None` for anything else.
+pub(crate) fn literal(pattern: &str) -> Option<Literal> {
+    let hir = regex_syntax::Parser::new().parse(pattern).ok()?;
+    let parts: Vec<&Hir> = match hir.kind() {
+        HirKind::Concat(subs) => subs.iter().collect(),
+        _ => vec![&hir],
+    };
+    let (mut start, mut end, mut text) = (false, false, String::new());
+    for (i, part) in parts.iter().enumerate() {
+        match part.kind() {
+            HirKind::Look(_) if i == 0 => start = true,
+            HirKind::Look(_) if i == parts.len() - 1 => end = true,
+            HirKind::Literal(lit) => text.push_str(std::str::from_utf8(&lit.0).ok()?),
+            _ => return None,
+        }
+    }
+    Some(match (start, end) {
+        (true, false) => Literal::Prefix(text),
+        (false, true) => Literal::Suffix(text),
+        (false, false) => Literal::Contains(text),
+        (true, true) => return None,
+    })
+}
+
 fn walk<R: rand::Rng>(rng: &mut R, hir: &Hir, out: &mut String) {
     match hir.kind() {
         HirKind::Empty | HirKind::Look(_) => {}
@@ -98,5 +131,14 @@ mod tests {
             }
         }
         assert!(super::generate(&mut rng, "(unclosed").is_none());
+    }
+
+    #[test]
+    fn classifies_literals() {
+        use super::{literal, Literal::*};
+        assert_eq!(literal("^pre_"), Some(Prefix("pre_".into())));
+        assert_eq!(literal("_suf$"), Some(Suffix("_suf".into())));
+        assert_eq!(literal(r"a\.b"), Some(Contains("a.b".into())));
+        assert_eq!(literal("^a+$"), None);
     }
 }
