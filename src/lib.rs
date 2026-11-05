@@ -334,6 +334,21 @@ pub fn datetime() -> primitives::ZDateTime {
     primitives::ZDateTime::new()
 }
 
+/// Create a time-of-day schema (`HH:MM:SS[.frac]`) with the only enabled
+/// date backend.
+///
+/// Available only when exactly one of `chrono`, `jiff`, `time` is enabled;
+/// otherwise use `vld::chrono::time()`, `vld::jiff::time()` or
+/// `vld::time::time()` (see [`primitives::date`]).
+#[cfg(any(
+    all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+    all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+    all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+))]
+pub fn time_of_day() -> primitives::ZTime {
+    primitives::ZTime::new()
+}
+
 /// Create a record (dictionary) schema. All values validated by the given schema.
 ///
 /// ```

@@ -98,6 +98,13 @@ pub(crate) fn is_valid_iso_time(s: &str) -> bool {
     time(s.as_bytes(), false)
 }
 
+/// `HH:MM:SS[.frac]` (seconds required, 1-9 fraction digits), as used by the
+/// date backends' time-of-day schemas.
+#[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
+pub(crate) fn is_valid_time_of_day(s: &str) -> bool {
+    time(s.as_bytes(), true)
+}
+
 /// `YYYY-MM-DDTHH:MM[:SS[.frac]][Z|±HH:MM]`.
 pub(crate) fn is_valid_iso_datetime(s: &str) -> bool {
     let b = s.as_bytes();

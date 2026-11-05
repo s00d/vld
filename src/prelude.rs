@@ -28,6 +28,6 @@ pub use crate::primitives::{
     all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
     all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
 ))]
-pub use crate::primitives::{ZDate, ZDateTime};
+pub use crate::primitives::{ZDate, ZDateTime, ZTime};
 pub use crate::primitives::{ZDuration, ZPath, ZSocketAddr};
 pub use crate::schema::{VldInput, VldParse, VldSchema};

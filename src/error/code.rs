@@ -32,6 +32,8 @@ pub enum SizeOrigin {
     /// Datetime (bound is an RFC 3339 string).
     #[serde(rename = "datetime")]
     DateTime,
+    /// Time of day (bound is an `HH:MM:SS[.frac]` string).
+    Time,
     /// Duration in seconds.
     Duration,
     /// File size in bytes.
@@ -61,6 +63,7 @@ impl SizeOrigin {
             SizeOrigin::Bytes => "bytes",
             SizeOrigin::Date => "date",
             SizeOrigin::DateTime => "datetime",
+            SizeOrigin::Time => "time",
             SizeOrigin::Duration => "duration",
             SizeOrigin::File => "file",
             SizeOrigin::ImageWidth => "image_width",
@@ -71,21 +74,25 @@ impl SizeOrigin {
     }
 }
 
-/// Date or datetime, for the date-specific issue codes.
+/// Date, datetime or time of day, for the date-specific issue codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum DateKind {
     Date,
     #[serde(rename = "datetime")]
     DateTime,
+    /// Time of day (`HH:MM:SS[.frac]`).
+    Time,
 }
 
 impl DateKind {
-    /// `"date"` or `"datetime"`.
+    /// `"date"`, `"datetime"` or `"time"`.
     pub fn key(&self) -> &'static str {
         match self {
             DateKind::Date => "date",
             DateKind::DateTime => "datetime",
+            DateKind::Time => "time",
         }
     }
 }
@@ -769,6 +776,7 @@ mod tests {
             Bytes,
             Date,
             DateTime,
+            Time,
             Duration,
             File,
             ImageWidth,

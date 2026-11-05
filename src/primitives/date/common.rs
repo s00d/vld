@@ -1,4 +1,4 @@
-//! [`ZDate`] / [`ZDateTime`], generic over a [`DateBackend`].
+//! [`ZDate`] / [`ZDateTime`] / [`ZTime`], generic over a [`DateBackend`].
 //!
 //! A backend only provides the concrete types and parsing of an already
 //! shape-checked string (see `primitives::iso`); every rule (accepted formats,
@@ -8,14 +8,16 @@
 //! - date: `YYYY-MM-DD` (zero-padded, real calendar day);
 //! - datetime: `YYYY-MM-DDTHH:MM:SS[.fraction]` (seconds required, 1-9
 //!   fraction digits) followed by `Z` or `±HH:MM`; without the offset the input
-//!   is *naive* and is accepted only while [`ZDateTime::naive_allowed`] is on.
+//!   is *naive* and is accepted only while [`ZDateTime::naive_allowed`] is on;
+//! - time of day: `HH:MM:SS[.fraction]` (seconds required, 1-9 fraction
+//!   digits, no offset).
 
 use serde_json::Value;
 use std::fmt::Display;
 use std::marker::PhantomData;
 
 use crate::error::{issue_error, DateKind, IssueCode, SizeOrigin, ValidationIssue, VldError};
-use crate::primitives::iso::{is_valid_iso_date, split_datetime};
+use crate::primitives::iso::{is_valid_iso_date, is_valid_time_of_day, split_datetime};
 use crate::schema::VldSchema;
 
 mod sealed {
@@ -30,9 +32,13 @@ pub trait DateBackend: Sealed {
     type Date: Clone + PartialOrd + Display;
     /// UTC instant type.
     type DateTime: Clone + PartialOrd;
+    /// Time-of-day type.
+    type Time: Clone + PartialOrd + Display;
 
     /// Parse a shape-checked `YYYY-MM-DD` string.
     fn parse_date(s: &str) -> Option<Self::Date>;
+    /// Parse a shape-checked `HH:MM:SS[.frac]` string.
+    fn parse_time(s: &str) -> Option<Self::Time>;
     /// Interpret a shape-checked `YYYY-MM-DDTHH:MM:SS[.frac]` at `offset_seconds`, as UTC.
     fn naive_to_utc(naive: &str, offset_seconds: i32) -> Option<Self::DateTime>;
     /// Current UTC date.
@@ -41,10 +47,18 @@ pub trait DateBackend: Sealed {
     fn now() -> Self::DateTime;
     /// RFC 3339 form (messages, JSON Schema).
     fn format_datetime(dt: &Self::DateTime) -> String;
+    /// `HH:MM:SS[.frac]` form (messages, JSON Schema).
+    fn format_time(t: &Self::Time) -> String {
+        t.to_string()
+    }
 }
 
 fn parse_date<B: DateBackend>(s: &str) -> Option<B::Date> {
     is_valid_iso_date(s).then(|| B::parse_date(s)).flatten()
+}
+
+fn parse_time<B: DateBackend>(s: &str) -> Option<B::Time> {
+    is_valid_time_of_day(s).then(|| B::parse_time(s)).flatten()
 }
 
 /// Strict datetime parse; `naive_offset` is applied when the input has no offset
@@ -125,6 +139,7 @@ impl<T: PartialOrd> Bounds<T> {
         let origin = match kind {
             DateKind::Date => SizeOrigin::Date,
             DateKind::DateTime => SizeOrigin::DateTime,
+            DateKind::Time => SizeOrigin::Time,
         };
         let mut errors = VldError::new();
         let mut push = |code, msg: Option<&String>| {
@@ -526,3 +541,109 @@ impl<B: DateBackend> crate::openapi::JsonSchema for ZDateTime<B> {
 
 #[cfg(feature = "openapi")]
 impl<B: DateBackend> crate::openapi::CollectNestedSchemas for ZDateTime<B> {}
+
+/// Schema for a time of day: `HH:MM:SS[.fraction]` (no offset) into the
+/// backend's time type (`chrono::NaiveTime`, `jiff::civil::Time` or
+/// `time::Time`).
+///
+/// Created via `vld::chrono::time()`, `vld::jiff::time()` or `vld::time::time()`
+/// (or `vld::time_of_day()` when exactly one backend is enabled). Malformed
+/// input fails with `invalid_date` (kind `time`); bounds with `too_small` /
+/// `too_big` (origin `time`). JSON Schema: `{"type": "string", "format": "time"}`.
+#[derive(Clone)]
+pub struct ZTime<B: DateBackend> {
+    bounds: Bounds<B::Time>,
+    custom_type_error: Option<String>,
+    _backend: PhantomData<fn() -> B>,
+}
+
+impl<B: DateBackend> ZTime<B> {
+    pub fn new() -> Self {
+        Self {
+            bounds: Bounds::new(),
+            custom_type_error: None,
+            _backend: PhantomData,
+        }
+    }
+
+    /// Set a custom error message for type mismatch (non-string input).
+    pub fn type_error(mut self, msg: impl Into<String>) -> Self {
+        self.custom_type_error = Some(msg.into());
+        self
+    }
+
+    fn literal(time: &str) -> B::Time {
+        parse_time::<B>(time).unwrap_or_else(|| panic!("Invalid time literal: {}", time))
+    }
+
+    /// Earliest time (inclusive). Accepts `"HH:MM:SS[.frac]"`; panics on an invalid literal.
+    pub fn min(mut self, time: &str) -> Self {
+        self.bounds.set_min(Self::literal(time), time.to_string());
+        self
+    }
+
+    /// Earliest time (inclusive) from a backend time value.
+    pub fn min_time(mut self, time: B::Time) -> Self {
+        let display = B::format_time(&time);
+        self.bounds.set_min(time, display);
+        self
+    }
+
+    /// Latest time (inclusive). Accepts `"HH:MM:SS[.frac]"`; panics on an invalid literal.
+    pub fn max(mut self, time: &str) -> Self {
+        self.bounds.set_max(Self::literal(time), time.to_string());
+        self
+    }
+
+    /// Latest time (inclusive) from a backend time value.
+    pub fn max_time(mut self, time: B::Time) -> Self {
+        let display = B::format_time(&time);
+        self.bounds.set_max(time, display);
+        self
+    }
+}
+
+impl<B: DateBackend> Default for ZTime<B> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<B: DateBackend> VldSchema for ZTime<B> {
+    type Output = B::Time;
+
+    fn parse_value(&self, value: &Value) -> Result<B::Time, VldError> {
+        let s = value.as_str().ok_or_else(|| {
+            crate::primitives::type_error(&self.custom_type_error, "time string (HH:MM:SS)", value)
+        })?;
+        let time = parse_time::<B>(s).ok_or_else(|| {
+            VldError::from_code_with_value(
+                IssueCode::InvalidDate {
+                    kind: DateKind::Time,
+                },
+                value,
+            )
+        })?;
+        // No past/future checks for a time of day, so `now` is never called.
+        let errors = self
+            .bounds
+            .check(&time, || time.clone(), DateKind::Time, value);
+        if errors.is_empty() {
+            Ok(time)
+        } else {
+            Err(errors)
+        }
+    }
+}
+
+/// `{"type": "string", "format": "time"}`; `min`/`max` become
+/// `formatMinimum`/`formatMaximum`.
+#[cfg(feature = "openapi")]
+impl<B: DateBackend> crate::openapi::JsonSchema for ZTime<B> {
+    fn json_schema(&self) -> Value {
+        self.bounds.json_schema("time")
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<B: DateBackend> crate::openapi::CollectNestedSchemas for ZTime<B> {}

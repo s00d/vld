@@ -26,11 +26,11 @@ pub use boolean::ZBoolean;
 pub use bytes::ZBytes;
 // Shortcut aliases, only when exactly one date backend is enabled.
 #[cfg(all(feature = "chrono", not(feature = "jiff"), not(feature = "time")))]
-pub use date::chrono::{ZDate, ZDateTime};
+pub use date::chrono::{ZDate, ZDateTime, ZTime};
 #[cfg(all(feature = "jiff", not(feature = "chrono"), not(feature = "time")))]
-pub use date::jiff::{ZDate, ZDateTime};
+pub use date::jiff::{ZDate, ZDateTime, ZTime};
 #[cfg(all(feature = "time", not(feature = "chrono"), not(feature = "jiff")))]
-pub use date::time::{ZDate, ZDateTime};
+pub use date::time::{ZDate, ZDateTime, ZTime};
 #[cfg(feature = "decimal")]
 pub use decimal::ZDecimal;
 pub use duration::ZDuration;

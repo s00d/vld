@@ -1,4 +1,5 @@
-//! `jiff` date backend: [`date()`], [`datetime()`], [`ZDate`], [`ZDateTime`].
+//! `jiff` date backend: [`date()`], [`datetime()`], [`time()`], [`ZDate`],
+//! [`ZDateTime`], [`ZTime`].
 //!
 //! ```
 //! use vld::prelude::*;
@@ -21,8 +22,13 @@ impl Sealed for Jiff {}
 impl DateBackend for Jiff {
     type Date = ::jiff::civil::Date;
     type DateTime = ::jiff::Timestamp;
+    type Time = ::jiff::civil::Time;
 
     fn parse_date(s: &str) -> Option<Self::Date> {
+        s.parse().ok()
+    }
+
+    fn parse_time(s: &str) -> Option<Self::Time> {
         s.parse().ok()
     }
 
@@ -61,4 +67,20 @@ pub fn date() -> ZDate {
 /// Create a datetime schema (RFC 3339 → `jiff::Timestamp`).
 pub fn datetime() -> ZDateTime {
     ZDateTime::new()
+}
+
+/// Time-of-day schema producing `jiff::civil::Time`.
+pub type ZTime = super::ZTime<Jiff>;
+
+/// Create a time-of-day schema (`HH:MM:SS[.frac]` → `jiff::civil::Time`).
+///
+/// ```
+/// use vld::prelude::*;
+///
+/// assert!(vld::jiff::time().min("08:00:00").parse(r#""09:30:15.5""#).is_ok());
+/// assert!(vld::jiff::time().min("08:00:00").parse(r#""07:59:59""#).is_err());
+/// assert!(vld::jiff::time().parse(r#""24:00:00""#).is_err());
+/// ```
+pub fn time() -> ZTime {
+    ZTime::new()
 }
