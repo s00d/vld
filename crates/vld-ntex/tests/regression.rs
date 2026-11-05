@@ -117,3 +117,24 @@ async fn default_json_limit_is_2_mib() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 200);
 }
+
+/// With `compress`, gzip request bodies are decoded before validation
+/// (the extractor reads the raw payload itself).
+#[cfg(feature = "compress")]
+#[ntex::test]
+async fn gzip_json_body_is_decoded() {
+    use std::io::Write;
+    let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    enc.write_all(br#"{"name":"Alice"}"#).unwrap();
+    let gz = enc.finish().unwrap();
+    let app = test::init_service(App::new().route("/j", web::post().to(json_handler))).await;
+    let req = test::TestRequest::post()
+        .uri("/j")
+        .header("content-type", "application/json")
+        .header("content-encoding", "gzip")
+        .set_payload(gz)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    assert_eq!(test::read_body(resp).await, "Alice");
+}

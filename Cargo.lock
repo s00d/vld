@@ -54,7 +54,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "zstd",
+ "zstd 0.14.3",
 ]
 
 [[package]]
@@ -4840,6 +4840,7 @@ dependencies = [
  "derive_more",
  "encoding_rs",
  "env_logger",
+ "flate2",
  "httparse",
  "httpdate",
  "log",
@@ -4885,6 +4886,7 @@ dependencies = [
  "encoding_rs",
  "env_logger",
  "fastrand 2.5.0",
+ "flate2",
  "httparse",
  "httpdate",
  "log",
@@ -4914,6 +4916,7 @@ dependencies = [
  "urly",
  "uuid",
  "variadics_please",
+ "zstd 0.13.4",
 ]
 
 [[package]]
@@ -7786,7 +7789,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
- "zstd",
+ "zstd 0.14.3",
 ]
 
 [[package]]
@@ -10006,6 +10009,7 @@ dependencies = [
 name = "vld-ntex"
 version = "0.4.6"
 dependencies = [
+ "flate2",
  "ntex 3.12.3",
  "ntex 4.6.0",
  "serde",
@@ -10974,11 +10978,29 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zstd"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdb02c3132d251ab1606e9fc913a7da6c6ed08cc263df15edf082e1dc497d157"
+dependencies = [
+ "zstd-safe 7.4.0",
+]
+
+[[package]]
+name = "zstd"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
 dependencies = [
- "zstd-safe",
+ "zstd-safe 8.2.0",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "7.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c8ea04668f5de8d8d51051714ba560c9536519cadcdb8829bba4fe2ad159b03"
+dependencies = [
+ "zstd-sys",
 ]
 
 [[package]]

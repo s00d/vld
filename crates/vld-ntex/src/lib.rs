@@ -143,8 +143,14 @@ async fn read_body(req: &HttpRequest, payload: &mut Payload) -> Result<Vec<u8>, 
     let limit = req
         .app_state::<VldBodyLimit>()
         .map_or(DEFAULT_BODY_LIMIT, |l| l.0);
+    // With `compress`, decode `Content-Encoding` like ntex's own body
+    // extractors; the limit applies to the decoded size.
+    #[cfg(feature = "compress")]
+    let mut stream = ntex::http::encoding::Decoder::from_headers(payload.take(), req.headers());
+    #[cfg(not(feature = "compress"))]
+    let mut stream = payload.take();
     let mut body = Vec::new();
-    while let Some(chunk) = payload.recv().await {
+    while let Some(chunk) = ntex::util::stream_recv(&mut stream).await {
         let chunk =
             chunk.map_err(|e| VldHttpError::parse(format!("Failed to read request body: {e}")))?;
         if body.len() + chunk.len() > limit {

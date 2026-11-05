@@ -17,6 +17,8 @@ exclude = [".idea/", "tests/", "examples/"]
 default = ["ntex-4"]
 ntex-3 = ["dep:ntex3"]
 ntex-4 = ["dep:ntex4"]
+# Decode `Content-Encoding: gzip/deflate/br` request bodies (ntex `compress`).
+compress = ["ntex3?/compress", "ntex4?/compress"]
 
 [dependencies]
 vld = { workspace = true }
@@ -33,6 +35,7 @@ ntex3 = { package = "ntex", version = "3", default-features = false, features = 
 ntex4 = { package = "ntex", version = "4", default-features = false, features = ["tokio"] }
 serde = { workspace = true }
 vld = { workspace = true }
+flate2 = "1"
 
 [[example]]
 name = "ntex_basic"
