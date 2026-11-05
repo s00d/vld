@@ -20,8 +20,8 @@ pub use crate::primitives::ZIpNetwork;
 #[cfg(feature = "file")]
 pub use crate::primitives::{FileStorage, ValidatedFile, ZFile};
 pub use crate::primitives::{
-    IntoLiteral, ZAny, ZBoolean, ZBytes, ZEnum, ZEnumOf, ZFromSerde, ZFromStr, ZInt, ZInteger,
-    ZJsonValue, ZLiteral, ZNumber, ZString, ZF32,
+    IntoLiteral, ZAny, ZBoolean, ZBytes, ZChar, ZEnum, ZEnumOf, ZFromSerde, ZFromStr, ZInt,
+    ZInteger, ZJsonValue, ZLiteral, ZNever, ZNull, ZNumber, ZString, ZF32,
 };
 #[cfg(any(
     all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),

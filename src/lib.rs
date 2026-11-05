@@ -307,6 +307,21 @@ pub fn any() -> primitives::ZAny {
     primitives::ZAny::new()
 }
 
+/// Create a schema that accepts only `null` (output `()`).
+pub fn null() -> primitives::ZNull {
+    primitives::ZNull::new()
+}
+
+/// Create a schema that rejects every value (output [`std::convert::Infallible`]).
+pub fn never() -> primitives::ZNever {
+    primitives::ZNever::new()
+}
+
+/// Create a single-`char` schema (a string of exactly one Unicode scalar value).
+pub fn char() -> primitives::ZChar {
+    primitives::ZChar::new()
+}
+
 /// Create a date schema with the only enabled date backend.
 ///
 /// Available only when exactly one of `chrono`, `jiff`, `time` is enabled;

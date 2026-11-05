@@ -2,6 +2,7 @@ mod adapter;
 mod any;
 mod boolean;
 mod bytes;
+mod character;
 #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 pub mod date;
 #[cfg(feature = "decimal")]
@@ -21,9 +22,10 @@ mod socket_addr;
 mod string;
 
 pub use adapter::{ZEnumOf, ZFromSerde, ZFromStr};
-pub use any::ZAny;
+pub use any::{ZAny, ZNever, ZNull};
 pub use boolean::ZBoolean;
 pub use bytes::ZBytes;
+pub use character::ZChar;
 // Shortcut aliases, only when exactly one date backend is enabled.
 #[cfg(all(feature = "chrono", not(feature = "jiff"), not(feature = "time")))]
 pub use date::chrono::{ZDate, ZDateTime, ZTime};
