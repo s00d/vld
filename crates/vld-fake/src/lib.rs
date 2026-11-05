@@ -1046,97 +1046,53 @@ impl<R: Rng> FakeGen<R> {
     // ═══════════════════════════════════════════════════════════════════════
 
     fn gen_integer(&mut self, obj: &Map<String, Value>, hint: Option<&str>) -> Value {
-        let min = self.num_as_i64(obj, "minimum", "exclusiveMinimum", 1);
-        let max = self.num_as_i64_max(obj, "maximum", "exclusiveMaximum", 1);
+        let f = |k: &str| obj.get(k).and_then(Value::as_f64);
+        // Smallest / largest integer satisfying the (exclusive) bounds.
+        let lo = f("minimum")
+            .map(f64::ceil)
+            .or_else(|| f("exclusiveMinimum").map(|v| v.floor() + 1.0));
+        let hi = f("maximum")
+            .map(f64::floor)
+            .or_else(|| f("exclusiveMaximum").map(|v| v.ceil() - 1.0));
+        let to_i = |v: f64| v.clamp(i64::MIN as f64, i64::MAX as f64) as i64;
+        let (lo, hi) = (lo.map(to_i), hi.map(to_i));
 
-        let (min, max) = if min > max { (max, min) } else { (min, max) };
+        // A realistic range for known field names, when the schema leaves
+        // one side open and the two ranges overlap.
+        let hinted = hint
+            .and_then(int_hint_range)
+            .filter(|_| lo.is_none() || hi.is_none())
+            .map(|(hl, hh)| (lo.map_or(hl, |l| l.max(hl)), hi.map_or(hh, |h| h.min(hh))))
+            .filter(|(l, h)| l <= h);
 
-        // Heuristic defaults based on field name
-        let (min, max) = if let Some(h) = hint {
-            self.adjust_int_range_by_hint(h, min, max, obj)
-        } else {
-            (min, max)
+        let (lo, hi) = match (hinted, lo, hi) {
+            (Some(r), _, _) => r,
+            (None, Some(l), Some(h)) => (l, h),
+            (None, Some(l), None) => (l, l.max(0).saturating_add(1000)),
+            (None, None, Some(h)) => (if h >= 0 { 0 } else { h.saturating_sub(1000) }, h),
+            (None, None, None) => (0, 1000),
         };
+        if lo > hi {
+            // Unsatisfiable range — best effort, never panic.
+            return json!(lo);
+        }
 
-        let mut val = self.rng.gen_range(min..=max);
-
-        // multipleOf
-        if let Some(m) = obj
+        let m = obj
             .get("multipleOf")
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            if m > 0 {
-                val = (val / m) * m;
-                if val < min {
-                    val += m;
-                }
+            .and_then(Value::as_f64)
+            .filter(|m| *m >= 1.0 && m.fract() == 0.0)
+            .map(|m| m as i64);
+        if let Some(m) = m {
+            // k * m within [lo, hi]
+            let k_lo = lo.div_euclid(m) + i64::from(lo.rem_euclid(m) != 0);
+            let k_hi = hi.div_euclid(m);
+            if k_lo <= k_hi {
+                return json!(self.rng.gen_range(k_lo..=k_hi) * m);
             }
+            return json!(k_lo.saturating_mul(m));
         }
 
-        json!(val)
-    }
-
-    fn adjust_int_range_by_hint(
-        &self,
-        hint: &str,
-        schema_min: i64,
-        schema_max: i64,
-        obj: &Map<String, Value>,
-    ) -> (i64, i64) {
-        let h = hint.to_ascii_lowercase();
-        let has_min = obj.contains_key("minimum") || obj.contains_key("exclusiveMinimum");
-        let has_max = obj.contains_key("maximum") || obj.contains_key("exclusiveMaximum");
-
-        if has_min && has_max {
-            return (schema_min, schema_max);
-        }
-
-        match h.as_str() {
-            "age" if !has_max => (schema_min, schema_max.min(99)),
-            "port" if !has_max => (schema_min.max(1024), schema_max.min(65535)),
-            "year" if !has_min => (2000.max(schema_min), schema_max.min(2030)),
-            "quantity" | "qty" | "count" if !has_max => (schema_min, schema_max.min(100)),
-            "rating" | "score" if !has_max => (schema_min, schema_max.min(10)),
-            _ => (schema_min, schema_max),
-        }
-    }
-
-    fn num_as_i64(&self, obj: &Map<String, Value>, key: &str, ex_key: &str, offset: i64) -> i64 {
-        if let Some(v) = obj
-            .get(key)
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            return v;
-        }
-        if let Some(v) = obj
-            .get(ex_key)
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            return v + offset;
-        }
-        0
-    }
-
-    fn num_as_i64_max(
-        &self,
-        obj: &Map<String, Value>,
-        key: &str,
-        ex_key: &str,
-        offset: i64,
-    ) -> i64 {
-        if let Some(v) = obj
-            .get(key)
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            return v;
-        }
-        if let Some(v) = obj
-            .get(ex_key)
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            return v - offset;
-        }
-        1000
+        json!(self.rng.gen_range(lo..=hi))
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1152,40 +1108,73 @@ impl<R: Rng> FakeGen<R> {
         if let Some(h) = hint {
             let has_min = obj.contains_key("minimum") || obj.contains_key("exclusiveMinimum");
             let has_max = obj.contains_key("maximum") || obj.contains_key("exclusiveMaximum");
-            if !has_min && !has_max {
+            if !has_min && !has_max && !obj.contains_key("multipleOf") {
                 if let Some(val) = self.gen_number_by_hint(h) {
                     return json!(val);
                 }
             }
         }
 
-        let min = obj
-            .get("minimum")
-            .and_then(Value::as_f64)
-            .or_else(|| {
-                obj.get("exclusiveMinimum")
-                    .and_then(Value::as_f64)
-                    .map(|v| v + 0.01)
-            })
-            .unwrap_or(0.0);
-        let max = obj
-            .get("maximum")
-            .and_then(Value::as_f64)
-            .or_else(|| {
-                obj.get("exclusiveMaximum")
-                    .and_then(Value::as_f64)
-                    .map(|v| v - 0.01)
-            })
-            .unwrap_or(min + 1000.0);
+        let f = |k: &str| obj.get(k).and_then(Value::as_f64);
+        let (ex_lo, ex_hi) = (f("exclusiveMinimum"), f("exclusiveMaximum"));
+        let lo = f("minimum").or(ex_lo);
+        let hi = f("maximum").or(ex_hi);
+        let (lo, hi) = match (lo, hi) {
+            (Some(l), Some(h)) => (l, h),
+            (Some(l), None) => (l, l.max(0.0) + 1000.0),
+            (None, Some(h)) => (if h >= 0.0 { 0.0 } else { h - 1000.0 }, h),
+            (None, None) => (0.0, 1000.0),
+        };
+        let in_range = |v: f64| {
+            v >= lo
+                && v <= hi
+                && ex_lo.map_or(true, |e| v > e)
+                && ex_hi.map_or(true, |e| v < e)
+                && f("minimum").map_or(true, |m| v >= m)
+                && f("maximum").map_or(true, |m| v <= m)
+        };
 
-        let max = if max < min { min + 1.0 } else { max };
+        // multipleOf: pick k * m inside the range.
+        if let Some(m) = f("multipleOf").filter(|m| *m > 0.0) {
+            let k_lo = (lo / m).ceil() as i64;
+            let k_hi = (hi / m).floor() as i64;
+            // Decimals of `m` (e.g. 0.05 -> 2) to strip float noise from k * m.
+            let decimals = format!("{m}").split('.').nth(1).map_or(0, str::len) as i32;
+            let p = 10f64.powi(decimals);
+            for _ in 0..20 {
+                if k_lo > k_hi {
+                    break;
+                }
+                let k = self.rng.gen_range(k_lo..=k_hi) as f64;
+                for v in [(k * m * p).round() / p, k * m] {
+                    // Same check vld uses (`n % m` ~ 0).
+                    if in_range(v) && (v % m).abs() <= f64::EPSILON {
+                        return json!(v);
+                    }
+                }
+            }
+            // Zero is a multiple of everything.
+            if in_range(0.0) {
+                return json!(0.0);
+            }
+        }
 
-        let val = min + self.rng.gen::<f64>() * (max - min);
-
-        // Round to 2 decimal places for nicer output
-        let val = (val * 100.0).round() / 100.0;
-
-        json!(val)
+        if lo > hi {
+            // Unsatisfiable range — best effort, never panic.
+            return json!(lo);
+        }
+        for _ in 0..20 {
+            let val = lo + self.rng.gen::<f64>() * (hi - lo);
+            // Prefer 2 decimals for readability, if that stays in range.
+            let rounded = (val * 100.0).round() / 100.0;
+            if in_range(rounded) {
+                return json!(rounded);
+            }
+            if in_range(val) {
+                return json!(val);
+            }
+        }
+        json!((lo + hi) / 2.0)
     }
 
     /// Generate a realistic float based on field name when no constraints given.
@@ -1731,6 +1720,18 @@ fn luhn_check_digit(digits: &[u8]) -> u8 {
     ((10 - (sum % 10)) % 10) as u8
 }
 
+/// Realistic integer range for a field name (applied within the schema range).
+fn int_hint_range(hint: &str) -> Option<(i64, i64)> {
+    Some(match hint.to_ascii_lowercase().as_str() {
+        "age" => (0, 99),
+        "port" => (1024, 65535),
+        "year" => (2000, 2030),
+        "quantity" | "qty" | "count" => (0, 100),
+        "rating" | "score" => (0, 10),
+        _ => return None,
+    })
+}
+
 /// `(minLength, maxLength)` of a string schema.
 fn len_bounds(obj: &Map<String, Value>) -> (Option<usize>, Option<usize>) {
     let get = |k| obj.get(k).and_then(Value::as_u64).map(|v| v as usize);
@@ -1740,14 +1741,14 @@ fn len_bounds(obj: &Map<String, Value>) -> (Option<usize>, Option<usize>) {
 /// Whether `s` (counted in chars, like vld) satisfies the length bounds.
 fn len_ok(s: &str, min: Option<usize>, max: Option<usize>) -> bool {
     let n = s.chars().count();
-    min.is_none_or(|m| n >= m) && max.is_none_or(|m| n <= m)
+    min.map_or(true, |m| n >= m) && max.map_or(true, |m| n <= m)
 }
 
 /// Pad with `pad` / truncate `s` so its char count lies in `[min, max]`.
 fn fit_len(mut s: String, min: usize, max: Option<usize>, pad: char) -> String {
     let n = s.chars().count();
     if n < min {
-        s.extend(std::iter::repeat_n(pad, min - n));
+        s.extend(std::iter::repeat(pad).take(min - n));
     }
     if let Some(mx) = max {
         if let Some((idx, _)) = s.char_indices().nth(mx) {

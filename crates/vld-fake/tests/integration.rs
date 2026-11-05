@@ -1346,3 +1346,46 @@ fn hint_truncation_is_char_safe() {
         assert_eq!(v.as_str().unwrap().chars().count(), 2);
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Numeric ranges: one-sided bounds, hints outside range, multipleOf
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn integer_one_sided_and_hinted_ranges_never_panic() {
+    let n = || vld::number().int();
+    assert_fakes(n().min(5000)); // default max 1000 used to swap with min
+    assert_fakes(n().max(-10)); // max without min
+    assert_fakes(n().gt(7)); // exclusive only
+    assert_fakes(n().multiple_of(7).min(5000));
+    assert_fakes(n().multiple_of(5).max(-12));
+    let mut gen = FakeGen::new();
+    for (hint, schema) in [
+        ("year", json!({"type": "integer", "maximum": 1990})),
+        ("age", json!({"type": "integer", "minimum": 150})),
+        ("port", json!({"type": "integer", "maximum": 80})),
+        ("count", json!({"type": "integer", "minimum": 500})),
+    ] {
+        let lo = schema["minimum"].as_i64().unwrap_or(i64::MIN);
+        let hi = schema["maximum"].as_i64().unwrap_or(i64::MAX);
+        for _ in 0..200 {
+            let v = gen.value_with_hint(&schema, Some(hint)).as_i64().unwrap();
+            assert!(lo <= v && v <= hi, "{hint}: {v}");
+        }
+    }
+    // Hints still narrow a half-open range.
+    let year = gen.value_with_hint(&json!({"type": "integer", "minimum": 1}), Some("year"));
+    assert!((2000..=2030).contains(&year.as_i64().unwrap()));
+}
+
+#[test]
+fn float_multiple_of_and_tiny_ranges() {
+    assert_fakes(vld::number().multiple_of(0.25).min(1.0).max(3.0));
+    assert_fakes(vld::number().multiple_of(0.5));
+    assert_fakes(vld::number().multiple_of(3.0).min(10.0).max(20.0));
+    // Range narrower than the 2-decimal rounding step.
+    assert_fakes(vld::number().min(0.001).max(0.002));
+    assert_fakes(vld::number().gt(0.0).lt(0.001));
+    assert_fakes(vld::number().max(-5.5));
+    assert_fakes(vld::number().min(10_000.0));
+}
