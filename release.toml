@@ -1,43 +1,9 @@
-# cargo-release configuration
-# Install:
-#   cargo install cargo-release
-#   cargo install git-cliff
+# cargo-release configuration — how to release: PUBLISHING.md.
 #
-# crates.io has a rate limit of 5 NEW crates at a time.
-# For the first publish, use the batched approach below.
-# After all crates exist on crates.io, you can use:
-#   cargo release patch --workspace --execute
+#   cargo release minor --workspace            # dry run
+#   cargo release minor --workspace --execute
 #
-# === First-time publish (batched, 5 crates per batch) ===
-#
-# Batch 1 (foundations):
-#   cargo publish -p vld-derive
-#   cargo publish -p vld
-#   cargo publish -p vld-http-common
-#   cargo publish -p vld-ts
-#   cargo publish -p vld-clap
-#
-# (wait ~1 min for crates.io index to update)
-#
-# Batch 2 (integrations):
-#   cargo publish -p vld-config
-#   cargo publish -p vld-diesel
-#   cargo publish -p vld-utoipa
-#   cargo publish -p vld-tower
-#   cargo publish -p vld-sea
-#
-# (wait ~1 min)
-#
-# Batch 3 (web frameworks):
-#   cargo publish -p vld-axum
-#   cargo publish -p vld-actix
-#   cargo publish -p vld-rocket
-#   cargo publish -p vld-poem
-#   cargo publish -p vld-warp
-#   cargo publish -p vld-rama
-#
-# === Subsequent releases ===
-#   cargo release patch --workspace --execute
+# cargo-release publishes the crates in dependency order by itself.
 
 # Sign commits/tags
 sign-commit = false
@@ -47,7 +13,7 @@ sign-tag = false
 push = true
 push-remote = "origin"
 
-# Create git tag
+# One commit and one tag (v<version>) for the whole workspace
 tag = true
 tag-prefix = "v"
 tag-name = "{{prefix}}{{version}}"
@@ -66,7 +32,7 @@ verify = true
 # Publish to crates.io
 publish = true
 
-# Allow dirty working directory (set false for strict mode)
+# Releases only from these branches
 allow-branch = ["master", "main"]
 
 # Dependent version replacement — auto update `vld = { version = "X.Y.Z" }` everywhere

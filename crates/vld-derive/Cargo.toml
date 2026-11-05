@@ -11,12 +11,12 @@ documentation = "https://docs.rs/vld-derive"
 readme = "README.md"
 keywords = ["validation", "derive", "macro", "vld"]
 categories = ["development-tools::procedural-macro-helpers"]
-exclude = [".idea/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [lib]
 proc-macro = true
 
 [dependencies]
-syn = { version = "2", features = ["full"] }
-quote = "1"
-proc-macro2 = "1"
+syn = { version = "2.0.87", features = ["full"] }
+quote = "1.0.37"
+proc-macro2 = "1.0.89"

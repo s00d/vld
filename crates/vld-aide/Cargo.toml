@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-aide"
 readme = "README.md"
 keywords = ["validation", "aide", "openapi", "schemars", "vld"]
 categories = ["web-programming", "development-tools"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [features]
 default = ["schemars-0"]
@@ -20,7 +20,7 @@ schemars-1 = ["vld-schemars/schemars-1"]
 
 [dependencies]
 vld = { workspace = true, features = ["openapi"] }
-vld-schemars = { path = "../vld-schemars", version = "0.4.6", default-features = false }
+vld-schemars = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
@@ -31,3 +31,8 @@ insta = { version = "1.49.0", features = ["json"] }
 [[example]]
 name = "aide_basic"
 path = "examples/aide_basic.rs"
+
+[package.metadata.docs.rs]
+# One major per dual-major crate (they are mutually exclusive): the newest.
+no-default-features = true
+features = ["schemars-1"]

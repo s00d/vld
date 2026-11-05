@@ -1,5 +1,6 @@
 # cargo-deny configuration (https://embarkstudios.github.io/cargo-deny/).
-# Run: `cargo deny --all-features check` (CI job `deny`).
+# Run: `cargo deny --workspace --all-features check` (CI job `deny`;
+# without --workspace only the root package is checked).
 
 [graph]
 all-features = true

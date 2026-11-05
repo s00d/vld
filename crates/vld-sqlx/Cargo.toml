@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-sqlx"
 readme = "README.md"
 keywords = ["validation", "sqlx", "database", "sql", "vld"]
 categories = ["database", "web-programming"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [features]
 default = ["sqlx-0_8", "sqlite"]
@@ -27,7 +27,7 @@ sqlx08 = { package = "sqlx", version = "0.8", default-features = false, optional
 sqlx09 = { package = "sqlx", version = "0.9", default-features = false, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-vld-integration-common = { path = "../vld-integration-common", version = "0.4.6" }
+vld-integration-common = { workspace = true }
 
 [dev-dependencies]
 sqlx08 = { package = "sqlx", version = "0.8", features = ["sqlite", "runtime-tokio"] }
@@ -37,3 +37,8 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 [[example]]
 name = "sqlx_basic"
 path = "examples/sqlx_basic.rs"
+
+[package.metadata.docs.rs]
+# One major per dual-major crate (they are mutually exclusive): the newest.
+no-default-features = true
+features = ["sqlx-0_9", "postgres", "mysql", "sqlite"]

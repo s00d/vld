@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-lapin"
 readme = "README.md"
 keywords = ["validation", "lapin", "rabbitmq", "amqp", "vld"]
 categories = ["web-programming"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [features]
 default = ["lapin-2"]
@@ -34,3 +34,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 [[example]]
 name = "lapin_basic"
 path = "examples/lapin_basic.rs"
+
+[package.metadata.docs.rs]
+# One major per dual-major crate (they are mutually exclusive): the newest.
+no-default-features = true
+features = ["lapin-4"]

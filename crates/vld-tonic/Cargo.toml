@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-tonic"
 readme = "README.md"
 keywords = ["validation", "tonic", "grpc", "protobuf", "vld"]
 categories = ["web-programming", "network-programming"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true }

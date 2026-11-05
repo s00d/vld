@@ -11,15 +11,15 @@ documentation = "https://docs.rs/vld-warp"
 readme = "README.md"
 keywords = ["validation", "warp", "web", "json", "filter"]
 categories = ["web-programming", "web-programming::http-server"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
 warp = { version = ">=0.3, <0.5" }
 serde_json = { workspace = true }
-bytes = "1"
-futures-util = { version = "0.3", default-features = false }
+bytes = "1.5"
+futures-util = { version = "0.3.28", default-features = false }
 
 [dev-dependencies]
 vld-http-common = { workspace = true, features = ["conformance"] }

@@ -11,11 +11,11 @@ documentation = "https://docs.rs/vld-clap"
 readme = "README.md"
 keywords = ["validation", "clap", "cli", "arguments", "parsing"]
 categories = ["command-line-interface", "parsing"]
-exclude = [".idea/", "tests/", "examples/"]
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true, features = ["derive"] }
-vld-integration-common = { path = "../vld-integration-common", version = "0.4.6" }
+vld-integration-common = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 clap = { version = "4", default-features = false, features = ["std"] }

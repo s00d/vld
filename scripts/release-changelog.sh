@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Promote CHANGELOG.md's [Unreleased] section to [<version>] - <today>.
+# Fails (and so stops `cargo release`) when [Unreleased] is missing or empty:
+# release notes are written by hand, never regenerated from git history.
+# (`git cliff --unreleased` can draft them: copy what you need by hand.)
 set -euo pipefail
 
 VERSION="${1:-}"
@@ -18,7 +22,6 @@ cd "${ROOT_DIR}"
 
 echo "==> Update CHANGELOG.md for v${VERSION}"
 
-set +e
 python3 - "${VERSION}" <<'PY'
 import datetime
 import re
@@ -33,28 +36,18 @@ if re.search(rf"^## \[{re.escape(version)}\]", text, re.M):
     print(f"CHANGELOG already has [{version}], leaving as-is")
     sys.exit(0)
 
-m = re.search(r"^## \[Unreleased\]\s*\n", text, re.M)
+m = re.search(r"^## \[Unreleased\][^\n]*\n", text, re.M)
 if not m:
-    print("No [Unreleased] section; falling back to git-cliff", file=sys.stderr)
-    sys.exit(2)
+    sys.exit("CHANGELOG.md has no '## [Unreleased]' section: add the release notes first")
 
 rest = text[m.end() :]
 next_h = re.search(r"^## \[", rest, re.M)
 body = rest[: next_h.start()] if next_h else rest
 if not body.strip():
-    print("[Unreleased] empty; falling back to git-cliff", file=sys.stderr)
-    sys.exit(2)
+    sys.exit(f"CHANGELOG.md [Unreleased] is empty: write the {version} notes first")
 
 date = datetime.date.today().isoformat()
 new_header = f"## [Unreleased]\n\n## [{version}] - {date}\n"
 path.write_text(text[: m.start()] + new_header + rest)
-print(f"Promoted [Unreleased] → [{version}] - {date}")
+print(f"Promoted [Unreleased] -> [{version}] - {date}")
 PY
-status=$?
-set -e
-
-if [[ "${status}" -eq 2 ]]; then
-  git cliff --config cliff.toml --tag "v${VERSION}" --output CHANGELOG.md
-elif [[ "${status}" -ne 0 ]]; then
-  exit "${status}"
-fi
