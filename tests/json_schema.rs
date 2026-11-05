@@ -153,10 +153,10 @@ fn required_keys(js: &serde_json::Value) -> Vec<&str> {
 }
 
 fn assert_one_of_nullish(js: &serde_json::Value, expected_type: &str) {
-    let one_of = js["oneOf"]
+    let one_of = js["anyOf"]
         .as_array()
-        .unwrap_or_else(|| panic!("expected oneOf, got: {js}"));
-    assert_eq!(one_of.len(), 2, "oneOf should have inner + null: {js}");
+        .unwrap_or_else(|| panic!("expected anyOf, got: {js}"));
+    assert_eq!(one_of.len(), 2, "anyOf should have inner + null: {js}");
     assert_eq!(one_of[0]["type"], expected_type);
     assert_eq!(one_of[1]["type"], "null");
 }
@@ -169,30 +169,30 @@ fn modifiers_json_schema_and_is_required_matrix() {
     assert_eq!(plain.json_schema()["type"], "string");
     assert_eq!(plain.json_schema()["minLength"], 1);
 
-    // optional / nullish → omit from required, oneOf with null
+    // optional / nullish → omit from required, anyOf with null
     let optional = vld::string().min(2).email().optional();
     assert!(!optional.is_required());
     assert_one_of_nullish(&optional.json_schema(), "string");
-    assert_eq!(optional.json_schema()["oneOf"][0]["format"], "email");
-    assert_eq!(optional.json_schema()["oneOf"][0]["minLength"], 2);
+    assert_eq!(optional.json_schema()["anyOf"][0]["format"], "email");
+    assert_eq!(optional.json_schema()["anyOf"][0]["minLength"], 2);
 
     let nullish = vld::number().int().min(0).nullish();
     assert!(!nullish.is_required());
     assert_one_of_nullish(&nullish.json_schema(), "integer");
-    assert_eq!(nullish.json_schema()["oneOf"][0]["minimum"], 0.0);
+    assert_eq!(nullish.json_schema()["anyOf"][0]["minimum"], 0.0);
 
-    // nullable → stays required, oneOf with null
+    // nullable → stays required, anyOf with null
     let nullable = vld::number().min(0.0).max(100.0).nullable();
     assert!(nullable.is_required());
     assert_one_of_nullish(&nullable.json_schema(), "number");
-    assert_eq!(nullable.json_schema()["oneOf"][0]["maximum"], 100.0);
+    assert_eq!(nullable.json_schema()["anyOf"][0]["maximum"], 100.0);
 
     // default → omit from required, schema of inner
     let with_default = vld::string().min(1).with_default("hello".into());
     assert!(!with_default.is_required());
     assert_eq!(with_default.json_schema()["type"], "string");
     assert_eq!(with_default.json_schema()["minLength"], 1);
-    assert!(with_default.json_schema().get("oneOf").is_none());
+    assert!(with_default.json_schema().get("anyOf").is_none());
 
     // catch alone does not change requiredness / schema shape
     let catch = vld::string().min(1).catch("fallback".into());
@@ -219,7 +219,7 @@ fn is_required_survives_wrapper_stacks() {
     let js = optional_stack.json_schema();
     assert_one_of_nullish(&js, "string");
     assert_eq!(js["description"], "nickname");
-    assert_eq!(js["oneOf"][0]["minLength"], 3);
+    assert_eq!(js["anyOf"][0]["minLength"], 3);
 
     // nullish under message/describe
     let nullish_stack = vld::number()
@@ -249,7 +249,7 @@ fn is_required_survives_wrapper_stacks() {
     assert!(nullable_stack.is_required());
     assert_one_of_nullish(&nullable_stack.json_schema(), "string");
     assert_eq!(nullable_stack.json_schema()["description"], "contact");
-    assert_eq!(nullable_stack.json_schema()["oneOf"][0]["format"], "email");
+    assert_eq!(nullable_stack.json_schema()["anyOf"][0]["format"], "email");
 
     // plain under wrappers stays required
     let plain_stack = vld::string()
@@ -286,20 +286,20 @@ fn describe_adds_description() {
 }
 
 #[test]
-fn union_generates_one_of() {
+fn union_generates_any_of() {
     let schema = vld::union(vld::string(), vld::number());
     let js = schema.json_schema();
-    let one_of = js["oneOf"].as_array().unwrap();
+    let one_of = js["anyOf"].as_array().unwrap();
     assert_eq!(one_of.len(), 2);
     assert_eq!(one_of[0]["type"], "string");
     assert_eq!(one_of[1]["type"], "number");
 }
 
 #[test]
-fn union3_generates_one_of() {
+fn union3_generates_any_of() {
     let schema = vld::union3(vld::string(), vld::number(), vld::boolean());
     let js = schema.json_schema();
-    let one_of = js["oneOf"].as_array().unwrap();
+    let one_of = js["anyOf"].as_array().unwrap();
     assert_eq!(one_of.len(), 3);
 }
 
@@ -437,8 +437,8 @@ fn schema_macro_required_matrix_and_openapi_doc() {
     // Optional / nullish / default shapes
     assert_one_of_nullish(&js["properties"]["age"], "integer");
     assert_eq!(js["properties"]["age"]["description"], "years");
-    assert_eq!(js["properties"]["age"]["oneOf"][0]["minimum"], 0.0);
-    assert_eq!(js["properties"]["age"]["oneOf"][0]["maximum"], 150.0);
+    assert_eq!(js["properties"]["age"]["anyOf"][0]["minimum"], 0.0);
+    assert_eq!(js["properties"]["age"]["anyOf"][0]["maximum"], 150.0);
 
     assert_one_of_nullish(&js["properties"]["nickname"], "string");
     assert_eq!(
@@ -448,19 +448,19 @@ fn schema_macro_required_matrix_and_openapi_doc() {
 
     assert_eq!(js["properties"]["role"]["type"], "string");
     assert_eq!(js["properties"]["role"]["description"], "account role");
-    assert!(js["properties"]["role"].get("oneOf").is_none());
+    assert!(js["properties"]["role"].get("anyOf").is_none());
 
     assert_one_of_nullish(&js["properties"]["bio"], "string");
-    assert_eq!(js["properties"]["bio"]["oneOf"][0]["maxLength"], 500);
+    assert_eq!(js["properties"]["bio"]["anyOf"][0]["maxLength"], 500);
 
     assert_one_of_nullish(&js["properties"]["locale"], "string");
-    assert_eq!(js["properties"]["locale"]["oneOf"][0]["minLength"], 2);
+    assert_eq!(js["properties"]["locale"]["anyOf"][0]["minLength"], 2);
 
-    // Nullable stays in required with oneOf null
+    // Nullable stays in required with anyOf null
     assert_one_of_nullish(&js["properties"]["meta"], "string");
     assert_eq!(js["properties"]["meta"]["description"], "opaque meta");
     assert_one_of_nullish(&js["properties"]["notes"], "string");
-    assert_eq!(js["properties"]["notes"]["oneOf"][0]["maxLength"], 200);
+    assert_eq!(js["properties"]["notes"]["anyOf"][0]["maxLength"], 200);
 
     // Nested address schema itself has correct required
     let addr = ProfileAddress::json_schema();
@@ -686,14 +686,14 @@ fn derive_validate_json_schema_required_matrix() {
 
     assert_one_of_nullish(&js["properties"]["age"], "integer");
     assert_eq!(js["properties"]["age"]["description"], "years");
-    assert_eq!(js["properties"]["age"]["oneOf"][0]["maximum"], 150.0);
+    assert_eq!(js["properties"]["age"]["anyOf"][0]["maximum"], 150.0);
 
     assert_one_of_nullish(&js["properties"]["nickname"], "string");
     assert_eq!(js["properties"]["nickname"]["description"], "nick");
 
     assert_eq!(js["properties"]["role"]["type"], "string");
     assert_eq!(js["properties"]["role"]["description"], "role");
-    assert!(js["properties"]["role"].get("oneOf").is_none());
+    assert!(js["properties"]["role"].get("anyOf").is_none());
 
     assert_one_of_nullish(&js["properties"]["bio"], "string");
     assert_one_of_nullish(&js["properties"]["meta"], "string");
@@ -703,7 +703,7 @@ fn derive_validate_json_schema_required_matrix() {
     assert_one_of_nullish(&js["properties"]["labels"], "array");
     assert_eq!(js["properties"]["labels"]["description"], "labels");
     assert_eq!(
-        js["properties"]["labels"]["oneOf"][0]["items"]["type"],
+        js["properties"]["labels"]["anyOf"][0]["items"]["type"],
         "string"
     );
 

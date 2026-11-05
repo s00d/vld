@@ -373,6 +373,26 @@ pub fn value_type_name(value: &serde_json::Value) -> String {
     .to_string()
 }
 
+/// Return the value as a JSON object, or an `invalid_type` error
+/// ("Expected object, received ...").
+///
+/// Shared by [`ZObject`](crate::object::ZObject), `schema!` and `#[derive(Validate)]`.
+#[doc(hidden)]
+pub fn expect_object(
+    value: &serde_json::Value,
+) -> Result<&serde_json::Map<String, serde_json::Value>, VldError> {
+    value.as_object().ok_or_else(|| {
+        let received = value_type_name(value);
+        VldError::single(
+            IssueCode::InvalidType {
+                expected: "object".to_string(),
+                received: received.clone(),
+            },
+            format!("Expected object, received {}", received),
+        )
+    })
+}
+
 /// Format a JSON value for display in errors (short form).
 pub fn format_value_short(value: &serde_json::Value) -> String {
     match value {
@@ -573,8 +593,11 @@ impl<T: std::fmt::Debug> std::fmt::Display for ParseResult<T> {
 /// Truncate large values to avoid storing huge payloads in errors.
 fn truncate_value(value: &serde_json::Value) -> serde_json::Value {
     match value {
-        serde_json::Value::String(s) if s.len() > 100 => {
-            serde_json::Value::String(format!("{}...", &s[..97]))
+        // Slice by chars, not bytes: a byte slice can split a multi-byte
+        // UTF-8 sequence and panic on attacker-controlled input.
+        serde_json::Value::String(s) if s.chars().count() > 100 => {
+            let prefix: String = s.chars().take(97).collect();
+            serde_json::Value::String(format!("{}...", prefix))
         }
         serde_json::Value::Array(arr) if arr.len() > 5 => {
             let mut truncated: Vec<serde_json::Value> = arr[..5].to_vec();
