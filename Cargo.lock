@@ -9134,6 +9134,7 @@ dependencies = [
  "tokio",
  "tonic",
  "vld",
+ "vld-http-common",
 ]
 
 [[package]]

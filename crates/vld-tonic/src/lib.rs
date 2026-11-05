@@ -47,35 +47,21 @@ use vld::schema::VldParse;
 
 /// Convert a [`VldError`] into a [`tonic::Status`] with `INVALID_ARGUMENT` code.
 ///
-/// The status message contains a JSON object with structured error details.
+/// The status message contains a JSON object with structured error details:
+/// `{"error": "VALIDATION_ERROR", "message": "...", "details": [{"path":
+/// ".user.name", "message": "...", "code": "too_small"}]}` — `path` uses the
+/// same format as the HTTP adapters, `code` is
+/// [`IssueCode::key()`](vld::error::IssueCode::key).
 pub fn vld_status(error: &VldError) -> Status {
     vld_status_with_code(error, Code::InvalidArgument)
 }
 
 /// Convert a [`VldError`] into a [`tonic::Status`] with a custom gRPC code.
 pub fn vld_status_with_code(error: &VldError, code: Code) -> Status {
-    let issues: Vec<serde_json::Value> = error
-        .issues
-        .iter()
-        .map(|issue| {
-            let path: String = issue
-                .path
-                .iter()
-                .map(|p| p.to_string())
-                .collect::<Vec<_>>()
-                .join(".");
-            serde_json::json!({
-                "path": path,
-                "message": issue.message,
-                "code": format!("{:?}", issue.code),
-            })
-        })
-        .collect();
-
     let body = serde_json::json!({
         "error": "VALIDATION_ERROR",
         "message": "Request validation failed",
-        "details": issues,
+        "details": vld_http_common::format_issues_with_code(error),
     });
 
     Status::new(code, body.to_string())
@@ -169,7 +155,8 @@ where
 ///
 /// Metadata keys are converted from `kebab-case` to `snake_case`
 /// (e.g. `x-request-id` → `x_request_id`).
-/// String values are coerced: `"42"` → number, `"true"` → boolean.
+/// Values are coerced with [`vld_http_common::coerce_value`] (lossless:
+/// `"42"` → number, `"true"` → boolean, `"01234"` stays a string).
 ///
 /// # Example
 ///
@@ -191,22 +178,13 @@ pub fn validate_metadata<T, M>(request: &Request<M>) -> Result<T, Status>
 where
     T: VldParse,
 {
-    let metadata = request.metadata();
-    let mut map = serde_json::Map::new();
-
-    for kv in metadata.iter() {
-        match kv {
+    let json =
+        vld_http_common::headers_to_json(request.metadata().iter().filter_map(|kv| match kv {
             tonic::metadata::KeyAndValueRef::Ascii(key, value) => {
-                if let Ok(v) = value.to_str() {
-                    let k = key.as_str().replace('-', "_");
-                    map.insert(k, coerce_value(v));
-                }
+                Some((key.as_str(), value.as_encoded_bytes()))
             }
-            tonic::metadata::KeyAndValueRef::Binary(_, _) => {}
-        }
-    }
-
-    let json = serde_json::Value::Object(map);
+            tonic::metadata::KeyAndValueRef::Binary(_, _) => None,
+        }));
     T::vld_parse_value(&json).map_err(|e| vld_status(&e))
 }
 
@@ -310,29 +288,6 @@ macro_rules! impl_validate {
             }
         }
     };
-}
-
-// ========================= Helpers ===========================================
-
-fn coerce_value(s: &str) -> serde_json::Value {
-    if s.is_empty() {
-        return serde_json::Value::Null;
-    }
-    if s == "true" {
-        return serde_json::Value::Bool(true);
-    }
-    if s == "false" {
-        return serde_json::Value::Bool(false);
-    }
-    if let Ok(n) = s.parse::<i64>() {
-        return serde_json::Value::Number(n.into());
-    }
-    if let Ok(n) = s.parse::<f64>() {
-        if let Some(num) = serde_json::Number::from_f64(n) {
-            return serde_json::Value::Number(num);
-        }
-    }
-    serde_json::Value::String(s.to_string())
 }
 
 /// Prelude — import everything you need.
