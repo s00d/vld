@@ -140,9 +140,16 @@ pre-release-hook = [
 #
 # - `dev`: line tables for workspace crates; no debuginfo for registry deps
 # - `ci`:  no debuginfo, no incremental (used by scripts/ci-all.sh)
+#
+# `split-debuginfo = "off"`: on macOS the default ("unpacked") keeps every
+# codegen unit's `.o` in `target/*/deps` for the debugger and cargo never
+# deletes stale ones, so each rebuild of a test binary leaks ~170 objects
+# (measured: +172 `.o` per edit of src/, >1 GB after a day of work). "off"
+# embeds the line tables in the binary instead: no leftovers, no dsymutil.
 
 [profile.dev]
-debug = 1
+debug = "line-tables-only"
+split-debuginfo = "off"
 
 [profile.dev.package."*"]
 debug = false
@@ -150,6 +157,7 @@ debug = false
 [profile.ci]
 inherits = "dev"
 debug = 0
+split-debuginfo = "off"
 incremental = false
 
 [profile.ci.package."*"]
