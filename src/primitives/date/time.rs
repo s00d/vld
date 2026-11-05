@@ -47,7 +47,7 @@ impl DateBackend for Time {
         let offset = UtcOffset::from_whole_seconds(offset_seconds).ok()?;
         PrimitiveDateTime::parse(naive, NAIVE_FMT)
             .ok()
-            .map(|dt| dt.assume_offset(offset).to_offset(UtcOffset::UTC))
+            .and_then(|dt| dt.assume_offset(offset).checked_to_offset(UtcOffset::UTC))
     }
 
     fn today() -> Self::Date {

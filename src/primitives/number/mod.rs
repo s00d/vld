@@ -186,7 +186,8 @@ impl Kind {
 fn is_multiple_of(n: Num, v: Num) -> bool {
     match (n, v) {
         (_, Num::I(0)) => false,
-        (Num::I(a), Num::I(b)) => a % b == 0,
+        // `checked_rem` is `None` only for `i128::MIN % -1`, whose remainder is 0.
+        (Num::I(a), Num::I(b)) => a.checked_rem(b).is_none_or(|r| r == 0),
         (n, v) => {
             let (n, v) = (n.as_f64(), v.as_f64());
             if v == 0.0 || !n.is_finite() || !v.is_finite() {

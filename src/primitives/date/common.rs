@@ -11,6 +11,12 @@
 //!   is *naive* and is accepted only while [`ZDateTime::naive_allowed`] is on;
 //! - time of day: `HH:MM:SS[.fraction]` (seconds required, 1-9 fraction
 //!   digits, no offset).
+//!
+//! Datetimes must land, in UTC, within
+//! `0000-01-01T00:00:00Z ..= 9999-12-30T22:00:00.999999999Z` — the range all
+//! three libraries can represent (`jiff::Timestamp::MAX` is the upper end) —
+//! so e.g. `9999-12-31T00:00:00Z` or `0000-01-01T00:30:00+01:00` is
+//! `invalid_date` on every backend.
 
 use serde_json::Value;
 use std::fmt::Display;
@@ -68,8 +74,28 @@ fn parse_datetime<B: DateBackend>(
     naive_offset: Option<i32>,
 ) -> Option<(B::DateTime, Option<i32>)> {
     let (naive, offset) = split_datetime(s)?;
-    let dt = B::naive_to_utc(&naive, offset.or(naive_offset)?)?;
+    let at = offset.or(naive_offset)?;
+    if !in_common_range(&naive, at) {
+        return None;
+    }
+    let dt = B::naive_to_utc(&naive, at)?;
     Some((dt, offset))
+}
+
+/// Whether `naive` at `offset_seconds` is a UTC instant every backend can
+/// represent: `0000-01-01T00:00:00Z ..= 9999-12-30T22:00:00.999999999Z`
+/// (the upper end is `jiff::Timestamp::MAX`). Only the first and the last two
+/// days of that range need a look, as `|offset| < 24h`.
+fn in_common_range(naive: &str, offset_seconds: i32) -> bool {
+    // Shape-checked by `split_datetime`: `YYYY-MM-DDTHH:MM:SS...`, all ASCII.
+    let num = |r: std::ops::Range<usize>| naive[r].parse::<i32>().unwrap_or(0);
+    let secs = num(11..13) * 3600 + num(14..16) * 60 + num(17..19) - offset_seconds;
+    match &naive[..10] {
+        "0000-01-01" => secs >= 0,
+        "9999-12-30" => secs <= 22 * 3600,
+        "9999-12-31" => secs <= 22 * 3600 - 86_400,
+        _ => true,
+    }
 }
 
 fn check_offset(offset_seconds: i32) -> i32 {

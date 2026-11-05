@@ -25,5 +25,6 @@ mod modifiers;
 mod number;
 mod object;
 mod proptests;
+mod reaudit;
 mod regressions;
 mod string;
