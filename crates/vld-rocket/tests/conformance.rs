@@ -4,7 +4,9 @@
 use rocket::http::{Header, Method};
 use rocket::local::asynchronous::Client;
 use rocket::routes;
-use vld_http_common::conformance::{Cookies, Headers, PathId, Query, Request, Response, User};
+use vld_http_common::conformance::{
+    Cookies, Headers, PathId, PathNone, PathStr, Query, Request, Response, User,
+};
 use vld_rocket::prelude::*;
 
 #[rocket::post("/json", data = "<b>")]
@@ -24,6 +26,15 @@ fn path(id: &str, p: VldPath<PathId>) -> String {
     let _ = id;
     p.reply()
 }
+#[rocket::get("/pstr/<s>")]
+fn pstr(s: &str, p: VldPath<PathStr>) -> String {
+    let _ = s;
+    p.s.clone()
+}
+#[rocket::get("/pnone")]
+fn pnone(p: VldPath<PathNone>) -> String {
+    p.reply()
+}
 #[rocket::get("/headers")]
 fn headers(h: VldHeaders<Headers>) -> String {
     h.x_tag.clone()
@@ -35,7 +46,10 @@ fn cookie(c: VldCookie<Cookies>) -> String {
 
 async fn send_at(base: &str, r: Request) -> Response {
     let rocket = rocket::build()
-        .mount(base, routes![json, form, query, path, headers, cookie])
+        .mount(
+            base,
+            routes![json, form, query, path, pstr, pnone, headers, cookie],
+        )
         .register("/", vld_catchers());
     let client = Client::untracked(rocket).await.expect("valid rocket");
     let method: Method = r.method.parse().unwrap();
@@ -63,10 +77,16 @@ mod root {
         cases = [
             json_valid,
             json_content_type_case_insensitive,
+            json_content_type_bare_param,
+            json_content_type_unterminated_quote,
+            json_content_type_empty_suffix,
             json_malformed,
             json_validation_error,
             json_oversized,
             form_valid,
+            form_content_type_params,
+            form_wrong_content_type,
+            form_too_many_fields,
             form_validation_error,
             form_non_utf8,
             form_oversized,
@@ -75,9 +95,17 @@ mod root {
             query_missing_field,
             path_valid,
             path_invalid,
+            path_percent_decoding,
+            path_invalid_utf8,
+            path_no_params_optional,
             headers_valid,
+            headers_underscore_ignored,
+            headers_underscore_only,
             headers_missing,
             cookie_quoted_encoded,
+            cookie_multiple_headers,
+            cookie_duplicate_first_wins,
+            cookie_non_ascii,
             cookie_missing,
         ],
     }
@@ -102,6 +130,8 @@ mod mounted {
             query_repeated_keys,
             path_valid,
             path_invalid,
+            path_percent_decoding,
+            path_no_params_optional,
             headers_valid,
             cookie_quoted_encoded,
         ],

@@ -3,9 +3,11 @@
 //! Validation extractors for [Rocket](https://rocket.rs/). Validates request
 //! data against `vld` schemas and returns `422 Unprocessable Entity` with
 //! structured JSON errors on failure (malformed JSON/form bodies included),
-//! and `413 Payload Too Large` when a body exceeds Rocket's limit.
+//! and `413 Payload Too Large` when a body exceeds the limit.
 //! `VldJson` requires a JSON `Content-Type` (`application/json` or
-//! `application/*+json`) and answers `415 Unsupported Media Type` otherwise.
+//! `application/*+json`) and `VldForm` `application/x-www-form-urlencoded`;
+//! anything else is `415 Unsupported Media Type`. See the
+//! [error body format](vld_http_common#error-bodies).
 //!
 //! # Extractors
 //!
@@ -20,10 +22,12 @@
 //!
 //! # Body limits
 //!
-//! `VldJson` uses Rocket's `json` limit (default 1 MiB) and `VldForm` the
-//! `form` limit (default 32 KiB; falls back to
-//! [`DEFAULT_BODY_LIMIT`] if unset).
-//! Configure them via `limits` in `Rocket.toml`.
+//! `VldJson` reads up to Rocket's `json` limit and `VldForm` up to the
+//! `form` limit, configured via `limits` in `Rocket.toml` (or
+//! `ROCKET_LIMITS`). While a limit is left at Rocket's built-in default
+//! (1 MiB / 32 KiB) [`DEFAULT_BODY_LIMIT`] (2 MiB) applies instead, like in
+//! every other `vld` adapter — so setting exactly the built-in value counts
+//! as unset.
 //!
 //! # Error catchers
 //!
@@ -36,30 +40,61 @@
 //!     .register("/", vld_rocket::vld_catchers())
 //! ```
 
-use rocket::data::{Data, FromData, Outcome as DataOutcome, ToByteUnit};
+use rocket::data::{ByteUnit, Data, FromData, Limits, Outcome as DataOutcome, ToByteUnit};
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::serde::json::Json;
+use std::sync::Mutex;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, path_params_to_json,
-    query_string_to_json, require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
+    cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
+    path_params_to_json, query_string_to_json, require_form_content_type,
+    require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
 };
 
 // ---------------------------------------------------------------------------
 // Request-local error storage
 // ---------------------------------------------------------------------------
 
-/// Stored in request local cache so the catcher can read it.
-#[derive(Debug, Clone, Default)]
-pub struct VldErrorCache(pub Option<serde_json::Value>);
+/// The latest vld failure `(status, body)` of a request, for the catchers.
+#[derive(Default)]
+struct VldErrorCache(Mutex<Option<(Status, serde_json::Value)>>);
 
 /// Store the error body for the catchers and return `(status, body)`.
 fn fail(req: &Request<'_>, err: VldHttpError) -> (Status, serde_json::Value) {
+    let status = Status::new(err.status());
     let body = err.body();
-    // Rocket's local_cache returns &T, setting a value requires the closure pattern
-    let _ = req.local_cache(|| VldErrorCache(Some(body.clone())));
-    (Status::new(err.status()), body)
+    // A later failure overwrites: the catcher answers for the last one.
+    *req.local_cache(VldErrorCache::default)
+        .0
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some((status, body.clone()));
+    (status, body)
+}
+
+/// Rocket's limit `name`, or [`DEFAULT_BODY_LIMIT`] while it is unset or
+/// left at Rocket's built-in default.
+fn body_limit(req: &Request<'_>, name: &str) -> ByteUnit {
+    match req.limits().get(name) {
+        Some(limit) if Some(limit) != Limits::default().get(name) => limit,
+        _ => DEFAULT_BODY_LIMIT.bytes(),
+    }
+}
+
+/// Read the body up to `limit`: 413 beyond it, 422 on a read error.
+async fn read_body(
+    req: &Request<'_>,
+    data: Data<'_>,
+    limit: ByteUnit,
+) -> Result<Vec<u8>, (Status, serde_json::Value)> {
+    match data.open(limit).into_bytes().await {
+        Ok(b) if b.is_complete() => Ok(b.into_inner()),
+        Ok(_) => Err(fail(req, VldHttpError::payload_too_large())),
+        Err(e) => Err(fail(
+            req,
+            VldHttpError::parse(format!("Failed to read request body: {e}")),
+        )),
+    }
 }
 
 fn validate<T: VldParse>(
@@ -93,7 +128,7 @@ fn to_data_outcome<'r, S>(
 ///
 /// Reads the request body as JSON, validates via `T::vld_parse_value()`,
 /// and returns `422` with error details on failure (`413` when the body
-/// exceeds Rocket's `json` limit, `415` when the `Content-Type` is missing
+/// exceeds the `json` limit, `415` when the `Content-Type` is missing
 /// or not `application/json` / `application/*+json`).
 #[derive(Debug, Clone)]
 pub struct VldJson<T>(pub T);
@@ -106,24 +141,14 @@ impl<'r, T: VldParse + Send + 'static> FromData<'r> for VldJson<T> {
         if let Err(e) = require_json_content_type(req.headers().get_one("Content-Type")) {
             return DataOutcome::Error(fail(req, e));
         }
-        let value = match <Json<serde_json::Value> as FromData<'r>>::from_data(req, data).await {
-            DataOutcome::Success(json) => json.into_inner(),
-            DataOutcome::Error((status, _)) if status == Status::PayloadTooLarge => {
-                return DataOutcome::Error(fail(req, VldHttpError::payload_too_large()));
-            }
-            DataOutcome::Error((_, e)) => {
-                return DataOutcome::Error(fail(
-                    req,
-                    VldHttpError::parse(format!("Invalid JSON: {e}")),
-                ));
-            }
-            DataOutcome::Forward(f) => return DataOutcome::Forward(f),
-        };
-        to_data_outcome(
-            T::vld_parse_value(&value)
+        let result = match read_body(req, data, body_limit(req, "json")).await {
+            Ok(body) => parse_json_body(&body)
+                .and_then(|v| T::vld_parse_value(&v).map_err(VldHttpError::validation))
                 .map(VldJson)
-                .map_err(|e| fail(req, VldHttpError::validation(e))),
-        )
+                .map_err(|e| fail(req, e)),
+            Err(e) => Err(e),
+        };
+        to_data_outcome(result)
     }
 }
 
@@ -153,9 +178,9 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldQuery<T> {
 
 /// Validated form body extractor.
 ///
-/// Reads an `application/x-www-form-urlencoded` body (up to Rocket's `form`
-/// limit), parses it like a query string and validates via
-/// `T::vld_parse_value()`.
+/// Reads an `application/x-www-form-urlencoded` body (`415` for another
+/// `Content-Type`, `413` above the `form` limit), parses it like a query
+/// string and validates via `T::vld_parse_value()`.
 #[derive(Debug, Clone)]
 pub struct VldForm<T>(pub T);
 
@@ -164,19 +189,14 @@ impl<'r, T: VldParse + Send + 'static> FromData<'r> for VldForm<T> {
     type Error = serde_json::Value;
 
     async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> DataOutcome<'r, Self> {
-        let limit = req
-            .limits()
-            .get("form")
-            .unwrap_or_else(|| DEFAULT_BODY_LIMIT.bytes());
-        let result = match data.open(limit).into_bytes().await {
-            Ok(b) if b.is_complete() => parse_form_body(&b.into_inner())
+        if let Err(e) = require_form_content_type(req.headers().get_one("Content-Type")) {
+            return DataOutcome::Error(fail(req, e));
+        }
+        let result = match read_body(req, data, body_limit(req, "form")).await {
+            Ok(body) => parse_form_body(&body)
                 .map_err(|e| fail(req, e))
                 .and_then(|value| validate(req, &value)),
-            Ok(_) => Err(fail(req, VldHttpError::payload_too_large())),
-            Err(e) => Err(fail(
-                req,
-                VldHttpError::parse(format!("Failed to read form body: {e}")),
-            )),
+            Err(e) => Err(e),
         };
         to_data_outcome(result.map(VldForm))
     }
@@ -186,12 +206,19 @@ impl<'r, T: VldParse + Send + 'static> FromData<'r> for VldForm<T> {
 // Error catchers
 // ---------------------------------------------------------------------------
 
+/// The stored vld error body when it is for `status`; otherwise (another
+/// guard failed, e.g. Rocket's own `Json`) a generic `{"error": reason}`.
 fn cached_or(req: &Request<'_>, status: Status) -> (Status, Json<serde_json::Value>) {
-    let body = req
-        .local_cache(|| VldErrorCache(None))
+    let cached = req
+        .local_cache(VldErrorCache::default)
         .0
-        .clone()
-        .unwrap_or_else(|| vld_http_common::format_generic_error(status.reason_lossy()));
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    let body = match cached {
+        Some((s, body)) if s == status => body,
+        _ => vld_http_common::format_generic_error(status.reason_lossy()),
+    };
     (status, Json(body))
 }
 
@@ -302,7 +329,8 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldPath<T> {
 /// Validated HTTP headers extractor for Rocket.
 ///
 /// See [`vld_http_common::headers_to_json`]: names become snake_case
-/// (`Content-Type` → `content_type`), repeated headers are joined with `", "`.
+/// (`Content-Type` → `content_type`), names containing `_` are ignored,
+/// repeated headers are joined with `", "`.
 #[derive(Debug, Clone)]
 pub struct VldHeaders<T>(pub T);
 
@@ -311,6 +339,7 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldHeaders<T> 
     type Error = serde_json::Value;
 
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        // `iter()` yields `Header`s by value; keep them alive while borrowed.
         let headers: Vec<_> = req.headers().iter().collect();
         let value = headers_to_json(
             headers
@@ -327,9 +356,9 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldHeaders<T> 
 
 /// Validated cookie extractor for Rocket.
 ///
-/// Reads cookies from the `Cookie` header and validates against the schema.
-/// Cookie names are used as-is; values are unquoted, percent-decoded and
-/// coerced.
+/// Reads cookies from every `Cookie` header (the first occurrence of a name
+/// wins) and validates against the schema. Cookie names are used as-is;
+/// values are unquoted, percent-decoded and coerced.
 #[derive(Debug, Clone)]
 pub struct VldCookie<T>(pub T);
 
@@ -338,8 +367,8 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldCookie<T> {
     type Error = serde_json::Value;
 
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let cookie_header = req.headers().get_one("Cookie").unwrap_or("");
-        to_outcome(validate(req, &cookies_to_json(cookie_header)).map(VldCookie))
+        let value = cookie_headers_to_json(req.headers().get("Cookie").map(str::as_bytes));
+        to_outcome(validate(req, &value).map(VldCookie))
     }
 }
 
