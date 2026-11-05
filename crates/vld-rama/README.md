@@ -65,12 +65,14 @@ When you compose a `Service` stack without extractors:
 ```rust,ignore
 use vld_rama::{ValidateJsonLayer, validated, Validated};
 
-// .layer(ValidateJsonLayer::<CreateUser>::new())
+// .layer(ValidateJsonLayer::<CreateUser>::new())   // or ::with_limit(bytes)
 // then in a downstream service:
-// let user = validated::<CreateUser>(&req);
+// let user: Option<CreateUser> = validated::<CreateUser>(&req);
 ```
 
-Validated values are stored as `Validated<T>` in Rama `Extensions`.
+Validated values are stored as `Validated<T>` in Rama `Extensions`. Non-JSON requests
+(anything but `application/json` / `application/*+json`) are passed through untouched, so
+`validated` returns `None` for them. JSON bodies over the limit (default 2 MiB) get `413`.
 
 ## Extractors vs Layer
 

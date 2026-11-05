@@ -49,17 +49,22 @@ let svc = ServiceBuilder::new()
 
 ### Extracting Validated Data
 
+The inner service receives `Request<ValidatedBody<B>>` (`http_body_util::Either`): the buffered
+bytes of a validated JSON request, or the untouched original body of a non-JSON request.
+
 ```rust
-use vld_tower::{validated, try_validated};
+use vld_tower::{validated, ValidatedBody};
 
-async fn handler(req: Request<impl Body>) -> Result<Response<...>, ...> {
-    // Panics if middleware not applied
-    let user: CreateUser = validated(&req);
-
-    // Returns None if not available
-    let user: Option<CreateUser> = try_validated(&req);
+async fn handler(req: Request<ValidatedBody<Incoming>>) -> Result<Response<...>, ...> {
+    // None if the middleware was not applied or the request was not JSON
+    let Some(user) = validated::<CreateUser>(&req) else {
+        return Ok(unsupported_media_type());
+    };
 }
 ```
+
+JSON is detected case-insensitively (`application/json`, `application/*+json`). The body limit
+defaults to 2 MiB; use `ValidateJsonLayer::with_limit(bytes)` to change it.
 
 ### With Axum
 
@@ -86,13 +91,21 @@ let app = Router::new()
 }
 ```
 
-### Malformed JSON (400)
+### Malformed JSON (422)
 
 ```json
 {
-  "error": "Invalid JSON",
-  "message": "expected value at line 1 column 1"
+  "error": "Validation failed",
+  "issues": [
+    { "path": "", "message": "Invalid JSON: expected value at line 1 column 1" }
+  ]
 }
+```
+
+### Body over the limit (413)
+
+```json
+{ "error": "Payload too large" }
 ```
 
 ## Running the Example

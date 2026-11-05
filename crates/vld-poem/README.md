@@ -16,8 +16,17 @@
 | `VldJson<T>` | JSON body | Validates JSON request body |
 | `VldQuery<T>` | Query string | Validates URL query parameters |
 | `VldForm<T>` | Form body | Validates `application/x-www-form-urlencoded` |
+| `VldPath<T>` | Path params | Validates path parameters |
+| `VldHeaders<T>` | HTTP headers | Validates headers (`X-Request-Id` → `x_request_id`) |
+| `VldCookie<T>` | Cookie header | Validates cookie values |
 
-All extractors return `422 Unprocessable Entity` with a JSON error body on validation failure.
+All extractors return `422 Unprocessable Entity` with a JSON error body on validation failure
+or malformed input, and `413 Payload Too Large` (`{"error":"Payload too large"}`) for bodies over
+2 MiB. Errors are `VldPoemError` (exported from the prelude).
+
+Query/form/path/header/cookie values are coerced losslessly: canonical numbers → number,
+`"true"`/`"false"` → boolean, anything else (`""`, `"null"`, `"01234"`) stays a string; repeated
+keys and `key[]` become arrays.
 
 ## Installation
 

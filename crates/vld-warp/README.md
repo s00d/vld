@@ -28,7 +28,7 @@
 | `vld_cookie::<T>()` | Cookie header | Validates cookie values |
 | `handle_rejection` | — | Converts vld rejections into JSON responses |
 
-Validation failures are returned as `422 Unprocessable Entity` with a JSON error body.
+Validation failures and malformed bodies are returned as `422 Unprocessable Entity` with a JSON error body. Bodies are read as a stream (chunked uploads work) and limited to 2 MiB (`vld_json_limit` / `vld_form_limit`), otherwise `413`. `handle_rejection` also maps warp's own rejections (404, 405, 400, 411, 415) and answers `500` for unknown ones. Path params are percent-decoded.
 
 ## Installation
 

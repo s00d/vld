@@ -16,8 +16,16 @@
 | `VldJson<T>` | JSON body | Validates JSON request body |
 | `VldQuery<T>` | Query string | Validates URL query parameters |
 | `VldForm<T>` | Form body | Validates `application/x-www-form-urlencoded` |
+| `VldPath<T>` | Path segments | Validates `<param>` / trailing `<param..>` segments (any mount point) |
+| `VldHeaders<T>` | HTTP headers | Validates headers (`X-Request-Id` → `x_request_id`) |
+| `VldCookie<T>` | Cookie header | Validates cookie values |
 
-All extractors return `422 Unprocessable Entity` with a JSON error body on validation failure.
+All extractors return `422 Unprocessable Entity` with a JSON error body on validation failure
+or malformed input (invalid JSON, non-UTF-8 form), and `413 Payload Too Large` when the body
+exceeds Rocket's `limits.json` / `limits.form` (`form` falls back to 2 MiB if unset).
+
+Rocket requires every `<param>` to be a handler argument as well, so declare them next to
+`VldPath<T>` (e.g. `fn get(id: &str, p: VldPath<UserPath>)`).
 
 ## Installation
 
@@ -54,10 +62,7 @@ fn create_user(user: VldJson<CreateUser>) -> rocket::serde::json::Json<serde_jso
 async fn main() -> Result<(), rocket::Error> {
     rocket::build()
         .mount("/", rocket::routes![create_user])
-        .register("/", rocket::catchers![
-            vld_rocket::vld_422_catcher,
-            vld_rocket::vld_400_catcher,
-        ])
+        .register("/", vld_rocket::vld_catchers())
         .launch()
         .await?;
     Ok(())
@@ -69,9 +74,14 @@ async fn main() -> Result<(), rocket::Error> {
 Register the built-in catchers to get JSON error responses:
 
 ```rust,ignore
+.register("/", vld_rocket::vld_catchers()) // 400, 413, 415, 422
+
+// or pick individually:
 .register("/", rocket::catchers![
-    vld_rocket::vld_422_catcher,  // validation errors
-    vld_rocket::vld_400_catcher,  // JSON parse errors
+    vld_rocket::vld_422_catcher,  // validation / malformed body errors
+    vld_rocket::vld_413_catcher,  // body over the configured limit
+    vld_rocket::vld_415_catcher,
+    vld_rocket::vld_400_catcher,
 ])
 ```
 

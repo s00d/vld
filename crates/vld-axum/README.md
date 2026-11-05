@@ -22,7 +22,7 @@ Provides 6 extractors that validate request data using `vld` schemas **before** 
 | `VldHeaders<T>` | manual header extraction | HTTP headers |
 | `VldCookie<T>` | manual cookie parsing | Cookie values |
 
-On validation failure all extractors return **422 Unprocessable Entity** with a JSON body describing every issue.
+On validation failure (and for malformed bodies) all extractors return **422 Unprocessable Entity** with a JSON body describing every issue; bodies over the size limit return **413** `{"error":"Payload too large"}`.
 
 ## Installation
 
@@ -55,7 +55,7 @@ async fn create_user(VldJson(user): VldJson<CreateUser>) -> String {
 
 ## VldQuery — query parameters
 
-Values are automatically coerced: `"42"` → number, `"true"`/`"false"` → boolean, empty → null.
+Values are coerced losslessly: canonical numbers (`"42"`, `"-1.5"`) → number, `"true"`/`"false"` → boolean; everything else (`""`, `"null"`, `"01234"`, `"+1555"`, `"1e3"`) stays a string. Repeated keys (`?tag=a&tag=b`) and `tag[]=a` become arrays. Use `vld::string().coerce()` for string fields that may look numeric.
 
 ```rust
 use axum::{Router, routing::get};

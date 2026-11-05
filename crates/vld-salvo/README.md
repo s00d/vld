@@ -32,7 +32,7 @@ All extractors implement `Deref<Target = T>` so you access fields
 directly (e.g. `body.name` instead of `body.0.name`).
 
 `VldSalvoError` implements Salvo's `Writer` trait — validation
-failures render as `422 Unprocessable Entity` with a JSON error body.
+failures render as `422 Unprocessable Entity` with a JSON error body (`413` when the body exceeds Salvo's `secure_max_size`, 64 KiB by default).
 
 ## Installation
 
