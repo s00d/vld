@@ -3,7 +3,7 @@
 //! Validation extractors for [Poem](https://docs.rs/poem). Validates request
 //! data against `vld` schemas and returns `422 Unprocessable Entity` with
 //! structured JSON errors on failure (`413 Payload Too Large` when a body
-//! exceeds [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT), 2 MiB).
+//! exceeds [`DEFAULT_BODY_LIMIT`], 2 MiB).
 //! `VldJson` requires a JSON `Content-Type` (`application/json` or
 //! `application/*+json`) and answers `415 Unsupported Media Type` otherwise.
 //!

@@ -293,15 +293,14 @@ mod figment_tests {
         let err = from_figment::<AppSettings>(&figment).unwrap_err();
         match err {
             VldConfigError::Validation(e) => {
-                // `schema!` reads a missing key as `null`.
+                // Absent required keys report `missing_field`.
                 let paths: Vec<String> = e
                     .issues
                     .iter()
                     .map(|i| i.path.iter().map(|p| p.to_string()).collect())
                     .collect();
                 assert_eq!(paths, [".host", ".port", ".debug"]);
-                assert!(e.issues.iter().all(|i| i.code.key() == "invalid_type"
-                    && i.received == Some(serde_json::Value::Null)));
+                assert!(e.issues.iter().all(|i| i.code.key() == "missing_field"));
             }
             other => panic!("expected a validation error, got {other:?}"),
         }
