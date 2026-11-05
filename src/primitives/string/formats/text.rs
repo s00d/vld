@@ -62,21 +62,27 @@ pub(crate) fn is_valid_color(s: &str) -> bool {
         return (hex.len() == 6 || hex.len() == 8) && hex.bytes().all(|b| b.is_ascii_hexdigit());
     }
     let lower = s.to_ascii_lowercase();
+    // Plain digits only: `u8::from_str` would accept a leading `+`.
+    let num = |p: &str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
     let parts_of = |prefix: &str| -> Option<Vec<String>> {
         let inner = lower.strip_prefix(prefix)?.strip_suffix(')')?;
         let parts: Vec<String> = inner.split(',').map(|p| p.trim().to_string()).collect();
         (parts.len() == 3).then_some(parts)
     };
     if let Some(parts) = parts_of("rgb(") {
-        return parts.iter().all(|p| p.parse::<u8>().is_ok());
+        return parts.iter().all(|p| num(p) && p.parse::<u8>().is_ok());
     }
     if let Some(parts) = parts_of("hsl(") {
         let pct = |p: &str| {
             p.strip_suffix('%')
+                .filter(|v| num(v))
                 .and_then(|v| v.parse::<u8>().ok())
                 .is_some_and(|v| v <= 100)
         };
-        return parts[0].parse::<u16>().is_ok_and(|h| h <= 360) && pct(&parts[1]) && pct(&parts[2]);
+        return num(&parts[0])
+            && parts[0].parse::<u16>().is_ok_and(|h| h <= 360)
+            && pct(&parts[1])
+            && pct(&parts[2]);
     }
     false
 }
@@ -132,7 +138,14 @@ pub(crate) fn is_emoji_char(c: char) -> bool {
         | 0x2B50)
 }
 
-/// Non-empty and made of emoji characters only (ZWJ / variation selectors allowed).
+/// Joiners and modifiers that are not an emoji on their own: variation
+/// selectors, ZWJ, the combining keycap and tag characters.
+fn is_emoji_modifier(c: char) -> bool {
+    matches!(c as u32, 0xFE00..=0xFE0F | 0x200D | 0x20E3 | 0xE0020..=0xE007F)
+}
+
+/// Made of emoji characters only (ZWJ / variation selectors allowed), with at
+/// least one actual emoji (a lone U+FE0F or ZWJ is rejected).
 pub(crate) fn is_valid_emoji(s: &str) -> bool {
-    !s.is_empty() && s.chars().all(is_emoji_char)
+    s.chars().all(is_emoji_char) && s.chars().any(|c| !is_emoji_modifier(c))
 }

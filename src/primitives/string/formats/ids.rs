@@ -15,7 +15,6 @@ pub(crate) fn is_valid_uuid_version(s: &str, version: usize) -> bool {
 }
 
 pub(crate) fn is_valid_semver(s: &str) -> bool {
-    let s = s.trim();
     let s = s.strip_prefix('v').unwrap_or(s);
     let main = s.split(['-', '+']).next().unwrap_or("");
     let parts: Vec<&str> = main.split('.').collect();
@@ -63,8 +62,10 @@ pub(crate) fn is_valid_cuid2(s: &str) -> bool {
 }
 
 pub(crate) fn is_valid_ulid(s: &str) -> bool {
-    // Crockford's Base32: 0-9 A-H J K M N P-T V-Z (no I, L, O, U)
+    // Crockford's Base32: 0-9 A-H J K M N P-T V-Z (no I, L, O, U); 26 chars
+    // carry 130 bits, so the first must be 0-7 to fit the 128-bit value.
     s.len() == 26
+        && matches!(s.as_bytes()[0], b'0'..=b'7')
         && s.chars().all(|c| {
             matches!(c.to_ascii_uppercase(), '0'..='9' | 'A'..='H' | 'J' | 'K' | 'M' | 'N' | 'P'..='T' | 'V'..='Z')
         })

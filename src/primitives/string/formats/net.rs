@@ -112,8 +112,16 @@ pub(crate) fn is_valid_mac(s: &str) -> bool {
             .all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
+/// RFC 1123 labels; a dotted name may not end in an all-numeric label, so
+/// IPv4-like strings (`999.1.1.1`) are not hostnames.
 pub(crate) fn is_valid_hostname(s: &str) -> bool {
+    let numeric_tld = s.contains('.')
+        && s
+            .rsplit('.')
+            .next()
+            .is_some_and(|tld| tld.bytes().all(|b| b.is_ascii_digit()));
     !s.is_empty()
+        && !numeric_tld
         && s.len() <= 253
         && s.split('.').all(|label| {
             !label.is_empty()

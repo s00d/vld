@@ -21,6 +21,10 @@ fn parse_secs(s: &str) -> Option<Duration> {
 
 fn parse_duration_string(s: &str) -> Option<Duration> {
     if let Some(ms) = s.strip_suffix("ms") {
+        // Digits only: `u64::from_str` would accept a leading `+`.
+        if ms.is_empty() || !ms.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
         return ms.parse::<u64>().ok().map(Duration::from_millis);
     }
     if let Some(sec) = s.strip_suffix('s') {
