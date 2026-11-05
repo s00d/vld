@@ -145,11 +145,10 @@ macro_rules! impl_validate_fields {
 /// Unlike [`schema!`](crate::schema!) which creates the struct, this macro takes a struct you
 /// already have and generates `validate()` and `is_valid()` instance methods.
 ///
-/// The struct must implement `serde::Serialize`.
-///
-/// The struct does **not** need `#[derive(Serialize)]` or `#[derive(Debug)]` —
-/// each field is serialized individually (standard types like `String`, `f64`,
-/// `Vec<T>` already implement `Serialize`).
+/// The struct itself does **not** need `serde::Serialize` (or `Debug`): each
+/// listed **field** is serialized individually, so only the field types must
+/// implement `Serialize` (standard types like `String`, `f64`, `Vec<T>` do).
+/// A field that fails to serialize is reported as `serialize_error`.
 ///
 /// # Example
 ///
@@ -218,12 +217,10 @@ macro_rules! impl_rules {
                                     .map(|_| ())
                             }
                             ::std::result::Result::Err(e) => ::std::result::Result::Err(
-                                $crate::error::VldError::single(
-                                    $crate::error::IssueCode::ParseError,
-                                    ::std::format!(
-                                        "Serialization error for field '{}': {}",
-                                        __vld_key, e
-                                    ),
+                                $crate::error::VldError::from_code(
+                                    $crate::error::IssueCode::SerializeError {
+                                        detail: e.to_string(),
+                                    },
                                 ),
                             ),
                         };

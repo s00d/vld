@@ -467,6 +467,25 @@ fn f27_diff_keywords() {
     }
 }
 
+// 37. impl_rules! reports serialization failures as serialize_error.
+struct F37 {
+    m: std::collections::HashMap<(i32, i32), i32>,
+}
+
+vld::impl_rules!(F37 {
+    m => vld::any(),
+});
+
+#[test]
+fn f37_impl_rules_serialize_error() {
+    let v = F37 {
+        m: [((1, 2), 3)].into_iter().collect(),
+    };
+    let err = v.validate().unwrap_err();
+    assert_eq!(err.issues[0].code.key(), "serialize_error");
+    assert_eq!(crate::common::paths(&err), [".m"]);
+}
+
 // 22. Discriminator values compare numerically (1 == 1.0).
 #[test]
 fn f22_discriminator_numeric_equality() {

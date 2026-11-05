@@ -76,7 +76,8 @@ pub(crate) fn outside_base_error(base: &Path, value: &Value) -> VldError {
     )
 }
 
-/// Schema for filesystem paths. Created via [`vld::path()`](crate::path).
+/// Schema for filesystem paths. Created via [`vld::path()`](crate::path)
+/// (read its security note: confine untrusted paths with [`within`](Self::within)).
 #[derive(Clone)]
 pub struct ZPath {
     must_exist: bool,

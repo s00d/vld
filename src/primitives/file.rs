@@ -91,6 +91,9 @@ impl ValidatedFile {
     }
 }
 
+/// Schema for an uploaded / referenced file on the local filesystem. Created
+/// via [`vld::file()`](crate::file) (read its security note: confine untrusted
+/// paths with [`within`](Self::within)).
 #[derive(Clone)]
 pub struct ZFile {
     min_size: Option<u64>,

@@ -10,7 +10,7 @@ use crate::schema::VldSchema;
 /// Created via [`vld::map()`](crate::map).
 ///
 /// A key that appears twice (after validation) is an error
-/// (`duplicate_map_key`, reported at the later entry's index).
+/// (`duplicate_key`, reported at the later entry's index).
 ///
 /// # Example
 /// ```ignore

@@ -12,10 +12,14 @@ use crate::schema::VldSchema;
 ///
 /// Created via [`vld::lazy()`](crate::lazy).
 ///
+/// Every `vld::lazy(...)` node calls its factory once; nested lazy nodes
+/// built by the factory are themselves created on first use, so a recursive
+/// schema unfolds only as deep as the inputs go.
+///
 /// # Example
 /// ```ignore
 /// // Recursive tree: { value: i64, children: Tree[] }
-/// fn tree_schema() -> impl VldSchema<Output = serde_json::Value> {
+/// fn tree_schema() -> impl VldSchema<Output = serde_json::Map<String, serde_json::Value>> {
 ///     vld::object()
 ///         .field("value", vld::number().int())
 ///         .field("children", vld::array(vld::lazy(tree_schema)))

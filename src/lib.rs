@@ -33,6 +33,23 @@
 //! - [`primitives`], [`collections`], [`combinators`], [`modifiers`], [`mod@object`] — schema types
 //! - `openapi` (feature `openapi`) — JSON Schema / OpenAPI generation and schema diffs
 //! - [`prelude`] — everything needed for day-to-day use
+//!
+//! ## Size method names
+//!
+//! Size bounds are named after what they count (the old names stay; there
+//! are no aliases):
+//!
+//! | Schema | Bounds | Exact |
+//! |---|---|---|
+//! | `string()` (characters) | `min` / `max` | `len` |
+//! | `array()`, `bytes()` (items / bytes) | `min_len` / `max_len` | `len` |
+//! | `set()` (unique items), `file()` (bytes) | `min_size` / `max_size` | — |
+//! | `object()`, `record()` (keys) | `min_keys` / `max_keys` | — |
+//! | numbers, dates | `min` / `max` (`gt` / `lt` exclusive) | — |
+//!
+//! `schema!` structs get `parse()`; `#[derive(Validate)]` generates
+//! `vld_parse()` instead, as `parse` would clash with `clap::Parser::parse`
+//! and similar derives.
 
 pub mod collections;
 pub mod combinators;
@@ -153,6 +170,15 @@ pub fn json_value() -> primitives::ZJsonValue {
 /// Create a file validation schema.
 ///
 /// Requires the `file` feature.
+///
+/// # Security
+///
+/// The path comes from the (untrusted) input and is checked against the
+/// **server's** filesystem: by default any absolute path or `..` is
+/// accepted, so `exists()` / `file()` / `dir()` reveal whether arbitrary
+/// paths exist and `vld::file()` opens and reads them. Always confine user-supplied paths with
+/// [`within(base)`](primitives::ZFile::within), which resolves `..` and symlinks and returns
+/// the joined path.
 #[cfg(feature = "file")]
 pub fn file() -> primitives::ZFile {
     primitives::ZFile::new()
@@ -164,6 +190,15 @@ pub fn duration() -> primitives::ZDuration {
 }
 
 /// Create a path validation schema (`std::path::PathBuf`).
+///
+/// # Security
+///
+/// The path comes from the (untrusted) input and is checked against the
+/// **server's** filesystem: by default any absolute path or `..` is
+/// accepted, so `exists()` / `file()` / `dir()` reveal whether arbitrary
+/// paths exist. Always confine user-supplied paths with
+/// [`within(base)`](primitives::ZPath::within), which resolves `..` and symlinks and returns
+/// the joined path.
 pub fn path() -> primitives::ZPath {
     primitives::ZPath::new()
 }
@@ -460,7 +495,8 @@ pub fn discriminated_union(discriminator: impl Into<String>) -> combinators::ZDi
 
 /// Create a lazy schema for recursive data structures.
 ///
-/// The factory function is called on each parse, enabling self-referencing schemas.
+/// The factory is called on the first parse of this node and its schema is
+/// cached (see [`ZLazy`](combinators::ZLazy)), enabling self-referencing schemas.
 pub fn lazy<T: schema::VldSchema, F: Fn() -> T>(factory: F) -> combinators::ZLazy<T, F> {
     combinators::ZLazy::new(factory)
 }
