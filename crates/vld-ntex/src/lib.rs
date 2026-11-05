@@ -11,7 +11,17 @@
 //! | [`VldHeaders<T>`] | manual header extraction | HTTP headers |
 //! | [`VldCookie<T>`] | manual cookie parsing | Cookie values |
 //!
-//! All extractors return **422 Unprocessable Entity** on validation failure.
+//! All extractors return **422 Unprocessable Entity** on validation failure
+//! or malformed input, and **413 Payload Too Large** when the body exceeds
+//! the limit.
+//!
+//! # Body limits
+//!
+//! Body reading is delegated to ntex, so its configuration applies:
+//! `JsonConfig` for [`VldJson`] (ntex default 32 KiB) and `PayloadConfig`
+//! for [`VldForm`] (ntex default 256 KiB). Register e.g.
+//! `App::new().state(JsonConfig::default().limit(vld_http_common::DEFAULT_BODY_LIMIT))`
+//! to use the same 2 MiB default as the other `vld` adapters.
 //!
 //! # Quick example
 //!
@@ -42,10 +52,16 @@
 //! }
 //! ```
 
+use ntex::http::error::PayloadError;
 use ntex::http::StatusCode;
-use ntex::web::error::WebResponseError;
+use ntex::web::error::{JsonPayloadError, WebResponseError};
 use ntex::web::{ErrorRenderer, FromRequest, HttpRequest, HttpResponse};
 use std::fmt;
+use vld::schema::VldParse;
+use vld_http_common::{
+    cookies_to_json, headers_to_json, parse_form_body, path_params_to_json, query_string_to_json,
+    VldHttpError,
+};
 
 // ============================= Error / Rejection =============================
 
@@ -53,59 +69,55 @@ use std::fmt;
 ///
 /// Used by all `Vld*` extractors in this crate.
 #[derive(Debug)]
-pub struct VldNtexError {
-    error: vld::error::VldError,
-    status: StatusCode,
-}
+pub struct VldNtexError(VldHttpError);
 
 impl VldNtexError {
-    fn validation(error: vld::error::VldError) -> Self {
-        Self {
-            error,
-            status: StatusCode::UNPROCESSABLE_ENTITY,
-        }
+    /// The underlying validation error.
+    pub fn error(&self) -> &vld::error::VldError {
+        self.0.error()
     }
+}
 
-    fn parse(message: impl Into<String>) -> Self {
-        Self::validation(vld::error::VldError::single(
-            vld::error::IssueCode::ParseError,
-            message.into(),
-        ))
+impl From<VldHttpError> for VldNtexError {
+    fn from(e: VldHttpError) -> Self {
+        Self(e)
     }
+}
 
-    fn payload_too_large() -> Self {
-        Self {
-            error: vld::error::VldError::single(
-                vld::error::IssueCode::ParseError,
-                "Payload too large",
-            ),
-            status: StatusCode::PAYLOAD_TOO_LARGE,
-        }
+impl From<vld::error::VldError> for VldNtexError {
+    fn from(e: vld::error::VldError) -> Self {
+        Self(e.into())
     }
 }
 
 impl fmt::Display for VldNtexError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Validation failed: {}", self.error)
+        self.0.fmt(f)
     }
 }
 
 impl<Err: ErrorRenderer> WebResponseError<Err> for VldNtexError {
     fn status_code(&self) -> StatusCode {
-        self.status
+        StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
     }
 
     fn error_response(&self, _: &HttpRequest) -> HttpResponse {
-        let body = if self.status == StatusCode::PAYLOAD_TOO_LARGE {
-            vld_http_common::format_payload_too_large()
-        } else {
-            vld_http_common::format_vld_error(&self.error)
-        };
-
-        HttpResponse::build(self.status)
+        HttpResponse::build(<Self as WebResponseError<Err>>::status_code(self))
             .header("content-type", "application/json")
-            .body(body.to_string())
+            .body(self.0.body().to_string())
     }
+}
+
+/// `PayloadError::Overflow` → 413, anything else → 422.
+fn payload_error(e: PayloadError, what: &str) -> VldNtexError {
+    match e {
+        PayloadError::Overflow => VldHttpError::payload_too_large().into(),
+        other => VldHttpError::parse(format!("{what}: {other}")).into(),
+    }
+}
+
+fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, VldNtexError> {
+    T::vld_parse_value(value).map_err(VldNtexError::from)
 }
 
 // ============================= VldJson =======================================
@@ -115,20 +127,7 @@ impl<Err: ErrorRenderer> WebResponseError<Err> for VldNtexError {
 /// Drop-in replacement for `ntex::web::types::Json<T>`.
 pub struct VldJson<T>(pub T);
 
-impl<T> std::ops::Deref for VldJson<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldJson<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
-impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldJson<T> {
+impl<T: VldParse, Err: ErrorRenderer> FromRequest<Err> for VldJson<T> {
     type Error = VldNtexError;
 
     async fn from_request(
@@ -140,18 +139,16 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldJson<
                 req, payload,
             )
             .await
-            .map_err(|e| {
-                let msg = e.to_string();
-                if msg.to_ascii_lowercase().contains("overflow") {
-                    VldNtexError::payload_too_large()
-                } else {
-                    VldNtexError::parse(format!("JSON parse error: {}", e))
+            .map_err(|e| match e {
+                JsonPayloadError::Overflow => VldHttpError::payload_too_large().into(),
+                JsonPayloadError::Payload(p) => payload_error(p, "JSON parse error"),
+                other => {
+                    VldNtexError::from(VldHttpError::parse(format!("JSON parse error: {other}")))
                 }
-            })?;
+            })?
+            .into_inner();
 
-        let parsed = T::vld_parse_value(&json_value).map_err(VldNtexError::validation)?;
-
-        Ok(VldJson(parsed))
+        validate(&json_value).map(VldJson)
     }
 }
 
@@ -161,33 +158,17 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldJson<
 ///
 /// Drop-in replacement for `ntex::web::types::Query<T>`.
 ///
-/// Values are coerced: `"42"` -> number, `"true"`/`"false"` -> boolean, empty -> null.
+/// See [`vld_http_common::parse_query_string`] for coercion and array rules.
 pub struct VldQuery<T>(pub T);
 
-impl<T> std::ops::Deref for VldQuery<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldQuery<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
-impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldQuery<T> {
+impl<T: VldParse, Err: ErrorRenderer> FromRequest<Err> for VldQuery<T> {
     type Error = VldNtexError;
 
     async fn from_request(
         req: &HttpRequest,
         _payload: &mut ntex::http::Payload,
     ) -> Result<Self, Self::Error> {
-        let query_string = req.query_string();
-        let value = query_string_to_json(query_string);
-        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
-        Ok(VldQuery(parsed))
+        validate(&query_string_to_json(req.query_string())).map(VldQuery)
     }
 }
 
@@ -200,34 +181,14 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldQuery
 /// Path segment values are coerced the same way as query parameters.
 pub struct VldPath<T>(pub T);
 
-impl<T> std::ops::Deref for VldPath<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldPath<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
-impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldPath<T> {
+impl<T: VldParse, Err: ErrorRenderer> FromRequest<Err> for VldPath<T> {
     type Error = VldNtexError;
 
     async fn from_request(
         req: &HttpRequest,
         _payload: &mut ntex::http::Payload,
     ) -> Result<Self, Self::Error> {
-        let mut map = serde_json::Map::new();
-        for (name, value) in req.match_info().iter() {
-            map.insert(name.to_owned(), coerce_value(value));
-        }
-
-        let value = serde_json::Value::Object(map);
-        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
-        Ok(VldPath(parsed))
+        validate(&path_params_to_json(req.match_info().iter())).map(VldPath)
     }
 }
 
@@ -238,23 +199,10 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldPath<
 ///
 /// Drop-in replacement for `ntex::web::types::Form<T>`.
 ///
-/// Values are coerced the same way as query parameters.
+/// Values are parsed the same way as query parameters.
 pub struct VldForm<T>(pub T);
 
-impl<T> std::ops::Deref for VldForm<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldForm<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
-impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldForm<T> {
+impl<T: VldParse, Err: ErrorRenderer> FromRequest<Err> for VldForm<T> {
     type Error = VldNtexError;
 
     async fn from_request(
@@ -263,22 +211,14 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldForm<
     ) -> Result<Self, Self::Error> {
         let bytes = <ntex::util::Bytes as FromRequest<Err>>::from_request(req, payload)
             .await
-            .map_err(|e| {
-                let msg = e.to_string();
-                if msg.to_ascii_lowercase().contains("overflow") {
-                    VldNtexError::payload_too_large()
-                } else {
-                    VldNtexError::parse(format!("Failed to read form body: {}", e))
+            .map_err(|e| match e {
+                ntex::web::error::PayloadError::Payload(p) => {
+                    payload_error(p, "Failed to read form body")
                 }
+                other => VldHttpError::parse(format!("Failed to read form body: {other}")).into(),
             })?;
 
-        let body_bytes: &[u8] = &bytes;
-        let body_str = std::str::from_utf8(body_bytes)
-            .map_err(|_| VldNtexError::parse("Form body is not valid UTF-8"))?;
-
-        let value = query_string_to_json(body_str);
-        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
-        Ok(VldForm(parsed))
+        validate(&parse_form_body(&bytes)?).map(VldForm)
     }
 }
 
@@ -286,35 +226,23 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldForm<
 
 /// ntex extractor that validates **HTTP headers**.
 ///
-/// Header names are normalised to snake_case for schema matching:
-/// `Content-Type` -> `content_type`, `X-Request-Id` -> `x_request_id`.
-///
-/// Values are coerced: `"42"` -> number, `"true"` -> boolean, etc.
+/// See [`vld_http_common::headers_to_json`]: names become snake_case
+/// (`X-Request-Id` → `x_request_id`), repeated headers are joined with `", "`.
 pub struct VldHeaders<T>(pub T);
 
-impl<T> std::ops::Deref for VldHeaders<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldHeaders<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
-impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldHeaders<T> {
+impl<T: VldParse, Err: ErrorRenderer> FromRequest<Err> for VldHeaders<T> {
     type Error = VldNtexError;
 
     async fn from_request(
         req: &HttpRequest,
         _payload: &mut ntex::http::Payload,
     ) -> Result<Self, Self::Error> {
-        let value = headers_to_json(req.headers());
-        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
-        Ok(VldHeaders(parsed))
+        let value = headers_to_json(
+            req.headers()
+                .iter()
+                .map(|(n, v)| (n.as_str(), v.as_bytes())),
+        );
+        validate(&value).map(VldHeaders)
     }
 }
 
@@ -323,23 +251,10 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldHeade
 /// ntex extractor that validates **cookie values** from the `Cookie` header.
 ///
 /// Cookie names are used as-is for schema field matching.
-/// Values are coerced the same way as query parameters.
+/// Values are unquoted, percent-decoded and coerced.
 pub struct VldCookie<T>(pub T);
 
-impl<T> std::ops::Deref for VldCookie<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldCookie<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
-impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldCookie<T> {
+impl<T: VldParse, Err: ErrorRenderer> FromRequest<Err> for VldCookie<T> {
     type Error = VldNtexError;
 
     async fn from_request(
@@ -351,29 +266,11 @@ impl<T: vld::schema::VldParse, Err: ErrorRenderer> FromRequest<Err> for VldCooki
             .get(ntex::http::header::COOKIE)
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-
-        let value = cookies_to_json(cookie_header);
-        let parsed = T::vld_parse_value(&value).map_err(VldNtexError::validation)?;
-        Ok(VldCookie(parsed))
+        validate(&cookies_to_json(cookie_header)).map(VldCookie)
     }
 }
 
-// ========================= Helper functions ==================================
-
-use vld_http_common::{coerce_value, cookies_to_json, query_string_to_json};
-
-fn headers_to_json(headers: &ntex::http::HeaderMap) -> serde_json::Value {
-    let mut map = serde_json::Map::new();
-
-    for (name, value) in headers.iter() {
-        let key = name.as_str().replace('-', "_");
-        if let Ok(v) = value.to_str() {
-            map.insert(key, coerce_value(v));
-        }
-    }
-
-    serde_json::Value::Object(map)
-}
+vld_http_common::impl_deref!(VldJson, VldQuery, VldPath, VldForm, VldHeaders, VldCookie);
 
 /// Prelude — import everything you need.
 pub mod prelude {
