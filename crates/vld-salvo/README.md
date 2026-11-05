@@ -34,6 +34,8 @@ directly (e.g. `body.name` instead of `body.0.name`).
 `VldSalvoError` implements Salvo's `Writer` trait — validation
 failures render as `422 Unprocessable Entity` with a JSON error body (`413` when the body exceeds Salvo's `secure_max_size`, 64 KiB by default).
 
+JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
 ## Installation
 
 ```toml

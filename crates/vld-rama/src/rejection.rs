@@ -10,6 +10,7 @@ use vld_http_common::VldHttpError;
 /// Converts to a JSON response via [`vld_http_common`] helpers:
 /// - validation / parse → **422**
 /// - payload too large → **413**
+/// - non-JSON `Content-Type` on [`VldJson`](crate::VldJson) → **415**
 #[derive(Debug)]
 pub struct VldRejection(VldHttpError);
 
@@ -51,7 +52,7 @@ impl VldRejection {
         self.0.error()
     }
 
-    /// HTTP status of this rejection (422 or 413).
+    /// HTTP status of this rejection (422, 413 or 415).
     #[must_use]
     pub fn status(&self) -> StatusCode {
         StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)

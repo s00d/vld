@@ -13,7 +13,9 @@
 //!
 //! All extractors return **422 Unprocessable Entity** on validation failure
 //! or malformed input, and **413 Payload Too Large** when the body exceeds
-//! axum's `DefaultBodyLimit` (2 MiB unless configured).
+//! axum's `DefaultBodyLimit` (2 MiB unless configured). [`VldJson`] requires
+//! a JSON `Content-Type` (`application/json` or `application/*+json`) and
+//! answers **415 Unsupported Media Type** otherwise.
 //!
 //! # Quick example
 //!
@@ -59,7 +61,7 @@ use http::StatusCode;
 use vld::schema::VldParse;
 use vld_http_common::{
     cookies_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
-    query_string_to_json, VldHttpError,
+    query_string_to_json, require_json_content_type, VldHttpError,
 };
 
 // ============================= Rejection =====================================
@@ -75,7 +77,7 @@ impl VldJsonRejection {
         self.0.error()
     }
 
-    /// HTTP status of this rejection (422 or 413).
+    /// HTTP status of this rejection (422, 413 or 415).
     pub fn status(&self) -> StatusCode {
         StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
     }
@@ -134,8 +136,9 @@ async fn read_body<S: Send + Sync>(req: Request, state: &S) -> Result<bytes::Byt
         })
 }
 
+/// Validate a value coerced from text (query, path, form, headers, cookies).
 fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, VldJsonRejection> {
-    T::vld_parse_value(value).map_err(VldJsonRejection::from)
+    vld_http_common::parse_coerced(value).map_err(VldJsonRejection::from)
 }
 
 // ============================= VldJson =======================================
@@ -153,8 +156,15 @@ where
     type Rejection = VldJsonRejection;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        require_json_content_type(
+            req.headers()
+                .get(http::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+        )?;
         let body = read_body(req, state).await?;
-        validate(&parse_json_body(&body)?).map(VldJson)
+        T::vld_parse_value(&parse_json_body(&body)?)
+            .map(VldJson)
+            .map_err(VldJsonRejection::from)
     }
 }
 

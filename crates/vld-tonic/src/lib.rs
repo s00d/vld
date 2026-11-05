@@ -156,7 +156,9 @@ where
 /// Metadata keys are converted from `kebab-case` to `snake_case`
 /// (e.g. `x-request-id` → `x_request_id`).
 /// Values are coerced with [`vld_http_common::coerce_value`] (lossless:
-/// `"42"` → number, `"true"` → boolean, `"01234"` stays a string).
+/// `"42"` → number, `"true"` → boolean, `"01234"` stays a string) and
+/// validated with [`vld_http_common::parse_coerced`], so a string field still
+/// accepts `"42"`.
 ///
 /// # Example
 ///
@@ -185,7 +187,7 @@ where
             }
             tonic::metadata::KeyAndValueRef::Binary(_, _) => None,
         }));
-    T::vld_parse_value(&json).map_err(|e| vld_status(&e))
+    vld_http_common::parse_coerced::<T>(&json).map_err(|e| vld_status(&e))
 }
 
 /// Retrieve a validated metadata struct from request extensions.

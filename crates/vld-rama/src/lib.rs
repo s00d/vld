@@ -17,6 +17,9 @@
 //! or malformed input, and **413 Payload Too Large** when a body exceeds
 //! [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT) (2 MiB;
 //! configurable on the layer via [`ValidateJsonLayer::with_limit`]).
+//! [`VldJson`] requires a JSON `Content-Type` (`application/json` or
+//! `application/*+json`) and answers **415 Unsupported Media Type**
+//! otherwise; [`ValidateJsonLayer`] passes non-JSON requests through.
 //!
 //! Requires Rust **1.96+** (Rama MSRV).
 

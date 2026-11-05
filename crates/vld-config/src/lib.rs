@@ -55,6 +55,16 @@
 //!
 //! let settings: AppSettings = from_figment(&figment).unwrap();
 //! ```
+//!
+//! # Typed env values
+//!
+//! `from_config`, `from_builder` and `from_figment` validate with
+//! [`vld::schema::parse_coerced`]: env values that the backend parsed into
+//! numbers / booleans are turned back into text where the schema expects a
+//! string (`APP_HOST=12345` into `vld::string()` is `"12345"`), and a single
+//! value is wrapped into an array where the schema expects one. The text is
+//! the backend's parsed value, so a lossy parse (`"01234"` → `1234`) yields
+//! `"1234"`. [`from_value`] validates the JSON value as is.
 
 use std::fmt;
 use vld::schema::VldParse;
@@ -132,7 +142,7 @@ pub fn from_config<T: VldParse>(config: &config::Config) -> Result<T, VldConfigE
         .clone()
         .try_deserialize()
         .map_err(|e| VldConfigError::Source(e.to_string()))?;
-    T::vld_parse_value(&value).map_err(VldConfigError::Validation)
+    vld::schema::parse_coerced::<T>(&value).map_err(VldConfigError::Validation)
 }
 
 /// Load and validate configuration from a [`config::ConfigBuilder`].
@@ -214,7 +224,7 @@ pub fn from_figment<T: VldParse>(figment: &figment::Figment) -> Result<T, VldCon
     let value: serde_json::Value = figment
         .extract()
         .map_err(|e| VldConfigError::Source(e.to_string()))?;
-    T::vld_parse_value(&value).map_err(VldConfigError::Validation)
+    vld::schema::parse_coerced::<T>(&value).map_err(VldConfigError::Validation)
 }
 
 /// Prelude — re-exports everything you need.

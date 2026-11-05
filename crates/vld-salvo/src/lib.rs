@@ -16,7 +16,9 @@
 //!
 //! All extractors return **422 Unprocessable Entity** on validation failure
 //! or malformed input, and **413 Payload Too Large** when the body exceeds
-//! the limit.
+//! the limit. [`VldJson`] requires a JSON `Content-Type` (`application/json`
+//! or `application/*+json`) and answers **415 Unsupported Media Type**
+//! otherwise.
 //!
 //! # Body limits
 //!
@@ -52,8 +54,8 @@ use salvo::prelude::*;
 use std::sync::OnceLock;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_form_body, path_params_to_json, query_string_to_json,
-    VldHttpError,
+    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
+    path_params_to_json, query_string_to_json, require_json_content_type, VldHttpError,
 };
 
 // ---------------------------------------------------------------------------
@@ -65,7 +67,8 @@ use vld_http_common::{
 /// Implements [`Writer`] so it can be returned from `#[handler]` functions
 /// via `Result<T, VldSalvoError>`.
 ///
-/// On write, renders a JSON response (`422` for validation/parse, `413` for
+/// On write, renders a JSON response (`422` for validation/parse, `415` for a
+/// non-JSON `Content-Type`, `413` for
 /// payload too large) using [`vld_http_common`] helpers.
 #[derive(Debug)]
 pub struct VldSalvoError {
@@ -92,10 +95,10 @@ impl From<VldHttpError> for VldSalvoError {
 
 impl std::fmt::Display for VldSalvoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.status == StatusCode::PAYLOAD_TOO_LARGE {
-            f.write_str("Payload too large")
-        } else {
-            write!(f, "Validation failed: {}", self.error)
+        match self.status {
+            StatusCode::PAYLOAD_TOO_LARGE => f.write_str("Payload too large"),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE => f.write_str("Unsupported Media Type"),
+            _ => write!(f, "Validation failed: {}", self.error),
         }
     }
 }
@@ -111,10 +114,12 @@ impl From<vld::error::VldError> for VldSalvoError {
 #[async_trait]
 impl Writer for VldSalvoError {
     async fn write(mut self, _req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        let body = if self.status == StatusCode::PAYLOAD_TOO_LARGE {
-            vld_http_common::format_payload_too_large()
-        } else {
-            vld_http_common::format_vld_error(&self.error)
+        let body = match self.status {
+            StatusCode::PAYLOAD_TOO_LARGE => vld_http_common::format_payload_too_large(),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE => {
+                vld_http_common::format_unsupported_media_type()
+            }
+            _ => vld_http_common::format_vld_error(&self.error),
         };
         res.status_code(self.status);
         res.render(Json(body));
@@ -128,8 +133,9 @@ fn map_parse_error(e: salvo::http::ParseError) -> VldSalvoError {
     }
 }
 
+/// Validate a value coerced from text (query, path, form, headers, cookies).
 fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, VldSalvoError> {
-    T::vld_parse_value(value).map_err(VldSalvoError::from)
+    parse_coerced(value).map_err(VldSalvoError::from)
 }
 
 fn metadata(name: &'static str, from: SourceFrom, parser: SourceParser) -> Metadata {
@@ -161,8 +167,22 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldJson<T> {
         req: &'ex mut Request,
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
-        let value: serde_json::Value = req.parse_json().await.map_err(map_parse_error)?;
-        validate(&value).map(VldJson)
+        // Read the raw body: salvo's `parse_json` rejects `application/*+json`.
+        require_json_content_type(
+            req.headers()
+                .get(salvo::http::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+        )
+        .map_err(VldSalvoError::from)?;
+        let limit = req.secure_max_size();
+        let body = req
+            .payload_with_max_size(limit)
+            .await
+            .map_err(map_parse_error)?;
+        let value = parse_json_body(body).map_err(VldSalvoError::from)?;
+        T::vld_parse_value(&value)
+            .map(VldJson)
+            .map_err(VldSalvoError::from)
     }
 }
 

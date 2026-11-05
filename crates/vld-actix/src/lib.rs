@@ -13,7 +13,9 @@
 //!
 //! All extractors return **422 Unprocessable Entity** on validation failure
 //! or malformed input, and **413 Payload Too Large** when the body exceeds
-//! the limit.
+//! the limit. [`VldJson`] requires a JSON `Content-Type` (`application/json`
+//! or `application/*+json`) and answers **415 Unsupported Media Type**
+//! otherwise.
 //!
 //! # Body limits
 //!
@@ -69,8 +71,8 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_form_body, path_params_to_json, query_string_to_json,
-    VldHttpError,
+    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, path_params_to_json,
+    query_string_to_json, require_json_content_type, VldHttpError,
 };
 
 // ============================= Error / Rejection =============================
@@ -132,6 +134,13 @@ fn validate<T: vld::schema::VldParse>(value: &serde_json::Value) -> Result<T, Vl
     T::vld_parse_value(value).map_err(VldJsonError::from)
 }
 
+/// Validate a value coerced from text (query, path, form, headers, cookies).
+fn validate_coerced<T: vld::schema::VldParse>(
+    value: &serde_json::Value,
+) -> Result<T, VldJsonError> {
+    parse_coerced(value).map_err(VldJsonError::from)
+}
+
 /// Extractor future type.
 type ExtractFuture<T> = Pin<Box<dyn Future<Output = Result<T, VldJsonError>>>>;
 
@@ -147,6 +156,13 @@ impl<T: vld::schema::VldParse> FromRequest for VldJson<T> {
     type Future = ExtractFuture<Self>;
 
     fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
+        let content_type = req
+            .headers()
+            .get(actix_web::http::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok());
+        if let Err(e) = require_json_content_type(content_type) {
+            return Box::pin(async move { Err(e.into()) });
+        }
         let json_fut = actix_web::web::Json::<serde_json::Value>::from_request(req, payload);
 
         Box::pin(async move {
@@ -173,7 +189,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldQuery<T> {
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let value = query_string_to_json(req.query_string());
-        Box::pin(async move { validate(&value).map(VldQuery) })
+        Box::pin(async move { validate_coerced(&value).map(VldQuery) })
     }
 }
 
@@ -210,7 +226,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldPath<T> {
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let value = path_params_to_json(req.match_info().iter());
-        Box::pin(async move { validate(&value).map(VldPath) })
+        Box::pin(async move { validate_coerced(&value).map(VldPath) })
     }
 }
 
@@ -251,7 +267,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldForm<T> {
             let body = bytes_fut
                 .await
                 .map_err(|e| body_error(e, "Failed to read form body"))?;
-            validate(&parse_form_body(&body)?).map(VldForm)
+            validate_coerced(&parse_form_body(&body)?).map(VldForm)
         })
     }
 }
@@ -290,7 +306,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldHeaders<T> {
                 .iter()
                 .map(|(n, v)| (n.as_str(), v.as_bytes())),
         );
-        Box::pin(async move { validate(&value).map(VldHeaders) })
+        Box::pin(async move { validate_coerced(&value).map(VldHeaders) })
     }
 }
 
@@ -329,7 +345,7 @@ impl<T: vld::schema::VldParse> FromRequest for VldCookie<T> {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
         let value = cookies_to_json(cookie_header);
-        Box::pin(async move { validate(&value).map(VldCookie) })
+        Box::pin(async move { validate_coerced(&value).map(VldCookie) })
     }
 }
 

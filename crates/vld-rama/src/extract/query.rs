@@ -26,7 +26,7 @@ where
             .map(|q| q.as_encoded_str().into_owned())
             .unwrap_or_default();
         let value = query_string_to_json(&query_string);
-        let parsed = T::vld_parse_value(&value).map_err(VldRejection::from_vld)?;
+        let parsed = vld_http_common::parse_coerced::<T>(&value).map_err(VldRejection::from_vld)?;
         Ok(VldQuery(parsed))
     }
 }

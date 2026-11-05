@@ -30,6 +30,8 @@
 
 Validation failures and malformed bodies are returned as `422 Unprocessable Entity` with a JSON error body. Bodies are read as a stream (chunked uploads work) and limited to 2 MiB (`vld_json_limit` / `vld_form_limit`), otherwise `413`. `handle_rejection` also maps warp's own rejections (404, 405, 400, 411, 415) and answers `500` for unknown ones. Path params are percent-decoded.
 
+JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
+
 ## Installation
 
 ```toml
