@@ -17,16 +17,18 @@ Lapin (RabbitMQ) integration for [`vld`](https://crates.io/crates/vld).
 
 ## Overview
 
-`vld-lapin` keeps one entrypoint:
+Wrap a channel: `let channel = LapinChannel::new(channel);`
+(`impl_to_lapin!(channel)` only did that rebinding and is deprecated since 0.5).
 
-- `impl_to_lapin!(channel)`
-
-After rebinding, `channel` becomes a validating wrapper:
+The wrapper adds:
 
 - auto-conversion helpers: `publish`, `basic_get`, `decode_bytes`, `decode_delivery`, `decode_get`
 - settle helpers (`*_get` variants take a `basic_get` message):
+  - `ack_or_nack_decode` — decode + validate, **ack when valid, nack when invalid**:
+    every delivery is settled (also takes `basic_get` messages)
   - `ack_decode` / `ack_decode_get` — decode + validate, **ack when valid**; an invalid
-    message is left unsettled and the error is returned
+    message is left **unsettled** and the error is returned — a poison message then
+    holds a prefetch slot and is redelivered (to fail again) when the channel closes
   - `nack_decode` / `nack_decode_get`, `reject_decode` / `reject_decode_get` — decode +
     validate, **nack/reject when invalid** (then return the error), so poison messages
     are not left unacked; a valid message is returned unsettled — ack it after processing
@@ -36,8 +38,8 @@ After rebinding, `channel` becomes a validating wrapper:
 
 ```toml
 [dependencies]
-vld = { version = "0.2", features = ["serialize"] }
-vld-lapin = "0.2"
+vld = "0.5"
+vld-lapin = "0.5"
 lapin = "2"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
@@ -70,8 +72,7 @@ let conn = Connection::connect(
     "amqp://guest:guest@127.0.0.1:5672/%2f",
     ConnectionProperties::default(),
 ).await?;
-let channel = conn.create_channel().await?;
-impl_to_lapin!(channel);
+let channel = LapinChannel::new(conn.create_channel().await?);
 
 // Native method through deref.
 channel

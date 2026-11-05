@@ -1,4 +1,4 @@
-//! Real RabbitMQ/Lapin example for `impl_to_lapin!`.
+//! Real RabbitMQ/Lapin example for `LapinChannel`.
 //!
 //! Run:
 //! cargo run -p vld-lapin --example lapin_basic
@@ -33,14 +33,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         retries: 99,
     };
 
-    println!("1) real Lapin connection (only impl_to_lapin API):");
+    println!("1) real Lapin connection (LapinChannel API):");
     let conn = lapin::Connection::connect(
         "amqp://guest:guest@127.0.0.1:5672/%2f",
         lapin::ConnectionProperties::default(),
     )
     .await?;
-    let channel = conn.create_channel().await?;
-    impl_to_lapin!(channel);
+    let channel = LapinChannel::new(conn.create_channel().await?);
 
     // Native lapin::Channel API is available through Deref.
     channel

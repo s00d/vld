@@ -4,16 +4,17 @@
 //!
 //! ## Overview
 //!
-//! `vld-lapin` keeps one entrypoint macro:
+//! Wrap a channel: `let channel = LapinChannel::new(channel);`
+//! (`impl_to_lapin!(channel)` only did that rebinding and is deprecated).
 //!
-//! - `impl_to_lapin!(channel)`
-//!
-//! After rebinding, `channel` becomes a validating wrapper with:
+//! The wrapper adds:
 //!
 //! - publish helper: `publish`
 //! - get/decode helpers: `basic_get`, `decode_bytes`, `decode_delivery`, `decode_get`
-//! - settle helpers: `ack_decode` (ack when valid), `nack_decode` / `reject_decode`
-//!   (nack/reject when invalid, so poison messages are not left unacked)
+//! - settle helpers: `ack_or_nack_decode` (ack when valid, nack when invalid),
+//!   `ack_decode` (ack when valid — an invalid "poison" message stays unacked),
+//!   `nack_decode` / `reject_decode` (nack/reject when invalid, so poison
+//!   messages are not left unacked)
 //! - the same for `basic_get` messages: `ack_decode_get`, `nack_decode_get`, `reject_decode_get`
 //!
 //! All other native `lapin::Channel` methods are still available through deref.
@@ -153,9 +154,12 @@ impl LapinChannel {
 
     /// Decode + validate, then **ack on success**.
     ///
-    /// On a decode/validation error the delivery is left unsettled and the
-    /// error is returned (use [`nack_decode`](Self::nack_decode) /
-    /// [`reject_decode`](Self::reject_decode) to drop poison messages).
+    /// On a decode/validation error the delivery is left **unsettled** and the
+    /// error is returned. Such a poison message stays unacked: it holds a
+    /// prefetch (`basic_qos`) slot and is redelivered — to fail again — once the
+    /// channel closes. Use [`ack_or_nack_decode`](Self::ack_or_nack_decode) (or
+    /// [`nack_decode`](Self::nack_decode) / [`reject_decode`](Self::reject_decode))
+    /// to settle it.
     pub async fn ack_decode<T>(
         &self,
         delivery: &lapin::message::Delivery,
@@ -166,6 +170,29 @@ impl LapinChannel {
     {
         let parsed = self.decode_delivery(delivery)?;
         delivery.ack(options).await?;
+        Ok(parsed)
+    }
+
+    /// Decode + validate, then **ack when valid and nack when invalid** — every
+    /// delivery is settled.
+    ///
+    /// - valid payload: acked with `ack`, the value is returned;
+    /// - invalid payload: nacked with `nack` (`requeue: false` drops it or
+    ///   dead-letters it), then the decode/validation error is returned (a nack
+    ///   failure is returned instead).
+    ///
+    /// Takes a `basic_get` message too (it derefs to a delivery).
+    pub async fn ack_or_nack_decode<T>(
+        &self,
+        delivery: &lapin::message::Delivery,
+        ack: lapin::options::BasicAckOptions,
+        nack: lapin::options::BasicNackOptions,
+    ) -> Result<T, VldLapinError>
+    where
+        T: vld::schema::VldParse,
+    {
+        let parsed = decode_or_settle(&delivery.data, || delivery.nack(nack)).await?;
+        delivery.ack(ack).await?;
         Ok(parsed)
     }
 
@@ -316,6 +343,14 @@ impl From<lapin::Error> for VldLapinError {
     }
 }
 
+/// Rebind a `lapin::Channel` into a validating [`LapinChannel`].
+///
+/// Deprecated: it only shadows the variable — write
+/// `let channel = LapinChannel::new(channel);`.
+#[deprecated(
+    since = "0.5.0",
+    note = "use `let channel = LapinChannel::new(channel);`"
+)]
 #[macro_export]
 macro_rules! impl_to_lapin {
     ($channel:ident) => {
@@ -324,7 +359,9 @@ macro_rules! impl_to_lapin {
 }
 
 pub mod prelude {
-    pub use crate::{impl_to_lapin, LapinChannel, VldLapinError};
+    #[allow(deprecated)]
+    pub use crate::impl_to_lapin;
+    pub use crate::{LapinChannel, VldLapinError};
     pub use vld::prelude::*;
 }
 
