@@ -361,6 +361,44 @@ pub fn record<V: schema::VldSchema>(value_schema: V) -> collections::ZRecord<V> 
     collections::ZRecord::new(value_schema)
 }
 
+/// Create a record whose keys are validated and converted by `key_schema`.
+///
+/// Each object key is passed to `key_schema` as a JSON string (so use string
+/// schemas, [`enumeration()`], [`enum_of()`] or [`from_str()`] for numeric
+/// keys). Output is `HashMap<K::Output, V::Output>`; call `.ordered()` for a
+/// `BTreeMap`. JSON Schema: `propertyNames` from the key schema,
+/// `additionalProperties` from the value schema.
+///
+/// ```
+/// use vld::prelude::*;
+/// use std::collections::HashMap;
+///
+/// let scores = vld::record_with_keys(vld::from_str::<u32>(), vld::number());
+/// let map: HashMap<u32, f64> = scores.parse(r#"{"1": 9.5, "2": 7}"#).unwrap();
+/// assert_eq!(map[&1], 9.5);
+/// assert!(scores.parse(r#"{"x": 1}"#).is_err());
+///
+/// let by_role = vld::record_with_keys(vld::enumeration(&["admin", "user"]), vld::boolean())
+///     .ordered();
+/// let m = by_role.parse(r#"{"user": true, "admin": false}"#).unwrap();
+/// assert_eq!(m.keys().collect::<Vec<_>>(), ["admin", "user"]);
+/// ```
+pub fn record_with_keys<K, V>(
+    key_schema: K,
+    value_schema: V,
+) -> collections::ZRecord<
+    V,
+    collections::KeySchema<K>,
+    std::collections::HashMap<K::Output, V::Output>,
+>
+where
+    K: schema::VldSchema,
+    K::Output: Eq + std::hash::Hash,
+    V: schema::VldSchema,
+{
+    collections::ZRecord::with_keys(collections::KeySchema(key_schema), value_schema)
+}
+
 /// Create a Map schema. Validates `[[key, value], ...]` arrays into `HashMap`.
 pub fn map<K: schema::VldSchema, V: schema::VldSchema>(
     key_schema: K,

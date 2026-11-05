@@ -1,6 +1,6 @@
 //! Common imports for working with `vld`.
 
-pub use crate::collections::{ZArray, ZMap, ZRecord, ZSet};
+pub use crate::collections::{ZArray, ZMap, ZOrderedRecord, ZRecord, ZSet};
 pub use crate::combinators::{
     Either, Either3, ZCatch, ZCustom, ZDescribe, ZDiscriminatedUnion, ZIntersection, ZLazy,
     ZMessage, ZPipe, ZPreprocess, ZRefine, ZSuperRefine, ZTransform, ZUnion2, ZUnion3,
