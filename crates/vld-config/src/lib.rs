@@ -184,13 +184,13 @@ pub fn from_builder<T: VldParse>(
 /// Useful when you've already loaded the config data into a JSON value
 /// (e.g. from a custom source) and just want `vld` validation. For values that
 /// come from a typed source like env vars, use [`from_value_coerced`], which
-/// behaves like [`from_config`] / [`from_figment`].
+/// behaves like `from_config` / `from_figment`.
 pub fn from_value<T: VldParse>(value: &serde_json::Value) -> Result<T, VldConfigError> {
     T::vld_parse_value(value).map_err(VldConfigError::Validation)
 }
 
-/// Validate a raw `serde_json::Value` with the coercion [`from_config`] /
-/// [`from_figment`] apply ([`vld::schema::parse_coerced`]): numbers / booleans
+/// Validate a raw `serde_json::Value` with the coercion `from_config` /
+/// `from_figment` apply ([`vld::schema::parse_coerced`]): numbers / booleans
 /// become text where the schema expects a string, and a single value is
 /// wrapped where it expects an array.
 ///
