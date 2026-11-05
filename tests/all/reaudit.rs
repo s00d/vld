@@ -340,6 +340,76 @@ fn f32_container_received() {
     assert_eq!(rec((vld::string(),).parse("1").unwrap_err()), one);
 }
 
+// 24. Lax predicates tightened.
+#[test]
+fn f24_strict_predicates() {
+    let ok = |s: &ZString, v: &str| s.parse_value(&json!(v)).is_ok();
+    let table: Vec<(ZString, &[&str], &[&str])> = vec![
+        (vld::string().semver(), &["1.2.3", "v1.2.3"], &[" 1.2.3 ", "1.2.3 "]),
+        (
+            vld::string().color(),
+            &["rgb(1,2,3)", "rgb(255, 0, 0)", "hsl(120, 50%, 50%)"],
+            &["rgb(+1,+2,+3)", "hsl(+120, 50%, 50%)", "hsl(120, +50%, 50%)"],
+        ),
+        (
+            vld::string().emoji(),
+            &["😀", "👍🏽", "❤\u{FE0F}", "👨\u{200D}👩"],
+            &["\u{FE0F}", "\u{200D}", "\u{FE0F}\u{200D}", ""],
+        ),
+        (
+            vld::string().ulid(),
+            &["01ARZ3NDEKTSV4RRFFQ69G5FAV", "7ZZZZZZZZZZZZZZZZZZZZZZZZZ"],
+            &["8ZZZZZZZZZZZZZZZZZZZZZZZZZ", "ZZZZZZZZZZZZZZZZZZZZZZZZZZ"],
+        ),
+        (
+            vld::string().hostname(),
+            &["example.com", "a1.b2", "localhost", "123"],
+            &["999.1.1.1", "1.2.3.4", "example.123"],
+        ),
+    ];
+    for (s, good, bad) in &table {
+        for v in *good {
+            assert!(ok(s, v), "{v:?} rejected");
+        }
+        for v in *bad {
+            assert!(!ok(s, v), "{v:?} accepted");
+        }
+    }
+    let d = vld::duration();
+    assert!(d.parse(r#""250ms""#).is_ok());
+    assert!(d.parse(r#""+250ms""#).is_err());
+    assert!(d.parse(r#""ms""#).is_err());
+}
+
+// 34. extend/merge keep the other schema's settings; when-targets are known;
+// duplicate field() replaces.
+#[test]
+fn f34_object_merge() {
+    let base = vld::object().field("a", vld::string());
+    let other = vld::object()
+        .field("b", vld::string())
+        .strict()
+        .min_keys(2)
+        .when("b", "x", "c", vld::string().min(3));
+    let m = base.extend(other);
+    assert!(m.parse(r#"{"a": "1", "b": "y", "z": 1}"#).is_err()); // strict kept
+    assert!(m.parse(r#"{"a": "1"}"#).is_err()); // min_keys kept (and b missing)
+    // when-rule kept; its target is not "unrecognized" under strict
+    assert!(m.parse(r#"{"a": "1", "b": "x", "c": "ab"}"#).is_err());
+    assert!(m.parse(r#"{"a": "1", "b": "x", "c": "abc"}"#).is_ok());
+
+    let o = vld::object()
+        .field("a", vld::string())
+        .field("a", vld::number());
+    assert_eq!(o.keyof(), vec!["a".to_string()]);
+    assert!(o.parse(r#"{"a": 1}"#).is_ok());
+    #[cfg(feature = "openapi")]
+    assert_eq!(
+        vld::openapi::JsonSchema::json_schema(&o)["required"],
+        json!(["a"])
+    );
+}
+
 // 22. Discriminator values compare numerically (1 == 1.0).
 #[test]
 fn f22_discriminator_numeric_equality() {

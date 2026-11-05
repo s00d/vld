@@ -69,21 +69,30 @@ impl ZObject {
         }
     }
 
-    /// Add a field with its validation schema.
+    /// Add `field`, replacing (in place) an earlier field with the same name.
+    fn put(mut self, field: ObjectField) -> Self {
+        match self.fields.iter_mut().find(|f| f.name == field.name) {
+            Some(existing) => *existing = field,
+            None => self.fields.push(field),
+        }
+        self
+    }
+
+    /// Add a field with its validation schema. A field with the same name
+    /// is replaced.
     ///
     /// With the `openapi` feature the field keeps its JSON Schema, its
     /// `required` status (`.optional()` / `.nullish()` / `.with_default(...)`
     /// / `.nullable()` are not required) and its named nested schemas.
     pub fn field<S: DynSchema + Send + Sync + 'static>(
-        mut self,
+        self,
         name: impl Into<String>,
         schema: S,
     ) -> Self {
-        self.fields.push(ObjectField {
+        self.put(ObjectField {
             name: name.into(),
             schema: Box::new(schema),
-        });
-        self
+        })
     }
 
     /// Same as [`field()`](Self::field), which now keeps the JSON Schema too.
@@ -116,15 +125,14 @@ impl ZObject {
     /// assert_eq!(result.get("nickname").unwrap(), &serde_json::Value::Null);
     /// ```
     pub fn field_optional<S: DynSchema + Send + Sync + 'static>(
-        mut self,
+        self,
         name: impl Into<String>,
         schema: S,
     ) -> Self {
-        self.fields.push(ObjectField {
+        self.put(ObjectField {
             name: name.into(),
             schema: Box::new(OptionalDynSchema(Box::new(schema))),
-        });
-        self
+        })
     }
 
     /// Reject unknown fields not defined in the schema.
@@ -159,14 +167,24 @@ impl ZObject {
         self
     }
 
-    /// Merge another object schema's fields into this one.
+    /// Merge another object schema into this one.
     ///
-    /// If both schemas define the same field, the one from `other` wins.
+    /// If both schemas define the same field, the one from `other` wins (and
+    /// takes its place at the end). `other`'s settings are merged too: its
+    /// unknown-field mode (when not the default `strip()`), `catchall`,
+    /// `min_keys` / `max_keys` win when set, and its `when` rules are added.
     pub fn extend(mut self, other: ZObject) -> Self {
         for field in other.fields {
             self.fields.retain(|f| f.name != field.name);
             self.fields.push(field);
         }
+        if other.unknown_mode != UnknownFieldMode::Strip {
+            self.unknown_mode = other.unknown_mode;
+        }
+        self.catchall_schema = other.catchall_schema.or(self.catchall_schema);
+        self.conditional_rules.extend(other.conditional_rules);
+        self.min_keys = other.min_keys.or(self.min_keys);
+        self.max_keys = other.max_keys.or(self.max_keys);
         self
     }
 
@@ -218,6 +236,8 @@ impl ZObject {
     ///
     /// When `condition_field` has the given value, `target_field` is validated
     /// with the provided schema **in addition** to any existing field schemas.
+    /// Under [`strict()`](Self::strict) an undeclared `target_field` is not
+    /// reported as unrecognized.
     ///
     /// # Example
     /// ```
@@ -373,7 +393,9 @@ impl VldSchema for ZObject {
             match self.unknown_mode {
                 UnknownFieldMode::Strip => {}
                 UnknownFieldMode::Strict => {
-                    for key in &unknown_keys {
+                    let is_target =
+                        |k: &str| self.conditional_rules.iter().any(|r| r.target_field == k);
+                    for key in unknown_keys.iter().filter(|k| !is_target(k)) {
                         errors = errors.merge(
                             VldError::from_code(IssueCode::UnrecognizedField)
                                 .with_prefix(PathSegment::Field((*key).clone())),
