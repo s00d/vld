@@ -227,7 +227,11 @@ impl<T> DerefMut for VldPath<T> {
 
 impl<'a, T: VldParse + Send + Sync + 'static> FromRequest<'a> for VldPath<T> {
     async fn from_request(req: &'a Request, _body: &mut RequestBody) -> Result<Self> {
-        let params = req.params::<Vec<(String, String)>>().unwrap_or_default();
+        // `Request::params` parses the *query string*; route parameters come from
+        // `path_params` (the router's match params).
+        let params = req
+            .path_params::<std::collections::BTreeMap<String, String>>()
+            .unwrap_or_default();
 
         let mut map = serde_json::Map::new();
         for (k, v) in &params {

@@ -124,3 +124,35 @@ async fn query_invalid() {
         .await;
     resp.assert_status(poem::http::StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+// ---------------------------------------------------------------------------
+// VldPath reads route params, not the query string
+// ---------------------------------------------------------------------------
+
+vld::schema! {
+    #[derive(Debug, Clone)]
+    pub struct UserPath {
+        pub id: i64 => vld::number().int().min(1),
+    }
+}
+
+#[handler]
+async fn get_user(p: VldPath<UserPath>) -> String {
+    p.id.to_string()
+}
+
+#[tokio::test]
+async fn path_param_comes_from_route() {
+    let cli = TestClient::new(Route::new().at("/users/:id", poem::get(get_user)));
+    let resp = cli.get("/users/42").send().await;
+    resp.assert_status_is_ok();
+    resp.assert_text("42").await;
+}
+
+#[tokio::test]
+async fn path_param_cannot_be_overridden_by_query() {
+    let cli = TestClient::new(Route::new().at("/users/:id", poem::get(get_user)));
+    let resp = cli.get("/users/42").query("id", &7).send().await;
+    resp.assert_status_is_ok();
+    resp.assert_text("42").await;
+}
