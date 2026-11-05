@@ -2,7 +2,8 @@
 //!
 //! Validation extractors for [Rocket](https://rocket.rs/). Validates request
 //! data against `vld` schemas and returns `422 Unprocessable Entity` with
-//! structured JSON errors on failure.
+//! structured JSON errors on failure (malformed JSON/form bodies included),
+//! and `413 Payload Too Large` when a body exceeds Rocket's limit.
 //!
 //! # Extractors
 //!
@@ -10,30 +11,37 @@
 //! |-----------|--------|-------------------|
 //! | `VldJson<T>` | JSON body | `rocket::serde::json::Json<T>` |
 //! | `VldQuery<T>` | Query string | query params |
-//! | `VldPath<T>` | Path segments | `<param>` segments |
+//! | `VldPath<T>` | Path segments | `<param>` / `<param..>` segments |
 //! | `VldForm<T>` | Form body | `rocket::form::Form<T>` |
 //! | `VldHeaders<T>` | HTTP headers | manual extraction |
 //! | `VldCookie<T>` | Cookie values | `CookieJar` |
 //!
-//! # Error catcher
+//! # Body limits
 //!
-//! Register [`vld_catcher()`] to get JSON error responses instead of the
+//! `VldJson` uses Rocket's `json` limit (default 1 MiB) and `VldForm` the
+//! `form` limit (default 32 KiB; falls back to
+//! [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT) if unset).
+//! Configure them via `limits` in `Rocket.toml`.
+//!
+//! # Error catchers
+//!
+//! Register [`vld_catchers()`] to get JSON error responses instead of the
 //! default HTML:
 //!
 //! ```rust,ignore
 //! rocket::build()
 //!     .mount("/", routes![...])
-//!     .register("/", catchers![vld_rocket::vld_422_catcher])
+//!     .register("/", vld_rocket::vld_catchers())
 //! ```
 
-use rocket::data::{Data, FromData, Outcome as DataOutcome};
+use rocket::data::{Data, FromData, Outcome as DataOutcome, ToByteUnit};
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::serde::json::Json;
-use std::ops::{Deref, DerefMut};
 use vld::schema::VldParse;
 use vld_http_common::{
-    coerce_value, cookies_to_json, format_vld_error, parse_query_string as parse_query_to_json,
+    cookies_to_json, headers_to_json, parse_form_body, path_params_to_json, query_string_to_json,
+    VldHttpError, DEFAULT_BODY_LIMIT,
 };
 
 // ---------------------------------------------------------------------------
@@ -44,9 +52,35 @@ use vld_http_common::{
 #[derive(Debug, Clone, Default)]
 pub struct VldErrorCache(pub Option<serde_json::Value>);
 
-fn store_error(req: &Request<'_>, err: serde_json::Value) {
+/// Store the error body for the catchers and return `(status, body)`.
+fn fail(req: &Request<'_>, err: VldHttpError) -> (Status, serde_json::Value) {
+    let body = err.body();
     // Rocket's local_cache returns &T, setting a value requires the closure pattern
-    let _ = req.local_cache(|| VldErrorCache(Some(err.clone())));
+    let _ = req.local_cache(|| VldErrorCache(Some(body.clone())));
+    (Status::new(err.status()), body)
+}
+
+fn validate<T: VldParse>(
+    req: &Request<'_>,
+    value: &serde_json::Value,
+) -> Result<T, (Status, serde_json::Value)> {
+    T::vld_parse_value(value).map_err(|e| fail(req, VldHttpError::validation(e)))
+}
+
+fn to_outcome<S>(r: Result<S, (Status, serde_json::Value)>) -> Outcome<S, serde_json::Value> {
+    match r {
+        Ok(v) => Outcome::Success(v),
+        Err(e) => Outcome::Error(e),
+    }
+}
+
+fn to_data_outcome<'r, S>(
+    r: Result<S, (Status, serde_json::Value)>,
+) -> DataOutcome<'r, S, serde_json::Value> {
+    match r {
+        Ok(v) => DataOutcome::Success(v),
+        Err(e) => DataOutcome::Error(e),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -56,47 +90,30 @@ fn store_error(req: &Request<'_>, err: serde_json::Value) {
 /// Validated JSON body extractor.
 ///
 /// Reads the request body as JSON, validates via `T::vld_parse_value()`,
-/// and returns `422` with error details on failure.
+/// and returns `422` with error details on failure (`413` when the body
+/// exceeds Rocket's `json` limit).
 #[derive(Debug, Clone)]
 pub struct VldJson<T>(pub T);
-
-impl<T> Deref for VldJson<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for VldJson<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
 
 #[rocket::async_trait]
 impl<'r, T: VldParse + Send + 'static> FromData<'r> for VldJson<T> {
     type Error = serde_json::Value;
 
     async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> DataOutcome<'r, Self> {
-        let json_outcome = <Json<serde_json::Value> as FromData<'r>>::from_data(req, data).await;
-        let value = match json_outcome {
+        let value = match <Json<serde_json::Value> as FromData<'r>>::from_data(req, data).await {
             DataOutcome::Success(json) => json.into_inner(),
-            DataOutcome::Error((status, e)) => {
-                let body = vld_http_common::format_json_parse_error(&format!("{e}"));
-                store_error(req, body.clone());
-                return DataOutcome::Error((status, body));
+            DataOutcome::Error((status, _)) if status == Status::PayloadTooLarge => {
+                return DataOutcome::Error(fail(req, VldHttpError::payload_too_large()));
+            }
+            DataOutcome::Error((_, e)) => {
+                return DataOutcome::Error(fail(
+                    req,
+                    VldHttpError::parse(format!("Invalid JSON: {e}")),
+                ));
             }
             DataOutcome::Forward(f) => return DataOutcome::Forward(f),
         };
-
-        match T::vld_parse_value(&value) {
-            Ok(parsed) => DataOutcome::Success(VldJson(parsed)),
-            Err(vld_err) => {
-                let body = format_vld_error(&vld_err);
-                store_error(req, body.clone());
-                DataOutcome::Error((Status::UnprocessableEntity, body))
-            }
-        }
+        to_data_outcome(validate(req, &value).map(VldJson))
     }
 }
 
@@ -106,23 +123,9 @@ impl<'r, T: VldParse + Send + 'static> FromData<'r> for VldJson<T> {
 
 /// Validated query string extractor.
 ///
-/// Parses query parameters into a JSON object (coercing string values),
-/// validates via `T::vld_parse_value()`.
+/// See [`vld_http_common::parse_query_string`] for coercion and array rules.
 #[derive(Debug, Clone)]
 pub struct VldQuery<T>(pub T);
-
-impl<T> Deref for VldQuery<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for VldQuery<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
 
 #[rocket::async_trait]
 impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldQuery<T> {
@@ -130,17 +133,7 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldQuery<T> {
 
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let qs = req.uri().query().map(|q| q.as_str()).unwrap_or("");
-        let map = parse_query_to_json(qs);
-        let value = serde_json::Value::Object(map);
-
-        match T::vld_parse_value(&value) {
-            Ok(parsed) => Outcome::Success(VldQuery(parsed)),
-            Err(vld_err) => {
-                let body = format_vld_error(&vld_err);
-                store_error(req, body.clone());
-                Outcome::Error((Status::UnprocessableEntity, body))
-            }
-        }
+        to_outcome(validate(req, &query_string_to_json(qs)).map(VldQuery))
     }
 }
 
@@ -150,65 +143,61 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldQuery<T> {
 
 /// Validated form body extractor.
 ///
-/// Reads `application/x-www-form-urlencoded` body, parses into a JSON object
-/// (coercing values), and validates via `T::vld_parse_value()`.
+/// Reads an `application/x-www-form-urlencoded` body (up to Rocket's `form`
+/// limit), parses it like a query string and validates via
+/// `T::vld_parse_value()`.
 #[derive(Debug, Clone)]
 pub struct VldForm<T>(pub T);
-
-impl<T> Deref for VldForm<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for VldForm<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
 
 #[rocket::async_trait]
 impl<'r, T: VldParse + Send + 'static> FromData<'r> for VldForm<T> {
     type Error = serde_json::Value;
 
     async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> DataOutcome<'r, Self> {
-        use rocket::data::ToByteUnit;
-        let bytes = match data.open(1.mebibytes()).into_bytes().await {
-            Ok(b) if b.is_complete() => b.into_inner(),
-            _ => {
-                let body = vld_http_common::format_payload_too_large();
-                store_error(req, body.clone());
-                return DataOutcome::Error((Status::PayloadTooLarge, body));
-            }
+        let limit = req
+            .limits()
+            .get("form")
+            .unwrap_or_else(|| DEFAULT_BODY_LIMIT.bytes());
+        let result = match data.open(limit).into_bytes().await {
+            Ok(b) if b.is_complete() => parse_form_body(&b.into_inner())
+                .map_err(|e| fail(req, e))
+                .and_then(|value| validate(req, &value)),
+            Ok(_) => Err(fail(req, VldHttpError::payload_too_large())),
+            Err(e) => Err(fail(
+                req,
+                VldHttpError::parse(format!("Failed to read form body: {e}")),
+            )),
         };
-
-        let body_str = match String::from_utf8(bytes) {
-            Ok(s) => s,
-            Err(_) => {
-                let body = vld_http_common::format_utf8_error();
-                store_error(req, body.clone());
-                return DataOutcome::Error((Status::BadRequest, body));
-            }
-        };
-
-        let map = parse_query_to_json(&body_str);
-        let value = serde_json::Value::Object(map);
-
-        match T::vld_parse_value(&value) {
-            Ok(parsed) => DataOutcome::Success(VldForm(parsed)),
-            Err(vld_err) => {
-                let body = format_vld_error(&vld_err);
-                store_error(req, body.clone());
-                DataOutcome::Error((Status::UnprocessableEntity, body))
-            }
-        }
+        to_data_outcome(result.map(VldForm))
     }
 }
 
 // ---------------------------------------------------------------------------
-// Error catcher
+// Error catchers
 // ---------------------------------------------------------------------------
+
+fn cached_or(req: &Request<'_>, status: Status) -> (Status, Json<serde_json::Value>) {
+    let body = req
+        .local_cache(|| VldErrorCache(None))
+        .0
+        .clone()
+        .unwrap_or_else(|| vld_http_common::format_generic_error(status.reason_lossy()));
+    (status, Json(body))
+}
+
+/// All vld catchers: `400`, `413`, `415` and `422`.
+///
+/// ```rust,ignore
+/// rocket::build().register("/", vld_rocket::vld_catchers())
+/// ```
+pub fn vld_catchers() -> Vec<rocket::Catcher> {
+    rocket::catchers![
+        vld_400_catcher,
+        vld_413_catcher,
+        vld_415_catcher,
+        vld_422_catcher
+    ]
+}
 
 /// Catcher for `422 Unprocessable Entity` that returns JSON from the
 /// validation error stored by vld extractors.
@@ -221,23 +210,29 @@ impl<'r, T: VldParse + Send + 'static> FromData<'r> for VldForm<T> {
 /// ```
 #[rocket::catch(422)]
 pub fn vld_422_catcher(req: &Request<'_>) -> (Status, Json<serde_json::Value>) {
-    let cached = req.local_cache(|| VldErrorCache(None));
-    let body = cached
-        .0
-        .clone()
-        .unwrap_or_else(|| vld_http_common::format_generic_error("Unprocessable Entity"));
-    (Status::UnprocessableEntity, Json(body))
+    cached_or(req, Status::UnprocessableEntity)
 }
 
 /// Catcher for `400 Bad Request` that returns JSON.
 #[rocket::catch(400)]
 pub fn vld_400_catcher(req: &Request<'_>) -> (Status, Json<serde_json::Value>) {
-    let cached = req.local_cache(|| VldErrorCache(None));
-    let body = cached
-        .0
-        .clone()
-        .unwrap_or_else(|| vld_http_common::format_generic_error("Bad Request"));
-    (Status::BadRequest, Json(body))
+    cached_or(req, Status::BadRequest)
+}
+
+/// Catcher for `413 Payload Too Large` that returns
+/// `{"error": "Payload too large"}`.
+#[rocket::catch(413)]
+pub fn vld_413_catcher(_req: &Request<'_>) -> (Status, Json<serde_json::Value>) {
+    (
+        Status::PayloadTooLarge,
+        Json(vld_http_common::format_payload_too_large()),
+    )
+}
+
+/// Catcher for `415 Unsupported Media Type` that returns JSON.
+#[rocket::catch(415)]
+pub fn vld_415_catcher(req: &Request<'_>) -> (Status, Json<serde_json::Value>) {
+    cached_or(req, Status::UnsupportedMediaType)
 }
 
 // ---------------------------------------------------------------------------
@@ -246,25 +241,37 @@ pub fn vld_400_catcher(req: &Request<'_>) -> (Status, Json<serde_json::Value>) {
 
 /// Validated path parameter extractor for Rocket.
 ///
-/// Extracts named path segments and validates via `T::vld_parse_value()`.
-/// Path values are coerced: `"42"` → number, `"true"` → bool, etc.
+/// Extracts named dynamic segments of the matched route (`<id>`; a trailing
+/// `<path..>` receives the remaining segments joined with `/`) and validates
+/// via `T::vld_parse_value()`. Works with any mount point.
 ///
-/// Use Rocket's `<param>` syntax to define path parameters.
 /// The struct field names must match the parameter names.
 #[derive(Debug, Clone)]
 pub struct VldPath<T>(pub T);
 
-impl<T> Deref for VldPath<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
+/// Map the route's dynamic segments to the request's routed segments.
+fn path_params(req: &Request<'_>) -> Vec<(String, String)> {
+    let Some(route) = req.route() else {
+        return Vec::new();
+    };
+    // `unmounted_origin` and `routed_segments` both exclude the mount base.
+    let mut values = req.routed_segments(0..);
+    let mut params = Vec::new();
+    for pattern in route.uri.unmounted_origin.path().segments() {
+        let value = values.next();
+        let Some(name) = pattern.strip_prefix('<').and_then(|p| p.strip_suffix('>')) else {
+            continue;
+        };
+        if let Some(name) = name.strip_suffix("..") {
+            let rest: Vec<&str> = value.into_iter().chain(values.by_ref()).collect();
+            params.push((name.to_string(), rest.join("/")));
+            break;
+        }
+        if let Some(value) = value {
+            params.push((name.to_string(), value.to_string()));
+        }
     }
-}
-
-impl<T> DerefMut for VldPath<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
+    params
 }
 
 #[rocket::async_trait]
@@ -272,55 +279,9 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldPath<T> {
     type Error = serde_json::Value;
 
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let mut map = serde_json::Map::new();
-
-        // Rocket exposes route segments in match_info via routed_segments
-        // We iterate over the raw segments from the uri
-        for (i, seg) in req.routed_segments(0..).enumerate() {
-            // Try to get param name from route if available
-            let key = format!("{}", i);
-            let _ = key; // fallback
-            map.insert(seg.to_string(), coerce_value(seg));
-        }
-
-        // Better approach: use named query params from Rocket's param API
-        // Since Rocket doesn't expose route pattern names easily,
-        // we'll read all segments as positional values and also try
-        // to extract by common names from the route's dynamic segments
-        let mut named_map = serde_json::Map::new();
-
-        // Extract each dynamic param by trying common names
-        // Rocket stores route segments; we can access them by index
-        let segments: Vec<&str> = req.routed_segments(0..).collect();
-        if let Some(route) = req.route() {
-            let uri_str = route.uri.origin.path().as_str();
-            let mut param_idx = 0;
-            for part in uri_str.split('/') {
-                if part.starts_with('<') && part.ends_with('>') {
-                    let name = part
-                        .trim_start_matches('<')
-                        .trim_end_matches('>')
-                        .trim_end_matches("..");
-                    if let Some(&seg_value) = segments.get(param_idx) {
-                        named_map.insert(name.to_string(), coerce_value(seg_value));
-                    }
-                    param_idx += 1;
-                } else if !part.is_empty() {
-                    param_idx += 1;
-                }
-            }
-        }
-
-        let value = serde_json::Value::Object(named_map);
-
-        match T::vld_parse_value(&value) {
-            Ok(parsed) => Outcome::Success(VldPath(parsed)),
-            Err(vld_err) => {
-                let body = format_vld_error(&vld_err);
-                store_error(req, body.clone());
-                Outcome::Error((Status::UnprocessableEntity, body))
-            }
-        }
+        let params = path_params(req);
+        let value = path_params_to_json(params.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+        to_outcome(validate(req, &value).map(VldPath))
     }
 }
 
@@ -330,46 +291,23 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldPath<T> {
 
 /// Validated HTTP headers extractor for Rocket.
 ///
-/// Header names are normalised to snake_case: `Content-Type` → `content_type`.
-/// Values are coerced: `"42"` → number, `"true"` → bool, etc.
+/// See [`vld_http_common::headers_to_json`]: names become snake_case
+/// (`Content-Type` → `content_type`), repeated headers are joined with `", "`.
 #[derive(Debug, Clone)]
 pub struct VldHeaders<T>(pub T);
-
-impl<T> Deref for VldHeaders<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for VldHeaders<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
 
 #[rocket::async_trait]
 impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldHeaders<T> {
     type Error = serde_json::Value;
 
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let mut map = serde_json::Map::new();
-
-        for header in req.headers().iter() {
-            let key = header.name().as_str().to_lowercase().replace('-', "_");
-            map.insert(key, coerce_value(header.value()));
-        }
-
-        let value = serde_json::Value::Object(map);
-
-        match T::vld_parse_value(&value) {
-            Ok(parsed) => Outcome::Success(VldHeaders(parsed)),
-            Err(vld_err) => {
-                let body = format_vld_error(&vld_err);
-                store_error(req, body.clone());
-                Outcome::Error((Status::UnprocessableEntity, body))
-            }
-        }
+        let headers: Vec<_> = req.headers().iter().collect();
+        let value = headers_to_json(
+            headers
+                .iter()
+                .map(|h| (h.name().as_str(), h.value().as_bytes())),
+        );
+        to_outcome(validate(req, &value).map(VldHeaders))
     }
 }
 
@@ -380,22 +318,10 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldHeaders<T> 
 /// Validated cookie extractor for Rocket.
 ///
 /// Reads cookies from the `Cookie` header and validates against the schema.
-/// Cookie names are used as-is for field matching.
+/// Cookie names are used as-is; values are unquoted, percent-decoded and
+/// coerced.
 #[derive(Debug, Clone)]
 pub struct VldCookie<T>(pub T);
-
-impl<T> Deref for VldCookie<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for VldCookie<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
 
 #[rocket::async_trait]
 impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldCookie<T> {
@@ -403,25 +329,17 @@ impl<'r, T: VldParse + Send + Sync + 'static> FromRequest<'r> for VldCookie<T> {
 
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let cookie_header = req.headers().get_one("Cookie").unwrap_or("");
-
-        let value = cookies_to_json(cookie_header);
-
-        match T::vld_parse_value(&value) {
-            Ok(parsed) => Outcome::Success(VldCookie(parsed)),
-            Err(vld_err) => {
-                let body = format_vld_error(&vld_err);
-                store_error(req, body.clone());
-                Outcome::Error((Status::UnprocessableEntity, body))
-            }
-        }
+        to_outcome(validate(req, &cookies_to_json(cookie_header)).map(VldCookie))
     }
 }
+
+vld_http_common::impl_deref!(VldJson, VldQuery, VldPath, VldForm, VldHeaders, VldCookie);
 
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        vld_400_catcher, vld_422_catcher, VldCookie, VldForm, VldHeaders, VldJson, VldPath,
-        VldQuery,
+        vld_400_catcher, vld_413_catcher, vld_415_catcher, vld_422_catcher, vld_catchers,
+        VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery,
     };
     pub use vld::prelude::*;
 }
