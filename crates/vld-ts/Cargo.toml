@@ -23,3 +23,5 @@ path = "examples/generate_zod.rs"
 
 [dev-dependencies]
 insta = { version = "1.49.0", features = ["json"] }
+vld = { workspace = true, features = ["openapi", "regex", "string-advanced"] }
+regex-lite = "0.1"

@@ -17,7 +17,7 @@ Generate TypeScript [Zod](https://zod.dev/) and [Valibot](https://valibot.dev/) 
 
 ```toml
 [dependencies]
-vld-ts = "0.4"
+vld-ts = "0.5"
 ```
 
 ## Quick start
@@ -161,17 +161,57 @@ Zod output targets the **Zod 3** API (`z.string().email()`, `.ip({ version })`).
 | `oneOf` / `anyOf`                      | `z.union([...])`                            | `v.union([...])`                   |
 | `oneOf`/`anyOf` with `null`            | `.nullable()`                               | `v.nullable(...)`                  |
 | `allOf`                                | `z.intersection(...)`                       | `v.intersect([...])`               |
+| `allOf` fragments next to `type` (extra `pattern`/`format`/`multipleOf`) | further checks on the typed base | further pipe actions |
+| `not: {}` (`vld::never()`)             | `z.never()`                                 | `v.never()`                        |
+| `prefixItems` (tuples, `vld::map`)     | `z.tuple([...])` (`.rest()` unless `items: false`) | `v.strictTuple` / `v.tupleWithRest` |
 | `enum` / `const`                       | `z.literal(...)` / `z.union()`              | `v.literal(...)` / `v.union()`     |
-| `format` (email, uuid, date, …)        | `.email()`, `.uuid()`, `.date()`, …         | `v.email()`, `v.uuid()`, …         |
+| `format` (email, uuid, ip, …)          | `.email()`, `.uuid()`, `.ip()`, …           | `v.email()`, `v.uuid()`, …         |
+| other vld formats                      | `.regex(/…/)` / `.refine(…)` matching vld   | `v.regex(/…/)` / `v.check(…)`      |
+| `uniqueItems`, `contains`/`minContains`/`maxContains`, `x-minUniqueItems`/`x-maxUniqueItems` | `.refine(…)` | `v.check(…)` |
+| `propertyNames` (records)              | `z.record(keySchema, …)`                    | `v.record(keySchema, …)`           |
+| `minProperties`/`maxProperties`        | `.refine(…)`                                | `v.minEntries()` / `v.maxEntries()` |
+| `formatMinimum`/`formatMaximum`, `x-past`/`x-future` | `.refine(…)`                  | `v.check(…)`                       |
 | `minLength`/`maxLength`, `minItems`/`maxItems` | `.min()` / `.max()`                 | `v.minLength()` / `v.maxLength()`  |
 | `minimum`/`maximum`/`multipleOf`       | `.min()` / `.max()` / `.multipleOf()`       | `v.minValue()` / …                 |
-| `pattern`                              | `.regex(new RegExp("..."))`                 | `v.regex(new RegExp("..."))`       |
+| `pattern`                              | `.regex(new RegExp("...", flags))`          | `v.regex(new RegExp("...", flags))` |
 | `description` (any schema)             | `.describe("...")`                          | `v.description("...")`             |
 | `default` (also applied to `null`)     | `.nullish().transform((v) => v ?? value)`   | `v.nullish(schema, value)`         |
 | `$ref` to named schemas                | `z.lazy(() => NameSchema)`                  | `v.lazy(() => NameSchema)`         |
 
 Strings, enum literals and object keys that are not JS identifiers are emitted as
 escaped/quoted JSON string literals.
+
+Refinements (`.refine` / `v.check`) are always attached after the other
+methods, because a Zod refinement returns `ZodEffects` (no `.min()` etc.).
+
+### Formats
+
+Every vld string format is generated so that Zod/Valibot accept the same
+strings as vld (cross-checked with node against zod 3 / valibot 1):
+`date`, `date-time` and `time` use vld's exact ISO shapes (seconds optional,
+`Z` / `±HH:MM` offsets, real calendar days) instead of `.datetime()` /
+`v.isoDateTime()`; `hostname`, `mac`, `hex`, `slug`, `semver`, `jwt`, `cuid2`,
+`ulid`, `nanoid`, `emoji`, `cron`, `phone`, `color`, `base64`, `base64url`,
+`ascii`, `alpha`, `alphanumeric`, `locale`, `country-code`, `currency-code`
+become regexes; `credit-card` (Luhn), `json`, `cidr`, `lowercase`, `uppercase`
+become refinements. Known differences:
+
+- `email` uses `.email()` / `v.email()`, which need a dot in the domain (vld
+  accepts `a@b`).
+- `uri` (vld `url()` and the string-advanced `uri()` share it) is an http(s)
+  URL; `url-strict`'s public-host check and `phone-e164`'s numbering-plan check
+  are not ported (shape only).
+- Non-string-shaped formats (`decimal`, `int32`, `path`, …) add nothing.
+
+### Regex patterns
+
+vld patterns are Rust regexes. Leading inline flags `(?i)` / `(?m)` / `(?s)`
+become RegExp flags, `\A` / `\z` become `^` / `$` and `(?P<name>…)` becomes
+`(?<name>…)`. A pattern JS cannot express (scoped or mid-pattern flags, nested
+classes / class set operations, `\p{…}`, `\<`, `\b{start}`, `\x{…}`, a leading
+`]` in a class) is **not checked**: the base gets a
+`/* pattern not portable to JS, not checked: "…" */` note instead of a regex
+that would throw or match something else.
 
 ## Examples
 
