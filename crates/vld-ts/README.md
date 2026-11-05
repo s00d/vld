@@ -167,7 +167,7 @@ Zod output targets the **Zod 3** API (`z.string().email()`, `.ip({ version })`).
 | `minimum`/`maximum`/`multipleOf`       | `.min()` / `.max()` / `.multipleOf()`       | `v.minValue()` / …                 |
 | `pattern`                              | `.regex(new RegExp("..."))`                 | `v.regex(new RegExp("..."))`       |
 | `description` (any schema)             | `.describe("...")`                          | `v.description("...")`             |
-| `default`                              | `.default(value)`                           | `v.optional(schema, value)`        |
+| `default` (also applied to `null`)     | `.nullish().transform((v) => v ?? value)`   | `v.nullish(schema, value)`         |
 | `$ref` to named schemas                | `z.lazy(() => NameSchema)`                  | `v.lazy(() => NameSchema)`         |
 
 Strings, enum literals and object keys that are not JS identifiers are emitted as

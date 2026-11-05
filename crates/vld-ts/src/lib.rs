@@ -418,10 +418,13 @@ impl Target {
     }
 
     /// `default` value: JSON is valid JS expression syntax.
+    ///
+    /// Like vld, both `undefined` and `null` take the default (zod's
+    /// `.default()` / valibot's `v.optional(x, d)` would reject `null`).
     fn with_default(self, e: String, default: &Value) -> String {
         match self {
-            Zod => format!("{}.default({})", e, default),
-            Valibot => format!("v.optional({}, {})", e, default),
+            Zod => format!("{}.nullish().transform((v) => v ?? {})", e, default),
+            Valibot => format!("v.nullish({}, {})", e, default),
         }
     }
 
