@@ -1,13 +1,14 @@
 use serde_json::Value;
-use std::marker::PhantomData;
+use std::sync::OnceLock;
 
 use crate::error::VldError;
 use crate::schema::VldSchema;
 
 /// Lazy schema for recursive/self-referencing data structures.
 ///
-/// The schema factory is called on each `parse_value` invocation,
-/// which allows defining schemas that reference themselves.
+/// The schema factory is called on the first `parse_value` of this node and the
+/// result is cached, which allows defining schemas that reference themselves
+/// without rebuilding them on every parse.
 ///
 /// Created via [`vld::lazy()`](crate::lazy).
 ///
@@ -26,7 +27,7 @@ where
     T: VldSchema,
 {
     factory: F,
-    _phantom: PhantomData<T>,
+    schema: OnceLock<T>,
 }
 
 impl<T, F> ZLazy<T, F>
@@ -37,8 +38,13 @@ where
     pub fn new(factory: F) -> Self {
         Self {
             factory,
-            _phantom: PhantomData,
+            schema: OnceLock::new(),
         }
+    }
+
+    /// The (cached) schema produced by the factory.
+    pub fn schema(&self) -> &T {
+        self.schema.get_or_init(|| (self.factory)())
     }
 }
 
@@ -50,7 +56,6 @@ where
     type Output = T::Output;
 
     fn parse_value(&self, value: &Value) -> Result<T::Output, VldError> {
-        let schema = (self.factory)();
-        schema.parse_value(value)
+        self.schema().parse_value(value)
     }
 }

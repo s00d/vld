@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::time::Duration;
 
-use crate::error::{value_type_name, IssueCode, VldError};
+use crate::error::{IssueCode, VldError};
 use crate::schema::VldSchema;
 
 fn parse_duration_string(s: &str) -> Option<Duration> {
@@ -57,14 +57,25 @@ impl ZDuration {
         self.max(Duration::from_secs(secs))
     }
 
+    /// JSON Schema. `min`/`max` become `minimum`/`maximum` (seconds) on the
+    /// integer branch and `x-minSeconds`/`x-maxSeconds` on the string branch.
     #[cfg(feature = "openapi")]
     pub fn to_json_schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "oneOf": [
+        let mut schema = serde_json::json!({
+            "anyOf": [
                 { "type": "string", "description": "Duration like `PT15S`, `10s`, `250ms`" },
                 { "type": "integer", "minimum": 0, "description": "Duration in seconds" }
             ]
-        })
+        });
+        if let Some(min) = self.min {
+            schema["anyOf"][0]["x-minSeconds"] = serde_json::json!(min.as_secs_f64());
+            schema["anyOf"][1]["minimum"] = serde_json::json!(min.as_secs_f64().ceil() as u64);
+        }
+        if let Some(max) = self.max {
+            schema["anyOf"][0]["x-maxSeconds"] = serde_json::json!(max.as_secs_f64());
+            schema["anyOf"][1]["maximum"] = serde_json::json!(max.as_secs_f64().floor() as u64);
+        }
+        schema
     }
 }
 
@@ -84,18 +95,10 @@ impl VldSchema for ZDuration {
             _ => None,
         }
         .ok_or_else(|| {
-            let msg = self.custom_type_error.clone().unwrap_or_else(|| {
-                format!(
-                    "Expected duration as integer seconds or string (`PT15S`, `10s`, `250ms`), received {}",
-                    value_type_name(value)
-                )
-            });
-            VldError::single_with_value(
-                IssueCode::InvalidType {
-                    expected: "duration".to_string(),
-                    received: value_type_name(value),
-                },
-                msg,
+            super::type_error(
+                &self.custom_type_error,
+                "duration",
+                "duration as integer seconds or string (`PT15S`, `10s`, `250ms`)",
                 value,
             )
         })?;

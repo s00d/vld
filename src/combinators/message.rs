@@ -5,9 +5,8 @@ use crate::schema::VldSchema;
 
 /// Override the error message for an inner schema.
 ///
-/// Created via [`VldSchema::message()`]. On validation failure the **first**
-/// issue's message is replaced; if the schema produces multiple issues they
-/// are all replaced.
+/// Created via [`VldSchema::message()`]. On validation failure the message of
+/// **every** issue is replaced (codes, paths and received values are kept).
 ///
 /// # Example
 /// ```

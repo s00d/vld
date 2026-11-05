@@ -34,7 +34,7 @@ fn lazy_recursive_tree() {
 }
 
 #[test]
-fn lazy_called_each_time() {
+fn lazy_factory_called_once_and_cached() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 
@@ -47,5 +47,5 @@ fn lazy_called_each_time() {
     let _ = schema.parse(r#""a""#);
     let _ = schema.parse(r#""b""#);
     let after = CALL_COUNT.load(Ordering::Relaxed);
-    assert_eq!(after - before, 2);
+    assert_eq!(after - before, 1);
 }

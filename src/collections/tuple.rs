@@ -38,11 +38,15 @@ macro_rules! impl_tuple_schema {
                     };
                 )+
 
-                if !__errors.is_empty() {
-                    return Err(__errors);
+                match ($($v,)+) {
+                    ($(Some($v),)+) if __errors.is_empty() => Ok(($($v,)+)),
+                    _ if !__errors.is_empty() => Err(__errors),
+                    // An element schema failed without reporting an issue.
+                    _ => Err(VldError::single(
+                        IssueCode::Custom { code: "invalid_tuple".to_string() },
+                        "Invalid tuple element",
+                    )),
                 }
-
-                Ok(($($v.unwrap(),)+))
             }
         }
     };

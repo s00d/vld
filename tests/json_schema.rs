@@ -136,9 +136,11 @@ fn set_schema() {
     let schema = vld::set(vld::string()).min_size(1).max_size(5);
     let js = schema.json_schema();
     assert_eq!(js["type"], "array");
-    assert_eq!(js["uniqueItems"], true);
+    // Duplicates are merged, not rejected: no uniqueItems / maxItems.
+    assert!(js.get("uniqueItems").is_none());
     assert_eq!(js["minItems"], 1);
-    assert_eq!(js["maxItems"], 5);
+    assert!(js.get("maxItems").is_none());
+    assert_eq!(js["x-maxUniqueItems"], 5);
 }
 
 // ---------------------------------------------------------------------------
