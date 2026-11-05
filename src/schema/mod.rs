@@ -6,12 +6,14 @@ use crate::combinators::{
 use crate::error::VldError;
 use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
 
+mod coerced;
 mod dyn_schema;
 pub mod input;
 mod nested;
 
 pub(crate) use dyn_schema::to_json_value;
 
+pub use coerced::parse_coerced;
 pub use dyn_schema::DynSchema;
 pub use input::VldInput;
 pub use nested::{NestedSchema, NestedSchemaCollectFn, NestedSchemaEntry};
