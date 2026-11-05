@@ -121,7 +121,7 @@ fn CreateUserForm() -> impl IntoView {
     let server_errors = Memo::new(move |_| {
         action.value().get().and_then(|result| {
             result.err().and_then(|e| {
-                vld_leptos::VldServerError::from_json(&e.to_string())
+                vld_leptos::VldServerError::from_server_message(&e.to_string())
             })
         })
     });
@@ -167,7 +167,8 @@ fn CreateUserForm() -> impl IntoView {
 | `field_errors(name)` | `Vec<&str>` | All error messages for a field |
 | `has_field_error(name)` | `bool` | Check if a field has errors |
 | `error_fields()` | `Vec<&str>` | All field names with errors |
-| `from_json(s)` | `Option<Self>` | Parse from JSON string |
+| `from_json(s)` | `Option<Self>` | Parse from a bare JSON string |
+| `from_server_message(s)` | `Option<Self>` | Parse from a `ServerFnError` message (`e.to_string()` adds a prefix before the JSON) |
 | `to_string()` | `String` | Serialize to JSON (via `Display`) |
 
 ### Validation Functions
