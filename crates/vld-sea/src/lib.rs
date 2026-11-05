@@ -38,9 +38,6 @@
 //! am.insert(&db).await?;
 //! ```
 
-use std::fmt;
-use std::ops::Deref;
-
 #[cfg(all(feature = "sea-orm-1", feature = "sea-orm-2"))]
 compile_error!("Enable exactly one SeaORM version feature: `sea-orm-1` or `sea-orm-2`.");
 #[cfg(not(any(feature = "sea-orm-1", feature = "sea-orm-2")))]
@@ -57,38 +54,10 @@ pub use vld;
 // Error type
 // ---------------------------------------------------------------------------
 
-/// Error returned by `vld-sea` operations.
-#[derive(Debug, Clone)]
-pub enum VldSeaError {
-    /// Schema validation failed.
-    Validation(vld::error::VldError),
-    /// Failed to serialize the value to JSON for validation.
-    Serialization(String),
-}
-
-impl fmt::Display for VldSeaError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            VldSeaError::Validation(e) => write!(f, "Validation error: {}", e),
-            VldSeaError::Serialization(e) => write!(f, "Serialization error: {}", e),
-        }
-    }
-}
-
-impl std::error::Error for VldSeaError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            VldSeaError::Validation(e) => Some(e),
-            VldSeaError::Serialization(_) => None,
-        }
-    }
-}
-
-impl From<vld::error::VldError> for VldSeaError {
-    fn from(e: vld::error::VldError) -> Self {
-        VldSeaError::Validation(e)
-    }
-}
+vld_integration_common::__vld_db_error!(
+    /// Error returned by `vld-sea` operations.
+    VldSeaError
+);
 
 impl From<VldSeaError> for crate::sea_orm::DbErr {
     fn from(e: VldSeaError) -> Self {
@@ -127,41 +96,119 @@ where
     serde_json::Value::Object(map)
 }
 
-/// Convert a [`crate::sea_orm::Value`] to [`serde_json::Value`].
+/// Convert a [`crate::sea_orm::Value`] to [`serde_json::Value`], matching what
+/// `serde_json::to_value` produces for the corresponding Rust type (so the same
+/// schema works for `validate_active` and `validate_model`):
 ///
-/// Handles the always-available variants. Feature-gated variants
-/// (chrono, uuid, json, etc.) fall through to `Null`.
+/// - numbers / bools / strings / chars as-is, `Bytes` as an array of `u8`
+/// - `with-json`: JSON as-is
+/// - `with-chrono`: dates `YYYY-MM-DD`, times `HH:MM:SS[.f]`, naive datetimes
+///   `YYYY-MM-DDTHH:MM:SS[.f]`, zoned datetimes RFC 3339
+/// - `with-uuid`: hyphenated string; `with-rust_decimal` / `with-bigdecimal`: string
+///
+/// Variants whose vld-sea feature is not enabled (and `None`s) become `null`.
+#[allow(unreachable_patterns)]
 fn sea_value_to_json(v: crate::sea_orm::Value) -> serde_json::Value {
     use crate::sea_orm::sea_query::Value as SV;
+    use serde_json::Value as J;
+
+    fn float(n: f64) -> J {
+        serde_json::Number::from_f64(n)
+            .map(J::Number)
+            .unwrap_or(J::Null)
+    }
 
     match v {
-        SV::Bool(Some(b)) => serde_json::Value::Bool(b),
-        SV::TinyInt(Some(n)) => serde_json::Value::Number((n as i64).into()),
-        SV::SmallInt(Some(n)) => serde_json::Value::Number((n as i64).into()),
-        SV::Int(Some(n)) => serde_json::Value::Number((n as i64).into()),
-        SV::BigInt(Some(n)) => serde_json::Value::Number(n.into()),
-        SV::TinyUnsigned(Some(n)) => serde_json::Value::Number((n as u64).into()),
-        SV::SmallUnsigned(Some(n)) => serde_json::Value::Number((n as u64).into()),
-        SV::Unsigned(Some(n)) => serde_json::Value::Number((n as u64).into()),
-        SV::BigUnsigned(Some(n)) => serde_json::Value::Number(n.into()),
-        SV::Float(Some(n)) => serde_json::Number::from_f64(n as f64)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        SV::Double(Some(n)) => serde_json::Number::from_f64(n)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        SV::String(Some(s)) => serde_json::Value::String(s.to_string()),
-        SV::Char(Some(c)) => serde_json::Value::String(c.to_string()),
+        SV::Bool(Some(b)) => J::Bool(b),
+        SV::TinyInt(Some(n)) => (n as i64).into(),
+        SV::SmallInt(Some(n)) => (n as i64).into(),
+        SV::Int(Some(n)) => (n as i64).into(),
+        SV::BigInt(Some(n)) => n.into(),
+        SV::TinyUnsigned(Some(n)) => (n as u64).into(),
+        SV::SmallUnsigned(Some(n)) => (n as u64).into(),
+        SV::Unsigned(Some(n)) => (n as u64).into(),
+        SV::BigUnsigned(Some(n)) => n.into(),
+        SV::Float(Some(n)) => float(n as f64),
+        SV::Double(Some(n)) => float(n),
+        SV::String(Some(s)) => J::String(s.to_string()),
+        SV::Char(Some(c)) => J::String(c.to_string()),
+        SV::Bytes(Some(b)) => J::Array(b.iter().map(|x| J::from(*x)).collect()),
         // sea-query 1 / sea-orm 2 — ActiveEnum columns
         #[cfg(feature = "sea-orm-2")]
         SV::Enum(opt) => match opt {
-            crate::sea_orm::sea_query::OptionEnum::Some(e) => {
-                serde_json::Value::String(e.value.to_string())
-            }
-            crate::sea_orm::sea_query::OptionEnum::None(_) => serde_json::Value::Null,
+            crate::sea_orm::sea_query::OptionEnum::Some(e) => J::String(e.value.to_string()),
+            crate::sea_orm::sea_query::OptionEnum::None(_) => J::Null,
         },
-        // Bytes, Chrono, Uuid, Json, etc. — or any None variant
-        _ => serde_json::Value::Null,
+        #[cfg(feature = "with-json")]
+        SV::Json(Some(j)) => (*j).clone(),
+        #[cfg(feature = "with-chrono")]
+        SV::ChronoDate(Some(d)) => J::String(d.to_string()),
+        #[cfg(feature = "with-chrono")]
+        SV::ChronoTime(Some(t)) => J::String(t.to_string()),
+        #[cfg(feature = "with-chrono")]
+        SV::ChronoDateTime(Some(dt)) => J::String(dt.format("%Y-%m-%dT%H:%M:%S%.f").to_string()),
+        #[cfg(feature = "with-chrono")]
+        SV::ChronoDateTimeUtc(Some(dt)) => J::String(dt.to_rfc3339()),
+        #[cfg(feature = "with-chrono")]
+        SV::ChronoDateTimeLocal(Some(dt)) => J::String(dt.to_rfc3339()),
+        #[cfg(feature = "with-chrono")]
+        SV::ChronoDateTimeWithTimeZone(Some(dt)) => J::String(dt.to_rfc3339()),
+        #[cfg(feature = "with-uuid")]
+        SV::Uuid(Some(u)) => J::String(u.to_string()),
+        #[cfg(feature = "with-rust_decimal")]
+        SV::Decimal(Some(d)) => J::String(d.to_string()),
+        #[cfg(feature = "with-bigdecimal")]
+        SV::BigDecimal(Some(d)) => J::String(d.to_string()),
+        // None variants and types without a vld-sea feature (time, arrays, ...)
+        _ => J::Null,
+    }
+}
+
+#[cfg(test)]
+mod sea_value_tests {
+    use super::sea_value_to_json;
+    use crate::sea_orm::sea_query::Value as SV;
+    use serde_json::json;
+
+    #[test]
+    #[allow(clippy::useless_conversion)] // Box<Vec<u8>> on sea-orm 1, Vec<u8> on 2
+    fn bytes_map_to_u8_array() {
+        let v = SV::Bytes(Some(vec![1u8, 2, 255].into()));
+        assert_eq!(sea_value_to_json(v), json!([1, 2, 255]));
+    }
+
+    #[cfg(all(
+        feature = "with-chrono",
+        feature = "with-uuid",
+        feature = "with-json",
+        feature = "with-rust_decimal"
+    ))]
+    #[test]
+    fn feature_types_map_like_serde() {
+        use crate::sea_orm::prelude::{
+            ChronoDate, ChronoDateTime, ChronoDateTimeUtc, Decimal, Uuid,
+        };
+        let date = ChronoDate::from_ymd_opt(2024, 2, 29).unwrap();
+        let dt: ChronoDateTime = date.and_hms_opt(12, 30, 0).unwrap();
+        let utc: ChronoDateTimeUtc = dt.and_utc();
+        let id = Uuid::nil();
+        let dec: Decimal = "12.50".parse().unwrap();
+
+        assert_eq!(sea_value_to_json(date.into()), json!("2024-02-29"));
+        assert_eq!(sea_value_to_json(dt.into()), json!("2024-02-29T12:30:00"));
+        assert_eq!(
+            sea_value_to_json(utc.into()),
+            json!("2024-02-29T12:30:00+00:00")
+        );
+        assert_eq!(
+            sea_value_to_json(id.into()),
+            json!("00000000-0000-0000-0000-000000000000")
+        );
+        assert_eq!(sea_value_to_json(dec.into()), json!("12.50"));
+        assert_eq!(
+            sea_value_to_json(json!({"a": [1, 2]}).into()),
+            json!({"a": [1, 2]})
+        );
     }
 }
 
@@ -226,9 +273,7 @@ where
     S: vld::schema::VldParse,
     T: serde::Serialize,
 {
-    let json =
-        serde_json::to_value(value).map_err(|e| VldSeaError::Serialization(e.to_string()))?;
-    S::vld_parse_value(&json).map_err(VldSeaError::Validation)
+    __vld_validate::<S, T>(value)
 }
 
 /// Parse and validate raw JSON against schema `S`.
@@ -261,81 +306,16 @@ where
     S: vld::schema::VldParse,
     A: crate::sea_orm::ActiveModelTrait,
 {
-    let json = active_model_to_json(model);
-    S::vld_parse_value(&json)
+    validate_active::<S, A>(model)
         .map(|_| ())
-        .map_err(|e| crate::sea_orm::DbErr::Custom(format!("Validation error: {}", e)))
+        .map_err(Into::into)
 }
 
 // ---------------------------------------------------------------------------
 // Validated<S, T> — wrapper
 // ---------------------------------------------------------------------------
 
-/// A wrapper that proves its inner value has been validated against schema `S`.
-///
-/// `T` must implement [`serde::Serialize`] so it can be converted to JSON
-/// for validation.
-///
-/// ```rust,ignore
-/// let input = NewUser { name: "Alice".into(), email: "alice@example.com".into() };
-/// let validated = vld_sea::Validated::<UserInput, _>::new(input)?;
-/// // validated.inner() is guaranteed valid
-/// ```
-pub struct Validated<S, T> {
-    inner: T,
-    _schema: std::marker::PhantomData<S>,
-}
-
-impl<S, T> Validated<S, T>
-where
-    S: vld::schema::VldParse,
-    T: serde::Serialize,
-{
-    /// Validate `value` against schema `S` and wrap it on success.
-    pub fn new(value: T) -> Result<Self, VldSeaError> {
-        let json =
-            serde_json::to_value(&value).map_err(|e| VldSeaError::Serialization(e.to_string()))?;
-        S::vld_parse_value(&json).map_err(VldSeaError::Validation)?;
-        Ok(Self {
-            inner: value,
-            _schema: std::marker::PhantomData,
-        })
-    }
-
-    /// Get a reference to the validated inner value.
-    pub fn inner(&self) -> &T {
-        &self.inner
-    }
-
-    /// Consume and return the inner value.
-    pub fn into_inner(self) -> T {
-        self.inner
-    }
-}
-
-impl<S, T> Deref for Validated<S, T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.inner
-    }
-}
-
-impl<S, T: fmt::Debug> fmt::Debug for Validated<S, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Validated")
-            .field("inner", &self.inner)
-            .finish()
-    }
-}
-
-impl<S, T: Clone> Clone for Validated<S, T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            _schema: std::marker::PhantomData,
-        }
-    }
-}
+vld_integration_common::__vld_db_validated!(VldSeaError);
 
 // ---------------------------------------------------------------------------
 // Macro: impl_vld_before_save!

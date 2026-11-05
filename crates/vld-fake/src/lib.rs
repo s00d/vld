@@ -52,6 +52,7 @@
 //! ```
 
 mod dict;
+mod regex_gen;
 
 use dict::*;
 use rand::Rng;
@@ -119,11 +120,15 @@ pub fn fake_many(schema: &Value, count: usize) -> Vec<Value> {
 /// Panics if the generated value does not pass validation (should not happen
 /// unless the schema is ambiguous).
 pub fn fake_parsed<T: VldParse>(schema: &Value) -> T {
-    let val = fake_value(schema);
-    T::vld_parse_value(&val).unwrap_or_else(|e| {
+    parse_or_panic(&fake_value(schema))
+}
+
+#[doc(hidden)]
+pub fn parse_or_panic<T: VldParse>(val: &Value) -> T {
+    T::vld_parse_value(val).unwrap_or_else(|e| {
         panic!(
             "vld_fake::fake_parsed: generated value failed validation.\nValue: {}\nError: {:?}",
-            serde_json::to_string_pretty(&val).unwrap_or_default(),
+            serde_json::to_string_pretty(val).unwrap_or_default(),
             e,
         )
     })
@@ -151,6 +156,9 @@ pub struct FakeGen<R: Rng> {
     depth: usize,
     /// Auto-incrementing counter for unique values.
     counter: u64,
+    /// Named definitions used to resolve `$ref` (collected from the root
+    /// schema's `$defs` / `definitions` / `components.schemas`).
+    defs: Map<String, Value>,
 }
 
 const MAX_DEPTH: usize = 12;
@@ -162,6 +170,7 @@ impl FakeGen<rand::rngs::ThreadRng> {
             rng: thread_rng_compat(),
             depth: 0,
             counter: 0,
+            defs: Map::new(),
         }
     }
 }
@@ -179,6 +188,7 @@ impl<R: Rng> FakeGen<R> {
             rng,
             depth: 0,
             counter: 0,
+            defs: Map::new(),
         }
     }
 
@@ -204,10 +214,39 @@ impl<R: Rng> FakeGen<R> {
         if self.depth > MAX_DEPTH {
             return Value::Null;
         }
+        if self.depth == 0 {
+            self.collect_defs(schema);
+        }
         self.depth += 1;
         let result = self.dispatch(schema, hint);
         self.depth -= 1;
         result
+    }
+
+    /// Register definitions embedded in a root schema so `$ref`s resolve.
+    fn collect_defs(&mut self, schema: &Value) {
+        for defs in [
+            schema.get("$defs"),
+            schema.get("definitions"),
+            schema.pointer("/components/schemas"),
+        ]
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+        {
+            for (k, v) in defs {
+                self.defs.insert(k.clone(), v.clone());
+            }
+        }
+    }
+
+    /// Resolve a local `$ref` (`#/components/schemas/X`, `#/$defs/X`,
+    /// `#/definitions/X`) against the collected definitions.
+    fn resolve_ref(&self, r: &str) -> Option<Value> {
+        let name = ["#/components/schemas/", "#/$defs/", "#/definitions/"]
+            .iter()
+            .find_map(|p| r.strip_prefix(p))?;
+        self.defs.get(name).cloned()
     }
 
     fn dispatch(&mut self, schema: &Value, hint: Option<&str>) -> Value {
@@ -215,6 +254,14 @@ impl<R: Rng> FakeGen<R> {
             Some(o) => o,
             None => return Value::Null,
         };
+
+        // ---- $ref ----
+        if let Some(r) = obj.get("$ref").and_then(Value::as_str) {
+            return match self.resolve_ref(r) {
+                Some(target) => self.value_with_hint(&target, hint),
+                None => Value::Null,
+            };
+        }
 
         // ---- const / enum ----
         if let Some(c) = obj.get("const") {
@@ -255,7 +302,16 @@ impl<R: Rng> FakeGen<R> {
         }
 
         // ---- type-based dispatch ----
-        let ty = obj.get("type").and_then(Value::as_str).unwrap_or("string");
+        // `type` may be an array (`["string", "null"]`): use the first non-null.
+        let ty = match obj.get("type") {
+            Some(Value::Array(types)) => types
+                .iter()
+                .filter_map(Value::as_str)
+                .find(|t| *t != "null")
+                .unwrap_or("null"),
+            Some(t) => t.as_str().unwrap_or("string"),
+            None => "string",
+        };
 
         match ty {
             "string" => self.gen_string(obj, hint),
@@ -274,10 +330,25 @@ impl<R: Rng> FakeGen<R> {
     // ═══════════════════════════════════════════════════════════════════════
 
     fn gen_string(&mut self, obj: &Map<String, Value>, hint: Option<&str>) -> Value {
-        let format = obj.get("format").and_then(Value::as_str);
+        let (min, max) = len_bounds(obj);
+
+        // 0) `pattern` — generate a string matching the regex
+        if let Some(p) = obj.get("pattern").and_then(Value::as_str) {
+            let mut last = None;
+            for _ in 0..20 {
+                match regex_gen::generate(&mut self.rng, p) {
+                    Some(s) if len_ok(&s, min, max) => return Value::String(s),
+                    Some(s) => last = Some(s),
+                    None => break, // unparsable regex — fall through
+                }
+            }
+            if let Some(s) = last {
+                return Value::String(s);
+            }
+        }
 
         // 1) Explicit JSON Schema format
-        if let Some(fmt) = format {
+        if let Some(fmt) = obj.get("format").and_then(Value::as_str) {
             return Value::String(self.gen_string_format(fmt, obj));
         }
 
@@ -441,28 +512,8 @@ impl<R: Rng> FakeGen<R> {
             _ => None,
         };
 
-        // Check length constraints
-        if let Some(mut s) = result {
-            let min = obj.get("minLength").and_then(Value::as_u64).unwrap_or(0) as usize;
-            let max = obj
-                .get("maxLength")
-                .and_then(Value::as_u64)
-                .map(|v| v as usize);
-
-            // Pad if too short
-            while s.len() < min {
-                s.push('x');
-            }
-            // Truncate if too long
-            if let Some(mx) = max {
-                if s.len() > mx {
-                    s.truncate(mx);
-                }
-            }
-            Some(Value::String(s))
-        } else {
-            None
-        }
+        let (min, max) = len_bounds(obj);
+        result.map(|s| Value::String(fit_len(s, min.unwrap_or(0), max, 'x')))
     }
 
     /// Generate a readable, word-based string that respects `minLength`/`maxLength`.
@@ -525,28 +576,94 @@ impl<R: Rng> FakeGen<R> {
             s = chars.next().unwrap().to_uppercase().chain(chars).collect();
         }
 
-        // Pad if too short
-        while s.len() < min_len {
-            s.push('a');
-        }
-
-        // Truncate if too long
-        if s.len() > max_len {
-            s.truncate(max_len);
-        }
-
-        Value::String(s)
+        Value::String(fit_len(s, min_len, Some(max_len), 'a'))
     }
 
     // ── format-specific generators ──────────────────────────────────────
 
     fn gen_string_format(&mut self, fmt: &str, obj: &Map<String, Value>) -> String {
-        match fmt {
+        let (min, max) = len_bounds(obj);
+
+        // Free-length character-class formats: build exactly `n` chars.
+        let charset: Option<&[u8]> = match fmt {
+            "hex" => Some(HEX),
+            "alpha" => Some(ALPHA),
+            "alphanumeric" => Some(TOKEN_ALPHA),
+            "lowercase" => Some(LOWER_ALPHA),
+            "uppercase" => Some(UPPER_ALPHA),
+            _ => None,
+        };
+        if let Some(cs) = charset {
+            let n = self.pick_len(min, max, 8, 24);
+            return self.gen_chars(cs, n);
+        }
+
+        // Byte-string formats: `minLength`/`maxLength` count decoded bytes.
+        if let Some(enc) = fmt.strip_prefix("byte") {
+            let n = self.pick_len(min, max, 8, 32);
+            let bytes: Vec<u8> = (0..n).map(|_| self.rng.gen()).collect();
+            return match enc {
+                "-hex" => bytes.iter().map(|b| format!("{b:02x}")).collect(),
+                "-base64url" => base64url(&bytes),
+                _ => base64_encode(&bytes),
+            };
+        }
+
+        if fmt == "decimal" {
+            return self.gen_decimal(obj);
+        }
+
+        // Structured formats: regenerate until the length fits.
+        let mut last = None;
+        for _ in 0..20 {
+            let Some(s) = self.gen_format_value(fmt) else {
+                break;
+            };
+            if len_ok(&s, min, max) {
+                return s;
+            }
+            last = Some(s);
+        }
+        match last {
+            // `email` can be padded in the local part without breaking it.
+            Some(s) if fmt == "email" && min.is_some_and(|m| s.chars().count() < m) => {
+                let pad = min.unwrap() - s.chars().count();
+                s.replacen('@', &format!("{}@", "x".repeat(pad)), 1)
+            }
+            Some(s) => s,
+            // Unknown format — readable string within the length bounds.
+            None => match self.gen_readable_string(obj) {
+                Value::String(s) => s,
+                _ => unreachable!(),
+            },
+        }
+    }
+
+    /// Generate a value for a known string `format`; `None` if unknown.
+    fn gen_format_value(&mut self, fmt: &str) -> Option<String> {
+        Some(match fmt {
             "email" => self.gen_email(),
-            "uuid" => self.gen_uuid(),
-            "uri" | "url" => self.gen_url(),
+            "uuid" | "uuid-v4" => self.gen_uuid(),
+            "uuid-v1" => self.gen_uuid_v(b'1'),
+            "uuid-v7" => self.gen_uuid_v(b'7'),
+            "uri" | "url" | "url-strict" => self.gen_url(),
             "ipv4" => self.gen_ipv4(),
             "ipv6" => self.gen_ipv6(),
+            "ip" => {
+                if self.rng.gen_bool(0.5) {
+                    self.gen_ipv4()
+                } else {
+                    self.gen_ipv6()
+                }
+            }
+            "cidr" => {
+                let prefix = self.rng.gen_range(8u8..=32);
+                format!("{}/{prefix}", self.gen_ipv4())
+            }
+            "socket-addr" => {
+                let port = self.rng.gen_range(1024u16..=65535);
+                format!("{}:{port}", self.gen_ipv4())
+            }
             "hostname" => self.gen_hostname(),
             "date" | "iso-date" => self.gen_date(),
             "time" | "iso-time" => self.gen_time(),
@@ -557,38 +674,111 @@ impl<R: Rng> FakeGen<R> {
             "nanoid" => self.gen_nanoid(),
             "emoji" => self.gen_emoji(),
             "phone" => self.gen_phone(),
+            "phone-e164" => {
+                // US numbers with real area codes: valid per libphonenumber.
+                let area = self.pick(&[201u16, 212, 213, 305, 312, 415, 617, 646, 702, 718]);
+                let exchange = self.rng.gen_range(200u16..=999);
+                let line = self.rng.gen_range(1000u16..=9999);
+                format!("+1{area}{exchange}{line}")
+            }
             "credit-card" => self.gen_credit_card(),
             "mac-address" | "mac" => self.gen_mac_address(),
             "color" | "hex-color" => self.gen_hex_color(),
-            "semver" => {
-                let major = self.rng.gen_range(0u8..10);
-                let minor = self.rng.gen_range(0u8..30);
-                let patch = self.rng.gen_range(0u16..100);
-                format!("{major}.{minor}.{patch}")
+            "semver" => self.gen_semver(),
+            "semver-full" => {
+                let v = self.gen_semver();
+                match self.rng.gen_range(0..3) {
+                    0 => format!("{v}-alpha.{}", self.rng.gen_range(1u8..10)),
+                    1 => format!("{v}+build.{}", self.rng.gen_range(1u16..1000)),
+                    _ => v,
+                }
             }
             "slug" => self.gen_slug(),
-            _ => {
-                // Unknown — readable string
-                let min = obj.get("minLength").and_then(Value::as_u64).unwrap_or(1) as usize;
-                let max = obj
-                    .get("maxLength")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(min as u64 + 20) as usize;
-                let target = self.rng.gen_range(min..=max.max(min));
-                let mut s = String::new();
-                while s.len() < target {
-                    if !s.is_empty() {
-                        s.push(' ');
-                    }
-                    let idx = self.rng.gen_range(0..WORDS.len());
-                    s.push_str(WORDS[idx]);
+            "currency-code" => self.pick(CURRENCIES).to_string(),
+            "country-code" => self.pick(LOCALES)[3..].to_string(),
+            "locale" => {
+                let l = self.pick(LOCALES);
+                if self.rng.gen_bool(0.3) {
+                    l[..2].to_string()
+                } else {
+                    l.to_string()
                 }
-                s.truncate(max.max(min));
-                while s.len() < min {
-                    s.push('a');
-                }
-                s
             }
+            "cron" => {
+                let minute = self.rng.gen_range(0u8..60);
+                let hour = self.rng.gen_range(0u8..24);
+                match self.rng.gen_range(0..3) {
+                    0 => format!("{minute} {hour} * * *"),
+                    1 => format!("*/{} * * * *", self.rng.gen_range(1u8..30)),
+                    _ => format!("{minute} {hour} * * 1-5"),
+                }
+            }
+            "jwt" => {
+                let header = base64url(br#"{"alg":"HS256","typ":"JWT"}"#);
+                let payload = base64url(format!(r#"{{"sub":"{}"}}"#, self.next_id()).as_bytes());
+                let sig = self.gen_chars(B64URL_ALPHA, 43);
+                format!("{header}.{payload}.{sig}")
+            }
+            "path" => {
+                let dir = self.pick(WORDS).to_lowercase();
+                let file = self.pick(WORDS).to_lowercase();
+                let ext = self.pick(FILE_EXTENSIONS);
+                format!("/var/data/{dir}/{file}.{ext}")
+            }
+            _ => return None,
+        })
+    }
+
+    /// Pick a length in `[min, max]`, defaulting to `[dmin, dmax]` around
+    /// whichever bound is missing.
+    fn pick_len(
+        &mut self,
+        min: Option<usize>,
+        max: Option<usize>,
+        dmin: usize,
+        dmax: usize,
+    ) -> usize {
+        let lo = min.unwrap_or(dmin.min(max.unwrap_or(dmin)));
+        let hi = max.unwrap_or(lo.max(dmax)).max(lo);
+        self.rng.gen_range(lo..=hi)
+    }
+
+    fn gen_chars(&mut self, charset: &[u8], n: usize) -> String {
+        (0..n)
+            .map(|_| charset[self.rng.gen_range(0..charset.len())] as char)
+            .collect()
+    }
+
+    fn gen_semver(&mut self) -> String {
+        let major = self.rng.gen_range(0u8..10);
+        let minor = self.rng.gen_range(0u8..30);
+        let patch = self.rng.gen_range(0u16..100);
+        format!("{major}.{minor}.{patch}")
+    }
+
+    /// Decimal string honouring vld's `x-minDecimal` / `x-maxDecimal`.
+    fn gen_decimal(&mut self, obj: &Map<String, Value>) -> String {
+        let bound = |k: &str| {
+            obj.get(k).and_then(|v| {
+                v.as_str()
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .or(v.as_f64())
+            })
+        };
+        let lo = bound("x-minDecimal");
+        let hi = bound("x-maxDecimal");
+        let (lo, hi) = match (lo, hi) {
+            (Some(l), Some(h)) => (l, h.max(l)),
+            (Some(l), None) => (l, l + 1000.0),
+            (None, Some(h)) => (h - 1000.0, h),
+            (None, None) => (0.0, 1000.0),
+        };
+        let v = lo + self.rng.gen::<f64>() * (hi - lo);
+        let s = format!("{v:.2}");
+        if s.parse::<f64>().is_ok_and(|r| (lo..=hi).contains(&r)) {
+            s
+        } else {
+            v.to_string()
         }
     }
 
@@ -607,19 +797,20 @@ impl<R: Rng> FakeGen<R> {
     }
 
     fn gen_uuid(&mut self) -> String {
-        let hex = |n: usize, rng: &mut R| -> String {
-            (0..n)
-                .map(|_| HEX[rng.gen_range(0..HEX.len())] as char)
-                .collect()
-        };
+        self.gen_uuid_v(b'4')
+    }
+
+    /// Random UUID with the given version nibble and RFC 4122 variant.
+    fn gen_uuid_v(&mut self, version: u8) -> String {
         format!(
-            "{}-{}-4{}-{}{}-{}",
-            hex(8, &mut self.rng),
-            hex(4, &mut self.rng),
-            hex(3, &mut self.rng),
+            "{}-{}-{}{}-{}{}-{}",
+            self.gen_chars(HEX, 8),
+            self.gen_chars(HEX, 4),
+            version as char,
+            self.gen_chars(HEX, 3),
             HEX_89AB[self.rng.gen_range(0..4)] as char,
-            hex(3, &mut self.rng),
-            hex(12, &mut self.rng),
+            self.gen_chars(HEX, 3),
+            self.gen_chars(HEX, 12),
         )
     }
 
@@ -855,97 +1046,53 @@ impl<R: Rng> FakeGen<R> {
     // ═══════════════════════════════════════════════════════════════════════
 
     fn gen_integer(&mut self, obj: &Map<String, Value>, hint: Option<&str>) -> Value {
-        let min = self.num_as_i64(obj, "minimum", "exclusiveMinimum", 1);
-        let max = self.num_as_i64_max(obj, "maximum", "exclusiveMaximum", 1);
+        let f = |k: &str| obj.get(k).and_then(Value::as_f64);
+        // Smallest / largest integer satisfying the (exclusive) bounds.
+        let lo = f("minimum")
+            .map(f64::ceil)
+            .or_else(|| f("exclusiveMinimum").map(|v| v.floor() + 1.0));
+        let hi = f("maximum")
+            .map(f64::floor)
+            .or_else(|| f("exclusiveMaximum").map(|v| v.ceil() - 1.0));
+        let to_i = |v: f64| v.clamp(i64::MIN as f64, i64::MAX as f64) as i64;
+        let (lo, hi) = (lo.map(to_i), hi.map(to_i));
 
-        let (min, max) = if min > max { (max, min) } else { (min, max) };
+        // A realistic range for known field names, when the schema leaves
+        // one side open and the two ranges overlap.
+        let hinted = hint
+            .and_then(int_hint_range)
+            .filter(|_| lo.is_none() || hi.is_none())
+            .map(|(hl, hh)| (lo.map_or(hl, |l| l.max(hl)), hi.map_or(hh, |h| h.min(hh))))
+            .filter(|(l, h)| l <= h);
 
-        // Heuristic defaults based on field name
-        let (min, max) = if let Some(h) = hint {
-            self.adjust_int_range_by_hint(h, min, max, obj)
-        } else {
-            (min, max)
+        let (lo, hi) = match (hinted, lo, hi) {
+            (Some(r), _, _) => r,
+            (None, Some(l), Some(h)) => (l, h),
+            (None, Some(l), None) => (l, l.max(0).saturating_add(1000)),
+            (None, None, Some(h)) => (if h >= 0 { 0 } else { h.saturating_sub(1000) }, h),
+            (None, None, None) => (0, 1000),
         };
+        if lo > hi {
+            // Unsatisfiable range — best effort, never panic.
+            return json!(lo);
+        }
 
-        let mut val = self.rng.gen_range(min..=max);
-
-        // multipleOf
-        if let Some(m) = obj
+        let m = obj
             .get("multipleOf")
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            if m > 0 {
-                val = (val / m) * m;
-                if val < min {
-                    val += m;
-                }
+            .and_then(Value::as_f64)
+            .filter(|m| *m >= 1.0 && m.fract() == 0.0)
+            .map(|m| m as i64);
+        if let Some(m) = m {
+            // k * m within [lo, hi]
+            let k_lo = lo.div_euclid(m) + i64::from(lo.rem_euclid(m) != 0);
+            let k_hi = hi.div_euclid(m);
+            if k_lo <= k_hi {
+                return json!(self.rng.gen_range(k_lo..=k_hi) * m);
             }
+            return json!(k_lo.saturating_mul(m));
         }
 
-        json!(val)
-    }
-
-    fn adjust_int_range_by_hint(
-        &self,
-        hint: &str,
-        schema_min: i64,
-        schema_max: i64,
-        obj: &Map<String, Value>,
-    ) -> (i64, i64) {
-        let h = hint.to_ascii_lowercase();
-        let has_min = obj.contains_key("minimum") || obj.contains_key("exclusiveMinimum");
-        let has_max = obj.contains_key("maximum") || obj.contains_key("exclusiveMaximum");
-
-        if has_min && has_max {
-            return (schema_min, schema_max);
-        }
-
-        match h.as_str() {
-            "age" if !has_max => (schema_min, schema_max.min(99)),
-            "port" if !has_max => (schema_min.max(1024), schema_max.min(65535)),
-            "year" if !has_min => (2000.max(schema_min), schema_max.min(2030)),
-            "quantity" | "qty" | "count" if !has_max => (schema_min, schema_max.min(100)),
-            "rating" | "score" if !has_max => (schema_min, schema_max.min(10)),
-            _ => (schema_min, schema_max),
-        }
-    }
-
-    fn num_as_i64(&self, obj: &Map<String, Value>, key: &str, ex_key: &str, offset: i64) -> i64 {
-        if let Some(v) = obj
-            .get(key)
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            return v;
-        }
-        if let Some(v) = obj
-            .get(ex_key)
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            return v + offset;
-        }
-        0
-    }
-
-    fn num_as_i64_max(
-        &self,
-        obj: &Map<String, Value>,
-        key: &str,
-        ex_key: &str,
-        offset: i64,
-    ) -> i64 {
-        if let Some(v) = obj
-            .get(key)
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            return v;
-        }
-        if let Some(v) = obj
-            .get(ex_key)
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-        {
-            return v - offset;
-        }
-        1000
+        json!(self.rng.gen_range(lo..=hi))
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -961,40 +1108,73 @@ impl<R: Rng> FakeGen<R> {
         if let Some(h) = hint {
             let has_min = obj.contains_key("minimum") || obj.contains_key("exclusiveMinimum");
             let has_max = obj.contains_key("maximum") || obj.contains_key("exclusiveMaximum");
-            if !has_min && !has_max {
+            if !has_min && !has_max && !obj.contains_key("multipleOf") {
                 if let Some(val) = self.gen_number_by_hint(h) {
                     return json!(val);
                 }
             }
         }
 
-        let min = obj
-            .get("minimum")
-            .and_then(Value::as_f64)
-            .or_else(|| {
-                obj.get("exclusiveMinimum")
-                    .and_then(Value::as_f64)
-                    .map(|v| v + 0.01)
-            })
-            .unwrap_or(0.0);
-        let max = obj
-            .get("maximum")
-            .and_then(Value::as_f64)
-            .or_else(|| {
-                obj.get("exclusiveMaximum")
-                    .and_then(Value::as_f64)
-                    .map(|v| v - 0.01)
-            })
-            .unwrap_or(min + 1000.0);
+        let f = |k: &str| obj.get(k).and_then(Value::as_f64);
+        let (ex_lo, ex_hi) = (f("exclusiveMinimum"), f("exclusiveMaximum"));
+        let lo = f("minimum").or(ex_lo);
+        let hi = f("maximum").or(ex_hi);
+        let (lo, hi) = match (lo, hi) {
+            (Some(l), Some(h)) => (l, h),
+            (Some(l), None) => (l, l.max(0.0) + 1000.0),
+            (None, Some(h)) => (if h >= 0.0 { 0.0 } else { h - 1000.0 }, h),
+            (None, None) => (0.0, 1000.0),
+        };
+        let in_range = |v: f64| {
+            v >= lo
+                && v <= hi
+                && ex_lo.map_or(true, |e| v > e)
+                && ex_hi.map_or(true, |e| v < e)
+                && f("minimum").map_or(true, |m| v >= m)
+                && f("maximum").map_or(true, |m| v <= m)
+        };
 
-        let max = if max < min { min + 1.0 } else { max };
+        // multipleOf: pick k * m inside the range.
+        if let Some(m) = f("multipleOf").filter(|m| *m > 0.0) {
+            let k_lo = (lo / m).ceil() as i64;
+            let k_hi = (hi / m).floor() as i64;
+            // Decimals of `m` (e.g. 0.05 -> 2) to strip float noise from k * m.
+            let decimals = format!("{m}").split('.').nth(1).map_or(0, str::len) as i32;
+            let p = 10f64.powi(decimals);
+            for _ in 0..20 {
+                if k_lo > k_hi {
+                    break;
+                }
+                let k = self.rng.gen_range(k_lo..=k_hi) as f64;
+                for v in [(k * m * p).round() / p, k * m] {
+                    // Same check vld uses (`n % m` ~ 0).
+                    if in_range(v) && (v % m).abs() <= f64::EPSILON {
+                        return json!(v);
+                    }
+                }
+            }
+            // Zero is a multiple of everything.
+            if in_range(0.0) {
+                return json!(0.0);
+            }
+        }
 
-        let val = min + self.rng.gen::<f64>() * (max - min);
-
-        // Round to 2 decimal places for nicer output
-        let val = (val * 100.0).round() / 100.0;
-
-        json!(val)
+        if lo > hi {
+            // Unsatisfiable range — best effort, never panic.
+            return json!(lo);
+        }
+        for _ in 0..20 {
+            let val = lo + self.rng.gen::<f64>() * (hi - lo);
+            // Prefer 2 decimals for readability, if that stays in range.
+            let rounded = (val * 100.0).round() / 100.0;
+            if in_range(rounded) {
+                return json!(rounded);
+            }
+            if in_range(val) {
+                return json!(val);
+            }
+        }
+        json!((lo + hi) / 2.0)
     }
 
     /// Generate a realistic float based on field name when no constraints given.
@@ -1471,6 +1651,11 @@ impl<R: Rng> FakeGen<R> {
         let mut required: Vec<String> = Vec::new();
 
         for s in schemas {
+            let resolved = s
+                .get("$ref")
+                .and_then(Value::as_str)
+                .and_then(|r| self.resolve_ref(r));
+            let s = resolved.as_ref().unwrap_or(s);
             if let Some(obj) = s.as_object() {
                 if let Some(props) = obj.get("properties").and_then(Value::as_object) {
                     for (k, v) in props {
@@ -1535,7 +1720,55 @@ fn luhn_check_digit(digits: &[u8]) -> u8 {
     ((10 - (sum % 10)) % 10) as u8
 }
 
+/// Realistic integer range for a field name (applied within the schema range).
+fn int_hint_range(hint: &str) -> Option<(i64, i64)> {
+    Some(match hint.to_ascii_lowercase().as_str() {
+        "age" => (0, 99),
+        "port" => (1024, 65535),
+        "year" => (2000, 2030),
+        "quantity" | "qty" | "count" => (0, 100),
+        "rating" | "score" => (0, 10),
+        _ => return None,
+    })
+}
+
+/// `(minLength, maxLength)` of a string schema.
+fn len_bounds(obj: &Map<String, Value>) -> (Option<usize>, Option<usize>) {
+    let get = |k| obj.get(k).and_then(Value::as_u64).map(|v| v as usize);
+    (get("minLength"), get("maxLength"))
+}
+
+/// Whether `s` (counted in chars, like vld) satisfies the length bounds.
+fn len_ok(s: &str, min: Option<usize>, max: Option<usize>) -> bool {
+    let n = s.chars().count();
+    min.map_or(true, |m| n >= m) && max.map_or(true, |m| n <= m)
+}
+
+/// Pad with `pad` / truncate `s` so its char count lies in `[min, max]`.
+fn fit_len(mut s: String, min: usize, max: Option<usize>, pad: char) -> String {
+    let n = s.chars().count();
+    if n < min {
+        s.extend(std::iter::repeat(pad).take(min - n));
+    }
+    if let Some(mx) = max {
+        if let Some((idx, _)) = s.char_indices().nth(mx) {
+            s.truncate(idx);
+        }
+    }
+    s
+}
+
+fn base64url(data: &[u8]) -> String {
+    base64_encode(data)
+        .trim_end_matches('=')
+        .replace('+', "-")
+        .replace('/', "_")
+}
+
 const LOWER_ALPHA: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
+const UPPER_ALPHA: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ALPHA: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const B64URL_ALPHA: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
 const LOWER_DIGIT: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 const HEX: &[u8] = b"0123456789abcdef";
 const HEX_89AB: &[u8] = b"89ab";
@@ -1627,36 +1860,69 @@ macro_rules! impl_fake {
     ($ty:ty) => {
         impl $crate::FakeData for $ty {
             fn fake() -> Self {
-                let schema = <$ty>::json_schema();
-                $crate::fake_parsed::<$ty>(&schema)
+                $crate::fake_parsed::<$ty>(&$crate::__fake_schema!($ty))
             }
 
             fn fake_many(count: usize) -> Vec<Self> {
-                let schema = <$ty>::json_schema();
-                let mut gen = $crate::FakeGen::new();
+                let schema = $crate::__fake_schema!($ty);
                 (0..count)
-                    .map(|_| {
-                        let val = gen.value(&schema);
-                        <$ty as ::vld::prelude::VldParse>::vld_parse_value(&val)
-                            .expect("vld_fake: generated value failed validation")
-                    })
+                    .map(|_| $crate::fake_parsed::<$ty>(&schema))
                     .collect()
             }
 
             fn fake_seeded(seed: u64) -> Self {
-                let schema = <$ty>::json_schema();
-                let val = $crate::fake_value_seeded(&schema, seed);
-                <$ty as ::vld::prelude::VldParse>::vld_parse_value(&val)
-                    .expect("vld_fake: generated value failed validation")
+                let schema = $crate::__fake_schema!($ty);
+                $crate::parse_or_panic(&$crate::fake_value_seeded(&schema, seed))
             }
 
             fn try_fake() -> Result<Self, ::vld::error::VldError> {
-                let schema = <$ty>::json_schema();
-                $crate::try_fake_parsed::<$ty>(&schema)
+                $crate::try_fake_parsed::<$ty>(&$crate::__fake_schema!($ty))
             }
         }
     };
 }
+
+/// `json_schema()` of `$ty` with its nested schemas embedded under `$defs`,
+/// so the `$ref`s emitted by `vld::nested!` resolve.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __fake_schema {
+    ($ty:ty) => {{
+        #[allow(unused_imports)]
+        use $crate::__VldNestedSchemasFallback as _;
+        $crate::with_nested_defs(<$ty>::json_schema(), <$ty>::__vld_nested_schemas())
+    }};
+}
+
+/// Embed `nested` schemas into `schema` under `$defs`.
+#[doc(hidden)]
+pub fn with_nested_defs(
+    mut schema: Value,
+    nested: Vec<vld::json_schema::NestedSchemaEntry>,
+) -> Value {
+    if let Some(obj) = schema.as_object_mut() {
+        if !nested.is_empty() {
+            let defs = nested
+                .into_iter()
+                .map(|(name, f)| (name.to_string(), f()))
+                .collect();
+            obj.insert("$defs".into(), Value::Object(defs));
+        }
+    }
+    schema
+}
+
+/// Fallback so `impl_fake!` compiles for types without `__vld_nested_schemas`.
+/// An inherent `__vld_nested_schemas` (from `vld::schema!`) always takes
+/// precedence over this trait method.
+#[doc(hidden)]
+pub trait __VldNestedSchemasFallback {
+    fn __vld_nested_schemas() -> Vec<vld::json_schema::NestedSchemaEntry> {
+        Vec::new()
+    }
+}
+
+impl<T: ?Sized> __VldNestedSchemasFallback for T {}
 
 // ──────────────────── prelude ────────────────────────────────────────────
 

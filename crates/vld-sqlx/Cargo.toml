@@ -27,6 +27,7 @@ sqlx08 = { package = "sqlx", version = "0.8", default-features = false, optional
 sqlx09 = { package = "sqlx", version = "0.9", default-features = false, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+vld-integration-common = { path = "../vld-integration-common", version = "0.4.6" }
 
 [dev-dependencies]
 sqlx08 = { package = "sqlx", version = "0.8", features = ["sqlite", "runtime-tokio"] }

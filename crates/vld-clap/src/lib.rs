@@ -74,20 +74,7 @@ impl VldClapError {
             ErrorSource::Validation(e) => e
                 .issues
                 .iter()
-                .map(|i| {
-                    let path = i
-                        .path
-                        .iter()
-                        .map(|p| p.to_string())
-                        .collect::<Vec<_>>()
-                        .join(".");
-                    let field = path.trim_start_matches('.');
-                    if field.is_empty() {
-                        format!("  {}", i.message)
-                    } else {
-                        format!("  --{}: {}", field, i.message)
-                    }
-                })
+                .map(|i| format!("  {}", issue_line(i)))
                 .collect::<Vec<_>>()
                 .join("\n"),
             ErrorSource::Serialization(msg) => format!("  {}", msg),
@@ -114,24 +101,22 @@ impl std::error::Error for VldClapError {
 // Core validation functions
 // ---------------------------------------------------------------------------
 
+/// `--flag-name: message`, using clap's default kebab-case flag names
+/// (`max_connections` -> `--max-connections`, nested `user.email` -> `--user.email`).
+fn issue_line(i: &vld::error::ValidationIssue) -> String {
+    let field = vld_integration_common::format_path(&i.path).replace('_', "-");
+    if field.is_empty() {
+        i.message.clone()
+    } else {
+        format!("--{}: {}", field, i.message)
+    }
+}
+
 fn make_error(e: vld::error::VldError) -> VldClapError {
     let summary = e
         .issues
         .iter()
-        .map(|i| {
-            let path = i
-                .path
-                .iter()
-                .map(|p| p.to_string())
-                .collect::<Vec<_>>()
-                .join(".");
-            let field = path.trim_start_matches('.');
-            if field.is_empty() {
-                i.message.clone()
-            } else {
-                format!("--{}: {}", field, i.message)
-            }
-        })
+        .map(issue_line)
         .collect::<Vec<_>>()
         .join("\n       ");
     VldClapError {

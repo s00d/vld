@@ -1,5 +1,3 @@
-use std::io::Write;
-
 // -- Shared schema --
 
 vld::schema! {
@@ -27,6 +25,7 @@ vld::schema! {
 #[cfg(feature = "config-rs")]
 mod config_rs_tests {
     use super::*;
+    use std::io::Write;
     use vld_config::{from_builder, from_config, from_value, VldConfigError};
 
     #[test]
@@ -178,6 +177,40 @@ mod config_rs_tests {
         let err = from_value::<AppSettings>(&json).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("validation error"));
+    }
+
+    fn env(vars: &[(&str, &str)]) -> config::Environment {
+        let map = vars
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        config::Environment::with_prefix("APP").source(Some(map))
+    }
+
+    #[test]
+    fn env_numbers_need_try_parsing() {
+        let vars = [
+            ("APP_HOST", "h"),
+            ("APP_PORT", "8080"),
+            ("APP_DEBUG", "true"),
+        ];
+        let s: AppSettings =
+            from_builder(config::Config::builder().add_source(env(&vars).try_parsing(true)))
+                .unwrap();
+        assert_eq!(s.port, 8080);
+        assert!(s.debug);
+        // Without try_parsing env values stay strings and fail number()/boolean().
+        assert!(
+            from_builder::<AppSettings>(config::Config::builder().add_source(env(&vars))).is_err()
+        );
+    }
+
+    #[test]
+    fn validation_error_has_source() {
+        use std::error::Error;
+        let err = from_value::<AppSettings>(&serde_json::json!({})).unwrap_err();
+        assert!(err.source().is_some());
+        assert!(VldConfigError::Source("x".into()).source().is_none());
     }
 
     #[test]

@@ -338,15 +338,15 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
     assert_eq!(js["properties"]["title"]["description"], "ticket title");
     assert_eq!(js["properties"]["title"]["maxLength"], 120);
     assert_eq!(js["properties"]["priority"]["type"], "string");
-    assert!(js["properties"]["labels"]["oneOf"].is_array());
-    assert!(js["properties"]["due_at"]["oneOf"].is_array());
+    assert!(union(&js["properties"]["labels"]).is_array());
+    assert!(union(&js["properties"]["due_at"]).is_array());
     assert_eq!(js["properties"]["due_at"]["description"], "ISO date");
-    assert!(js["properties"]["reporter"]["oneOf"].is_array());
+    assert!(union(&js["properties"]["reporter"]).is_array());
     assert_eq!(
         js["properties"]["reporter"]["description"],
         "reporter email"
     );
-    assert!(js["properties"]["meta"]["oneOf"].is_array());
+    assert!(union(&js["properties"]["meta"]).is_array());
 
     let schemars = vld_to_schemars(&js);
     assert_eq!(schemars.get("type").unwrap(), "object");
@@ -363,8 +363,8 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
         vec!["title", "body", "reporter"]
     );
     assert_eq!(generated_json["properties"]["title"]["minLength"], 3);
-    assert!(generated_json["properties"]["labels"]["oneOf"].is_array());
-    assert!(generated_json["properties"]["reporter"]["oneOf"].is_array());
+    assert!(union(&generated_json["properties"]["labels"]).is_array());
+    assert!(union(&generated_json["properties"]["reporter"]).is_array());
 
     let derive_js = AideDerivePatch::json_schema();
     assert_eq!(
@@ -372,10 +372,10 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
         vec!["title", "cursor"],
         "derive: optional/nullish/default omitted, nullable kept"
     );
-    assert!(derive_js["properties"]["body"]["oneOf"].is_array());
+    assert!(union(&derive_js["properties"]["body"]).is_array());
     assert_eq!(derive_js["properties"]["priority"]["type"], "string");
-    assert!(derive_js["properties"]["assignee"]["oneOf"].is_array());
-    assert!(derive_js["properties"]["cursor"]["oneOf"].is_array());
+    assert!(union(&derive_js["properties"]["assignee"]).is_array());
+    assert!(union(&derive_js["properties"]["cursor"]).is_array());
 
     let mut gen2 = schemars::SchemaGenerator::default();
     let derive_generated = <AideDerivePatch as JsonSchema>::json_schema(&mut gen2);
@@ -409,10 +409,19 @@ impl_json_schema!(AideOrder);
 
 #[test]
 fn nested_schema_ref_in_schemars() {
-    let mut gen = schemars::SchemaGenerator::default();
+    // aide-style generator: definitions under #/components/schemas/
+    let mut gen = schemars::generate::SchemaSettings::draft07()
+        .with(|s| s.definitions_path = "#/components/schemas/".into())
+        .into_generator();
     let schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut gen);
     let props = schema.get("properties").unwrap();
     assert_eq!(props["address"]["$ref"], "#/components/schemas/AideAddress");
+
+    // default generator: refs follow its definitions path
+    let mut gen = schemars::SchemaGenerator::default();
+    let schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut gen);
+    let props = schema.get("properties").unwrap();
+    assert_eq!(props["address"]["$ref"], "#/$defs/AideAddress");
 }
 
 #[test]
@@ -473,4 +482,13 @@ fn transitive_nested_schema_registered_in_definitions() {
         "grandchild AideBreak missing: {:?}",
         defs.keys().collect::<Vec<_>>()
     );
+}
+
+/// Core emits `anyOf` for optional/nullable/union (older core: `oneOf`).
+fn union(v: &serde_json::Value) -> &serde_json::Value {
+    if v["anyOf"].is_array() {
+        &v["anyOf"]
+    } else {
+        &v["oneOf"]
+    }
 }

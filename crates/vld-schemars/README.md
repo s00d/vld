@@ -147,7 +147,20 @@ let user = User::vld_parse_value(&json).unwrap();
 `type`, `required`, `properties`, `items`, `minLength`, `maxLength`,
 `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `pattern`,
 `format`, `enum`, `const`, `minItems`, `maxItems`, `uniqueItems`,
-`minProperties`, `maxProperties`, `multipleOf`, `oneOf`, `anyOf`, `allOf`, `not`.
+`minProperties`, `maxProperties`, `multipleOf`, `oneOf`, `anyOf`, `allOf`, `not`,
+`$ref` (local, resolved against the root schema), `additionalProperties`
+(`false` or a schema), `patternProperties`, `prefixItems` / tuple `items`.
+
+String lengths count Unicode characters; `multipleOf` tolerates float rounding;
+an uncompilable `pattern` is reported as a validation issue; `format: "uri"`
+accepts any RFC 3986 scheme (`url` stays http/https).
+
+### Nested vld schemas
+
+`impl_json_schema!` registers `vld::nested!` types in the generator's
+definitions and rewrites vld's `#/components/schemas/X` refs to the generator's
+definitions path (`#/$defs/X` by default, `#/components/schemas/X` with
+`SchemaSettings::openapi3()`), so standalone root schemas have no dangling refs.
 
 ## Introspection
 

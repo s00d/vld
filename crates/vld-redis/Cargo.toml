@@ -17,6 +17,8 @@ exclude = [".idea/", "tests/", "examples/"]
 default = ["redis-0"]
 redis-0 = ["dep:redis"]
 redis-1 = ["dep:redis1"]
+# Async wrapper `AsyncRedisConn` over `redis::aio::ConnectionLike` (enables redis tokio-comp).
+aio = ["redis?/aio", "redis1?/aio", "redis?/tokio-comp", "redis1?/tokio-comp"]
 
 [dependencies]
 vld = { workspace = true, features = ["serialize"] }
@@ -27,6 +29,7 @@ redis1 = { package = "redis", version = ">=1, <2", optional = true }
 
 [dev-dependencies]
 vld = { workspace = true, features = ["serialize"] }
+tokio = { version = "1", features = ["rt", "macros"] }
 
 [[example]]
 name = "redis_basic"

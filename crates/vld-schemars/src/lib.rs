@@ -174,7 +174,8 @@ mod validator;
 /// string constraints (minLength, maxLength, pattern, format),
 /// number constraints (minimum, maximum, exclusiveMinimum, exclusiveMaximum),
 /// array constraints (minItems, maxItems), enum values, and recursive
-/// validation of `properties` and `items`.
+/// validation of `properties`, `patternProperties`, `additionalProperties`,
+/// `items` / `prefixItems`, and local `$ref`s (resolved against `schema`).
 ///
 /// ```rust
 /// let schema = serde_json::json!({
@@ -192,7 +193,15 @@ mod validator;
 /// assert!(vld_schemars::validate_with_schema(&schema, &invalid).is_err());
 /// ```
 pub fn validate_with_schema(schema: &Value, value: &Value) -> Result<(), vld::error::VldError> {
-    validator::validate_value_against_schema(schema, value, &[])
+    validator::validate_value_against_schema(
+        schema,
+        value,
+        &[],
+        validator::Ctx {
+            root: schema,
+            depth: 0,
+        },
+    )
 }
 
 /// Validate a `serde_json::Value` against a `schemars::Schema`.
@@ -577,28 +586,7 @@ pub fn overlay_constraints(base: &Value, overlay: &Value) -> Value {
 #[macro_export]
 macro_rules! impl_json_schema {
     ($ty:ty) => {
-        impl $crate::schemars::JsonSchema for $ty {
-            fn schema_name() -> ::std::borrow::Cow<'static, str> {
-                ::std::borrow::Cow::Borrowed(stringify!($ty))
-            }
-
-            fn schema_id() -> ::std::borrow::Cow<'static, str> {
-                ::std::borrow::Cow::Owned(concat!(module_path!(), "::", stringify!($ty)).to_owned())
-            }
-
-            fn json_schema(
-                gen: &mut $crate::schemars::SchemaGenerator,
-            ) -> $crate::schemars::Schema {
-                #[allow(unused_imports)]
-                use $crate::__VldNestedSchemasFallback as _;
-                for (name, schema_fn) in <$ty>::__vld_nested_schemas() {
-                    gen.definitions_mut()
-                        .entry(name.to_string())
-                        .or_insert_with(|| schema_fn());
-                }
-                $crate::vld_to_schemars(&<$ty>::json_schema())
-            }
-        }
+        $crate::impl_json_schema!($ty, stringify!($ty));
     };
     ($ty:ty, $name:expr) => {
         impl $crate::schemars::JsonSchema for $ty {
@@ -613,23 +601,65 @@ macro_rules! impl_json_schema {
             fn json_schema(
                 gen: &mut $crate::schemars::SchemaGenerator,
             ) -> $crate::schemars::Schema {
+                // Inherent `__vld_nested_schemas` (from `vld::schema!` / derive) wins
+                // over this trait fallback in `<T>::f()` path resolution.
                 #[allow(unused_imports)]
                 use $crate::__VldNestedSchemasFallback as _;
-                for (name, schema_fn) in <$ty>::__vld_nested_schemas() {
-                    gen.definitions_mut()
-                        .entry(name.to_string())
-                        .or_insert_with(|| schema_fn());
-                }
-                $crate::vld_to_schemars(&<$ty>::json_schema())
+                $crate::__vld_json_schema(gen, <$ty>::json_schema(), <$ty>::__vld_nested_schemas())
             }
         }
     };
 }
 
+/// Register nested vld schemas in the generator and rewrite vld's
+/// `#/components/schemas/X` refs to the generator's definitions path.
+#[doc(hidden)]
+pub fn __vld_json_schema(
+    gen: &mut schemars::SchemaGenerator,
+    mut root: Value,
+    nested: Vec<vld::json_schema::NestedSchemaEntry>,
+) -> schemars::Schema {
+    let path = &gen.settings().definitions_path;
+    let path = path.strip_prefix('#').unwrap_or(path);
+    let prefix = format!("#{}/", path.strip_suffix('/').unwrap_or(path));
+    for (name, schema_fn) in nested {
+        let mut schema = schema_fn();
+        rewrite_refs(&mut schema, &prefix);
+        gen.definitions_mut()
+            .entry(name.to_string())
+            .or_insert(schema);
+    }
+    rewrite_refs(&mut root, &prefix);
+    vld_to_schemars(&root)
+}
+
+/// Point local refs (`#/components/schemas/X`, `#/$defs/X`, `#/definitions/X`)
+/// at `prefix` (e.g. `#/$defs/`).
+fn rewrite_refs(value: &mut Value, prefix: &str) {
+    match value {
+        Value::Object(map) => {
+            for (key, v) in map.iter_mut() {
+                match v {
+                    Value::String(r) if key == "$ref" => {
+                        let name = ["#/components/schemas/", "#/$defs/", "#/definitions/"]
+                            .iter()
+                            .find_map(|p| r.strip_prefix(p));
+                        if let Some(name) = name {
+                            *r = format!("{prefix}{name}");
+                        }
+                    }
+                    _ => rewrite_refs(v, prefix),
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(|v| rewrite_refs(v, prefix)),
+        _ => {}
+    }
+}
+
 #[doc(hidden)]
 pub trait __VldNestedSchemasFallback {
-    #[allow(clippy::type_complexity)]
-    fn __vld_nested_schemas() -> Vec<(&'static str, fn() -> serde_json::Value)> {
+    fn __vld_nested_schemas() -> Vec<vld::json_schema::NestedSchemaEntry> {
         Vec::new()
     }
 }

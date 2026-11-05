@@ -124,8 +124,24 @@ vld_sea::validate_model::<UserInput, _>(&input)?;
 
 `active_model_to_json` converts an ActiveModel to a JSON object. Only `Set` and `Unchanged` fields are included; `NotSet` fields are omitted.
 
-Supported SQL types: `bool`, `i8`–`i64`, `u8`–`u64`, `f32`, `f64`, `String`, `char`.
-Feature-gated types (chrono, uuid, etc.) are mapped to `null`.
+Always supported: `bool`, `i8`–`i64`, `u8`–`u64`, `f32`, `f64`, `String`, `char`,
+bytes (array of `u8`), ActiveEnum (sea-orm 2, as string).
+
+Feature-gated column types need the matching **vld-sea** feature (it also enables
+the SeaORM feature); values mirror what `serde_json` produces for the Rust type:
+
+| vld-sea feature | JSON |
+|---|---|
+| `with-json` | the JSON value as-is |
+| `with-chrono` | `"2024-02-29"`, `"12:30:00"`, `"2024-02-29T12:30:00"`, RFC 3339 for zoned datetimes |
+| `with-uuid` | hyphenated string |
+| `with-rust_decimal`, `with-bigdecimal` | decimal string, e.g. `"12.50"` |
+
+```toml
+vld-sea = { version = "0.5", features = ["with-chrono", "with-uuid"] }
+```
+
+Without the feature (and for `time`/array/other types) the value becomes `null`.
 
 ## Running Examples
 

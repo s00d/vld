@@ -1158,3 +1158,234 @@ fn typed_fake_field_access() {
     let _email: &str = &user.email;
     let _age: i64 = user.age;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  $ref resolution (vld::nested! emits `#/components/schemas/X`)
+// ═══════════════════════════════════════════════════════════════════════════
+
+vld::schema! {
+    #[derive(Debug, Clone, serde::Serialize)]
+    pub struct RefAddress {
+        pub city: String => vld::string().min(1).max(100),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug, Clone, serde::Serialize)]
+    pub struct RefUser {
+        pub name:    String     => vld::string().min(2).max(50),
+        pub address: RefAddress => vld::nested!(RefAddress),
+    }
+}
+
+vld_fake::impl_fake!(RefUser);
+
+#[test]
+fn typed_fake_resolves_nested_ref() {
+    assert!(RefUser::json_schema()["properties"]["address"]["$ref"].is_string());
+    for _ in 0..20 {
+        let u = RefUser::fake();
+        assert!(!u.address.city.is_empty());
+    }
+    let _ = RefUser::fake_seeded(7);
+    assert_eq!(RefUser::fake_many(3).len(), 3);
+}
+
+#[test]
+fn raw_ref_resolves_defs_and_components() {
+    let target = json!({"type": "object", "required": ["n"], "properties": {"n": {"type": "integer", "minimum": 1, "maximum": 3}}});
+    for (root, r) in [
+        ("$defs", "#/$defs/T"),
+        ("definitions", "#/definitions/T"),
+        ("$defs", "#/components/schemas/T"),
+    ] {
+        let mut schema =
+            json!({"type": "object", "required": ["t"], "properties": {"t": {"$ref": r}}});
+        schema[root] = json!({ "T": target });
+        let v = fake_value(&schema);
+        let n = v["t"]["n"].as_i64().expect("ref resolved to object");
+        assert!((1..=3).contains(&n));
+    }
+    let doc = json!({
+        "components": {"schemas": {"T": target}},
+        "$ref": "#/components/schemas/T"
+    });
+    assert!(fake_value(&doc)["n"].is_i64());
+}
+
+#[test]
+fn type_array_uses_non_null_type() {
+    let schema = json!({"type": ["integer", "null"], "minimum": 5, "maximum": 6});
+    for _ in 0..10 {
+        let n = fake_value(&schema).as_i64().unwrap();
+        assert!((5..=6).contains(&n));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Generated values must pass the very schema they were generated from
+// ═══════════════════════════════════════════════════════════════════════════
+
+fn assert_fakes<S>(s: S)
+where
+    S: vld::schema::VldSchema + vld::json_schema::JsonSchema,
+{
+    let schema = s.json_schema();
+    for _ in 0..200 {
+        let v = fake_value(&schema);
+        assert!(
+            s.parse_value(&v).is_ok(),
+            "schema {schema} produced invalid {v}: {:?}",
+            s.parse_value(&v).err()
+        );
+    }
+}
+
+#[test]
+fn every_core_string_format_is_generated_validly() {
+    let s = vld::string;
+    for schema in [
+        s().email(),
+        s().url(),
+        s().url_strict(),
+        s().uri(),
+        s().uuid(),
+        s().uuid_v1(),
+        s().uuid_v4(),
+        s().uuid_v7(),
+        s().ip(),
+        s().ipv4(),
+        s().ipv6(),
+        s().cidr(),
+        s().mac(),
+        s().hex(),
+        s().slug(),
+        s().color(),
+        s().currency_code(),
+        s().country_code(),
+        s().locale(),
+        s().cron(),
+        s().credit_card(),
+        s().phone(),
+        s().phone_e164_strict(),
+        s().semver(),
+        s().semver_full(),
+        s().jwt(),
+        s().ascii(),
+        s().alpha(),
+        s().alphanumeric(),
+        s().lowercase(),
+        s().uppercase(),
+        s().iso_date(),
+        s().iso_datetime(),
+        s().iso_time(),
+        s().hostname(),
+        s().cuid2(),
+        s().ulid(),
+        s().nanoid(),
+        s().emoji(),
+    ] {
+        assert_fakes(schema);
+    }
+}
+
+#[test]
+fn free_length_formats_respect_min_max_length() {
+    let s = vld::string;
+    for schema in [
+        s().hex().min(40).max(40),
+        s().alpha().min(1).max(3),
+        s().alphanumeric().min(50),
+        s().lowercase().max(2),
+        s().uppercase().min(30).max(31),
+        s().email().min(40),
+        s().ascii().min(3).max(4),
+    ] {
+        assert_fakes(schema);
+    }
+}
+
+#[test]
+fn non_string_formats_are_generated_validly() {
+    assert_fakes(vld::bytes().base64().min_len(4).max_len(6));
+    assert_fakes(vld::bytes().base64url());
+    assert_fakes(vld::bytes().hex().len(3));
+    assert_fakes(vld::decimal());
+    assert_fakes(vld::ip_network());
+    assert_fakes(vld::socket_addr());
+    assert_fakes(vld::path());
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  pattern
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn pattern_is_honoured() {
+    let schema =
+        json!({"type": "string", "pattern": r"^(red|green)/[0-9a-f]{4}$", "maxLength": 10});
+    let re = vld::regex_lite::Regex::new(r"^(red|green)/[0-9a-f]{4}$").unwrap();
+    for _ in 0..100 {
+        let v = fake_value(&schema);
+        let s = v.as_str().unwrap();
+        assert!(re.is_match(s) && s.len() <= 10, "{s}");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Multi-byte strings: lengths count chars, never split a char
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn hint_truncation_is_char_safe() {
+    // CITIES contains "São Paulo"; max(2) used to split 'ã' and panic.
+    let schema = json!({"type": "string", "maxLength": 2, "minLength": 2});
+    let mut gen = FakeGen::new();
+    for _ in 0..2000 {
+        let v = gen.value_with_hint(&schema, Some("city"));
+        assert_eq!(v.as_str().unwrap().chars().count(), 2);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Numeric ranges: one-sided bounds, hints outside range, multipleOf
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn integer_one_sided_and_hinted_ranges_never_panic() {
+    let n = || vld::number().int();
+    assert_fakes(n().min(5000)); // default max 1000 used to swap with min
+    assert_fakes(n().max(-10)); // max without min
+    assert_fakes(n().gt(7)); // exclusive only
+    assert_fakes(n().multiple_of(7).min(5000));
+    assert_fakes(n().multiple_of(5).max(-12));
+    let mut gen = FakeGen::new();
+    for (hint, schema) in [
+        ("year", json!({"type": "integer", "maximum": 1990})),
+        ("age", json!({"type": "integer", "minimum": 150})),
+        ("port", json!({"type": "integer", "maximum": 80})),
+        ("count", json!({"type": "integer", "minimum": 500})),
+    ] {
+        let lo = schema["minimum"].as_i64().unwrap_or(i64::MIN);
+        let hi = schema["maximum"].as_i64().unwrap_or(i64::MAX);
+        for _ in 0..200 {
+            let v = gen.value_with_hint(&schema, Some(hint)).as_i64().unwrap();
+            assert!(lo <= v && v <= hi, "{hint}: {v}");
+        }
+    }
+    // Hints still narrow a half-open range.
+    let year = gen.value_with_hint(&json!({"type": "integer", "minimum": 1}), Some("year"));
+    assert!((2000..=2030).contains(&year.as_i64().unwrap()));
+}
+
+#[test]
+fn float_multiple_of_and_tiny_ranges() {
+    assert_fakes(vld::number().multiple_of(0.25).min(1.0).max(3.0));
+    assert_fakes(vld::number().multiple_of(0.5));
+    assert_fakes(vld::number().multiple_of(3.0).min(10.0).max(20.0));
+    // Range narrower than the 2-decimal rounding step.
+    assert_fakes(vld::number().min(0.001).max(0.002));
+    assert_fakes(vld::number().gt(0.0).lt(0.001));
+    assert_fakes(vld::number().max(-5.5));
+    assert_fakes(vld::number().min(10_000.0));
+}

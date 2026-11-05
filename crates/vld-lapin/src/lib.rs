@@ -12,8 +12,9 @@
 //!
 //! - publish helper: `publish`
 //! - get/decode helpers: `basic_get`, `decode_bytes`, `decode_delivery`, `decode_get`
-//! - ack helpers: `ack_decode`, `nack_decode`, `reject_decode`
-//! - get+ack helpers: `ack_decode_get`, `nack_decode_get`, `reject_decode_get`
+//! - settle helpers: `ack_decode` (ack when valid), `nack_decode` / `reject_decode`
+//!   (nack/reject when invalid, so poison messages are not left unacked)
+//! - the same for `basic_get` messages: `ack_decode_get`, `nack_decode_get`, `reject_decode_get`
 //!
 //! All other native `lapin::Channel` methods are still available through deref.
 
@@ -69,13 +70,12 @@ impl LapinChannel {
         serde_json::to_vec(&json).map_err(|e| VldLapinError::Serialization(e.to_string()))
     }
 
+    /// Decode + validate a JSON payload.
     pub fn decode_bytes<T>(&self, payload: &[u8]) -> Result<T, VldLapinError>
     where
         T: vld::schema::VldParse,
     {
-        let value: serde_json::Value = serde_json::from_slice(payload)
-            .map_err(|e| VldLapinError::Deserialization(e.to_string()))?;
-        <T as vld::schema::VldParse>::vld_parse_value(&value).map_err(VldLapinError::Validation)
+        decode(payload)
     }
 
     #[allow(clippy::useless_conversion)]
@@ -138,7 +138,7 @@ impl LapinChannel {
     where
         T: vld::schema::VldParse,
     {
-        self.decode_bytes(&delivery.data)
+        decode(&delivery.data)
     }
 
     pub fn decode_get<T>(
@@ -148,9 +148,14 @@ impl LapinChannel {
     where
         T: vld::schema::VldParse,
     {
-        self.decode_delivery(message)
+        decode(&message.data)
     }
 
+    /// Decode + validate, then **ack on success**.
+    ///
+    /// On a decode/validation error the delivery is left unsettled and the
+    /// error is returned (use [`nack_decode`](Self::nack_decode) /
+    /// [`reject_decode`](Self::reject_decode) to drop poison messages).
     pub async fn ack_decode<T>(
         &self,
         delivery: &lapin::message::Delivery,
@@ -160,10 +165,16 @@ impl LapinChannel {
         T: vld::schema::VldParse,
     {
         let parsed = self.decode_delivery(delivery)?;
-        delivery.ack(options).await.map_err(VldLapinError::Lapin)?;
+        delivery.ack(options).await?;
         Ok(parsed)
     }
 
+    /// Decode + validate, and **nack the delivery if it is invalid**.
+    ///
+    /// - invalid payload: the delivery is nacked with `options`, then the
+    ///   decode/validation error is returned (a nack failure is returned instead);
+    /// - valid payload: the value is returned and the delivery is left
+    ///   unsettled — ack it after processing.
     pub async fn nack_decode<T>(
         &self,
         delivery: &lapin::message::Delivery,
@@ -172,11 +183,12 @@ impl LapinChannel {
     where
         T: vld::schema::VldParse,
     {
-        let parsed = self.decode_delivery(delivery)?;
-        delivery.nack(options).await.map_err(VldLapinError::Lapin)?;
-        Ok(parsed)
+        decode_or_settle(&delivery.data, || delivery.nack(options)).await
     }
 
+    /// Decode + validate, and **reject the delivery if it is invalid**.
+    ///
+    /// Same contract as [`nack_decode`](Self::nack_decode), using `basic.reject`.
     pub async fn reject_decode<T>(
         &self,
         delivery: &lapin::message::Delivery,
@@ -185,14 +197,10 @@ impl LapinChannel {
     where
         T: vld::schema::VldParse,
     {
-        let parsed = self.decode_delivery(delivery)?;
-        delivery
-            .reject(options)
-            .await
-            .map_err(VldLapinError::Lapin)?;
-        Ok(parsed)
+        decode_or_settle(&delivery.data, || delivery.reject(options)).await
     }
 
+    /// [`ack_decode`](Self::ack_decode) for a `basic_get` message.
     pub async fn ack_decode_get<T>(
         &self,
         message: &lapin::message::BasicGetMessage,
@@ -204,6 +212,7 @@ impl LapinChannel {
         self.ack_decode(message, options).await
     }
 
+    /// [`nack_decode`](Self::nack_decode) for a `basic_get` message.
     pub async fn nack_decode_get<T>(
         &self,
         message: &lapin::message::BasicGetMessage,
@@ -215,6 +224,7 @@ impl LapinChannel {
         self.nack_decode(message, options).await
     }
 
+    /// [`reject_decode`](Self::reject_decode) for a `basic_get` message.
     pub async fn reject_decode_get<T>(
         &self,
         message: &lapin::message::BasicGetMessage,
@@ -224,6 +234,29 @@ impl LapinChannel {
         T: vld::schema::VldParse,
     {
         self.reject_decode(message, options).await
+    }
+}
+
+fn decode<T: vld::schema::VldParse>(payload: &[u8]) -> Result<T, VldLapinError> {
+    let value: serde_json::Value = serde_json::from_slice(payload)
+        .map_err(|e| VldLapinError::Deserialization(e.to_string()))?;
+    T::vld_parse_value(&value).map_err(VldLapinError::Validation)
+}
+
+/// Decode `payload`; if that fails, run `settle` (nack/reject) before returning the error.
+/// (`settle` output is `()` on lapin 2 and `bool` on lapin 3/4, hence `R`.)
+async fn decode_or_settle<T, R, F, Fut>(payload: &[u8], settle: F) -> Result<T, VldLapinError>
+where
+    T: vld::schema::VldParse,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<R, lapin::Error>>,
+{
+    match decode(payload) {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            settle().await?;
+            Err(e)
+        }
     }
 }
 
@@ -293,4 +326,49 @@ macro_rules! impl_to_lapin {
 pub mod prelude {
     pub use crate::{impl_to_lapin, LapinChannel, VldLapinError};
     pub use vld::prelude::*;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    vld::schema! {
+        #[derive(Debug)]
+        struct Evt { event: String => vld::string().min(1) }
+    }
+
+    fn run<F: std::future::Future>(f: F) -> F::Output {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(f)
+    }
+
+    #[test]
+    fn invalid_payload_is_settled_then_error_returned() {
+        let settled = Cell::new(0);
+        let settle = || {
+            settled.set(settled.get() + 1);
+            async { Ok::<_, lapin::Error>(()) }
+        };
+        let r: Result<Evt, _> = run(decode_or_settle(br#"{"event":""}"#, settle));
+        assert!(matches!(r, Err(VldLapinError::Validation(_))));
+        assert_eq!(settled.get(), 1);
+
+        let r: Result<Evt, _> = run(decode_or_settle(b"not json", settle));
+        assert!(matches!(r, Err(VldLapinError::Deserialization(_))));
+        assert_eq!(settled.get(), 2);
+    }
+
+    #[test]
+    fn valid_payload_is_not_settled() {
+        let settled = Cell::new(false);
+        let r: Result<Evt, _> = run(decode_or_settle(br#"{"event":"x"}"#, || {
+            settled.set(true);
+            async { Ok::<_, lapin::Error>(()) }
+        }));
+        assert_eq!(r.unwrap().event, "x");
+        assert!(!settled.get());
+    }
 }

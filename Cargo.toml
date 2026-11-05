@@ -2,6 +2,7 @@
 members = [
     ".",
     "crates/vld-derive",
+    "crates/vld-integration-common",
     "crates/vld-axum",
     "crates/vld-actix",
     "crates/vld-ts",
@@ -46,6 +47,7 @@ homepage = "https://github.com/s00d/vld"
 vld = { path = ".", version = "0.4.6" }
 vld-derive = { path = "crates/vld-derive", version = "0.4.6" }
 vld-http-common = { path = "crates/vld-http-common", version = "0.4.6" }
+vld-integration-common = { path = "crates/vld-integration-common", version = "0.4.6" }
 vld-utoipa = { path = "crates/vld-utoipa", version = "0.4.6" }
 
 # Shared external

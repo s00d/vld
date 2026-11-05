@@ -143,7 +143,7 @@ use vld::schema::VldParse;
 /// Single validation issue, serialised for the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TauriIssue {
-    /// JSON-path of the failing field, e.g. `.name`.
+    /// Path of the failing field, e.g. `name`, `user.email`, `items[0]`.
     pub path: String,
     /// Human-readable error message.
     pub message: String,
@@ -159,7 +159,7 @@ pub struct TauriIssue {
 /// {
 ///   "error": "Validation failed",
 ///   "issues": [
-///     { "path": ".name", "message": "String must be at least 2 characters" }
+///     { "path": "name", "message": "String must be at least 2 characters" }
 ///   ]
 /// }
 /// ```
@@ -174,21 +174,9 @@ pub struct VldTauriError {
 impl VldTauriError {
     /// Create from a [`VldError`](vld::error::VldError).
     pub fn from_vld(e: &vld::error::VldError) -> Self {
-        let issues = e
-            .issues
-            .iter()
-            .map(|issue| {
-                let path: String = issue
-                    .path
-                    .iter()
-                    .map(|p| p.to_string())
-                    .collect::<Vec<_>>()
-                    .join(".");
-                TauriIssue {
-                    path,
-                    message: issue.message.clone(),
-                }
-            })
+        let issues = vld_integration_common::flatten_issues(e)
+            .into_iter()
+            .map(|(path, message)| TauriIssue { path, message })
             .collect();
         Self {
             error: "Validation failed".into(),
@@ -517,18 +505,9 @@ impl<'de, T: VldParse> Deserialize<'de> for VldEvent<T> {
 // ---------------------------------------------------------------------------
 
 fn format_vld_error_inline(e: &vld::error::VldError) -> String {
-    let issues: Vec<String> = e
-        .issues
-        .iter()
-        .map(|i| {
-            let path: String = i
-                .path
-                .iter()
-                .map(|p| p.to_string())
-                .collect::<Vec<_>>()
-                .join(".");
-            format!("{path}: {}", i.message)
-        })
+    let issues: Vec<String> = vld_integration_common::flatten_issues(e)
+        .into_iter()
+        .map(|(path, message)| format!("{path}: {message}"))
         .collect();
     format!("Validation failed: {}", issues.join("; "))
 }

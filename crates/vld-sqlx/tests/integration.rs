@@ -117,6 +117,7 @@ fn validate_insert_multiple_errors() {
 // ========================= Tests: validate_update / validate_row =============
 
 #[test]
+#[allow(deprecated)]
 fn validate_update_works() {
     let user = NewUser {
         name: "Updated".into(),
@@ -513,4 +514,26 @@ async fn vld_int_encode_decode() {
 
     let decoded: VldInt<AgeFieldSchema> = row.get("age");
     assert_eq!(decoded.get(), 30);
+}
+
+#[tokio::test]
+async fn vld_int_decodes_small_integer_columns() {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    sqlx::query("CREATE TABLE t (a INT4 NOT NULL, b SMALLINT NOT NULL)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO t (a, b) VALUES (?, ?)")
+        .bind(VldInt::<AgeFieldSchema>::new(30).unwrap())
+        .bind(VldInt::<AgeFieldSchema>::new(7).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let row = sqlx::query("SELECT a, b FROM t")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let a: VldInt<AgeFieldSchema> = row.try_get("a").unwrap();
+    let b: VldInt<AgeFieldSchema> = row.try_get("b").unwrap();
+    assert_eq!((a.get(), b.get()), (30, 7));
 }

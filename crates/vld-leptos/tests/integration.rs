@@ -141,8 +141,8 @@ fn validate_invalid_name() {
         email: "alice@example.com".into(),
     };
     let err = validate::<UserSchema, _>(&args).unwrap_err();
-    assert!(err.has_field_error(".name"));
-    assert!(!err.has_field_error(".email"));
+    assert!(err.has_field_error("name"));
+    assert!(!err.has_field_error("email"));
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn validate_invalid_email() {
         email: "bad".into(),
     };
     let err = validate::<UserSchema, _>(&args).unwrap_err();
-    assert!(err.has_field_error(".email"));
+    assert!(err.has_field_error("email"));
 }
 
 #[test]
@@ -162,8 +162,8 @@ fn validate_multiple_errors() {
         email: "bad".into(),
     };
     let err = validate::<UserSchema, _>(&args).unwrap_err();
-    assert!(err.has_field_error(".name"));
-    assert!(err.has_field_error(".email"));
+    assert!(err.has_field_error("name"));
+    assert!(err.has_field_error("email"));
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn validate_value_ok() {
 fn validate_value_err() {
     let json = serde_json::json!({ "name": "A", "email": "a@b.com" });
     let err = vld_leptos::validate_value::<UserSchema>(&json).unwrap_err();
-    assert!(err.has_field_error(".name"));
+    assert!(err.has_field_error("name"));
 }
 
 // ===================== check_field ===========================================

@@ -26,10 +26,11 @@ perfect for unit tests, property-based testing, seed scripts, and demos.
 
 ### Supported JSON Schema features
 
-- **Types**: `string`, `integer`, `number`, `boolean`, `array`, `object`, `null`
-- **String formats**: `email`, `uuid`, `url`/`uri`, `ipv4`, `ipv6`, `hostname`, `date`, `time`, `date-time`, `base64`, `cuid2`, `ulid`, `nanoid`, `emoji`, `phone`, `credit-card`, `mac-address`, `hex-color`, `semver`, `slug`
-- **Constraints**: `minLength`/`maxLength`, `minimum`/`maximum`, `exclusiveMinimum`/`exclusiveMaximum`, `multipleOf`, `minItems`/`maxItems`, `uniqueItems`
+- **Types**: `string`, `integer`, `number`, `boolean`, `array`, `object`, `null`, type arrays (`["string", "null"]`)
+- **String formats** (every format `vld` emits): `email`, `uuid`, `uuid-v1`/`-v4`/`-v7`, `url`/`uri`/`url-strict`, `ip`, `ipv4`, `ipv6`, `cidr`, `socket-addr`, `hostname`, `date`, `time`, `date-time`, `base64`, `byte`/`byte-hex`/`byte-base64url`, `cuid2`, `ulid`, `nanoid`, `emoji`, `phone`, `phone-e164`, `credit-card`, `mac`, `color`, `hex`, `jwt`, `semver`, `semver-full`, `slug`, `currency-code`, `country-code`, `locale`, `cron`, `alpha`, `alphanumeric`, `lowercase`, `uppercase`, `ascii`, `decimal`, `path`
+- **Constraints**: `pattern` (random string matching the regex), `minLength`/`maxLength` (counted in characters), `minimum`/`maximum`, `exclusiveMinimum`/`exclusiveMaximum`, `multipleOf` (integers and floats), `minItems`/`maxItems`, `uniqueItems`
 - **Combinators**: `enum`, `const`, `oneOf`, `anyOf`, `allOf`, `prefixItems` (tuples)
+- **References**: `$ref` to `#/components/schemas/X`, `#/$defs/X` or `#/definitions/X`, resolved against the root schema's `$defs` / `definitions` / `components.schemas`. `impl_fake!` embeds a type's nested schemas (`vld::nested!(T)`) automatically.
 - **Objects**: `properties`, `required`, `additionalProperties`
 
 ### Smart field-name heuristics
@@ -165,13 +166,16 @@ vld::schema! {
     #[derive(Debug, Clone, serde::Serialize)]
     pub struct UserWithAddress {
         pub name:    String  => vld::string().min(2),
-        pub address: Address => vld::nested(Address::parse_value),
+        pub address: Address => vld::nested!(Address),
     }
 }
 
-let schema = UserWithAddress::json_schema();
-let value = fake_value(&schema);
-// { "name": "kRtBwZ", "address": { "city": "aBcDe", "zip": "12345" } }
+// `nested!(Address)` emits `{"$ref": "#/components/schemas/Address"}`;
+// impl_fake! embeds Address's schema so the ref resolves.
+vld_fake::impl_fake!(UserWithAddress);
+
+let user = UserWithAddress::fake();
+// UserWithAddress { name: "kRtBwZ", address: Address { city: "aBcDe", zip: "12345" } }
 ```
 
 ## Raw JSON Schema
