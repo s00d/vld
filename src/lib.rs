@@ -237,6 +237,71 @@ pub fn enumeration(variants: &[&str]) -> primitives::ZEnum {
     primitives::ZEnum::new(variants)
 }
 
+/// Deserialize the JSON value into `T` with serde (Rust enums, `uuid::Uuid`,
+/// `url::Url`, `semver::Version`, …).
+///
+/// Serde errors become a `parse_error` issue carrying the serde message.
+/// The JSON Schema is `{}` unless set with [`ZFromSerde::schema`](primitives::ZFromSerde::schema).
+///
+/// ```
+/// use vld::prelude::*;
+///
+/// #[derive(Debug, PartialEq, serde::Deserialize)]
+/// #[serde(rename_all = "snake_case")]
+/// enum Status { Active, OnHold }
+///
+/// let schema = vld::from_serde::<Status>()
+///     .schema(serde_json::json!({"type": "string", "enum": ["active", "on_hold"]}));
+/// assert_eq!(schema.parse(r#""on_hold""#).unwrap(), Status::OnHold);
+/// assert!(schema.parse(r#""gone""#).is_err());
+/// ```
+pub fn from_serde<T: serde::de::DeserializeOwned>() -> primitives::ZFromSerde<T> {
+    primitives::ZFromSerde::new()
+}
+
+/// Parse a JSON string with `T: FromStr` (`IpAddr`, `Uuid`, `Url`, numbers
+/// as strings, …).
+///
+/// Parse errors become an `invalid_format` (`from_str`) issue whose message is
+/// the error's `Display`. The JSON Schema is `{"type": "string"}` unless set
+/// with [`ZFromStr::schema`](primitives::ZFromStr::schema).
+///
+/// ```
+/// use vld::prelude::*;
+/// use std::net::IpAddr;
+///
+/// let schema = vld::from_str::<IpAddr>()
+///     .schema(serde_json::json!({"type": "string", "format": "ip"}));
+/// let ip = schema.parse(r#""::1""#).unwrap();
+/// assert!(ip.is_loopback());
+/// assert!(schema.parse(r#""not-an-ip""#).is_err());
+/// ```
+pub fn from_str<T>() -> primitives::ZFromStr<T>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    primitives::ZFromStr::new()
+}
+
+/// Map fixed strings to values of `T` — a light alternative to
+/// [`from_serde()`] for enums without `Deserialize`.
+///
+/// ```
+/// use vld::prelude::*;
+///
+/// #[derive(Debug, Clone, PartialEq)]
+/// enum Level { Low, High }
+///
+/// let level = vld::enum_of(&[("low", Level::Low), ("high", Level::High)]);
+/// assert_eq!(level.parse(r#""high""#).unwrap(), Level::High);
+/// let err = level.parse(r#""mid""#).unwrap_err();
+/// assert_eq!(err.issues[0].code.key(), "invalid_enum_value");
+/// ```
+pub fn enum_of<T: Clone>(variants: &[(&str, T)]) -> primitives::ZEnumOf<T> {
+    primitives::ZEnumOf::new(variants)
+}
+
 /// Create a schema that accepts any JSON value.
 pub fn any() -> primitives::ZAny {
     primitives::ZAny::new()

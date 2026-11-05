@@ -1,3 +1,4 @@
+mod adapter;
 mod any;
 mod boolean;
 mod bytes;
@@ -19,6 +20,7 @@ mod path;
 mod socket_addr;
 mod string;
 
+pub use adapter::{ZEnumOf, ZFromSerde, ZFromStr};
 pub use any::ZAny;
 pub use boolean::ZBoolean;
 pub use bytes::ZBytes;

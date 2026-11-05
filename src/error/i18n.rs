@@ -288,6 +288,7 @@ const ENGLISH: &[(&str, &str)] = &[
     ("invalid_format.base64url", "Invalid Base64URL byte string"),
     ("invalid_format.hex", "Invalid hex byte string"),
     ("invalid_format.image", "Unable to decode image"),
+    ("invalid_format.from_str", "Invalid value"),
     // Dates
     ("invalid_date", "Invalid {kind}"),
     (

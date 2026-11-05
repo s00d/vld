@@ -104,6 +104,8 @@ pub enum FormatKind {
     Base64Url,
     Hex,
     Image,
+    /// A `FromStr` parse failed ([`vld::from_str()`](crate::from_str)).
+    FromStr,
 }
 
 impl FormatKind {
@@ -119,6 +121,7 @@ impl FormatKind {
             FormatKind::Base64Url => "base64url",
             FormatKind::Hex => "hex",
             FormatKind::Image => "image",
+            FormatKind::FromStr => "from_str",
         }
     }
 }
