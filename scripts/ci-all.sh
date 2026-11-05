@@ -40,25 +40,32 @@ cargo test --workspace --all-targets "${PROFILE[@]}"
 
 echo "==> Test integration crates: legacy/new major branches"
 cargo check -p vld-sqlx --no-default-features --features "sqlx-0_8,sqlite" "${PROFILE[@]}"
-cargo check -p vld-sqlx --no-default-features --features "sqlx-0_9,sqlite" "${PROFILE[@]}"
+cargo test -p vld-sqlx --no-default-features --features "sqlx-0_9,sqlite" "${PROFILE[@]}"
 cargo check -p vld-config --no-default-features --features "config-rs" "${PROFILE[@]}"
 cargo check -p vld-fake "${PROFILE[@]}"
 cargo check -p vld-salvo "${PROFILE[@]}"
 cargo check -p vld-redis --no-default-features --features "redis-0" "${PROFILE[@]}"
-cargo check -p vld-redis --no-default-features --features "redis-1" "${PROFILE[@]}"
+cargo test -p vld-redis --no-default-features --features "redis-1" "${PROFILE[@]}"
 cargo check -p vld-tonic "${PROFILE[@]}"
 cargo check -p vld-warp "${PROFILE[@]}"
 cargo check -p vld-lapin --no-default-features --features "lapin-2" "${PROFILE[@]}"
-cargo check -p vld-lapin --no-default-features --features "lapin-3" "${PROFILE[@]}"
-cargo check -p vld-lapin --no-default-features --features "lapin-4" "${PROFILE[@]}"
+cargo test -p vld-lapin --no-default-features --features "lapin-3" "${PROFILE[@]}"
+cargo test -p vld-lapin --no-default-features --features "lapin-4" "${PROFILE[@]}"
 cargo check -p vld-schemars --no-default-features --features "schemars-0" "${PROFILE[@]}"
-cargo check -p vld-schemars --no-default-features --features "schemars-1" "${PROFILE[@]}"
+cargo test -p vld-schemars --no-default-features --features "schemars-1" "${PROFILE[@]}"
 cargo check -p vld-aide --no-default-features --features "schemars-0" "${PROFILE[@]}"
-cargo check -p vld-aide --no-default-features --features "schemars-1" "${PROFILE[@]}"
+cargo test -p vld-aide --no-default-features --features "schemars-1" "${PROFILE[@]}"
 cargo check -p vld-sea --no-default-features --features "sea-orm-1" "${PROFILE[@]}"
 # Entity-macro integration tests stay on sea-orm-1; sea-orm-2 has lib unit tests.
 cargo test -p vld-sea --no-default-features --features "sea-orm-2" --lib "${PROFILE[@]}"
 cargo test -p vld-utoipa --no-default-features --features "utoipa-6" --tests "${PROFILE[@]}"
+cargo test -p vld-sqlx --features postgres --lib "${PROFILE[@]}"
+cargo test -p vld-sea --features "with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal" "${PROFILE[@]}"
+cargo test -p vld-sea --no-default-features --features "sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal" --lib "${PROFILE[@]}"
+cargo test -p vld-redis --no-default-features --features "redis-0,aio" "${PROFILE[@]}"
+cargo test -p vld-redis --no-default-features --features "redis-1,aio" "${PROFILE[@]}"
+cargo test -p vld-config --no-default-features --features figment "${PROFILE[@]}"
+cargo test -p vld-config --no-default-features --features "config-rs,figment" "${PROFILE[@]}"
 
 echo "==> Test vld feature matrix"
 cargo test -p vld --no-default-features "${PROFILE[@]}"
@@ -85,6 +92,16 @@ cargo clippy -p vld --all-targets --features "${JIFF_FEATURES}" "${PROFILE[@]}" 
 
 echo "==> Clippy (vld time features)"
 cargo clippy -p vld --all-targets --features "${TIME_FEATURES}" "${PROFILE[@]}" -- -D warnings
+
+echo "==> Clippy (integration crates, non-default branches)"
+cargo clippy -p vld-schemars --no-default-features --features schemars-1 --all-targets "${PROFILE[@]}" -- -D warnings
+cargo clippy -p vld-aide --no-default-features --features schemars-1 --all-targets "${PROFILE[@]}" -- -D warnings
+cargo clippy -p vld-utoipa --no-default-features --features utoipa-6 --lib --tests "${PROFILE[@]}" -- -D warnings
+cargo clippy -p vld-sqlx --no-default-features --features "sqlx-0_9,sqlite" --all-targets "${PROFILE[@]}" -- -D warnings
+cargo clippy -p vld-sea --no-default-features --features "sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal" --lib "${PROFILE[@]}" -- -D warnings
+cargo clippy -p vld-redis --no-default-features --features "redis-1,aio" --all-targets "${PROFILE[@]}" -- -D warnings
+cargo clippy -p vld-lapin --no-default-features --features lapin-4 --all-targets "${PROFILE[@]}" -- -D warnings
+cargo clippy -p vld-config --no-default-features --features "config-rs,figment" --all-targets "${PROFILE[@]}" -- -D warnings
 
 echo "==> Format check"
 cargo fmt --all --check
