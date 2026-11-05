@@ -1,0 +1,85 @@
+---
+source: tests/all/json_schema/mod.rs
+expression: value
+---
+{
+  "discriminated_union": {
+    "required": true,
+    "schema": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "a"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "b"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "intersection": {
+    "required": true,
+    "schema": {
+      "allOf": [
+        {
+          "minLength": 3,
+          "type": "string"
+        },
+        {
+          "maxLength": 10,
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "lazy": {
+    "required": true,
+    "schema": {}
+  },
+  "union": {
+    "required": true,
+    "schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    }
+  },
+  "union3": {
+    "required": true,
+    "schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    }
+  }
+}

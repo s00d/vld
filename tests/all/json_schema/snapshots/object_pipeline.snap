@@ -1,0 +1,303 @@
+---
+source: tests/all/json_schema/mod.rs
+expression: value
+---
+{
+  "catchall": {
+    "additionalProperties": {
+      "minimum": 0.0,
+      "type": "number"
+    },
+    "properties": {
+      "age": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "email": {
+        "format": "email",
+        "type": "string"
+      }
+    },
+    "required": [
+      "email"
+    ],
+    "type": "object"
+  },
+  "empty": {
+    "additionalProperties": true,
+    "properties": {},
+    "type": "object"
+  },
+  "extend_later_wins": {
+    "additionalProperties": true,
+    "properties": {
+      "age": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "optional age"
+      },
+      "city": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "city"
+    ],
+    "type": "object"
+  },
+  "field_optional_object": {
+    "additionalProperties": true,
+    "properties": {
+      "n": {
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "properties": {
+              "x": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "x"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "omit": {
+    "additionalProperties": true,
+    "properties": {
+      "body": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "partial": {
+    "additionalProperties": true,
+    "properties": {
+      "body": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "id": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "partial_required": {
+    "additionalProperties": true,
+    "properties": {
+      "body": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "id": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "id",
+      "title",
+      "body"
+    ],
+    "type": "object"
+  },
+  "pick": {
+    "additionalProperties": true,
+    "properties": {
+      "body": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "strict_mixed": {
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "markdown body"
+      },
+      "draft_note": {
+        "anyOf": [
+          {
+            "maxLength": 200,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "id": {
+        "exclusiveMinimum": 0,
+        "type": "integer"
+      },
+      "score": {
+        "anyOf": [
+          {
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "editor score"
+      },
+      "slug": {
+        "anyOf": [
+          {
+            "minLength": 3,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "url slug"
+      },
+      "status": {
+        "default": "draft",
+        "description": "workflow",
+        "type": "string"
+      },
+      "summary": {
+        "anyOf": [
+          {
+            "maxLength": 500,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": {
+        "description": "post title",
+        "maxLength": 80,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "title"
+    ],
+    "type": "object"
+  }
+}
