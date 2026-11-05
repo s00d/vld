@@ -456,6 +456,15 @@ pub mod cases {
         )
     }
 
+    /// `%2541` is `%41`, not `A`: decoded once only.
+    pub fn path_no_double_decoding() -> Case {
+        case(
+            "path_no_double_decoding",
+            req("GET", "/pstr/%2541"),
+            ok("%41"),
+        )
+    }
+
     /// Invalid UTF-8 after decoding becomes `U+FFFD`.
     pub fn path_invalid_utf8() -> Case {
         case("path_invalid_utf8", req("GET", "/pstr/%FF"), ok("\u{FFFD}"))

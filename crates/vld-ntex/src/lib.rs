@@ -80,7 +80,7 @@ use vld::schema::VldParse;
 pub use vld_http_common::VldBodyLimit;
 use vld_http_common::{
     cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
-    path_params_to_json, percent_decode, query_string_to_json, require_form_content_type,
+    path_params_to_json, query_string_to_json, require_form_content_type,
     require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
 };
 
@@ -271,22 +271,13 @@ impl<T: VldParse> VldQuery<T> {
 ///
 /// Drop-in replacement for `ntex::web::types::Path<T>`.
 ///
-/// Path segment values are percent-decoded (ntex keeps `%2F`, `%25` and
-/// `%2B` encoded in `match_info`) and coerced the same way as query
-/// parameters.
+/// Path segment values come percent-decoded from ntex's router (`%2F`,
+/// `%25`, `%2B` included) and are coerced the same way as query parameters.
 pub struct VldPath<T>(pub T);
 
 impl<T: VldParse> VldPath<T> {
     async fn extract(req: &HttpRequest, _payload: &mut Payload) -> Result<Self, VldNtexError> {
-        let params: Vec<_> = req
-            .match_info()
-            .iter()
-            .map(|(k, v)| (k, percent_decode(v)))
-            .collect();
-        validate(&path_params_to_json(
-            params.iter().map(|(k, v)| (*k, v.as_str())),
-        ))
-        .map(VldPath)
+        validate(&path_params_to_json(req.match_info().iter())).map(VldPath)
     }
 }
 

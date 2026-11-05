@@ -90,12 +90,11 @@ vld_http_common::conformance_suite! {
         path_valid,
         path_invalid,
         path_percent_decoding,
-        // The extractor decodes lossily, but ntex 3's router never matches
-        // such a path.
-        #[cfg_attr(
-            feature = "ntex-3",
-            ignore = "ntex 3 router answers 404 for invalid UTF-8 in the path"
-        )]
+        path_no_double_decoding,
+        // ntex's router decodes path segments itself: ntex 3 never matches
+        // such a path (404), ntex 4 keeps the invalid escape (`%FF`).
+        // Decoding again would turn `%2541` into `A`.
+        #[ignore = "ntex's router handles invalid UTF-8 in the path (404 / kept as %FF)"]
         path_invalid_utf8,
         path_no_params_optional,
         headers_valid,

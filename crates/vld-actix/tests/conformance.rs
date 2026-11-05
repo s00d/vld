@@ -86,6 +86,7 @@ vld_http_common::conformance_suite! {
         path_valid,
         path_invalid,
         path_percent_decoding,
+        path_no_double_decoding,
         path_invalid_utf8,
         path_no_params_optional,
         headers_valid,
