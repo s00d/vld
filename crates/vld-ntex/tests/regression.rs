@@ -47,8 +47,7 @@ async fn tags_handler(q: VldQuery<TagsQuery>) -> HttpResponse {
 #[ntex::test]
 async fn json_overflow_returns_413_json() {
     let app = test::init_service(
-        with_state!(App::new(), VldBodyLimit(8))
-            .route("/j", web::post().to(json_handler)),
+        with_state!(App::new(), VldBodyLimit(8)).route("/j", web::post().to(json_handler)),
     )
     .await;
     let req = test::TestRequest::post()

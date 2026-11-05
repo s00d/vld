@@ -227,7 +227,10 @@ fn form_body_field_cap() {
     assert_eq!(err.status(), 422);
     // 2 MiB of `a&a&…` is rejected before it expands into JSON values.
     let amplified = "a&".repeat(DEFAULT_BODY_LIMIT / 2);
-    assert_eq!(parse_form_body(amplified.as_bytes()).unwrap_err().status(), 422);
+    assert_eq!(
+        parse_form_body(amplified.as_bytes()).unwrap_err().status(),
+        422
+    );
 }
 
 #[test]

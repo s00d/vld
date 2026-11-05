@@ -145,8 +145,8 @@ async fn read_body(req: &HttpRequest, payload: &mut Payload) -> Result<Vec<u8>, 
         .map_or(DEFAULT_BODY_LIMIT, |l| l.0);
     let mut body = Vec::new();
     while let Some(chunk) = payload.recv().await {
-        let chunk = chunk
-            .map_err(|e| VldHttpError::parse(format!("Failed to read request body: {e}")))?;
+        let chunk =
+            chunk.map_err(|e| VldHttpError::parse(format!("Failed to read request body: {e}")))?;
         if body.len() + chunk.len() > limit {
             return Err(VldHttpError::payload_too_large());
         }
@@ -339,11 +339,8 @@ pub struct VldCookie<T>(pub T);
 
 impl<T: VldParse> VldCookie<T> {
     async fn extract(req: &HttpRequest, _payload: &mut Payload) -> Result<Self, VldNtexError> {
-        let value = cookie_headers_to_json(
-            req.headers()
-                .get_all(header::COOKIE)
-                .map(|v| v.as_bytes()),
-        );
+        let value =
+            cookie_headers_to_json(req.headers().get_all(header::COOKIE).map(|v| v.as_bytes()));
         validate(&value).map(VldCookie)
     }
 }

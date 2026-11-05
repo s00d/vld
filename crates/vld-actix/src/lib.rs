@@ -376,11 +376,8 @@ impl<T: vld::schema::VldParse> FromRequest for VldCookie<T> {
     type Future = ExtractFuture<Self>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let value = cookie_headers_to_json(
-            req.headers()
-                .get_all(header::COOKIE)
-                .map(|v| v.as_bytes()),
-        );
+        let value =
+            cookie_headers_to_json(req.headers().get_all(header::COOKIE).map(|v| v.as_bytes()));
         Box::pin(async move { validate_coerced(&value).map(VldCookie) })
     }
 }

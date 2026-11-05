@@ -36,9 +36,9 @@ use std::fmt;
 use vld::schema::VldParse;
 pub use vld_http_common::VldBodyLimit;
 use vld_http_common::{
-    cookie_headers_to_json, headers_to_json, parse_form_body, parse_json_body,
-    path_params_to_json, query_string_to_json, require_form_content_type,
-    require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
+    cookie_headers_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
+    query_string_to_json, require_form_content_type, require_json_content_type, VldHttpError,
+    DEFAULT_BODY_LIMIT,
 };
 
 // ---------------------------------------------------------------------------
@@ -120,12 +120,10 @@ async fn read_limited_body(req: &Request, body: &mut RequestBody) -> Result<impl
     let body = body
         .take()
         .map_err(|e| reject(VldHttpError::parse(format!("Failed to read body: {e}"))))?;
-    body.into_bytes_limit(limit)
-        .await
-        .map_err(|e| match e {
-            ReadBodyError::PayloadTooLarge => reject(VldHttpError::payload_too_large()),
-            other => reject(VldHttpError::parse(format!("Failed to read body: {other}"))),
-        })
+    body.into_bytes_limit(limit).await.map_err(|e| match e {
+        ReadBodyError::PayloadTooLarge => reject(VldHttpError::payload_too_large()),
+        other => reject(VldHttpError::parse(format!("Failed to read body: {other}"))),
+    })
 }
 
 // ---------------------------------------------------------------------------

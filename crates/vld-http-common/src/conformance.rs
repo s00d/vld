@@ -109,7 +109,8 @@ impl PathId {
 impl PathNone {
     /// The 200 body for `/pnone`: `"none"` or `"id={id}"`.
     pub fn reply(&self) -> String {
-        self.id.map_or_else(|| "none".into(), |id| format!("id={id}"))
+        self.id
+            .map_or_else(|| "none".into(), |id| format!("id={id}"))
     }
 }
 
@@ -307,11 +308,7 @@ pub mod cases {
     pub fn json_content_type_empty_suffix() -> Case {
         case(
             "json_content_type_empty_suffix",
-            post(
-                "/json",
-                "application/+json",
-                r#"{"name":"Alice","age":25}"#,
-            ),
+            post("/json", "application/+json", r#"{"name":"Alice","age":25}"#),
             Expect::Unsupported,
         )
     }
@@ -377,10 +374,7 @@ pub mod cases {
 
     /// More than `MAX_FORM_FIELDS` fields is a 422 parse error.
     pub fn form_too_many_fields() -> Case {
-        let body = format!(
-            "name=Alice&age=25{}",
-            "&a".repeat(crate::MAX_FORM_FIELDS)
-        );
+        let body = format!("name=Alice&age=25{}", "&a".repeat(crate::MAX_FORM_FIELDS));
         case(
             "form_too_many_fields",
             post("/form", FORM, body),
@@ -464,11 +458,7 @@ pub mod cases {
 
     /// Invalid UTF-8 after decoding becomes `U+FFFD`.
     pub fn path_invalid_utf8() -> Case {
-        case(
-            "path_invalid_utf8",
-            req("GET", "/pstr/%FF"),
-            ok("\u{FFFD}"),
-        )
+        case("path_invalid_utf8", req("GET", "/pstr/%FF"), ok("\u{FFFD}"))
     }
 
     /// A route without parameters is an empty object, not an error.
@@ -495,7 +485,11 @@ pub mod cases {
     pub fn headers_underscore_only() -> Case {
         let mut r = req("GET", "/headers");
         r.headers.push(("x_tag", b"evil".to_vec()));
-        case("headers_underscore_only", r, Expect::Invalid(vec![".x_tag"]))
+        case(
+            "headers_underscore_only",
+            r,
+            Expect::Invalid(vec![".x_tag"]),
+        )
     }
 
     pub fn headers_missing() -> Case {
