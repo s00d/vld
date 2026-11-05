@@ -5,19 +5,19 @@
 //!
 //! | Route | Extractor | 200 body |
 //! |---|---|---|
-//! | `POST /json` | JSON [`User`] | `"{name}:{age}"` |
-//! | `POST /form` | form [`User`] | `"{name}:{age}"` |
-//! | `GET /query` | query [`Query`] | `"{tag joined by ,}\|{q}"` |
-//! | `GET /path/{id}` | path [`PathId`] | `"id={id}"` |
-//! | `GET /pstr/{s}` | path [`PathStr`] | `"{s}"` |
-//! | `GET /pnone` (no params) | path [`PathNone`] | [`PathNone::reply`] |
-//! | `GET /headers` | headers [`Headers`] | `"{x_tag}"` |
-//! | `GET /cookie` | cookies [`Cookies`] | `"{sid}"` |
+//! | `POST /json` | JSON `User` | `"{name}:{age}"` |
+//! | `POST /form` | form `User` | `"{name}:{age}"` |
+//! | `GET /query` | query `Query` | `"{tag joined by ,}\|{q}"` |
+//! | `GET /path/{id}` | path `PathId` | `"id={id}"` |
+//! | `GET /pstr/{s}` | path `PathStr` | `"{s}"` |
+//! | `GET /pnone` (no params) | path `PathNone` | `PathNone::reply` |
+//! | `GET /headers` | headers `Headers` | `"{x_tag}"` |
+//! | `GET /cookie` | cookies `Cookies` | `"{sid}"` |
 //!
 //! Body limits stay at the adapter/framework defaults; the oversized cases
-//! send [`OVERSIZED_LEN`] bytes, above every default.
+//! send [`OVERSIZED_LEN`](crate::conformance::OVERSIZED_LEN) bytes, above every default.
 //!
-//! Each case is a function in [`cases`]; adapters list the cases they support
+//! Each case is a function in [`cases`](crate::conformance::cases); adapters list the cases they support
 //! with [`conformance_suite!`](crate::conformance_suite), marking known
 //! failures with `#[ignore = "BUG: ..."]`.
 
