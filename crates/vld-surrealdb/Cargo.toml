@@ -17,6 +17,7 @@ exclude = [".idea/", "tests/", "examples/"]
 vld = { workspace = true, features = ["serialize"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+vld-integration-common = { path = "../vld-integration-common", version = "0.4.6" }
 
 [dev-dependencies]
 vld = { workspace = true, features = ["serialize"] }

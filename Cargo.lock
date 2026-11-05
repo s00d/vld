@@ -9534,6 +9534,7 @@ dependencies = [
  "serde",
  "serde_json",
  "vld",
+ "vld-integration-common",
 ]
 
 [[package]]

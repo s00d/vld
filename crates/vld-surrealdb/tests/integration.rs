@@ -434,3 +434,60 @@ fn validate_fields_macro_invalid() {
     };
     assert!(result.is_err());
 }
+
+// ========================= Regressions =======================================
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct InnerAddr {
+        pub city: String => vld::string().min(2),
+    }
+}
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct OuterDoc {
+        pub tags: Vec<String> => vld::array(vld::string().min(1)),
+        pub addr: InnerAddr => vld::nested(InnerAddr::parse_value),
+    }
+}
+
+#[test]
+fn response_field_paths_have_no_leading_dot() {
+    let json = serde_json::json!({"tags": [""], "addr": {"city": "X"}});
+    let err = vld_surrealdb::validate_json::<OuterDoc>(&json).unwrap_err();
+    let resp = VldSurrealResponse::from_error(&err);
+    let fields: Vec<&str> = resp.fields.iter().map(|f| f.field.as_str()).collect();
+    assert!(fields.contains(&"tags[0]"), "{fields:?}");
+    assert!(fields.contains(&"addr.city"), "{fields:?}");
+}
+
+#[test]
+fn validate_fields_keeps_real_issues() {
+    let name = "";
+    let err = validate_fields! { name => vld::string().min(3) }.unwrap_err();
+    let VldSurrealError::Validation(e) = err else {
+        panic!("expected validation error")
+    };
+    let issue = &e.issues[0];
+    assert_ne!(issue.message, "field 'name' failed validation");
+    assert!(!matches!(issue.code, vld::error::IssueCode::Custom { .. }));
+    assert!(matches!(
+        issue.path.as_slice(),
+        [vld::error::PathSegment::Field(f)] if f == "name"
+    ));
+}
+
+struct Unserializable;
+impl serde::Serialize for Unserializable {
+    fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+        Err(serde::ser::Error::custom("nope"))
+    }
+}
+
+#[test]
+fn validate_fields_reports_serialization_failure() {
+    let bad = Unserializable;
+    let err = validate_fields! { bad => vld::any() }.unwrap_err();
+    assert!(matches!(err, VldSurrealError::Serialization(_)));
+}
