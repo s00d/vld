@@ -229,6 +229,12 @@ let utoipa_schema = json_schema_to_schema(&json_schema);
   `anyOf` has no `title`)
 - Query/path parameters built from optional fields keep the field's own
   `description` / `default`
+- `allOf` next to other keywords (vld puts a second `pattern` / `format` /
+  `multipleOf` there): those keywords become the first `allOf` member
+- `vld::never()` (`{"not": {}}`) and `false` stay "nothing is valid"
+- `x-*` extensions (`x-maxUniqueItems`, `x-past`, …) and keywords utoipa has no
+  field for (`contains`, `minContains`, `maxContains`, `propertyNames`,
+  `formatMinimum`, `formatMaximum`, `not`) are kept verbatim as schema extensions
 
 ## Migration from older APIs
 

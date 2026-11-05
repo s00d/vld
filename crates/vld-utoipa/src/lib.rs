@@ -58,6 +58,7 @@ pub use utoipa;
 pub use utoipa6 as utoipa;
 
 use serde_json::Value;
+use utoipa::openapi::extensions::Extensions;
 use utoipa::openapi::path::{Parameter, ParameterBuilder, ParameterIn};
 use utoipa::openapi::schema::{
     AdditionalProperties, AllOf, AnyOf, Array, ArrayItems, Object, OneOf, Schema, SchemaFormat,
@@ -82,6 +83,11 @@ type Map = serde_json::Map<String, Value>;
 /// - String constraints: `minLength`, `maxLength`, `pattern`
 /// - `format`, `title`, `description`, `default`, `example` — on every schema kind
 ///   (`anyOf` has no `title` in utoipa)
+/// - `allOf` next to other keywords: those keywords become the first `allOf` member
+/// - `not: {}` / `false` (`vld::never()`) stay "nothing is valid" (`{"not": {}}`)
+/// - `x-*` extensions and keywords utoipa has no field for (`contains`,
+///   `minContains`, `maxContains`, `propertyNames`, `formatMinimum`,
+///   `formatMaximum`, `not`) are kept verbatim as schema extensions
 /// - `$ref` references: a sibling `description` stays on the ref; `title`,
 ///   `default` or `example` wrap the ref in a single-item `allOf`
 ///
@@ -93,14 +99,19 @@ type Map = serde_json::Map<String, Value>;
 /// let schema = json_schema_to_schema(&serde_json::json!({"type": "string", "format": "email"}));
 /// ```
 pub fn json_schema_to_schema(value: &Value) -> RefOr<Schema> {
-    let Value::Object(map) = value else {
-        // `true` / non-object schemas: accept any value.
-        return RefOr::T(Schema::Object(Object::with_type(SchemaType::AnyValue)));
+    let map = match value {
+        Value::Object(map) => map,
+        // `false`: nothing is valid.
+        Value::Bool(false) => return never(),
+        // `true` / other non-object schemas: accept any value.
+        _ => return RefOr::T(Schema::Object(Object::with_type(SchemaType::AnyValue))),
     };
+    // `not` (e.g. `vld::never()`'s `{"not": {}}`) is kept as an extension below.
     let title = str_of(map, "title");
     let description = str_of(map, "description");
     let default = map.get("default").cloned();
     let example = map.get("example").cloned();
+    let extensions = extensions_of(map);
 
     // Sets the shared annotation fields on any utoipa schema struct.
     macro_rules! annotate {
@@ -110,6 +121,7 @@ pub fn json_schema_to_schema(value: &Value) -> RefOr<Schema> {
             t.description = description.clone();
             t.default = default.clone();
             t.example = example.clone();
+            t.extensions = extensions.clone();
             t
         }};
     }
@@ -135,7 +147,15 @@ pub fn json_schema_to_schema(value: &Value) -> RefOr<Schema> {
         any_of.items = items;
         return RefOr::T(Schema::AnyOf(any_of));
     }
-    if let Some(items) = composite_items(map, "allOf") {
+    if let Some(mut items) = composite_items(map, "allOf") {
+        // Core puts extra patterns / formats / multipleOf into `allOf` next to
+        // `type`: keep that typed base as the first `allOf` member.
+        let mut base = map.clone();
+        base.remove("allOf");
+        base.retain(|k, _| !ANNOTATIONS.contains(&k.as_str()) && !is_extension(k));
+        if !base.is_empty() {
+            items.insert(0, json_schema_to_schema(&Value::Object(base)));
+        }
         let mut all_of = annotate!(AllOf::new(), title);
         all_of.items = items;
         return RefOr::T(Schema::AllOf(all_of));
@@ -211,6 +231,42 @@ pub fn json_schema_to_schema(value: &Value) -> RefOr<Schema> {
     };
     obj.min_properties = usize_of(map, "minProperties");
     obj.max_properties = usize_of(map, "maxProperties");
+    RefOr::T(Schema::Object(obj))
+}
+
+/// Keys carried by `annotate!` on every schema kind.
+const ANNOTATIONS: &[&str] = &["title", "description", "default", "example"];
+
+/// JSON Schema keywords utoipa has no field for; they are kept verbatim as
+/// schema extensions (serialized next to the other keywords).
+const PASSTHROUGH: &[&str] = &[
+    "contains",
+    "minContains",
+    "maxContains",
+    "propertyNames",
+    "formatMinimum",
+    "formatMaximum",
+    "not",
+];
+
+fn is_extension(k: &str) -> bool {
+    k.starts_with("x-") || PASSTHROUGH.contains(&k)
+}
+
+/// `x-*` keys and [`PASSTHROUGH`] keywords as utoipa extensions.
+fn extensions_of(map: &Map) -> Option<Extensions> {
+    let ext: Extensions = map
+        .iter()
+        .filter(|(k, _)| is_extension(k))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    (!ext.is_empty()).then_some(ext)
+}
+
+/// `{"not": {}}`: a schema nothing satisfies.
+fn never() -> RefOr<Schema> {
+    let mut obj = Object::with_type(SchemaType::AnyValue);
+    obj.extensions = Some([("not", serde_json::json!({}))].into_iter().collect());
     RefOr::T(Schema::Object(obj))
 }
 
