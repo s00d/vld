@@ -17,14 +17,18 @@
 //! All extractors return **422 Unprocessable Entity** on validation failure
 //! or malformed input, and **413 Payload Too Large** when the body exceeds
 //! the limit. [`VldJson`] requires a JSON `Content-Type` (`application/json`
-//! or `application/*+json`) and answers **415 Unsupported Media Type**
-//! otherwise.
+//! or `application/*+json`) and [`VldForm`]
+//! `application/x-www-form-urlencoded`; anything else is **415 Unsupported
+//! Media Type**. See the [error body format](vld_http_common#error-bodies).
 //!
 //! # Body limits
 //!
-//! Bodies are read with Salvo's [`Request::secure_max_size`] (64 KiB unless
-//! raised with the `SecureMaxSize` middleware, `Request::set_secure_max_size`
-//! or `salvo::http::request::set_global_secure_max_size`).
+//! Bodies are read up to Salvo's [`Request::secure_max_size`], set with the
+//! `SecureMaxSize` middleware, `Request::set_secure_max_size` or
+//! `salvo::http::request::set_global_secure_max_size`. While it is Salvo's
+//! built-in 64 KiB default, [`DEFAULT_BODY_LIMIT`] (2 MiB) applies instead,
+//! like in every other `vld` adapter — so setting exactly 64 KiB counts as
+//! unset.
 //!
 //! # Quick Example
 //!
@@ -54,8 +58,9 @@ use salvo::prelude::*;
 use std::sync::OnceLock;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
-    path_params_to_json, query_string_to_json, require_json_content_type, VldHttpError,
+    cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
+    path_params_to_json, query_string_to_json, require_form_content_type,
+    require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
 };
 
 // ---------------------------------------------------------------------------
@@ -67,39 +72,43 @@ use vld_http_common::{
 /// Implements [`Writer`] so it can be returned from `#[handler]` functions
 /// via `Result<T, VldSalvoError>`.
 ///
-/// On write, renders a JSON response (`422` for validation/parse, `415` for a
-/// non-JSON `Content-Type`, `413` for
-/// payload too large) using [`vld_http_common`] helpers.
+/// On write, renders the [`VldHttpError`] it wraps as a JSON response
+/// (`422` for validation/parse, `415` for a wrong `Content-Type`, `413` for
+/// payload too large).
 #[derive(Debug)]
-pub struct VldSalvoError {
-    /// The underlying validation error.
-    pub error: vld::error::VldError,
-    status: StatusCode,
-}
+pub struct VldSalvoError(VldHttpError);
 
 impl VldSalvoError {
     /// Create a new `VldSalvoError` from a [`VldError`](vld::error::VldError).
     pub fn new(error: vld::error::VldError) -> Self {
         VldHttpError::validation(error).into()
     }
+
+    /// The underlying validation error.
+    pub fn error(&self) -> &vld::error::VldError {
+        self.0.error()
+    }
+
+    /// HTTP status (422, 413 or 415).
+    pub fn status(&self) -> StatusCode {
+        StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
+    }
+
+    /// JSON response body.
+    pub fn body(&self) -> serde_json::Value {
+        self.0.body()
+    }
 }
 
 impl From<VldHttpError> for VldSalvoError {
     fn from(e: VldHttpError) -> Self {
-        Self {
-            status: StatusCode::from_u16(e.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY),
-            error: e.into_error(),
-        }
+        Self(e)
     }
 }
 
 impl std::fmt::Display for VldSalvoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.status {
-            StatusCode::PAYLOAD_TOO_LARGE => f.write_str("Payload too large"),
-            StatusCode::UNSUPPORTED_MEDIA_TYPE => f.write_str("Unsupported Media Type"),
-            _ => write!(f, "Validation failed: {}", self.error),
-        }
+        self.0.fmt(f)
     }
 }
 
@@ -114,14 +123,31 @@ impl From<vld::error::VldError> for VldSalvoError {
 #[async_trait]
 impl Writer for VldSalvoError {
     async fn write(mut self, _req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        let body = match self.status {
-            StatusCode::PAYLOAD_TOO_LARGE => vld_http_common::format_payload_too_large(),
-            StatusCode::UNSUPPORTED_MEDIA_TYPE => vld_http_common::format_unsupported_media_type(),
-            _ => vld_http_common::format_vld_error(&self.error),
-        };
-        res.status_code(self.status);
-        res.render(Json(body));
+        res.status_code(self.status());
+        res.render(Json(self.body()));
     }
+}
+
+/// Salvo's built-in `secure_max_size` (64 KiB).
+const SALVO_DEFAULT_MAX_SIZE: usize = 64 * 1024;
+
+/// Read the body up to `secure_max_size`, or [`DEFAULT_BODY_LIMIT`] while
+/// that is Salvo's built-in default.
+async fn read_body(req: &mut Request) -> Result<&[u8], VldSalvoError> {
+    let limit = match req.secure_max_size() {
+        SALVO_DEFAULT_MAX_SIZE => DEFAULT_BODY_LIMIT,
+        limit => limit,
+    };
+    req.payload_with_max_size(limit)
+        .await
+        .map(|b| &b[..])
+        .map_err(map_parse_error)
+}
+
+fn content_type(req: &Request) -> Option<&str> {
+    req.headers()
+        .get(salvo::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
 }
 
 fn map_parse_error(e: salvo::http::ParseError) -> VldSalvoError {
@@ -166,18 +192,8 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldJson<T> {
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
         // Read the raw body: salvo's `parse_json` rejects `application/*+json`.
-        require_json_content_type(
-            req.headers()
-                .get(salvo::http::header::CONTENT_TYPE)
-                .and_then(|v| v.to_str().ok()),
-        )
-        .map_err(VldSalvoError::from)?;
-        let limit = req.secure_max_size();
-        let body = req
-            .payload_with_max_size(limit)
-            .await
-            .map_err(map_parse_error)?;
-        let value = parse_json_body(body).map_err(VldSalvoError::from)?;
+        require_json_content_type(content_type(req)).map_err(VldSalvoError::from)?;
+        let value = parse_json_body(read_body(req).await?).map_err(VldSalvoError::from)?;
         T::vld_parse_value(&value)
             .map(VldJson)
             .map_err(VldSalvoError::from)
@@ -235,12 +251,8 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldForm<T> {
         req: &'ex mut Request,
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
-        let limit = req.secure_max_size();
-        let body = req
-            .payload_with_max_size(limit)
-            .await
-            .map_err(map_parse_error)?;
-        let value = parse_form_body(body).map_err(VldSalvoError::from)?;
+        require_form_content_type(content_type(req)).map_err(VldSalvoError::from)?;
+        let value = parse_form_body(read_body(req).await?).map_err(VldSalvoError::from)?;
         validate(&value).map(VldForm)
     }
 }
@@ -287,7 +299,8 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldPath<T> {
 /// Salvo extractor that validates **HTTP headers**.
 ///
 /// See [`vld_http_common::headers_to_json`]: names become snake_case
-/// (`Content-Type` → `content_type`), repeated headers are joined with `", "`.
+/// (`Content-Type` → `content_type`), names containing `_` are ignored,
+/// repeated headers are joined with `", "`.
 ///
 /// ```rust,ignore
 /// #[handler]
@@ -318,7 +331,8 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldHeaders<T> {
 
 // ============================= VldCookie =====================================
 
-/// Salvo extractor that validates **cookie values** from the `Cookie` header.
+/// Salvo extractor that validates **cookie values** from the `Cookie`
+/// headers (all of them; the first occurrence of a name wins).
 ///
 /// Values are unquoted, percent-decoded and coerced.
 ///
@@ -340,12 +354,13 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldCookie<T> {
         req: &'ex mut Request,
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
-        let cookie_header = req
-            .headers()
-            .get("cookie")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        validate(&cookies_to_json(cookie_header)).map(VldCookie)
+        let value = cookie_headers_to_json(
+            req.headers()
+                .get_all(salvo::http::header::COOKIE)
+                .iter()
+                .map(|v| v.as_bytes()),
+        );
+        validate(&value).map(VldCookie)
     }
 }
 

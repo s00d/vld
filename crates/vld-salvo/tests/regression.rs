@@ -38,6 +38,30 @@ fn service() -> Service {
     )
 }
 
+/// The routes behind an explicit 1 KiB `SecureMaxSize`.
+fn limited_service() -> Service {
+    use salvo::http::request::SecureMaxSize;
+    Service::new(
+        Router::new()
+            .hoop(SecureMaxSize::new(1024))
+            .push(Router::with_path("form").post(form_handler))
+            .push(Router::with_path("json").post(json_handler)),
+    )
+}
+
+/// Salvo's 64 KiB default `secure_max_size` counts as unset: the shared
+/// 2 MiB default applies.
+#[tokio::test]
+async fn default_limit_is_2_mib() {
+    let big = format!(r#"{{"name":"{}"}}"#, "x".repeat(128 * 1024));
+    let resp = TestClient::post("http://localhost/json")
+        .add_header("content-type", "application/json", true)
+        .body(big)
+        .send(&service())
+        .await;
+    assert_eq!(resp.status_code.unwrap(), StatusCode::OK);
+}
+
 #[tokio::test]
 async fn urlencoded_form_is_accepted() {
     let mut resp = TestClient::post("http://localhost/form")
@@ -67,7 +91,7 @@ async fn form_too_large_is_413_json() {
     let mut resp = TestClient::post("http://localhost/form")
         .add_header("content-type", "application/x-www-form-urlencoded", true)
         .body(big)
-        .send(&service())
+        .send(&limited_service())
         .await;
     assert_eq!(resp.status_code.unwrap(), StatusCode::PAYLOAD_TOO_LARGE);
     let body: serde_json::Value = resp.take_json().await.unwrap();
@@ -80,7 +104,7 @@ async fn json_too_large_is_413_json() {
     let mut resp = TestClient::post("http://localhost/json")
         .add_header("content-type", "application/json", true)
         .body(big)
-        .send(&service())
+        .send(&limited_service())
         .await;
     assert_eq!(resp.status_code.unwrap(), StatusCode::PAYLOAD_TOO_LARGE);
     let body: serde_json::Value = resp.take_json().await.unwrap();
