@@ -58,7 +58,7 @@ pub trait CollectNestedSchemas {
 /// Hint for OpenAPI parameter location when a struct is used with `utoipa::IntoParams`.
 ///
 /// Set via utoipa's `#[into_params(parameter_in = Query)]` attribute on a struct
-/// defined with [`schema!`](crate::schema) or `#[derive(Validate)]`.
+/// defined with [`schema!`](crate::schema!) or `#[derive(Validate)]`.
 pub trait OpenApiParameterIn {
     /// Returns `"query"`, `"path"`, `"header"`, or `"cookie"` when the struct is
     /// annotated with `#[into_params(parameter_in = ...)]`, otherwise `None`.

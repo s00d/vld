@@ -14,7 +14,7 @@ pub type NestedSchemaEntry = (&'static str, fn() -> serde_json::Value);
 /// Shared by `NestedSchema` and the `nested!` macro.
 pub type NestedSchemaCollectFn = fn(&mut Vec<NestedSchemaEntry>);
 
-/// Schema for parsing nested structures. Created via [`vld::nested()`](crate::nested)
+/// Schema for parsing nested structures. Created via [`vld::nested()`](crate::nested())
 /// or the [`vld::nested!`](crate::nested!) macro.
 pub struct NestedSchema<T, F>
 where

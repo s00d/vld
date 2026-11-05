@@ -44,7 +44,7 @@ macro_rules! string_formats {
                 match self { $( $(#[cfg($cfg)])? Format::$variant => $key, )+ }
             }
 
-            #[cfg_attr(not(feature = "openapi"), allow(dead_code))]
+            #[cfg(feature = "openapi")]
             pub(super) fn schema_format(self) -> &'static str {
                 match self { $( $(#[cfg($cfg)])? Format::$variant => $schema_fmt, )+ }
             }

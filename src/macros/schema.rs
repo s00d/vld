@@ -83,7 +83,7 @@ macro_rules! __vld_struct_attrs {
 /// Raw identifiers map to their bare name (`r#type` → JSON key `"type"`).
 ///
 /// For query/path/header/cookie parameters, add utoipa's attribute on the struct
-/// (same as with `#[derive(Validate)]`), then call [`vld_utoipa::impl_to_schema`] once:
+/// (same as with `#[derive(Validate)]`), then call `vld_utoipa::impl_to_schema!` once:
 ///
 /// ```ignore
 /// vld::schema! {
@@ -134,7 +134,7 @@ macro_rules! __vld_struct_attrs {
 ///
 /// # Nested Structs
 ///
-/// Use [`nested()`](crate::nested) to compose schemas:
+/// Use [`nested()`](crate::nested()) to compose schemas:
 ///
 /// ```ignore
 /// vld::schema! {

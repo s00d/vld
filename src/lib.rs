@@ -26,11 +26,11 @@
 //!
 //! ## Module map
 //!
-//! - [`schema`] — the [`VldSchema`](schema::VldSchema) trait, [`VldParse`](schema::VldParse),
+//! - [`mod@schema`] — the [`VldSchema`](schema::VldSchema) trait, [`VldParse`](schema::VldParse),
 //!   [`DynSchema`](schema::DynSchema), input sources and nested schemas
 //! - [`error`] — [`VldError`](error::VldError), [`IssueCode`](error::IssueCode),
 //!   formatting ([`error::format`]) and translations ([`error::i18n`])
-//! - [`primitives`], [`collections`], [`combinators`], [`modifiers`], [`object`] — schema types
+//! - [`primitives`], [`collections`], [`combinators`], [`modifiers`], [`mod@object`] — schema types
 //! - `openapi` (feature `openapi`) — JSON Schema / OpenAPI generation and schema diffs
 //! - [`prelude`] — everything needed for day-to-day use
 

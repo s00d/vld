@@ -1,4 +1,4 @@
-/// Generate `impl Default` for a struct created by [`schema!`].
+/// Generate `impl Default` for a struct created by [`schema!`](crate::schema!).
 ///
 /// Every listed field is set to **its type's** `Default::default()` — the same
 /// as `#[derive(Default)]`. Schema defaults (`.with_default(...)`) are **not**

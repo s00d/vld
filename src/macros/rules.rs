@@ -1,5 +1,5 @@
 /// Generate `validate_fields()` and `parse_lenient()` methods for a struct
-/// previously defined with [`schema!`].
+/// previously defined with [`schema!`](crate::schema!).
 ///
 /// Syntax mirrors `schema!`, but without visibility/attributes:
 ///
@@ -130,7 +130,7 @@ macro_rules! impl_validate_fields {
 
 /// Attach validation rules to an **existing** struct.
 ///
-/// Unlike [`schema!`] which creates the struct, this macro takes a struct you
+/// Unlike [`schema!`](crate::schema!) which creates the struct, this macro takes a struct you
 /// already have and generates `validate()` and `is_valid()` instance methods.
 ///
 /// The struct must implement `serde::Serialize`.

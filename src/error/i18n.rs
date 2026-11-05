@@ -1,7 +1,7 @@
 //! Internationalization (i18n) support for validation error messages.
 //!
 //! Provides [`MessageResolver`] trait and built-in resolvers to translate
-//! [`VldError`](crate::error::VldError) messages using [`IssueCode::key()`] and
+//! [`VldError`] messages using [`IssueCode::message_keys()`] and
 //! [`IssueCode::params()`].
 //!
 //! # Example
