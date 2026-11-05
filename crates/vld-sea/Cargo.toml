@@ -17,6 +17,13 @@ exclude = [".idea/", "tests/", "examples/"]
 default = ["sea-orm-1"]
 sea-orm-1 = ["dep:sea-orm"]
 sea-orm-2 = ["dep:sea-orm2"]
+# Map these SeaORM column types to JSON for `validate_active` / `before_save`
+# (also enables the matching SeaORM feature).
+with-json = ["sea-orm?/with-json", "sea-orm2?/with-json"]
+with-chrono = ["sea-orm?/with-chrono", "sea-orm2?/with-chrono"]
+with-uuid = ["sea-orm?/with-uuid", "sea-orm2?/with-uuid"]
+with-rust_decimal = ["sea-orm?/with-rust_decimal", "sea-orm2?/with-rust_decimal"]
+with-bigdecimal = ["sea-orm?/with-bigdecimal", "sea-orm2?/with-bigdecimal"]
 
 [dependencies]
 vld = { workspace = true }
@@ -24,6 +31,7 @@ sea-orm = { version = "1", default-features = false, optional = true }
 sea-orm2 = { package = "sea-orm", version = "2", default-features = false, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+vld-integration-common = { path = "../vld-integration-common", version = "0.4.6" }
 
 [dev-dependencies]
 vld = { workspace = true }
