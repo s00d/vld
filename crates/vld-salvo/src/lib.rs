@@ -14,7 +14,15 @@
 //! | [`VldHeaders<T>`] | HTTP headers |
 //! | [`VldCookie<T>`] | Cookie values |
 //!
-//! All extractors return **422 Unprocessable Entity** on validation failure.
+//! All extractors return **422 Unprocessable Entity** on validation failure
+//! or malformed input, and **413 Payload Too Large** when the body exceeds
+//! the limit.
+//!
+//! # Body limits
+//!
+//! Bodies are read with Salvo's [`Request::secure_max_size`] (64 KiB unless
+//! raised with the `SecureMaxSize` middleware, `Request::set_secure_max_size`
+//! or `salvo::http::request::set_global_secure_max_size`).
 //!
 //! # Quick Example
 //!
@@ -43,7 +51,10 @@ use salvo::http::StatusCode;
 use salvo::prelude::*;
 use std::sync::OnceLock;
 use vld::schema::VldParse;
-use vld_http_common::coerce_value;
+use vld_http_common::{
+    cookies_to_json, headers_to_json, parse_form_body, path_params_to_json, query_string_to_json,
+    VldHttpError,
+};
 
 // ---------------------------------------------------------------------------
 // Error type
@@ -66,26 +77,26 @@ pub struct VldSalvoError {
 impl VldSalvoError {
     /// Create a new `VldSalvoError` from a [`VldError`](vld::error::VldError).
     pub fn new(error: vld::error::VldError) -> Self {
-        Self {
-            error,
-            status: StatusCode::UNPROCESSABLE_ENTITY,
-        }
+        VldHttpError::validation(error).into()
     }
+}
 
-    fn payload_too_large() -> Self {
+impl From<VldHttpError> for VldSalvoError {
+    fn from(e: VldHttpError) -> Self {
         Self {
-            error: vld::error::VldError::single(
-                vld::error::IssueCode::ParseError,
-                "Payload too large",
-            ),
-            status: StatusCode::PAYLOAD_TOO_LARGE,
+            status: StatusCode::from_u16(e.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY),
+            error: e.into_error(),
         }
     }
 }
 
 impl std::fmt::Display for VldSalvoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Validation failed: {}", self.error)
+        if self.status == StatusCode::PAYLOAD_TOO_LARGE {
+            f.write_str("Payload too large")
+        } else {
+            write!(f, "Validation failed: {}", self.error)
+        }
     }
 }
 
@@ -110,22 +121,19 @@ impl Writer for VldSalvoError {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helper: build a parse-error VldSalvoError
-// ---------------------------------------------------------------------------
-
-fn parse_error(msg: impl std::fmt::Display) -> VldSalvoError {
-    VldSalvoError::new(vld::error::VldError::single(
-        vld::error::IssueCode::ParseError,
-        msg.to_string(),
-    ))
-}
-
 fn map_parse_error(e: salvo::http::ParseError) -> VldSalvoError {
     match e {
-        salvo::http::ParseError::PayloadTooLarge => VldSalvoError::payload_too_large(),
-        other => parse_error(other),
+        salvo::http::ParseError::PayloadTooLarge => VldHttpError::payload_too_large().into(),
+        other => VldHttpError::parse(other.to_string()).into(),
     }
+}
+
+fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, VldSalvoError> {
+    T::vld_parse_value(value).map_err(VldSalvoError::from)
+}
+
+fn metadata(name: &'static str, from: SourceFrom, parser: SourceParser) -> Metadata {
+    Metadata::new(name).add_default_source(Source::new(from, parser))
 }
 
 // ============================= VldJson =======================================
@@ -143,26 +151,10 @@ fn map_parse_error(e: salvo::http::ParseError) -> VldSalvoError {
 /// ```
 pub struct VldJson<T>(pub T);
 
-impl<T> std::ops::Deref for VldJson<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldJson<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<'ex, T: VldParse + Send> Extractible<'ex> for VldJson<T> {
     fn metadata() -> &'static Metadata {
         static META: OnceLock<Metadata> = OnceLock::new();
-        META.get_or_init(|| {
-            Metadata::new("VldJson")
-                .add_default_source(Source::new(SourceFrom::Body, SourceParser::Json))
-        })
+        META.get_or_init(|| metadata("VldJson", SourceFrom::Body, SourceParser::Json))
     }
 
     async fn extract(
@@ -170,9 +162,7 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldJson<T> {
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
         let value: serde_json::Value = req.parse_json().await.map_err(map_parse_error)?;
-        T::vld_parse_value(&value)
-            .map(VldJson)
-            .map_err(VldSalvoError::from)
+        validate(&value).map(VldJson)
     }
 }
 
@@ -180,8 +170,8 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldJson<T> {
 
 /// Salvo extractor that validates **URL query parameters**.
 ///
-/// Values are coerced: `"42"` → number, `"true"`/`"false"` → boolean,
-/// empty → null.
+/// See [`vld_http_common::parse_query_string`] for coercion and array rules
+/// (`a=1&a=2` / `a[]=1` → arrays).
 ///
 /// ```rust,ignore
 /// #[handler]
@@ -191,37 +181,17 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldJson<T> {
 /// ```
 pub struct VldQuery<T>(pub T);
 
-impl<T> std::ops::Deref for VldQuery<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldQuery<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<'ex, T: VldParse + Send> Extractible<'ex> for VldQuery<T> {
     fn metadata() -> &'static Metadata {
         static META: OnceLock<Metadata> = OnceLock::new();
-        META.get_or_init(|| {
-            Metadata::new("VldQuery")
-                .add_default_source(Source::new(SourceFrom::Query, SourceParser::MultiMap))
-        })
+        META.get_or_init(|| metadata("VldQuery", SourceFrom::Query, SourceParser::MultiMap))
     }
 
     async fn extract(
         req: &'ex mut Request,
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
-        let qs = req.uri().query().unwrap_or("");
-        let value = vld_http_common::query_string_to_json(qs);
-        T::vld_parse_value(&value)
-            .map(VldQuery)
-            .map_err(VldSalvoError::from)
+        validate(&query_string_to_json(req.uri().query().unwrap_or(""))).map(VldQuery)
     }
 }
 
@@ -237,38 +207,23 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldQuery<T> {
 /// ```
 pub struct VldForm<T>(pub T);
 
-impl<T> std::ops::Deref for VldForm<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldForm<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<'ex, T: VldParse + Send> Extractible<'ex> for VldForm<T> {
     fn metadata() -> &'static Metadata {
         static META: OnceLock<Metadata> = OnceLock::new();
-        META.get_or_init(|| {
-            Metadata::new("VldForm")
-                .add_default_source(Source::new(SourceFrom::Body, SourceParser::MultiMap))
-        })
+        META.get_or_init(|| metadata("VldForm", SourceFrom::Body, SourceParser::MultiMap))
     }
 
     async fn extract(
         req: &'ex mut Request,
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
-        let body_str = req.parse_body::<String>().await.map_err(map_parse_error)?;
-        let map = vld_http_common::parse_query_string(&body_str);
-        let value = serde_json::Value::Object(map);
-        T::vld_parse_value(&value)
-            .map(VldForm)
-            .map_err(VldSalvoError::from)
+        let limit = req.secure_max_size();
+        let body = req
+            .payload_with_max_size(limit)
+            .await
+            .map_err(map_parse_error)?;
+        let value = parse_form_body(body).map_err(VldSalvoError::from)?;
+        validate(&value).map(VldForm)
     }
 }
 
@@ -276,7 +231,7 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldForm<T> {
 
 /// Salvo extractor that validates **path parameters**.
 ///
-/// Path segment values are coerced (numbers, booleans, etc.).
+/// Path segment values are coerced the same way as query parameters.
 ///
 /// ```rust,ignore
 /// // Route: /users/{id}
@@ -294,40 +249,18 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldForm<T> {
 /// ```
 pub struct VldPath<T>(pub T);
 
-impl<T> std::ops::Deref for VldPath<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldPath<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<'ex, T: VldParse + Send> Extractible<'ex> for VldPath<T> {
     fn metadata() -> &'static Metadata {
         static META: OnceLock<Metadata> = OnceLock::new();
-        META.get_or_init(|| {
-            Metadata::new("VldPath")
-                .add_default_source(Source::new(SourceFrom::Param, SourceParser::MultiMap))
-        })
+        META.get_or_init(|| metadata("VldPath", SourceFrom::Param, SourceParser::MultiMap))
     }
 
     async fn extract(
         req: &'ex mut Request,
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
-        let mut map = serde_json::Map::new();
-        for (key, value) in req.params().iter() {
-            map.insert(key.clone(), coerce_value(value));
-        }
-        let value = serde_json::Value::Object(map);
-        T::vld_parse_value(&value)
-            .map(VldPath)
-            .map_err(VldSalvoError::from)
+        let value = path_params_to_json(req.params().iter().map(|(k, v)| (k.as_str(), v.as_str())));
+        validate(&value).map(VldPath)
     }
 }
 
@@ -335,8 +268,8 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldPath<T> {
 
 /// Salvo extractor that validates **HTTP headers**.
 ///
-/// Header names are normalised to snake_case: `Content-Type` → `content_type`.
-/// Values are coerced (numbers, booleans, etc.).
+/// See [`vld_http_common::headers_to_json`]: names become snake_case
+/// (`Content-Type` → `content_type`), repeated headers are joined with `", "`.
 ///
 /// ```rust,ignore
 /// #[handler]
@@ -346,49 +279,30 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldPath<T> {
 /// ```
 pub struct VldHeaders<T>(pub T);
 
-impl<T> std::ops::Deref for VldHeaders<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldHeaders<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<'ex, T: VldParse + Send> Extractible<'ex> for VldHeaders<T> {
     fn metadata() -> &'static Metadata {
         static META: OnceLock<Metadata> = OnceLock::new();
-        META.get_or_init(|| {
-            Metadata::new("VldHeaders")
-                .add_default_source(Source::new(SourceFrom::Header, SourceParser::MultiMap))
-        })
+        META.get_or_init(|| metadata("VldHeaders", SourceFrom::Header, SourceParser::MultiMap))
     }
 
     async fn extract(
         req: &'ex mut Request,
         _depot: &'ex mut Depot,
     ) -> Result<Self, impl Writer + Send + std::fmt::Debug + 'static> {
-        let mut map = serde_json::Map::new();
-        for (name, value) in req.headers().iter() {
-            let key = name.as_str().to_lowercase().replace('-', "_");
-            if let Ok(v) = value.to_str() {
-                map.insert(key, coerce_value(v));
-            }
-        }
-        let value = serde_json::Value::Object(map);
-        T::vld_parse_value(&value)
-            .map(VldHeaders)
-            .map_err(VldSalvoError::from)
+        let value = headers_to_json(
+            req.headers()
+                .iter()
+                .map(|(n, v)| (n.as_str(), v.as_bytes())),
+        );
+        validate(&value).map(VldHeaders)
     }
 }
 
 // ============================= VldCookie =====================================
 
 /// Salvo extractor that validates **cookie values** from the `Cookie` header.
+///
+/// Values are unquoted, percent-decoded and coerced.
 ///
 /// ```rust,ignore
 /// #[handler]
@@ -398,26 +312,10 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldHeaders<T> {
 /// ```
 pub struct VldCookie<T>(pub T);
 
-impl<T> std::ops::Deref for VldCookie<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for VldCookie<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
-}
-
 impl<'ex, T: VldParse + Send> Extractible<'ex> for VldCookie<T> {
     fn metadata() -> &'static Metadata {
         static META: OnceLock<Metadata> = OnceLock::new();
-        META.get_or_init(|| {
-            Metadata::new("VldCookie")
-                .add_default_source(Source::new(SourceFrom::Cookie, SourceParser::MultiMap))
-        })
+        META.get_or_init(|| metadata("VldCookie", SourceFrom::Cookie, SourceParser::MultiMap))
     }
 
     async fn extract(
@@ -429,12 +327,11 @@ impl<'ex, T: VldParse + Send> Extractible<'ex> for VldCookie<T> {
             .get("cookie")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-        let value = vld_http_common::cookies_to_json(cookie_header);
-        T::vld_parse_value(&value)
-            .map(VldCookie)
-            .map_err(VldSalvoError::from)
+        validate(&cookies_to_json(cookie_header)).map(VldCookie)
     }
 }
+
+vld_http_common::impl_deref!(VldJson, VldQuery, VldPath, VldForm, VldHeaders, VldCookie);
 
 // ---------------------------------------------------------------------------
 // Prelude
