@@ -8,3 +8,4 @@ examples/user_corrected.json
 # Local unification research harness (do not publish / push)
 /scratch/
 /.claude/worktrees/
+/.ts-check/

@@ -33,7 +33,7 @@ ALL_DATES_FEATURES="chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,
 MSRV_TOOLCHAIN="${VLD_MSRV_TOOLCHAIN:-1.85}"
 # Every vld feature builds on the core MSRV (see MSRV.md).
 MSRV_FEATURES="${ALL_DATES_FEATURES}"
-SEA_TYPES="with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal"
+SEA_TYPES="with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array"
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "${ROOT_DIR}" || exit 1
@@ -155,17 +155,24 @@ group_integrations() {
   step "redis 1" cargo test -p vld-redis --no-default-features --features "redis-1" "${CI[@]}"
   step "redis 0 + aio" cargo test -p vld-redis --no-default-features --features "redis-0,aio" "${CI[@]}"
   step "redis 1 + aio" cargo test -p vld-redis --no-default-features --features "redis-1,aio" "${CI[@]}"
+  step "redis 1 + aio-tokio" cargo test -p vld-redis --no-default-features --features "redis-1,aio-tokio" "${CI[@]}"
   step "lapin 2" cargo test -p vld-lapin --no-default-features --features "lapin-2" "${CI[@]}"
   step "lapin 3" cargo test -p vld-lapin --no-default-features --features "lapin-3" "${CI[@]}"
   step "lapin 4" cargo test -p vld-lapin --no-default-features --features "lapin-4" "${CI[@]}"
   step "ntex 3" cargo test -p vld-ntex --no-default-features --features ntex-3 "${CI[@]}"
+  if [[ -n "${VLD_TS_NODE_DIR:-}" ]]; then
+    step "vld-ts node cross-check" cargo test -p vld-ts --test live_findings "${CI[@]}"
+  else
+    skip "vld-ts node cross-check (set VLD_TS_NODE_DIR to a dir with zod@3 + valibot@1)"
+  fi
+  step "ntex 4 + compress" cargo test -p vld-ntex --features compress "${CI[@]}"
+  step "ntex 3 + compress" cargo test -p vld-ntex --no-default-features --features ntex-3,compress "${CI[@]}"
   step "schemars 0 (check)" cargo check -p vld-schemars --no-default-features --features "schemars-0" "${CI[@]}"
   step "schemars 1" cargo test -p vld-schemars --no-default-features --features "schemars-1" "${CI[@]}"
   step "aide schemars 0 (check)" cargo check -p vld-aide --no-default-features --features "schemars-0" "${CI[@]}"
   step "aide schemars 1" cargo test -p vld-aide --no-default-features --features "schemars-1" "${CI[@]}"
   step "sea-orm 1 (check)" cargo check -p vld-sea --no-default-features --features "sea-orm-1" "${CI[@]}"
-  # Entity-macro integration tests stay on sea-orm-1; sea-orm-2 has lib unit tests.
-  step "sea-orm 2 (lib)" cargo test -p vld-sea --no-default-features --features "sea-orm-2" --lib "${CI[@]}"
+  step "sea-orm 2" cargo test -p vld-sea --no-default-features --features "sea-orm-2" "${CI[@]}"
   step "sea-orm 1 + all types" cargo test -p vld-sea --features "${SEA_TYPES}" "${CI[@]}"
   step "sea-orm 2 + all types (lib)" cargo test -p vld-sea --no-default-features --features "sea-orm-2,${SEA_TYPES}" --lib "${CI[@]}"
   step "utoipa 6" cargo test -p vld-utoipa --no-default-features --features "utoipa-6" --tests "${CI[@]}"
