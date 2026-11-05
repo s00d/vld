@@ -17,69 +17,94 @@
 //! | [`vld_headers::<T>()`] | HTTP headers |
 //! | [`vld_cookie::<T>()`] | Cookie values |
 //!
-//! Use [`handle_rejection`] with `.recover()` to turn rejections into JSON:
+//! Every filter rejects with [`VldRejection`] (wrapping [`VldHttpError`]).
+//! Use [`handle_rejection`] with `.recover()` to turn rejections into JSON
+//! (see the [error body format](vld_http_common#error-bodies)):
 //! validation / malformed body → 422, body over the limit → 413, `vld_json`
 //! without a JSON `Content-Type` (`application/json` or `application/*+json`)
-//! → 415 ([`UnsupportedJsonMediaType`]), plus the
-//! usual warp rejections (404, 405, 400, 411, 415) and 500 for anything
+//! or `vld_form` without `application/x-www-form-urlencoded` → 415, plus
+//! the usual warp rejections (404, 405, 400, 411, 415) and 500 for anything
 //! unknown.
+//!
+//! # Body limit
+//!
+//! `vld_json` / `vld_form` read at most
+//! [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT) (2 MiB);
+//! [`vld_json_limit`] / [`vld_form_limit`] take an explicit limit.
+//!
+//! Works with warp 0.3 and 0.4 (the dependency is `>=0.3, <0.5`; there are
+//! no version features).
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures_util::{Stream, StreamExt};
 use std::convert::Infallible;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookies_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
-    path_params_to_json, percent_decode, query_string_to_json, require_json_content_type,
-    VldHttpError,
+    cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
+    path_params_to_json, percent_decode, query_string_to_json, require_form_content_type,
+    require_json_content_type, VldHttpError,
 };
-use warp::http::StatusCode;
+use warp::http::{header, HeaderValue, StatusCode};
 use warp::reject::Reject;
 use warp::{Filter, Rejection, Reply};
 
 // ---------------------------------------------------------------------------
-// Rejection types
+// Rejection type
 // ---------------------------------------------------------------------------
 
-/// Rejection when JSON parsing fails (answered with 422 by
-/// [`handle_rejection`]).
+/// The rejection of every `vld_*` filter: validation / parse failure (422),
+/// body too large (413) or wrong `Content-Type` (415). [`handle_rejection`]
+/// answers it with [`status`](Self::status) and [`body`](Self::body).
 #[derive(Debug)]
-pub struct InvalidJson {
-    pub message: String,
-}
-impl Reject for InvalidJson {}
+pub struct VldRejection(VldHttpError);
 
-/// Rejection when vld validation fails.
-#[derive(Debug)]
-pub struct ValidationFailed {
-    pub error: vld::error::VldError,
-}
-impl Reject for ValidationFailed {}
-
-/// Rejection when [`vld_json`] gets a missing or non-JSON `Content-Type`
-/// (answered with 415 by [`handle_rejection`]).
-#[derive(Debug)]
-pub struct UnsupportedJsonMediaType;
-impl Reject for UnsupportedJsonMediaType {}
-
-/// Rejection when a request body exceeds the filter's size limit (413).
-#[derive(Debug)]
-pub struct BodyTooLarge;
-impl Reject for BodyTooLarge {}
-
-fn reject_http(e: VldHttpError) -> Rejection {
-    if e.status() == 413 {
-        warp::reject::custom(BodyTooLarge)
-    } else {
-        warp::reject::custom(ValidationFailed {
-            error: e.into_error(),
-        })
+impl VldRejection {
+    /// The underlying validation error.
+    pub fn error(&self) -> &vld::error::VldError {
+        self.0.error()
     }
+
+    /// HTTP status (422, 413 or 415).
+    pub fn status(&self) -> StatusCode {
+        StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY)
+    }
+
+    /// JSON response body.
+    pub fn body(&self) -> serde_json::Value {
+        self.0.body()
+    }
+}
+
+impl From<VldHttpError> for VldRejection {
+    fn from(e: VldHttpError) -> Self {
+        Self(e)
+    }
+}
+
+impl Reject for VldRejection {}
+
+fn reject(e: impl Into<VldHttpError>) -> Rejection {
+    warp::reject::custom(VldRejection(e.into()))
 }
 
 /// Validate a value coerced from text (query, path, form, headers, cookies).
 fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T, Rejection> {
-    parse_coerced(value).map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+    parse_coerced(value).map_err(reject)
+}
+
+/// The raw value of header `name`, if any. Unlike
+/// `warp::header::optional::<String>`, a non-ASCII value is not a 400.
+fn raw_header(
+    name: &'static str,
+) -> impl Filter<Extract = (Option<HeaderValue>,), Error = Infallible> + Clone {
+    warp::header::value(name)
+        .map(Some)
+        .or(warp::any().map(|| None))
+        .unify()
+}
+
+fn header_str(value: &Option<HeaderValue>) -> Option<&str> {
+    value.as_ref().and_then(|v| v.to_str().ok())
 }
 
 /// Read the whole body, streaming, up to `limit` bytes. Works without a
@@ -98,12 +123,12 @@ where
     let mut buf = BytesMut::new();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| {
-            reject_http(VldHttpError::parse(format!(
+            reject(VldHttpError::parse(format!(
                 "Failed to read request body: {e}"
             )))
         })?;
         if buf.len().saturating_add(chunk.remaining()) > limit {
-            return Err(warp::reject::custom(BodyTooLarge));
+            return Err(reject(VldHttpError::payload_too_large()));
         }
         buf.put(chunk);
     }
@@ -116,9 +141,9 @@ where
 
 /// Warp filter that extracts and validates a JSON body.
 ///
-/// Returns the validated `T` or rejects with [`ValidationFailed`] /
-/// [`InvalidJson`] / [`BodyTooLarge`] (body over
-/// [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT)).
+/// Returns the validated `T` or rejects with [`VldRejection`] (422; 413 for
+/// a body over [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT);
+/// 415 without a JSON `Content-Type`).
 ///
 /// # Example
 ///
@@ -149,21 +174,15 @@ pub fn vld_json<T: VldParse + Send + 'static>(
 pub fn vld_json_limit<T: VldParse + Send + 'static>(
     limit: u64,
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
-    warp::header::optional::<String>("content-type")
-        .and_then(|ct: Option<String>| async move {
-            require_json_content_type(ct.as_deref())
-                .map_err(|_| warp::reject::custom(UnsupportedJsonMediaType))
+    raw_header("content-type")
+        .and_then(|ct: Option<HeaderValue>| async move {
+            require_json_content_type(header_str(&ct)).map_err(reject)
         })
         .untuple_one()
         .and(limited_body(limit))
         .and_then(|bytes: Bytes| async move {
-            let value = parse_json_body(&bytes).map_err(|e| {
-                warp::reject::custom(InvalidJson {
-                    message: e.error().issues[0].message.clone(),
-                })
-            })?;
-            T::vld_parse_value(&value)
-                .map_err(|e| warp::reject::custom(ValidationFailed { error: e }))
+            let value = parse_json_body(&bytes).map_err(reject)?;
+            T::vld_parse_value(&value).map_err(reject)
         })
 }
 
@@ -211,9 +230,8 @@ pub fn vld_query<T: VldParse + Send + 'static>(
 ///
 /// | Rejection | Status |
 /// |---|---|
-/// | [`ValidationFailed`], [`InvalidJson`] | 422 (validation body) |
-/// | [`BodyTooLarge`], `PayloadTooLarge` | 413 |
-/// | [`UnsupportedJsonMediaType`] | 415 (`{"error": "Unsupported Media Type", "message": ...}`) |
+/// | [`VldRejection`] | its [`status`](VldRejection::status) (422 / 413 / 415) and [`body`](VldRejection::body) |
+/// | `PayloadTooLarge` | 413 |
 /// | `MethodNotAllowed` | 405 |
 /// | `UnsupportedMediaType` | 415 |
 /// | `LengthRequired` | 411 |
@@ -233,25 +251,12 @@ pub fn vld_query<T: VldParse + Send + 'static>(
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     use warp::reject as r;
 
-    let (status, body) = if let Some(e) = err.find::<ValidationFailed>() {
-        (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            vld_http_common::format_vld_error(&e.error),
-        )
-    } else if let Some(e) = err.find::<InvalidJson>() {
-        (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            VldHttpError::parse(e.message.clone()).body(),
-        )
-    } else if err.find::<BodyTooLarge>().is_some() || err.find::<r::PayloadTooLarge>().is_some() {
+    let (status, body) = if let Some(e) = err.find::<VldRejection>() {
+        (e.status(), e.body())
+    } else if err.find::<r::PayloadTooLarge>().is_some() {
         (
             StatusCode::PAYLOAD_TOO_LARGE,
             vld_http_common::format_payload_too_large(),
-        )
-    } else if err.find::<UnsupportedJsonMediaType>().is_some() {
-        (
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            vld_http_common::format_unsupported_media_type(),
         )
     } else if err.is_not_found() {
         (
@@ -291,7 +296,8 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> 
 // vld_form filter
 // ---------------------------------------------------------------------------
 
-/// Warp filter that extracts and validates a URL-encoded form body.
+/// Warp filter that extracts and validates a URL-encoded form body
+/// (`application/x-www-form-urlencoded`, 415 otherwise).
 ///
 /// Values are parsed the same way as query parameters.
 pub fn vld_form<T: VldParse + Send + 'static>(
@@ -303,9 +309,13 @@ pub fn vld_form<T: VldParse + Send + 'static>(
 pub fn vld_form_limit<T: VldParse + Send + 'static>(
     limit: u64,
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
-    limited_body(limit).and_then(|bytes: Bytes| async move {
-        validate(&parse_form_body(&bytes).map_err(reject_http)?)
-    })
+    raw_header("content-type")
+        .and_then(|ct: Option<HeaderValue>| async move {
+            require_form_content_type(header_str(&ct)).map_err(reject)
+        })
+        .untuple_one()
+        .and(limited_body(limit))
+        .and_then(|bytes: Bytes| async move { validate(&parse_form_body(&bytes).map_err(reject)?) })
 }
 
 // ---------------------------------------------------------------------------
@@ -472,7 +482,8 @@ pub fn validate_path_params<T: VldParse>(params: &[(&str, &str)]) -> Result<T, R
 /// Warp filter that extracts and validates HTTP headers.
 ///
 /// See [`vld_http_common::headers_to_json`]: names become snake_case
-/// (`Content-Type` → `content_type`), repeated headers are joined with `", "`.
+/// (`Content-Type` → `content_type`), names containing `_` are ignored,
+/// repeated headers are joined with `", "`.
 pub fn vld_headers<T: VldParse + Send + 'static>(
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     warp::header::headers_cloned().and_then(|headers: warp::http::HeaderMap| async move {
@@ -486,25 +497,26 @@ pub fn vld_headers<T: VldParse + Send + 'static>(
 // vld_cookie filter
 // ---------------------------------------------------------------------------
 
-/// Warp filter that extracts and validates cookies from the `Cookie` header.
+/// Warp filter that extracts and validates cookies from the `Cookie`
+/// headers (all of them; the first occurrence of a name wins; a non-ASCII
+/// value is not a 400).
 ///
 /// Cookie names are used as-is for schema field matching.
 /// Values are unquoted, percent-decoded and coerced.
 pub fn vld_cookie<T: VldParse + Send + 'static>(
 ) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
-    warp::header::optional::<String>("cookie").and_then(
-        |cookie_header: Option<String>| async move {
-            validate(&cookies_to_json(cookie_header.as_deref().unwrap_or("")))
-        },
-    )
+    warp::header::headers_cloned().and_then(|headers: warp::http::HeaderMap| async move {
+        validate(&cookie_headers_to_json(
+            headers.get_all(header::COOKIE).iter().map(|v| v.as_bytes()),
+        ))
+    })
 }
 
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
         handle_rejection, validate_path_params, vld_cookie, vld_form, vld_form_limit, vld_headers,
-        vld_json, vld_json_limit, vld_param, vld_path, vld_query, BodyTooLarge, InvalidJson,
-        UnsupportedJsonMediaType, ValidationFailed,
+        vld_json, vld_json_limit, vld_param, vld_path, vld_query, VldRejection,
     };
     pub use vld::prelude::*;
 }

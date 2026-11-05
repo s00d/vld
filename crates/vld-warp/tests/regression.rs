@@ -81,6 +81,7 @@ async fn form_over_limit_is_413() {
     let resp = warp::test::request()
         .method("POST")
         .path("/form")
+        .header("content-type", "application/x-www-form-urlencoded")
         .body("name=a-very-long-name")
         .reply(&routes())
         .await;
@@ -92,10 +93,45 @@ async fn non_utf8_form_is_422() {
     let resp = warp::test::request()
         .method("POST")
         .path("/form")
+        .header("content-type", "application/x-www-form-urlencoded")
         .body(b"name=\xFF\xFE".as_slice())
         .reply(&routes())
         .await;
     assert_eq!(resp.status(), 422);
+}
+
+/// A non-ASCII `Content-Type` is a 415 from `vld_json`, not warp's 400
+/// "Invalid request header".
+#[tokio::test]
+async fn non_ascii_content_type_is_415() {
+    let resp = warp::test::request()
+        .method("POST")
+        .path("/json")
+        .header(
+            "content-type",
+            warp::http::HeaderValue::from_bytes("application/jsön".as_bytes()).unwrap(),
+        )
+        .body(r#"{"name":"Al"}"#)
+        .reply(&routes())
+        .await;
+    assert_eq!(resp.status(), 415);
+}
+
+/// Malformed JSON keeps the full validation body (code and root path), not
+/// just the first issue's message.
+#[tokio::test]
+async fn malformed_json_keeps_issue_details() {
+    let resp = warp::test::request()
+        .method("POST")
+        .path("/json")
+        .header("content-type", "application/json")
+        .body("{")
+        .reply(&routes())
+        .await;
+    assert_eq!(resp.status(), 422);
+    let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+    assert_eq!(body["issues"][0]["path"], "");
+    assert_eq!(body["issues"][0]["code"], "parse_error");
 }
 
 #[tokio::test]
