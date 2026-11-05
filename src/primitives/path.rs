@@ -157,9 +157,9 @@ impl VldSchema for ZPath {
     type Output = PathBuf;
 
     fn parse_value(&self, value: &Value) -> Result<PathBuf, VldError> {
-        let s = value.as_str().ok_or_else(|| {
-            crate::primitives::type_error(&self.custom_type_error, "path", value)
-        })?;
+        let s = value
+            .as_str()
+            .ok_or_else(|| crate::primitives::type_error(&self.custom_type_error, "path", value))?;
         let mut p = PathBuf::from(s);
 
         if self.must_be_absolute && !p.is_absolute() {

@@ -319,13 +319,9 @@ impl<B: DateBackend> VldSchema for ZDate<B> {
     }
 
     fn parse_value(&self, value: &Value) -> Result<B::Date, VldError> {
-        let s = value.as_str().ok_or_else(|| {
-            crate::primitives::type_error(
-                &self.custom_type_error,
-                "date",
-                value,
-            )
-        })?;
+        let s = value
+            .as_str()
+            .ok_or_else(|| crate::primitives::type_error(&self.custom_type_error, "date", value))?;
         let date = parse_date::<B>(s).ok_or_else(|| {
             VldError::from_code_with_value(
                 IssueCode::InvalidDate {
@@ -678,9 +674,9 @@ impl<B: DateBackend> VldSchema for ZTime<B> {
     }
 
     fn parse_value(&self, value: &Value) -> Result<B::Time, VldError> {
-        let s = value.as_str().ok_or_else(|| {
-            crate::primitives::type_error(&self.custom_type_error, "time", value)
-        })?;
+        let s = value
+            .as_str()
+            .ok_or_else(|| crate::primitives::type_error(&self.custom_type_error, "time", value))?;
         let time = parse_time::<B>(s).ok_or_else(|| {
             VldError::from_code_with_value(
                 IssueCode::InvalidDate {

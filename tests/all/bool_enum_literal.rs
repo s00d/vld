@@ -31,10 +31,7 @@ fn boolean_strict_and_coerce() {
     for bad in ["TRUE", "yes", "", "١"] {
         let err = parse_err(&c, json!(bad));
         assert_issue!(&err, "", IssueCode::InvalidType { .. });
-        assert_eq!(
-            err.issues[0].message,
-            "Expected boolean, received string"
-        );
+        assert_eq!(err.issues[0].message, "Expected boolean, received string");
     }
     assert_issue!(
         parse_err(&c, json!(null)),

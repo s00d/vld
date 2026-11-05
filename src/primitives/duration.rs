@@ -135,13 +135,7 @@ impl VldSchema for ZDuration {
             Value::String(s) => parse_duration_string(s),
             _ => None,
         }
-        .ok_or_else(|| {
-            crate::primitives::type_error(
-                &self.custom_type_error,
-                "duration",
-                value,
-            )
-        })?;
+        .ok_or_else(|| crate::primitives::type_error(&self.custom_type_error, "duration", value))?;
 
         if let Some(min) = self.min {
             if d < min {

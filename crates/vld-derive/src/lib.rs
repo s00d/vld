@@ -563,7 +563,10 @@ fn parse_serde_struct_attrs(attrs: &[syn::Attribute]) -> syn::Result<SerdeStruct
                         return Err(meta.error(format!("unknown rename_all rule `{}`", conv)));
                     }
                 }
-                out.rename_all = (de.or(out.rename_all.0.take()), ser.or(out.rename_all.1.take()));
+                out.rename_all = (
+                    de.or(out.rename_all.0.take()),
+                    ser.or(out.rename_all.1.take()),
+                );
             } else if meta.path.is_ident("default") {
                 out.default = true;
                 skip_meta(&meta)?;

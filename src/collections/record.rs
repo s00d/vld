@@ -125,9 +125,9 @@ where
     type Output = M;
 
     fn parse_value(&self, value: &Value) -> Result<M, VldError> {
-        let obj = value.as_object().ok_or_else(|| {
-            crate::primitives::type_error(&None, "object", value)
-        })?;
+        let obj = value
+            .as_object()
+            .ok_or_else(|| crate::primitives::type_error(&None, "object", value))?;
 
         let mut errors = VldError::new();
         // An inner `Err` may carry no issues: track failure, not issue count.

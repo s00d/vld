@@ -342,9 +342,9 @@ pub(crate) fn value_type_name(value: &serde_json::Value) -> String {
 pub(crate) fn expect_object(
     value: &serde_json::Value,
 ) -> Result<&serde_json::Map<String, serde_json::Value>, VldError> {
-    value.as_object().ok_or_else(|| {
-        crate::primitives::type_error(&None, "object", value)
-    })
+    value
+        .as_object()
+        .ok_or_else(|| crate::primitives::type_error(&None, "object", value))
 }
 
 /// Format a JSON value for display in errors (short form).

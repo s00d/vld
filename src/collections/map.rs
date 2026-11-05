@@ -51,9 +51,9 @@ where
     type Output = HashMap<K::Output, V::Output>;
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
-        let arr = value.as_array().ok_or_else(|| {
-            crate::primitives::type_error(&None, "array", value)
-        })?;
+        let arr = value
+            .as_array()
+            .ok_or_else(|| crate::primitives::type_error(&None, "array", value))?;
 
         let mut result = HashMap::new();
         let mut errors = VldError::new();

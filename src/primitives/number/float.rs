@@ -228,9 +228,9 @@ impl ZNumber {
             if let Some(code) = check.kind.failure(n) {
                 let bulk = || self.messages.as_ref().and_then(|f| f(check.kind.key()));
                 let msg = check.msg.clone().or_else(bulk);
-                errors.issues.push(
-                    ValidationIssue::with_override(code, msg.as_ref()).with_received(value),
-                );
+                errors
+                    .issues
+                    .push(ValidationIssue::with_override(code, msg.as_ref()).with_received(value));
             }
         }
         if errors.is_empty() {

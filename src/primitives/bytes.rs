@@ -182,12 +182,8 @@ impl VldSchema for ZBytes {
                 let mut out = Vec::with_capacity(arr.len());
                 for (i, item) in arr.iter().enumerate() {
                     let n = item.as_u64().ok_or_else(|| {
-                        crate::primitives::type_error(
-                            &self.custom_type_error,
-                            "byte",
-                            item,
-                        )
-                        .with_prefix(PathSegment::Index(i))
+                        crate::primitives::type_error(&self.custom_type_error, "byte", item)
+                            .with_prefix(PathSegment::Index(i))
                     })?;
                     if n > 255 {
                         return Err(VldError::from_code_with_value(

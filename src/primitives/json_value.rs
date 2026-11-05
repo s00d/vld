@@ -87,11 +87,7 @@ impl VldSchema for ZJsonValue {
         }
         if !self.required_keys.is_empty() {
             let obj = value.as_object().ok_or_else(|| {
-                crate::primitives::type_error(
-                    &self.custom_type_error,
-                    "object",
-                    value,
-                )
+                crate::primitives::type_error(&self.custom_type_error, "object", value)
             })?;
             for k in &self.required_keys {
                 if !obj.contains_key(k) {

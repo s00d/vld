@@ -417,9 +417,7 @@ fn diff_extension_bounds(old: &Value, new: &Value, path: &str, changes: &mut Vec
                 .any(|p| k.starts_with(p))
         })
         .collect();
-    let num = |v: Option<&Value>| {
-        v.and_then(|v| v.as_f64().or_else(|| v.as_str()?.parse().ok()))
-    };
+    let num = |v: Option<&Value>| v.and_then(|v| v.as_f64().or_else(|| v.as_str()?.parse().ok()));
     for key in keys {
         let lower = key.starts_with("x-min") || key.starts_with("x-exclusiveMin");
         let (o, n) = (old.get(key), new.get(key));

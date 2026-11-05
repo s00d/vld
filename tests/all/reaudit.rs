@@ -66,7 +66,10 @@ fn f04_f32_multiple_of_and_messages() {
     assert_eq!(s.parse_value(&json!(0.3)).unwrap(), 0.3f32);
     let err = s.parse_value(&json!(0.35)).unwrap_err();
     assert_eq!(err.issues[0].message, "Number must be a multiple of 0.1");
-    assert_eq!(vld::f32().max(0.1).parse_value(&json!(0.1)).unwrap(), 0.1f32);
+    assert_eq!(
+        vld::f32().max(0.1).parse_value(&json!(0.1)).unwrap(),
+        0.1f32
+    );
     let err = vld::f32().min(0.1).parse_value(&json!(0.05)).unwrap_err();
     assert_eq!(err.issues[0].message, "Number must be at least 0.1");
 }
@@ -107,7 +110,10 @@ fn f05_union_macro_7_and_13() {
     let msgs: Vec<&str> = err.issues[1..].iter().map(|i| i.message.as_str()).collect();
     assert_eq!(msgs.len(), 13);
     for (i, m) in msgs.iter().enumerate() {
-        assert_eq!(*m, format!("[variant {}] Expected literal {}", i + 1, i + 1));
+        assert_eq!(
+            *m,
+            format!("[variant {}] Expected literal {}", i + 1, i + 1)
+        );
     }
 }
 
@@ -126,19 +132,12 @@ vld::schema! {
 
 #[test]
 fn f06_schema_macro_serde_rename() {
-    let v = F06Camel::parse(
-        r#"{"firstName": "A", "years": 3, "inName": "x"}"#,
-    )
-    .unwrap();
+    let v = F06Camel::parse(r#"{"firstName": "A", "years": 3, "inName": "x"}"#).unwrap();
     assert_eq!(v.first_name, "A");
     // A serialized instance validates (serialize names).
     assert!(F06Camel::validate(&v).is_ok());
-    assert_eq!(
-        serde_json::to_value(&v).unwrap()["outName"],
-        json!("x")
-    );
-    let err = F06Camel::parse(r#"{"first_name": "A", "years": 3, "inName": "x"}"#)
-        .unwrap_err();
+    assert_eq!(serde_json::to_value(&v).unwrap()["outName"], json!("x"));
+    let err = F06Camel::parse(r#"{"first_name": "A", "years": 3, "inName": "x"}"#).unwrap_err();
     assert_eq!(crate::common::paths(&err), vec![".firstName"]);
     #[cfg(feature = "openapi")]
     {
@@ -192,10 +191,7 @@ fn f08_translate_keeps_custom_messages() {
     assert_eq!(de(&crate::common::parse_err(&s, json!("ab"))), "bulk");
     let err = crate::common::parse_err(&vld::string().min(3), json!("ab"));
     assert!(!err.issues[0].has_custom_message());
-    assert_eq!(
-        de(&err),
-        "Zeichenkette muss mindestens 3 Zeichen lang sein"
-    );
+    assert_eq!(de(&err), "Zeichenkette muss mindestens 3 Zeichen lang sein");
     let u = vld::union(vld::string().min(3), vld::number());
     let t = translate_error(&crate::common::parse_err(&u, json!("ab")), &german());
     assert_eq!(
@@ -208,10 +204,7 @@ fn f08_translate_keeps_custom_messages() {
 #[test]
 fn f19_messages() {
     use vld::i18n::{russian, translate_error};
-    assert_eq!(
-        msg(&vld::i32().coerce(), json!("1.5")),
-        "Expected integer"
-    );
+    assert_eq!(msg(&vld::i32().coerce(), json!("1.5")), "Expected integer");
     assert_eq!(
         msg(&vld::char(), json!("ab")),
         "String must be exactly 1 character"
@@ -256,7 +249,9 @@ fn f19_messages() {
 fn f20_type_keys() {
     let err = crate::common::parse_err(&vld::duration(), json!(true));
     assert_issue!(&err, "", IssueCode::InvalidType { expected, .. } if expected == "duration");
-    assert!(err.issues[0].message.starts_with("Expected duration as seconds"));
+    assert!(err.issues[0]
+        .message
+        .starts_with("Expected duration as seconds"));
     let t = vld::i18n::translate_error(&err, &vld::i18n::russian());
     assert_eq!(
         t.issues[0].message,
@@ -264,7 +259,10 @@ fn f20_type_keys() {
     );
     let err = crate::common::parse_err(&vld::path(), json!(1));
     assert_issue!(&err, "", IssueCode::InvalidType { expected, .. } if expected == "path");
-    assert_eq!(err.issues[0].message, "Expected path string, received number");
+    assert_eq!(
+        err.issues[0].message,
+        "Expected path string, received number"
+    );
 }
 
 // 21. strict() / required() issues use templates (translatable).
@@ -318,7 +316,10 @@ fn f31_path_codes() {
         code(&vld::path().exists(), s(&dir.path().join("nope"))),
         IssueCode::PathNotFound
     );
-    assert_eq!(code(&vld::path().file(), s(dir.path())), IssueCode::PathNotFile);
+    assert_eq!(
+        code(&vld::path().file(), s(dir.path())),
+        IssueCode::PathNotFile
+    );
     assert_eq!(code(&vld::path().dir(), s(&file)), IssueCode::PathNotDir);
     #[cfg(feature = "file")]
     {
@@ -336,7 +337,12 @@ fn f32_container_received() {
     assert_eq!(rec(vld::object().parse("1").unwrap_err()), one);
     assert_eq!(rec(vld::record(vld::string()).parse("1").unwrap_err()), one);
     assert_eq!(rec(vld::set(vld::string()).parse("1").unwrap_err()), one);
-    assert_eq!(rec(vld::map(vld::string(), vld::string()).parse("1").unwrap_err()), one);
+    assert_eq!(
+        rec(vld::map(vld::string(), vld::string())
+            .parse("1")
+            .unwrap_err()),
+        one
+    );
     assert_eq!(rec((vld::string(),).parse("1").unwrap_err()), one);
 }
 
@@ -345,11 +351,19 @@ fn f32_container_received() {
 fn f24_strict_predicates() {
     let ok = |s: &ZString, v: &str| s.parse_value(&json!(v)).is_ok();
     let table: Vec<(ZString, &[&str], &[&str])> = vec![
-        (vld::string().semver(), &["1.2.3", "v1.2.3"], &[" 1.2.3 ", "1.2.3 "]),
+        (
+            vld::string().semver(),
+            &["1.2.3", "v1.2.3"],
+            &[" 1.2.3 ", "1.2.3 "],
+        ),
         (
             vld::string().color(),
             &["rgb(1,2,3)", "rgb(255, 0, 0)", "hsl(120, 50%, 50%)"],
-            &["rgb(+1,+2,+3)", "hsl(+120, 50%, 50%)", "hsl(120, +50%, 50%)"],
+            &[
+                "rgb(+1,+2,+3)",
+                "hsl(+120, 50%, 50%)",
+                "hsl(120, +50%, 50%)",
+            ],
         ),
         (
             vld::string().emoji(),
@@ -394,7 +408,7 @@ fn f34_object_merge() {
     let m = base.extend(other);
     assert!(m.parse(r#"{"a": "1", "b": "y", "z": 1}"#).is_err()); // strict kept
     assert!(m.parse(r#"{"a": "1"}"#).is_err()); // min_keys kept (and b missing)
-    // when-rule kept; its target is not "unrecognized" under strict
+                                                // when-rule kept; its target is not "unrecognized" under strict
     assert!(m.parse(r#"{"a": "1", "b": "x", "c": "ab"}"#).is_err());
     assert!(m.parse(r#"{"a": "1", "b": "x", "c": "abc"}"#).is_ok());
 
@@ -428,8 +442,16 @@ fn f27_diff_keywords() {
         (json!({"multipleOf": 2}), json!({"multipleOf": 4}), B),
         (json!({"multipleOf": 4}), json!({"multipleOf": 2}), N),
         (json!({"multipleOf": 2}), json!({"multipleOf": 3}), B),
-        (json!({"prefixItems": [{}]}), json!({"prefixItems": [{}, {}]}), B),
-        (json!({"prefixItems": [{}, {}]}), json!({"prefixItems": [{}]}), N),
+        (
+            json!({"prefixItems": [{}]}),
+            json!({"prefixItems": [{}, {}]}),
+            B,
+        ),
+        (
+            json!({"prefixItems": [{}, {}]}),
+            json!({"prefixItems": [{}]}),
+            N,
+        ),
         (
             json!({"prefixItems": [{"type": "string"}]}),
             json!({"prefixItems": [{"type": "number"}]}),
@@ -458,8 +480,16 @@ fn f27_diff_keywords() {
             json!({"formatMaximum": "2021-01-01"}),
             N,
         ),
-        (json!({"x-minDecimal": "1.5"}), json!({"x-minDecimal": "2"}), B),
-        (json!({"x-maxUniqueItems": 5}), json!({"x-maxUniqueItems": 6}), N),
+        (
+            json!({"x-minDecimal": "1.5"}),
+            json!({"x-minDecimal": "2"}),
+            B,
+        ),
+        (
+            json!({"x-maxUniqueItems": 5}),
+            json!({"x-maxUniqueItems": 6}),
+            N,
+        ),
         (json!({}), json!({"x-past": true}), B),
     ];
     for (old, new, want) in cases {
@@ -501,7 +531,9 @@ fn f35_literal_int_types() {
     assert_eq!(vld::literal(5u8).parse("5").unwrap(), 5u8);
     assert_eq!(vld::literal(5i32).parse("5.0").unwrap(), 5i32);
     assert_eq!(
-        vld::literal(u64::MAX).parse("18446744073709551615").unwrap(),
+        vld::literal(u64::MAX)
+            .parse("18446744073709551615")
+            .unwrap(),
         u64::MAX
     );
     assert!(vld::literal(5u16).parse("6").is_err());
@@ -526,7 +558,11 @@ fn f13_iso_datetime_grammar() {
             "{ok}"
         );
     }
-    for bad in ["2024-01-15T10:30Z", "2024-01-15T10:30", "2024-01-15 10:30:00Z"] {
+    for bad in [
+        "2024-01-15T10:30Z",
+        "2024-01-15T10:30",
+        "2024-01-15 10:30:00Z",
+    ] {
         assert!(s.parse_value(&json!(bad)).is_err(), "{bad}");
         #[cfg(feature = "chrono")]
         assert!(
@@ -622,7 +658,10 @@ mod json_schema {
             .json_schema()
             .get("multipleOf")
             .is_none());
-        assert_eq!(vld::number().multiple_of(2.0).json_schema()["multipleOf"], 2.0);
+        assert_eq!(
+            vld::number().multiple_of(2.0).json_schema()["multipleOf"],
+            2.0
+        );
     }
 
     // 25. output_json passes through wrappers (RFC 3339 default).

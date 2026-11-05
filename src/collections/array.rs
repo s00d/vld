@@ -121,9 +121,9 @@ impl<T: VldSchema> VldSchema for ZArray<T> {
     type Output = Vec<T::Output>;
 
     fn parse_value(&self, value: &Value) -> Result<Vec<T::Output>, VldError> {
-        let arr = value.as_array().ok_or_else(|| {
-            crate::primitives::type_error(&None, "array", value)
-        })?;
+        let arr = value
+            .as_array()
+            .ok_or_else(|| crate::primitives::type_error(&None, "array", value))?;
 
         let mut errors = VldError::new();
         // An inner `Err` may carry no issues: track failure, not issue count.

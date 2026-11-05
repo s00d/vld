@@ -53,9 +53,9 @@ where
     type Output = HashSet<T::Output>;
 
     fn parse_value(&self, value: &Value) -> Result<Self::Output, VldError> {
-        let arr = value.as_array().ok_or_else(|| {
-            crate::primitives::type_error(&None, "array", value)
-        })?;
+        let arr = value
+            .as_array()
+            .ok_or_else(|| crate::primitives::type_error(&None, "array", value))?;
 
         let mut result = HashSet::new();
         let mut errors = VldError::new();

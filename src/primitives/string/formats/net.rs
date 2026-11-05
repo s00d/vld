@@ -116,8 +116,7 @@ pub(crate) fn is_valid_mac(s: &str) -> bool {
 /// IPv4-like strings (`999.1.1.1`) are not hostnames.
 pub(crate) fn is_valid_hostname(s: &str) -> bool {
     let numeric_tld = s.contains('.')
-        && s
-            .rsplit('.')
+        && s.rsplit('.')
             .next()
             .is_some_and(|tld| tld.bytes().all(|b| b.is_ascii_digit()));
     !s.is_empty()
