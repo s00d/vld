@@ -60,7 +60,8 @@ pub use utoipa6 as utoipa;
 use serde_json::Value;
 use utoipa::openapi::path::{Parameter, ParameterBuilder, ParameterIn};
 use utoipa::openapi::schema::{
-    AdditionalProperties, AllOf, AnyOf, Array, Object, OneOf, Schema, SchemaFormat, SchemaType,
+    AdditionalProperties, AllOf, AnyOf, Array, ArrayItems, Object, OneOf, Schema, SchemaFormat,
+    SchemaType,
     Type,
 };
 use utoipa::openapi::{Ref, RefOr, Required};
@@ -162,6 +163,13 @@ pub fn json_schema_to_schema(value: &Value) -> RefOr<Schema> {
             .unwrap_or_else(|| RefOr::T(Schema::Object(Object::with_type(SchemaType::AnyValue))));
         let mut arr = annotate!(Array::new(items), title);
         arr.schema_type = schema_type;
+        // Tuples: `prefixItems` + `items: false`.
+        if let Some(Value::Array(prefix)) = map.get("prefixItems") {
+            arr.prefix_items = prefix.iter().map(ref_or_to_schema).collect();
+        }
+        if map.get("items") == Some(&Value::Bool(false)) {
+            arr.items = ArrayItems::False;
+        }
         arr.min_items = usize_of(map, "minItems");
         arr.max_items = usize_of(map, "maxItems");
         arr.unique_items = map.get("uniqueItems") == Some(&Value::Bool(true));
@@ -207,6 +215,18 @@ pub fn json_schema_to_schema(value: &Value) -> RefOr<Schema> {
     RefOr::T(Schema::Object(obj))
 }
 
+/// `prefixItems` holds plain schemas: a `$ref` becomes `allOf: [$ref]`.
+fn ref_or_to_schema(v: &Value) -> Schema {
+    match json_schema_to_schema(v) {
+        RefOr::T(s) => s,
+        r @ RefOr::Ref(_) => {
+            let mut all_of = AllOf::new();
+            all_of.items = vec![r];
+            Schema::AllOf(all_of)
+        }
+    }
+}
+
 fn composite_items(map: &Map, key: &str) -> Option<Vec<RefOr<Schema>>> {
     map.get(key)
         .and_then(Value::as_array)
@@ -238,6 +258,10 @@ fn num_of(map: &Map, key: &str) -> Option<utoipa::Number> {
     let n = map.get(key)?;
     Some(match (n.as_i64(), n.as_f64()) {
         (Some(i), _) if isize::try_from(i).is_ok() => utoipa::Number::Int(i as isize),
+        // Above i64 (`u64` bounds): keep the exact integer.
+        (None, _) if n.as_u64().is_some_and(|u| usize::try_from(u).is_ok()) => {
+            utoipa::Number::UInt(n.as_u64().unwrap() as usize)
+        }
         (_, Some(f)) if f.fract() == 0.0 && f.abs() < isize::MAX as f64 => {
             utoipa::Number::Int(f as isize)
         }
