@@ -423,8 +423,11 @@ fn time_crate_time() {
 #[test]
 fn time_of_day_shortcut() {
     let s: ZTime = vld::time_of_day().max("12:00:00");
-    assert!(s.parse(r#""11:59:59""#).is_ok());
-    assert!(s.parse(r#""12:00:01""#).is_err());
+    assert_eq!(
+        s.parse(r#""11:59:59""#).unwrap(),
+        vld::time_of_day().parse(r#""11:59:59""#).unwrap()
+    );
+    assert_eq!(code(s.parse(r#""12:00:01""#)).key(), "too_big");
 }
 
 #[cfg(all(feature = "time", feature = "openapi"))]
@@ -436,8 +439,9 @@ fn time_datetime_default_is_rfc3339() {
         .unwrap();
     let schema = vld::time::datetime().with_default(dt).json_schema();
     let default = schema["default"].clone();
-    assert!(
-        vld::time::datetime().parse_value(&default).is_ok(),
+    assert_eq!(
+        vld::time::datetime().parse_value(&default).unwrap(),
+        dt,
         "{default}"
     );
 }
