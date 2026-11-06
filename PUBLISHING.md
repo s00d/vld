@@ -13,7 +13,7 @@ gh auth login          # for the GitHub release
 
 ## Release
 
-1. Write the notes in `CHANGELOG.md` under `## [Unreleased]` (Breaking
+1. Add `## [Unreleased]` at the top of `CHANGELOG.md` and write the notes under it (Breaking
    changes / Migration / Added / Changed / Fixed / Security / Removed). The
    release stops if that section is empty: it is never regenerated from git.
 2. Make sure `main` is green in CI (MSRV, minimal versions, OS and live
@@ -57,7 +57,7 @@ entry in `[workspace.dependencies]` if other crates use it,
 
 ## Troubleshooting
 
-- **`[Unreleased] is empty`**: write the notes, commit, rerun.
+- **`[Unreleased]` is missing or empty**: add the heading and the notes, commit, rerun.
 - **Preflight fails**: fix on `main`, rerun the release (nothing was
   published yet; cargo-release has not committed).
 - **Publish stopped half-way** (rate limit, network, index lag): rerun

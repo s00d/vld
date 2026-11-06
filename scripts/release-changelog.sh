@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Promote CHANGELOG.md's [Unreleased] section to [<version>] - <today>.
+# Rename CHANGELOG.md's [Unreleased] section to [<version>] - <today>
+# (no empty [Unreleased] is left behind; add it back when writing new notes).
 # Fails (and so stops `cargo release`) when [Unreleased] is missing or empty:
 # release notes are written by hand, never regenerated from git history.
 # (`git cliff --unreleased` can draft them: copy what you need by hand.)
@@ -47,7 +48,7 @@ if not body.strip():
     sys.exit(f"CHANGELOG.md [Unreleased] is empty: write the {version} notes first")
 
 date = datetime.date.today().isoformat()
-new_header = f"## [Unreleased]\n\n## [{version}] - {date}\n"
+new_header = f"## [{version}] - {date}\n"
 path.write_text(text[: m.start()] + new_header + rest)
 print(f"Promoted [Unreleased] -> [{version}] - {date}")
 PY
