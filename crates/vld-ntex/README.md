@@ -1,66 +1,36 @@
-[![Crates.io](https://img.shields.io/crates/v/vld-ntex?style=for-the-badge)](https://crates.io/crates/vld-ntex)
-[![docs.rs](https://img.shields.io/docsrs/vld-ntex?style=for-the-badge)](https://docs.rs/vld-ntex)
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/s00d/vld)
-[![GitHub issues](https://img.shields.io/badge/github-issues-orange?style=for-the-badge)](https://github.com/s00d/vld/issues)
-[![GitHub stars](https://img.shields.io/badge/github-stars-yellow?style=for-the-badge)](https://github.com/s00d/vld/stargazers)
-
 # vld-ntex
 
-[ntex](https://ntex.rs/) integration for the [vld](https://crates.io/crates/vld) validation library.
+[![crates.io](https://img.shields.io/crates/v/vld-ntex)](https://crates.io/crates/vld-ntex)
+[![docs.rs](https://img.shields.io/docsrs/vld-ntex)](https://docs.rs/vld-ntex)
 
-## Overview
+[ntex](https://ntex.rs/) 3 / 4 extractors that validate JSON bodies, query strings, path parameters, forms, headers and cookies with [vld](https://crates.io/crates/vld) schemas.
 
-Provides 6 extractors that validate request data using `vld` schemas **before** your handler runs:
-
-| Extractor | Replaces | Source |
-|---|---|---|
-| `VldJson<T>` | `ntex::web::types::Json<T>` | JSON request body |
-| `VldQuery<T>` | `ntex::web::types::Query<T>` | URL query parameters |
-| `VldPath<T>` | `ntex::web::types::Path<T>` | URL path parameters |
-| `VldForm<T>` | `ntex::web::types::Form<T>` | URL-encoded form body |
-| `VldHeaders<T>` | manual header extraction | HTTP headers |
-| `VldCookie<T>` | manual cookie parsing | Cookie values |
-
-On validation failure (and for malformed bodies) all extractors return **422 Unprocessable Entity** with a JSON body describing every issue; bodies over the size limit return **413** `{"error":"Payload too large"}`.
-
-JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
-
-Form extractors require `application/x-www-form-urlencoded` (**415** otherwise) and accept at most 1000 fields (**422** beyond). Header names containing `_` are ignored (only `-` maps to `_`, so `x_user: admin` cannot fill an `x_user` field past a proxy that strips `X-User`), and every `Cookie` header is read — the first occurrence of a cookie name wins.
-
-## Installation
+## Install
 
 ```toml
 [dependencies]
 vld = "0.5"
-vld-ntex = "0.5"
-ntex = "4"
+vld-ntex = "0.5"                                   # ntex 4
+ntex = { version = "4", features = ["tokio"] }
+
+# ntex 3:
+# vld-ntex = { version = "0.5", default-features = false, features = ["ntex-3"] }
 ```
 
-### ntex versions
+## Features
 
-| Feature | ntex |
-|---|---|
-| `ntex-4` (default) | 4.x |
-| `ntex-3` | 3.x |
+| Feature | Default | Description |
+|---|---|---|
+| `ntex-4` | yes | ntex 4 |
+| `ntex-3` | no | ntex 3 |
+| `compress` | no | Decode `gzip` / `deflate` / `br` request bodies |
 
-Enable exactly one. The selected crate is re-exported as `vld_ntex::ntex`. Crate MSRV is
-Rust 1.97 (required by ntex 4).
+Enable exactly one of `ntex-3` / `ntex-4`. The selected crate is re-exported as `vld_ntex::ntex`.
 
-**Migrating from 0.4 (ntex 3):** the default is now ntex 4. To stay on ntex 3:
-
-```toml
-vld-ntex = { version = "0.5", default-features = false, features = ["ntex-3"] }
-```
-
-Extractors, error type and status codes are identical on both versions. The body limit
-(`VldBodyLimit`) is registered with `App::state(..)` on ntex 3 and
-`App::with_config(WebAppConfig::new().set_state(..))` on ntex 4.
-
-## VldJson — JSON body
+## Example
 
 ```rust
-use ntex::web::{self, HttpResponse};
+use ntex::web::{self, App, HttpResponse, HttpServer};
 use vld_ntex::VldJson;
 
 vld::schema! {
@@ -71,185 +41,30 @@ vld::schema! {
     }
 }
 
-async fn create_user(body: VldJson<CreateUser>) -> HttpResponse {
-    HttpResponse::Ok().body(format!("Created: {}", body.name))
+async fn create_user(user: VldJson<CreateUser>) -> HttpResponse {
+    HttpResponse::Created().body(format!("created {}", user.name))
+}
+
+#[ntex::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(async move |_| App::new().route("/users", web::post().to(create_user)))
+        .bind("127.0.0.1:8080", ntex::SharedCfg::default())? // ntex 4
+        .run()
+        .await
 }
 ```
 
-## VldQuery — query parameters
+Invalid input is answered with **422** and `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`; a wrong `Content-Type` is **415**, a body over the limit (2 MiB, change it with the `VldBodyLimit` app state) is **413**.
 
-Values are coerced losslessly: canonical numbers (`"42"`, `"-1.5"`) → number, `"true"`/`"false"` → boolean; everything else (`""`, `"null"`, `"01234"`, `"+1555"`, `"1e3"`) stays a string. Repeated keys (`?tag=a&tag=b`) and `tag[]=a` become arrays. Use `vld::string().coerce()` for string fields that may look numeric.
+Extractors: `VldJson`, `VldQuery`, `VldPath`, `VldForm`, `VldHeaders`, `VldCookie`.
 
-```rust
-use ntex::web::HttpResponse;
-use vld_ntex::VldQuery;
+## Documentation
 
-vld::schema! {
-    #[derive(Debug)]
-    pub struct SearchParams {
-        pub q: String => vld::string().min(1).max(200),
-        pub page: Option<i64> => vld::number().int().min(1).optional(),
-        pub limit: Option<i64> => vld::number().int().min(1).max(100).optional(),
-    }
-}
+- Guide: <https://s00d.github.io/vld/integrations/web/ntex>
+- Shared adapter rules: <https://s00d.github.io/vld/integrations/web/overview>
+- API: <https://docs.rs/vld-ntex>
 
-async fn search(params: VldQuery<SearchParams>) -> HttpResponse {
-    HttpResponse::Ok().body(format!("Searching '{}' page={:?}", params.q, params.page))
-}
-```
-
-## VldPath — path parameters
-
-```rust
-use ntex::web::{self, HttpResponse};
-use vld_ntex::VldPath;
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct UserPath {
-        pub id: i64 => vld::number().int().min(1),
-    }
-}
-
-async fn get_user(path: VldPath<UserPath>) -> HttpResponse {
-    HttpResponse::Ok().body(format!("User #{}", path.id))
-}
-
-// Register: .route("/users/{id}", web::get().to(get_user))
-```
-
-## VldForm — URL-encoded form body
-
-```rust
-use ntex::web::HttpResponse;
-use vld_ntex::VldForm;
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct LoginForm {
-        pub username: String => vld::string().min(3).max(50),
-        pub password: String => vld::string().min(8),
-    }
-}
-
-async fn login(form: VldForm<LoginForm>) -> HttpResponse {
-    HttpResponse::Ok().body(format!("Welcome, {}!", form.username))
-}
-```
-
-## VldHeaders — HTTP headers
-
-Header names are normalised to snake_case: `Content-Type` → `content_type`, `X-Request-Id` → `x_request_id`.
-
-```rust
-use ntex::web::HttpResponse;
-use vld_ntex::VldHeaders;
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct AuthHeaders {
-        pub authorization: String => vld::string().min(1),
-        pub x_request_id: Option<String> => vld::string().optional(),
-    }
-}
-
-async fn protected(headers: VldHeaders<AuthHeaders>) -> HttpResponse {
-    HttpResponse::Ok().body(format!("auth={}", headers.authorization))
-}
-```
-
-## VldCookie — cookies
-
-Cookie names are matched as-is to schema field names.
-
-```rust
-use ntex::web::HttpResponse;
-use vld_ntex::VldCookie;
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct Session {
-        pub session_id: String => vld::string().min(1),
-        pub theme: Option<String> => vld::string().optional(),
-    }
-}
-
-async fn dashboard(cookies: VldCookie<Session>) -> HttpResponse {
-    HttpResponse::Ok().body(format!("session={}", cookies.session_id))
-}
-```
-
-## Combining extractors
-
-Multiple extractors can be used in the same handler:
-
-```rust
-use ntex::web::HttpResponse;
-use vld_ntex::{VldJson, VldQuery};
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct OrderQuery {
-        pub dry_run: Option<bool> => vld::boolean().optional(),
-    }
-}
-
-vld::schema! {
-    #[derive(Debug)]
-    pub struct OrderBody {
-        pub product_id: i64 => vld::number().int().min(1),
-        pub quantity: i64 => vld::number().int().min(1).max(1000),
-    }
-}
-
-async fn create_order(
-    query: VldQuery<OrderQuery>,
-    body: VldJson<OrderBody>,
-) -> HttpResponse {
-    HttpResponse::Ok().body(format!(
-        "product={} qty={} dry_run={:?}",
-        body.product_id, body.quantity, query.dry_run,
-    ))
-}
-```
-
-## Running the example
-
-```sh
-cargo run -p vld-ntex --example ntex_basic
-```
-
-### Example requests
-
-```sh
-# VldJson — create user:
-curl -s -X POST http://localhost:8080/users \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Alice", "email": "alice@example.com", "age": 30}'
-
-# VldPath — get user by id:
-curl -s http://localhost:8080/users/42
-
-# VldQuery — search:
-curl -s "http://localhost:8080/search?q=rust&page=1"
-```
-
-## Errors and body limits
-
-Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
-
-| Body | Default limit | Configure |
-|---|---|---|
-| JSON (`VldJson`) | 2 MiB | app state `VldBodyLimit(n)` (ntex's `JsonConfig` / `PayloadConfig` do not apply; compressed request bodies are not decoded) |
-| Form (`VldForm`) | 2 MiB, max 1000 fields | app state `VldBodyLimit(n)` (ntex's `JsonConfig` / `PayloadConfig` do not apply; compressed request bodies are not decoded) |
-
-Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
-
-## OpenAPI (vld-utoipa)
-
-Same pattern as [vld-axum](../vld-axum/README.md#openapi-vld-utoipa): `#[into_params(parameter_in = Query|Path)]`
-on the struct, `impl_to_schema!`, then `params(T)` in `#[utoipa::path]`. Use `VldQuery` / `VldPath`
-extractors at runtime.
+MSRV: 1.97 with `ntex-4` (default); `ntex-3` builds on 1.88 with `--ignore-rust-version` ([MSRV.md](https://github.com/s00d/vld/blob/main/MSRV.md)).
 
 ## License
 

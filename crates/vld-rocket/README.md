@@ -1,47 +1,20 @@
-[![Crates.io](https://img.shields.io/crates/v/vld-rocket?style=for-the-badge)](https://crates.io/crates/vld-rocket)
-[![docs.rs](https://img.shields.io/docsrs/vld-rocket?style=for-the-badge)](https://docs.rs/vld-rocket)
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/s00d/vld)
-[![GitHub issues](https://img.shields.io/badge/github-issues-orange?style=for-the-badge)](https://github.com/s00d/vld/issues)
-[![GitHub stars](https://img.shields.io/badge/github-stars-yellow?style=for-the-badge)](https://github.com/s00d/vld/stargazers)
-
 # vld-rocket
 
-[Rocket](https://rocket.rs/) integration for the **vld** validation library.
+[![crates.io](https://img.shields.io/crates/v/vld-rocket)](https://crates.io/crates/vld-rocket)
+[![docs.rs](https://img.shields.io/docsrs/vld-rocket)](https://docs.rs/vld-rocket)
 
-## Features
+[Rocket](https://rocket.rs/) 0.5 guards that validate JSON bodies, query strings, path segments, forms, headers and cookies with [vld](https://crates.io/crates/vld) schemas, plus catchers that answer with JSON errors.
 
-| Extractor | Source | Description |
-|-----------|--------|-------------|
-| `VldJson<T>` | JSON body | Validates JSON request body |
-| `VldQuery<T>` | Query string | Validates URL query parameters |
-| `VldForm<T>` | Form body | Validates `application/x-www-form-urlencoded` |
-| `VldPath<T>` | Path segments | Validates `<param>` / trailing `<param..>` segments (any mount point) |
-| `VldHeaders<T>` | HTTP headers | Validates headers (`X-Request-Id` → `x_request_id`) |
-| `VldCookie<T>` | Cookie header | Validates cookie values |
-
-All extractors return `422 Unprocessable Entity` with a JSON error body on validation failure
-or malformed input (invalid JSON, non-UTF-8 form), and `413 Payload Too Large` when the body
-exceeds the limit (see [Errors and body limits](#errors-and-body-limits)).
-
-JSON body extractors require a JSON `Content-Type` (`application/json` or any `application/*+json`, case-insensitive); a missing or different type returns **415** `{"error":"Unsupported Media Type","message":"..."}`. Query, path, form, header and cookie values are coerced from text but follow the schema: `?q=123` into `vld::string()` stays `"123"`, and a single `?tags=a` fills a `Vec<String>`. Every issue in the 422 body carries a machine-readable `code` (e.g. `"too_small"`).
-
-Form extractors require `application/x-www-form-urlencoded` (**415** otherwise) and accept at most 1000 fields (**422** beyond). Header names containing `_` are ignored (only `-` maps to `_`, so `x_user: admin` cannot fill an `x_user` field past a proxy that strips `X-User`), and every `Cookie` header is read — the first occurrence of a cookie name wins.
-
-Rocket requires every `<param>` to be a handler argument as well, so declare them next to
-`VldPath<T>` (e.g. `fn get(id: &str, p: VldPath<UserPath>)`).
-
-## Installation
+## Install
 
 ```toml
 [dependencies]
-vld-rocket = "0.5"
 vld = "0.5"
+vld-rocket = "0.5"
 rocket = { version = "0.5", features = ["json"] }
-serde_json = "1"
 ```
 
-## Quick Start
+## Example
 
 ```rust
 use vld_rocket::prelude::*;
@@ -55,81 +28,29 @@ vld::schema! {
 }
 
 #[rocket::post("/users", data = "<user>")]
-fn create_user(user: VldJson<CreateUser>) -> rocket::serde::json::Json<serde_json::Value> {
-    rocket::serde::json::Json(serde_json::json!({
-        "name": user.name,
-        "email": user.email,
-    }))
+fn create_user(user: VldJson<CreateUser>) -> String {
+    format!("created {}", user.name)
 }
 
-#[rocket::main]
-async fn main() -> Result<(), rocket::Error> {
+#[rocket::launch]
+fn rocket() -> _ {
     rocket::build()
         .mount("/", rocket::routes![create_user])
-        .register("/", vld_rocket::vld_catchers())
-        .launch()
-        .await?;
-    Ok(())
+        .register("/", vld_catchers()) // JSON bodies for 400, 413, 415, 422
 }
 ```
 
-## Error Catchers
+Invalid input is answered with **422** and `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`; a wrong `Content-Type` is **415**, a body over the limit is **413**. Bodies are limited by Rocket's `json` / `form` limits; while those are at Rocket's built-in defaults, 2 MiB applies.
 
-Register the built-in catchers to get JSON error responses:
+Guards: `VldJson`, `VldForm`, `VldQuery`, `VldPath`, `VldHeaders`, `VldCookie`.
 
-```rust,ignore
-.register("/", vld_rocket::vld_catchers()) // 400, 413, 415, 422
+## Documentation
 
-// or pick individually:
-.register("/", rocket::catchers![
-    vld_rocket::vld_422_catcher,  // validation / malformed body errors
-    vld_rocket::vld_413_catcher,  // body over the configured limit
-    vld_rocket::vld_415_catcher,
-    vld_rocket::vld_400_catcher,
-])
-```
+- Guide: <https://s00d.github.io/vld/integrations/web/rocket>
+- Shared adapter rules: <https://s00d.github.io/vld/integrations/web/overview>
+- API: <https://docs.rs/vld-rocket>
 
-## Errors and body limits
-
-Every error uses the shared `vld` JSON body — 422 validation / malformed input, 413 payload too large, 415 wrong `Content-Type`; e.g. `{"error": "Validation failed", "issues": [{"path": ".name", "message": "...", "code": "too_small"}]}`. See [error bodies](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#error-bodies).
-
-| Body | Default limit | Configure |
-|---|---|---|
-| JSON (`VldJson`) | 2 MiB | `limits.json` in `Rocket.toml` / `ROCKET_LIMITS` |
-| Form (`VldForm`) | 2 MiB, max 1000 fields | `limits.form` in `Rocket.toml` / `ROCKET_LIMITS` |
-
-While a limit is left at Rocket's built-in default (1 MiB json / 32 KiB form) the shared 2 MiB applies, so setting exactly the built-in value counts as unset. The catchers return the stored vld error only for the status it was stored with.
-
-Limits of every adapter: [body limits](https://github.com/s00d/vld/blob/main/crates/vld-http-common/README.md#body-limits).
-
-## Running Examples
-
-```bash
-cargo run -p vld-rocket --example rocket_basic
-```
-
-### Example Requests
-
-```bash
-# Create user (valid)
-curl -X POST http://localhost:8000/users \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Alice","email":"alice@example.com","age":30}'
-
-# Create user (invalid — triggers 422)
-curl -X POST http://localhost:8000/users \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"A","email":"bad","age":-1}'
-
-# Search (query params)
-curl "http://localhost:8000/search?q=hello&page=1&limit=10"
-```
-
-## OpenAPI (vld-utoipa)
-
-Use [vld-utoipa](../vld-utoipa/README.md) with `#[into_params(parameter_in = Query)]` or `Path` and
-`impl_to_schema!` for OpenAPI parameter constraints. Runtime: `VldJson<T>`, `VldQuery<T>`,
-`VldPath<T>` in handler signatures.
+MSRV: 1.85 ([MSRV.md](https://github.com/s00d/vld/blob/main/MSRV.md)).
 
 ## License
 
