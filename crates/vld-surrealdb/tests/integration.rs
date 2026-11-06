@@ -57,9 +57,35 @@ vld::schema! {
     }
 }
 
+/// `(path, code)` of every issue of a `Validation` error (panics on `Ok`).
+#[track_caller]
+fn issues<T: std::fmt::Debug>(r: Result<T, VldSurrealError>) -> Vec<(String, String)> {
+    match r {
+        Err(VldSurrealError::Validation(e)) => e
+            .issues
+            .iter()
+            .map(|i| {
+                (
+                    i.path.iter().map(ToString::to_string).collect(),
+                    i.code.key().to_string(),
+                )
+            })
+            .collect(),
+        other => panic!("expected a validation error, got {other:?}"),
+    }
+}
+
+/// Owned `(path, code)` pairs for comparing with [`issues`].
+fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
+    expected
+        .iter()
+        .map(|(p, c)| (p.to_string(), c.to_string()))
+        .collect()
+}
+
 // ========================= Test data =========================================
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct Person {
     name: String,
     email: String,
@@ -80,7 +106,14 @@ fn validate_content_valid() {
         email: "alice@example.com".into(),
         age: 30,
     };
-    assert!(validate_content::<PersonSchema, _>(&person).is_ok());
+    validate_content::<PersonSchema, _>(&person).unwrap();
+    // Bounds are inclusive.
+    let edge = Person {
+        name: "A".into(),
+        email: "a@b.co".into(),
+        age: 150,
+    };
+    validate_content::<PersonSchema, _>(&edge).unwrap();
 }
 
 #[test]
@@ -90,7 +123,10 @@ fn validate_content_invalid_name() {
         email: "alice@example.com".into(),
         age: 30,
     };
-    assert!(validate_content::<PersonSchema, _>(&person).is_err());
+    assert_eq!(
+        issues(validate_content::<PersonSchema, _>(&person)),
+        pairs(&[(".name", "too_small")])
+    );
 }
 
 #[test]
@@ -100,7 +136,10 @@ fn validate_content_invalid_email() {
         email: "not-an-email".into(),
         age: 30,
     };
-    assert!(validate_content::<PersonSchema, _>(&person).is_err());
+    assert_eq!(
+        issues(validate_content::<PersonSchema, _>(&person)),
+        pairs(&[(".email", "invalid_string")])
+    );
 }
 
 #[test]
@@ -110,7 +149,10 @@ fn validate_content_invalid_age() {
         email: "alice@example.com".into(),
         age: -1,
     };
-    assert!(validate_content::<PersonSchema, _>(&person).is_err());
+    assert_eq!(
+        issues(validate_content::<PersonSchema, _>(&person)),
+        pairs(&[(".age", "too_small")])
+    );
 }
 
 // ========================= validate_json =====================================
@@ -118,19 +160,29 @@ fn validate_content_invalid_age() {
 #[test]
 fn validate_json_valid() {
     let json = json!({"name": "Bob", "email": "bob@example.com", "age": 25});
-    assert!(validate_json::<PersonSchema>(&json).is_ok());
+    validate_json::<PersonSchema>(&json).unwrap();
 }
 
 #[test]
 fn validate_json_invalid() {
     let json = json!({"name": "", "email": "bad", "age": 200});
-    assert!(validate_json::<PersonSchema>(&json).is_err());
+    assert_eq!(
+        issues(validate_json::<PersonSchema>(&json)),
+        pairs(&[
+            (".name", "too_small"),
+            (".email", "invalid_string"),
+            (".age", "too_big")
+        ])
+    );
 }
 
 #[test]
 fn validate_json_missing_fields() {
     let json = json!({"name": "Bob"});
-    assert!(validate_json::<PersonSchema>(&json).is_err());
+    assert_eq!(
+        issues(validate_json::<PersonSchema>(&json)),
+        pairs(&[(".email", "missing_field"), (".age", "missing_field")])
+    );
 }
 
 // ========================= validate_record(s) ================================
@@ -144,7 +196,11 @@ fn validate_record_valid() {
     };
     #[allow(deprecated)]
     let r = validate_record::<PersonSchema, _>(&p);
-    assert!(r.is_ok());
+    r.unwrap();
+    let bad = Person { age: 151, ..p };
+    #[allow(deprecated)]
+    let r = validate_record::<PersonSchema, _>(&bad);
+    assert_eq!(issues(r), pairs(&[(".age", "too_big")]));
 }
 
 #[test]
@@ -155,7 +211,8 @@ fn validate_records_all_valid() {
         },
         NameOnly { name: "Bob".into() },
     ];
-    assert!(validate_records::<NameSchema, _>(&rows).is_ok());
+    validate_records::<NameSchema, _>(&rows).unwrap();
+    validate_records::<NameSchema, NameOnly>(&[]).unwrap();
 }
 
 #[test]
@@ -171,6 +228,7 @@ fn validate_records_one_invalid() {
     ];
     let err = validate_records::<NameSchema, _>(&rows).unwrap_err();
     assert_eq!(err.0, 1); // index of bad row
+    assert_eq!(issues::<()>(Err(err.1)), pairs(&[(".name", "too_small")]));
 }
 
 // ========================= validate_value ====================================
@@ -178,22 +236,37 @@ fn validate_records_one_invalid() {
 #[test]
 fn validate_value_valid_string() {
     let schema = vld::string().min(1).max(100);
-    let val = json!("Hello");
-    assert!(validate_value(&schema, &val).is_ok());
+    validate_value(&schema, &json!("Hello")).unwrap();
+    validate_value(&schema, &json!("H")).unwrap();
+    assert_eq!(
+        issues(validate_value(&schema, &json!("x".repeat(101)))),
+        pairs(&[("", "too_big")])
+    );
 }
 
 #[test]
 fn validate_value_invalid_string() {
     let schema = vld::string().min(5);
-    let val = json!("Hi");
-    assert!(validate_value(&schema, &val).is_err());
+    assert_eq!(
+        issues(validate_value(&schema, &json!("Hi"))),
+        pairs(&[("", "too_small")])
+    );
+    assert_eq!(
+        issues(validate_value(&schema, &json!(5))),
+        pairs(&[("", "invalid_type")])
+    );
 }
 
 #[test]
 fn validate_value_valid_number() {
     let schema = vld::number().int().min(0).max(100);
-    let val = json!(42);
-    assert!(validate_value(&schema, &val).is_ok());
+    for ok in [0, 42, 100] {
+        validate_value(&schema, &json!(ok)).unwrap();
+    }
+    assert_eq!(
+        issues(validate_value(&schema, &json!(1.5))),
+        pairs(&[("", "not_int")])
+    );
 }
 
 // ========================= Validated<S, T> ===================================
@@ -217,7 +290,14 @@ fn validated_wrapper_invalid() {
         email: "bad".into(),
         age: -1,
     };
-    assert!(Validated::<PersonSchema, _>::new(p).is_err());
+    assert_eq!(
+        issues(Validated::<PersonSchema, _>::new(p)),
+        pairs(&[
+            (".name", "too_small"),
+            (".email", "invalid_string"),
+            (".age", "too_small")
+        ])
+    );
 }
 
 #[test]
@@ -256,7 +336,10 @@ fn vld_text_valid() {
 
 #[test]
 fn vld_text_invalid() {
-    assert!(VldText::<EmailField>::new("not-email").is_err());
+    assert_eq!(
+        issues(VldText::<EmailField>::new("not-email")),
+        pairs(&[(".value", "invalid_string")])
+    );
 }
 
 #[test]
@@ -276,8 +359,11 @@ fn vld_text_deserializes_valid() {
 #[test]
 fn vld_text_deserializes_invalid() {
     let json = json!("not-email");
-    let result: Result<VldText<EmailField>, _> = serde_json::from_value(json);
-    assert!(result.is_err());
+    let err = serde_json::from_value::<VldText<EmailField>>(json).unwrap_err();
+    assert!(
+        err.to_string().starts_with("Validation error: .value: "),
+        "{err}"
+    );
 }
 
 #[test]
@@ -304,8 +390,14 @@ fn vld_int_valid() {
 
 #[test]
 fn vld_int_invalid() {
-    assert!(VldInt::<AgeField>::new(-1).is_err());
-    assert!(VldInt::<AgeField>::new(200).is_err());
+    assert_eq!(
+        issues(VldInt::<AgeField>::new(-1)),
+        pairs(&[(".value", "too_small")])
+    );
+    assert_eq!(
+        issues(VldInt::<AgeField>::new(200)),
+        pairs(&[(".value", "too_big")])
+    );
 }
 
 #[test]
@@ -325,8 +417,11 @@ fn vld_int_deserializes() {
 #[test]
 fn vld_int_deserializes_invalid() {
     let json = json!(-5);
-    let result: Result<VldInt<AgeField>, _> = serde_json::from_value(json);
-    assert!(result.is_err());
+    let err = serde_json::from_value::<VldInt<AgeField>>(json).unwrap_err();
+    assert!(
+        err.to_string().starts_with("Validation error: .value: "),
+        "{err}"
+    );
 }
 
 // ========================= VldFloat<S> =======================================
@@ -339,7 +434,10 @@ fn vld_float_valid() {
 
 #[test]
 fn vld_float_invalid() {
-    assert!(VldFloat::<PriceField>::new(-0.01).is_err());
+    assert_eq!(
+        issues(VldFloat::<PriceField>::new(-0.01)),
+        pairs(&[(".value", "too_small")])
+    );
 }
 
 #[test]
@@ -423,7 +521,7 @@ fn validate_fields_macro_valid() {
         name => vld::string().min(1).max(100),
         email => vld::string().email(),
     };
-    assert!(result.is_ok());
+    result.unwrap();
 }
 
 #[test]
@@ -434,7 +532,10 @@ fn validate_fields_macro_invalid() {
         name => vld::string().min(1),
         email => vld::string().email(),
     };
-    assert!(result.is_err());
+    assert_eq!(
+        issues(result),
+        pairs(&[(".name", "too_small"), (".email", "invalid_string")])
+    );
 }
 
 // ========================= Regressions =======================================

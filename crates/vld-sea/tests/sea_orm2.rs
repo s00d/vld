@@ -44,10 +44,43 @@ fn active(email: &str) -> user_entity::ActiveModel {
     }
 }
 
+/// `(path, code)` of every issue of a `Validation` error (panics on `Ok`).
+#[track_caller]
+fn issues<T: std::fmt::Debug>(r: Result<T, VldSeaError>) -> Vec<(String, String)> {
+    match r {
+        Err(VldSeaError::Validation(e)) => e
+            .issues
+            .iter()
+            .map(|i| {
+                (
+                    i.path.iter().map(ToString::to_string).collect(),
+                    i.code.key().to_string(),
+                )
+            })
+            .collect(),
+        other => panic!("expected a validation error, got {other:?}"),
+    }
+}
+
+/// Owned `(path, code)` pairs for comparing with [`issues`].
+fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
+    expected
+        .iter()
+        .map(|(p, c)| (p.to_string(), c.to_string()))
+        .collect()
+}
+
 #[test]
 fn validate_active_and_json() {
-    assert!(validate_active::<UserInput, _>(&active("a@b.co")).is_ok());
-    assert!(validate_active::<UserInput, _>(&active("nope")).is_err());
+    let user = validate_active::<UserInput, _>(&active("a@b.co")).unwrap();
+    assert_eq!(
+        (user.name.as_str(), user.email.as_str()),
+        ("Alice", "a@b.co")
+    );
+    assert_eq!(
+        issues(validate_active::<UserInput, _>(&active("nope"))),
+        pairs(&[(".email", "invalid_string")])
+    );
     let json = active_model_to_json(&active("a@b.co"));
     // f32 maps through its decimal form.
     assert_eq!(json["score"], serde_json::json!(0.1));
@@ -56,8 +89,11 @@ fn validate_active_and_json() {
 #[test]
 fn before_save_helper() {
     let ok: Result<(), sea_orm::DbErr> = before_save::<UserInput, _>(&active("a@b.co"));
-    assert!(ok.is_ok());
-    assert!(before_save::<UserInput, _>(&active("nope")).is_err());
+    ok.unwrap();
+    match before_save::<UserInput, _>(&active("nope")) {
+        Err(sea_orm::DbErr::Custom(msg)) => assert!(msg.contains(".email: "), "{msg}"),
+        other => panic!("expected DbErr::Custom, got {other:?}"),
+    }
 }
 
 #[tokio::test]
