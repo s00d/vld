@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [Unreleased]
+
+## [0.4.7] - 2026-11-06
 ### Fixed
 
 - **Security** `vld-poem`: `VldPath` read the query string instead of the matched route parameters, so `/users/42` failed validation and `/users/42?id=7` validated `id = 7` (client-controlled). It now uses `Request::path_params`.
