@@ -1,78 +1,40 @@
 name: CI
 
+# Push / PR: one job (`check`) runs every blocking group of scripts/ci-all.sh
+# in sequence on one runner. The heavy or rarely-breaking checks (feature
+# matrix, MSRV toolchains, Windows/macOS, minimal versions, wasm, latest
+# stable) run in `extended` weekly and on demand (Actions -> CI -> Run workflow).
+# `scripts/ci-all.sh` with no arguments runs everything locally before a release.
+
 on:
   push:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  # Superseded PR runs are cancelled; every push to main runs to completion.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   # Pinned so new clippy lints / rustdoc checks cannot break CI unannounced;
-  # the `latest-stable` job warns about them early. Bump deliberately.
+  # the extended `latest stable` step warns about them early. Bump deliberately.
   RUST_TOOLCHAIN: "1.99.1"
   # Keep target/ for Swatinem/rust-cache (ci-all.sh deletes only its own
   # default target/ci).
   CARGO_TARGET_DIR: target
 
 jobs:
-  # Each job runs one group of scripts/ci-all.sh, so a failure in one area
-  # does not hide the others and local runs use the same script.
-  test:
-    name: Build + test (workspace, doctests, playground)
-    runs-on: ubuntu-latest
-    # No redis / rabbitmq services here: the live tests run in `integrations`
-    # (with CI set they otherwise fail when REDIS_URL / AMQP_URL are missing).
-    env:
-      VLD_LIVE_OPTIONAL: "1"
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: Swatinem/rust-cache@v2
-      - run: bash scripts/ci-all.sh test playground
-
-  features:
-    name: vld feature matrix
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-hack
-      - uses: Swatinem/rust-cache@v2
-      - run: bash scripts/ci-all.sh features
-
-  # Path / file containment (ZPath::within, ZFile::within) is OS-sensitive.
-  os:
-    name: vld file/path tests (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p vld --features file,file-advanced,string-advanced --locked
-
-  integrations:
-    name: Integration crates (dual-major features, DB backends, live redis/rabbitmq)
+  check:
+    name: Check (fmt, clippy, tests, integrations, docs, deny, package, fuzz)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     services:
       redis:
@@ -96,128 +58,65 @@ jobs:
       # diesel postgres / mysql backends link libpq / libmysqlclient.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
       # vld-ts cross-checks generated Zod/Valibot code against vld under node.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - run: mkdir -p .ts-check && cd .ts-check && echo '{"private":true}' > package.json && npm install --no-audit --no-fund zod@3 valibot@1
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: Swatinem/rust-cache@v2
-      - run: bash scripts/ci-all.sh integrations
-
-  clippy:
-    name: Clippy + rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - run: bash scripts/ci-all.sh fmt clippy
-
-  docs:
-    name: Docs (rustdoc -D warnings)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@master
+      - uses: taiki-e/install-action@v2
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          tool: cargo-deny
       - uses: Swatinem/rust-cache@v2
-      - run: bash scripts/ci-all.sh docs
+      - run: bash scripts/ci-all.sh fmt clippy test integrations docs deny package fuzz playground
 
-  msrv:
-    name: MSRV (core on 1.85 with all features, every crate on its rust-version)
+  extended:
+    name: Extended (features, MSRV, Windows/macOS, minimal, wasm, latest stable)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # The default toolchain resolves the MSRV-aware lockfiles; the listed
+      # The pinned toolchain resolves the MSRV-aware lockfiles; the listed
       # toolchains (MSRV.md) build. Keep in sync with group_msrv.
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
       - run: |
           for tc in 1.85 1.88 1.94 1.96 1.97; do
             rustup toolchain install "${tc}" --profile minimal
           done
+          rustup toolchain install nightly --profile minimal
+          rustup toolchain install stable --profile minimal --component clippy
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
       - uses: Swatinem/rust-cache@v2
         with:
-          key: msrv
-      - run: bash scripts/ci-all.sh msrv
+          key: extended
+      - run: bash scripts/ci-all.sh features msrv wasm
+      - name: minimal versions (non-blocking)
+        continue-on-error: true
+        run: bash scripts/ci-all.sh minimal
+      - name: clippy on latest stable (non-blocking)
+        continue-on-error: true
+        run: cargo +stable clippy --workspace --all-targets --profile ci --locked -- -D warnings
 
-  minimal-versions:
-    name: Minimal direct dependency versions (non-blocking)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: minimal-versions
-      - run: bash scripts/ci-all.sh minimal
-
-  package:
-    name: Package dry run (what cargo publish uploads)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - run: bash scripts/ci-all.sh package
-
-  fuzz:
-    name: Fuzz targets compile
-    runs-on: ubuntu-latest
+  # Path / file containment (ZPath::within, ZFile::within) is OS-sensitive.
+  os:
+    name: vld file/path tests (${{ matrix.os }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: fuzz
-      - run: bash scripts/ci-all.sh fuzz
-
-  wasm:
-    name: wasm32 check (vld, vld-leptos, vld-dioxus)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: wasm
-      - run: bash scripts/ci-all.sh wasm
-
-  deny:
-    name: cargo deny (advisories, licenses, bans, sources)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          # --workspace: without it only the root `vld` package is checked.
-          arguments: --workspace --all-features
-          command: check
-
-  latest-stable:
-    name: Clippy on latest stable (early warning, non-blocking)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: latest-stable
-      - run: cargo clippy --workspace --all-targets --profile ci --locked -- -D warnings
+      - run: cargo test -p vld --features file,file-advanced,string-advanced --locked

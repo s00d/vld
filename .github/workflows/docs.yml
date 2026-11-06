@@ -9,8 +9,6 @@ on:
       - 'CHANGELOG.md'
       - 'MSRV.md'
       - '.github/workflows/docs.yml'
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
