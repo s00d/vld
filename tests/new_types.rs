@@ -756,7 +756,8 @@ mod schemas {
     fn f32_schema() {
         assert_eq!(
             vld::f32().min(0.5).json_schema(),
-            json!({"type": "number", "format": "float", "minimum": 0.5})
+            json!({"type": "number", "format": "float", "minimum": 0.5,
+                   "maximum": f64::from(f32::MAX)})
         );
     }
 
@@ -854,7 +855,8 @@ mod schemas {
                 .min("08:00:00")
                 .max("18:00:00")
                 .json_schema(),
-            json!({"type": "string", "pattern": r"^\d{2}:\d{2}:\d{2}(\.\d{1,9})?$",
+            json!({"type": "string", "format": "partial-time",
+                   "pattern": r"^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?$",
                    "formatMinimum": "08:00:00", "formatMaximum": "18:00:00"})
         );
     }

@@ -169,6 +169,7 @@ pub(super) const RUSSIAN: &[(&str, &str)] = &[
     ("invalid_literal", "Ожидалось значение {expected}"),
     ("invalid_enum_value", "Недопустимое значение. Ожидалось одно из: {options}"),
     ("invalid_union", "Значение не соответствует ни одному из вариантов"),
+    ("union_variant", "[вариант {n}]"),
     (
         "invalid_discriminator",
         "Недопустимое значение дискриминатора. Ожидалось одно из: {options}",
@@ -367,6 +368,7 @@ pub(super) const GERMAN: &[(&str, &str)] = &[
     ("invalid_literal", "Literal {expected} erwartet"),
     ("invalid_enum_value", "Ungültiger Enum-Wert. Erwartet einer von: {options}"),
     ("invalid_union", "Eingabe passt zu keiner Variante der Union"),
+    ("union_variant", "[Variante {n}]"),
     (
         "invalid_discriminator",
         "Ungültiger Diskriminatorwert. Erwartet einer von: {options}",
@@ -565,6 +567,7 @@ pub(super) const SPANISH: &[(&str, &str)] = &[
     ("invalid_literal", "Se esperaba el literal {expected}"),
     ("invalid_enum_value", "Valor de enumeración inválido. Se esperaba uno de: {options}"),
     ("invalid_union", "La entrada no coincide con ninguna variante de la unión"),
+    ("union_variant", "[variante {n}]"),
     (
         "invalid_discriminator",
         "Valor de discriminador inválido. Se esperaba uno de: {options}",

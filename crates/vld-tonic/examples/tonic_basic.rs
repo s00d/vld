@@ -110,7 +110,10 @@ fn main() {
 
     match vld_tonic::metadata_interceptor::<AuthMetadata>(req) {
         Ok(req) => {
-            let auth = req.extensions().get::<AuthMetadata>().unwrap();
+            let auth = req
+                .extensions()
+                .get::<vld_tonic::Validated<AuthMetadata>>()
+                .unwrap();
             println!("Interceptor stored: {:?}", auth);
         }
         Err(status) => println!("Interceptor rejected: {}", status.message()),

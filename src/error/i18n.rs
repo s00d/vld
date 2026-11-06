@@ -193,9 +193,21 @@ pub fn translate_issue(issue: &ValidationIssue, resolver: &dyn MessageResolver) 
                 }
                 _ => None,
             });
-        out.message = format!("{prefix}{message}");
+        out.message = format!("{}{message}", translate_union_prefix(prefix, resolver));
     }
     out
+}
+
+/// `"[variant 2] "` → the resolver's `union_variant` template (`"[вариант 2] "`);
+/// kept as is when the resolver has none.
+fn translate_union_prefix(prefix: &str, resolver: &dyn MessageResolver) -> String {
+    match crate::combinators::split_variant_prefix(prefix) {
+        Some((n, _)) => resolver
+            .resolve("union_variant")
+            .map(|t| format!("{} ", t.replace("{n}", &n.to_string())))
+            .unwrap_or_else(|| prefix.to_string()),
+        None => prefix.to_string(),
+    }
 }
 
 /// `"[variant 2] msg"` → `("[variant 2] ", "msg")`; no prefix → `("", msg)`.
@@ -442,6 +454,8 @@ const ENGLISH: &[(&str, &str)] = &[
         "Invalid enum value. Expected one of: {options}",
     ),
     ("invalid_union", "Input did not match any variant of the union"),
+    // Prefix of each variant's issues inside a union error.
+    ("union_variant", "[variant {n}]"),
     (
         "invalid_discriminator",
         "Invalid discriminator value. Expected one of: {options}",
@@ -497,6 +511,11 @@ fn english_map() -> &'static TemplateMap {
         }
         map
     })
+}
+
+/// Default English template for exactly `base.sub` (no fallback).
+pub(crate) fn english_template_exact(base: &str, sub: &str) -> Option<&'static str> {
+    english_map().get(base)?.1.get(sub).copied()
 }
 
 /// Default English template for `base.sub`, falling back to `base`.
@@ -585,5 +604,49 @@ mod tests {
                 assert_eq!(placeholders(tr), placeholders(en), "{name}: `{key}`");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod live_round3 {
+    use crate::prelude::*;
+
+    #[test]
+    fn integer_bound_of_one_keeps_number_wording() {
+        let err = crate::u16()
+            .min(1)
+            .parse_value(&serde_json::json!(0))
+            .unwrap_err();
+        assert_eq!(err.issues[0].message, "Number must be at least 1");
+        let err = crate::i64()
+            .max(1)
+            .parse_value(&serde_json::json!(5))
+            .unwrap_err();
+        assert_eq!(err.issues[0].message, "Number must be at most 1");
+        // The `_one` form still applies where it exists.
+        let err = crate::char()
+            .parse_value(&serde_json::json!("ab"))
+            .unwrap_err();
+        assert!(
+            err.issues[0].message.contains("1 character"),
+            "{}",
+            err.issues[0].message
+        );
+    }
+
+    #[test]
+    fn union_variant_prefix_is_translated() {
+        let err = crate::union(crate::string(), crate::number())
+            .parse_value(&serde_json::json!(true))
+            .unwrap_err();
+        let ru = super::translate_error(&err, &super::russian());
+        assert!(
+            ru.issues
+                .iter()
+                .any(|i| i.message.starts_with("[вариант 1] ")),
+            "{:?}",
+            ru.issues.iter().map(|i| &i.message).collect::<Vec<_>>()
+        );
+        assert!(!ru.issues.iter().any(|i| i.message.contains("[variant")));
     }
 }

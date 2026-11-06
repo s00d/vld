@@ -142,7 +142,10 @@ impl VldSchema for ZF32 {
 #[cfg(feature = "openapi")]
 impl crate::openapi::JsonSchema for ZF32 {
     fn json_schema(&self) -> serde_json::Value {
-        let mut schema = self.inner.schema("number", None);
+        // The f32 range is part of the type (like the sized integers' range).
+        let max = Num::F(f64::from(f32::MAX));
+        let min = Num::F(f64::from(f32::MIN));
+        let mut schema = self.inner.schema("number", Some((min, max)));
         schema["format"] = serde_json::json!("float");
         schema
     }
@@ -150,3 +153,17 @@ impl crate::openapi::JsonSchema for ZF32 {
 
 #[cfg(feature = "openapi")]
 impl crate::openapi::CollectNestedSchemas for ZF32 {}
+
+#[cfg(all(test, feature = "openapi"))]
+mod schema_tests {
+    use crate::openapi::JsonSchema;
+
+    #[test]
+    fn f32_schema_carries_the_type_range() {
+        let s = crate::f32().json_schema();
+        assert_eq!(s["minimum"], serde_json::json!(f64::from(f32::MIN)));
+        assert_eq!(s["maximum"], serde_json::json!(f64::from(f32::MAX)));
+        let s = crate::f32().min(0.5).json_schema();
+        assert_eq!(s["minimum"], serde_json::json!(0.5));
+    }
+}

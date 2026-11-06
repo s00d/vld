@@ -581,7 +581,7 @@ impl<B: DateBackend> crate::openapi::JsonSchema for ZDateTime<B> {
                 "type": "string",
                 "anyOf": [
                     {"format": "date-time"},
-                    {"pattern": NAIVE_DATETIME_PATTERN},
+                    {"format": "naive-date-time", "pattern": NAIVE_DATETIME_PATTERN},
                 ],
             })
         } else {
@@ -593,7 +593,12 @@ impl<B: DateBackend> crate::openapi::JsonSchema for ZDateTime<B> {
 
 /// Naive `YYYY-MM-DDTHH:MM:SS[.frac]` (the calendar is checked by the parser).
 #[cfg(feature = "openapi")]
-const NAIVE_DATETIME_PATTERN: &str = r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d{1,9})?$";
+const NAIVE_DATETIME_PATTERN: &str =
+    r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])[Tt]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?$";
+
+/// `HH:MM:SS[.frac]` with field ranges checked.
+#[cfg(feature = "openapi")]
+const TIME_OF_DAY_PATTERN: &str = r"^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?$";
 
 #[cfg(feature = "openapi")]
 impl<B: DateBackend> crate::openapi::CollectNestedSchemas for ZDateTime<B> {}
@@ -697,15 +702,17 @@ impl<B: DateBackend> VldSchema for ZTime<B> {
     }
 }
 
-/// `{"type": "string", "pattern": "^\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?$"}`
-/// (not `format: time`, which requires an offset); `min`/`max` become
+/// `{"type": "string", "format": "partial-time", "pattern": ...}` — RFC 3339
+/// `partial-time` (not `format: time`, which requires an offset; validators
+/// ignore the unknown format and use the pattern); `min`/`max` become
 /// `formatMinimum`/`formatMaximum`.
 #[cfg(feature = "openapi")]
 impl<B: DateBackend> crate::openapi::JsonSchema for ZTime<B> {
     fn json_schema(&self) -> Value {
         self.bounds.json_schema(serde_json::json!({
             "type": "string",
-            "pattern": r"^\d{2}:\d{2}:\d{2}(\.\d{1,9})?$",
+            "format": "partial-time",
+            "pattern": TIME_OF_DAY_PATTERN,
         }))
     }
 }

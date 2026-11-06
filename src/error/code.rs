@@ -612,7 +612,7 @@ impl IssueCode {
         };
         let one = sub
             .filter(|_| self.plural_count() == Some(1))
-            .and_then(|s| super::i18n::english_template_for(base, Some(&format!("{s}_one"))));
+            .and_then(|s| super::i18n::english_template_exact(base, &format!("{s}_one")));
         let template = one
             .or_else(|| super::i18n::english_template_for(base, sub))
             .unwrap_or("{code}");

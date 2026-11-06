@@ -374,7 +374,7 @@ const TIME_RE: &str = r"([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?";
 const DATETIME_TIME_RE: &str = r"([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?";
 
 /// The date part (first 10 chars) is a real calendar day.
-const CALENDAR_FN: &str = "(s) => { const d = new Date(s.slice(0, 10) + \"T00:00:00Z\"); return !isNaN(d) && d.toISOString().slice(0, 10) === s.slice(0, 10); }";
+const CALENDAR_FN: &str = "(s) => { const d = new Date(s.slice(0, 10) + \"T00:00:00Z\"); return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s.slice(0, 10); }";
 
 const LUHN_FN: &str = "(s) => { if (!/^[\\d -]*$/.test(s)) return false; const d = s.replace(/\\D/g, \"\"); if (d.length < 12 || d.length > 19) return false; let sum = 0; for (let i = 0; i < d.length; i++) { let n = +d[d.length - 1 - i]; if (i % 2) { n *= 2; if (n > 9) n -= 9; } sum += n; } return sum % 10 === 0; }";
 

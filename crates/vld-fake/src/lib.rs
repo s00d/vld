@@ -998,6 +998,15 @@ impl<R: Rng> FakeGen<R> {
         if matches!(fmt, "date" | "date-time" | "time") {
             return self.gen_temporal(fmt, obj);
         }
+        // vld's offset-free variants: `partial-time` (time of day) and
+        // `naive-date-time` (no `Z` / offset).
+        if fmt == "partial-time" {
+            return self.gen_temporal("time", obj);
+        }
+        if fmt == "naive-date-time" {
+            let s = self.gen_temporal("date-time", obj);
+            return s.strip_suffix('Z').map(str::to_string).unwrap_or(s);
+        }
 
         // Unpadded Base64URL text: `n` chars encode `3n/4` bytes, `n % 4 != 1`.
         if fmt == "base64url" {
@@ -2412,4 +2421,35 @@ pub mod prelude {
         fake_json, fake_many, fake_parsed, fake_value, fake_value_seeded, impl_fake,
         try_fake_parsed, FakeData, FakeGen,
     };
+}
+
+#[cfg(test)]
+mod offset_free_formats {
+    use vld::schema::VldSchema;
+
+    /// `vld::*::time()` / naive `datetime()` emit `partial-time` /
+    /// `naive-date-time` next to their patterns; values must be real times.
+    #[test]
+    fn partial_time_and_naive_datetime_are_valid() {
+        let time = serde_json::json!({
+            "type": "string", "format": "partial-time",
+            "pattern": r"^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?$"
+        });
+        let naive = serde_json::json!({
+            "type": "string",
+            "anyOf": [
+                {"format": "date-time"},
+                {"format": "naive-date-time",
+                 "pattern": r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])[Tt]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?$"}
+            ]
+        });
+        let t = vld::string().iso_time();
+        let dt = vld::string().iso_datetime();
+        for seed in 0..500 {
+            let v = super::fake_value_seeded(&time, seed);
+            assert!(t.parse_value(&v).is_ok(), "time {v}");
+            let v = super::fake_value_seeded(&naive, seed);
+            assert!(dt.parse_value(&v).is_ok(), "datetime {v}");
+        }
+    }
 }

@@ -196,7 +196,7 @@ fn f08_translate_keeps_custom_messages() {
     let t = translate_error(&crate::common::parse_err(&u, json!("ab")), &german());
     assert_eq!(
         t.issues[1].message,
-        "[variant 1] Zeichenkette muss mindestens 3 Zeichen lang sein"
+        "[Variante 1] Zeichenkette muss mindestens 3 Zeichen lang sein"
     );
 }
 
@@ -597,8 +597,12 @@ mod json_schema {
     #[test]
     fn f11_time_pattern() {
         let js = vld::chrono::time().json_schema();
-        assert!(js.get("format").is_none());
-        assert_eq!(js["pattern"], r"^\d{2}:\d{2}:\d{2}(\.\d{1,9})?$");
+        // RFC 3339 `partial-time`, never `time` (which requires an offset).
+        assert_eq!(js["format"], "partial-time");
+        assert_eq!(
+            js["pattern"],
+            r"^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?$"
+        );
     }
 
     // 12. datetime() accepting naive input is not plain `date-time`.
