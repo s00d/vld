@@ -27,4 +27,5 @@ mod object;
 mod proptests;
 mod reaudit;
 mod regressions;
+mod security_047;
 mod string;

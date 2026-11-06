@@ -351,3 +351,9 @@ fn validation_error_body_schema_roundtrip() {
     assert_eq!(parsed.issues.len(), 1);
     assert_eq!(parsed.issues[0].message, "too short");
 }
+
+#[test]
+fn duplicate_cookie_first_occurrence_wins() {
+    let v = vld_http_common::cookies_to_json("sid=legit; other=1; sid=evil");
+    assert_eq!(v["sid"], "legit");
+}

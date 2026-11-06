@@ -91,8 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- `vld-poem`: `VldPath` read the query string instead of the matched route parameters, so `/users/42` failed validation and `/users/42?id=7` validated `id = 7` (client-controlled). It now uses `Request::path_params`.
-- Received-value truncation sliced strings by bytes and panicked on long multi-byte input (remote DoS); it now slices by chars.
+- All 0.4.7 security fixes (see below).
 - `vld-tower`: `Application/JSON` and `+json` bodies no longer bypass validation; JSON bodies are size-limited.
 - Dependencies refreshed: 21 of 23 RustSec advisories cleared (two remaining, documented in `deny.toml`).
 
@@ -101,6 +100,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `std` feature.
 - Inherent `to_json_schema_inner()` / per-type `to_json_schema()` duplicates (the `JsonSchema` trait remains; `ZObject::to_json_schema` stays).
 - `vld-http-common::extract_path_param_names` (unused).
+
+## [0.4.7] - 2026-11-06
+### Fixed
+
+- **Security** `vld-poem`: `VldPath` read the query string instead of the matched route parameters, so `/users/42` failed validation and `/users/42?id=7` validated `id = 7` (client-controlled). It now uses `Request::path_params`.
+- **Security** `vld`: a string longer than 100 bytes whose 97th byte falls inside a multi-byte character (e.g. Cyrillic, accented Latin) panicked while being stored as `received` in an error — any request body could crash the process. Truncation is now char-based.
+- **Security** `vld`: `string().iso_date()` / `iso_time()` / `iso_datetime()` panicked on non-ASCII input (`"123é56789"`) and on `"2024-01-01T"`.
+- **Security** `vld` (`time` backend): `datetime()` panicked when the UTC instant left the supported year range (`"9999-12-31T23:00:00-05:00"`); it is now a validation error. Requires `time >= 0.3.47`.
+- **Security** `vld`: `string().url_strict()` never checked IPv6 hosts (`http://[::1]/`, `http://[fd00::1]/`, `http://[::ffff:127.0.0.1]/` passed) and allowed `0.0.0.0`, `localhost.` and `*.localhost`.
+- **Security** `vld`: `path().within(base)` accepted `base/../outside` when the target did not exist (lexical `..` was not resolved).
+- **Security** `vld-http-common`: with duplicate cookie names the last value won, allowing cookie tossing; the first occurrence now wins.
 
 ## [0.4.6] - 2026-11-05
 ### Fixed
