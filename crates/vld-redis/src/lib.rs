@@ -1,14 +1,11 @@
-//! # vld-redis
-//!
-//! Redis integration for `vld`.
-//!
-//! ## Overview
+//! # vld-redis — Redis integration for `vld`
 //!
 //! Wrap a connection in a validating wrapper:
 //!
 //! - [`RedisConn::new(conn)`](RedisConn::new) — sync connections (`redis::ConnectionLike`)
 //! - `AsyncRedisConn::new(conn)` — async connections (`redis::aio::ConnectionLike`,
-//!   feature `aio`; `aio-tokio` also enables redis' tokio runtime)
+//!   feature `aio`, which needs a redis runtime feature: `aio-tokio` enables
+//!   redis' tokio runtime, or enable one on your own `redis` dependency)
 //!
 //! (`impl_to_redis!(conn)` / `impl_to_redis_async!(conn)` only did
 //! `let mut conn = RedisConn::new(conn);` and are deprecated.)
@@ -22,6 +19,38 @@
 //! - `sadd/smembers`
 //! - `zadd/zrange`
 //! - `publish`
+//!
+//! Values written are `Serialize + VldParse` (a `vld::schema!` struct with
+//! `#[derive(serde::Serialize)]`); values read are parsed with `VldParse`.
+//!
+//! Features: `redis-0` (default, `redis` `>=0.32, <1`) or `redis-1` — exactly
+//! one; the selected crate is re-exported as [`vld_redis::redis`](crate::redis).
+//!
+//! ```no_run
+//! use vld_redis::prelude::*;
+//! use vld_redis::redis;
+//!
+//! vld::schema! {
+//!     #[derive(Debug, serde::Serialize)]
+//!     pub struct UserSchema {
+//!         pub name: String => vld::string().min(1),
+//!         pub email: String => vld::string().email(),
+//!     }
+//! }
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = redis::Client::open("redis://127.0.0.1/")?;
+//! let mut conn = RedisConn::new(client.get_connection()?);
+//!
+//! conn.set("user:1", &UserSchema { name: "Alice".into(), email: "alice@example.com".into() })?;
+//! let user: Option<UserSchema> = conn.get("user:1")?;
+//!
+//! let bad = UserSchema { name: "".into(), email: "nope".into() };
+//! assert!(matches!(conn.set("user:2", &bad), Err(VldRedisError::Validation(_))));
+//! # Ok(()) }
+//! ```
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/messaging/redis>
 //!
 //! ## Shadowing of native methods
 //!
@@ -85,10 +114,12 @@ macro_rules! wrapper {
         }
 
         impl<C> $name<C> {
+            /// Wrap a connection.
             pub fn new(inner: C) -> Self {
                 Self { inner }
             }
 
+            /// Unwrap the inner connection.
             pub fn into_inner(self) -> C {
                 self.inner
             }
@@ -120,7 +151,8 @@ wrapper!(
 
 #[cfg(feature = "aio")]
 wrapper!(
-    /// Async Redis connection wrapper with validate+JSON behavior (feature `aio`).
+    /// Async Redis connection wrapper with validate+JSON behavior (feature `aio`,
+    /// plus a redis runtime feature such as `aio-tokio`).
     ///
     /// Same methods as [`RedisConn`], but `async`. They shadow
     /// `redis::AsyncCommands` methods of the same name.
@@ -250,11 +282,16 @@ commands! {
     { build: { let mut c = cmd1("PUBLISH", channel); c.arg(encode(value)?); c }, raw: i64, map: Ok }
 }
 
+/// Error type for `vld-redis`.
 #[derive(Debug)]
 pub enum VldRedisError {
+    /// The value (written or read) failed schema validation.
     Validation(vld::error::VldError),
+    /// The value could not be serialized to JSON.
     Serialization(String),
+    /// The stored bytes are not valid JSON.
     Deserialization(String),
+    /// The Redis command failed.
     Redis(redis::RedisError),
 }
 

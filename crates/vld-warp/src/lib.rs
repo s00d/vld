@@ -1,10 +1,7 @@
 //! # vld-warp — Warp integration for `vld`
 //!
-//! Validation [filters](warp::Filter) for [Warp](https://docs.rs/warp).
-//! Validates request data against `vld` schemas and rejects with structured
-//! JSON errors on failure.
-//!
-//! # Filters
+//! Validation [filters](warp::Filter) for [Warp](https://docs.rs/warp) 0.3
+//! and 0.4 (the dependency is `>=0.3, <0.5`; there are no version features).
 //!
 //! | Filter / Function | Source |
 //! |-------------------|--------|
@@ -18,7 +15,7 @@
 //! | [`vld_cookie::<T>()`] | Cookie values |
 //!
 //! Every filter rejects with [`VldRejection`] (wrapping [`VldHttpError`]).
-//! Use [`handle_rejection`] with `.recover()` to turn rejections into JSON
+//! Add [`handle_rejection`] with `.recover()` to turn rejections into JSON
 //! (see the [error body format](vld_http_common#error-bodies)):
 //! validation / malformed body → 422, body over the limit → 413, `vld_json`
 //! without a JSON `Content-Type` (`application/json` or `application/*+json`)
@@ -26,14 +23,41 @@
 //! the usual warp rejections (404, 405, 400, 411, 415) and 500 for anything
 //! unknown.
 //!
+//! # Example
+//!
+//! ```no_run
+//! use vld_warp::prelude::*;
+//! use warp::Filter;
+//!
+//! vld::schema! {
+//!     #[derive(Debug, Clone)]
+//!     pub struct CreateUser {
+//!         pub name: String  => vld::string().min(2),
+//!         pub email: String => vld::string().email(),
+//!     }
+//! }
+//!
+//! # #[tokio::main]
+//! # async fn main() {
+//! let create = warp::post()
+//!     .and(warp::path("users"))
+//!     .and(vld_json::<CreateUser>())
+//!     .map(|u: CreateUser| warp::reply::json(&serde_json::json!({ "name": u.name })));
+//!
+//! warp::serve(create.recover(handle_rejection))
+//!     .run(([127, 0, 0, 1], 3030))
+//!     .await;
+//! # }
+//! ```
+//!
 //! # Body limit
 //!
-//! `vld_json` / `vld_form` read at most
-//! [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT) (2 MiB);
+//! `vld_json` / `vld_form` stream the body and stop at
+//! [`DEFAULT_BODY_LIMIT`](vld_http_common::DEFAULT_BODY_LIMIT) (2 MiB), also
+//! without a `Content-Length` (chunked uploads);
 //! [`vld_json_limit`] / [`vld_form_limit`] take an explicit limit.
 //!
-//! Works with warp 0.3 and 0.4 (the dependency is `>=0.3, <0.5`; there are
-//! no version features).
+//! Guide: <https://s00d.github.io/vld/integrations/web/warp>
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures_util::{Stream, StreamExt};

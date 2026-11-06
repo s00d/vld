@@ -1,8 +1,20 @@
-//! Shared helpers for `vld` integration crates (internal).
+//! # vld-integration-common — shared helpers for `vld` integration crates
 //!
-//! Not intended for direct use; the public API lives in the integration
-//! crates (`vld-dioxus`, `vld-leptos`, `vld-tauri`, `vld-clap`, DB crates, …)
-//! which re-export what they need from here.
+//! **Internal crate** with no stable API of its own: depend on the
+//! integration crate you need (`vld-dioxus`, `vld-leptos`, `vld-tauri`,
+//! `vld-clap`, `vld-sqlx`, `vld-diesel`, `vld-sea`, `vld-surrealdb`), which
+//! re-exports what it uses from here.
+//!
+//! - [`format_path`] / [`flatten_issues`] — clean issue paths (`user.email`,
+//!   `items[0].name`, no leading dot);
+//! - [`form`] — `VldServerError`, `FieldError`, `check_field`,
+//!   [`validate_args!`] (re-exported by `vld-dioxus` / `vld-leptos`);
+//! - [`db`] — hidden macros that generate each database crate's error type,
+//!   `Validated<S, T>` and the `VldText` / `VldInt` / `VldFloat` / `VldBool`
+//!   column wrappers inside that crate (so it can implement its own database
+//!   traits without orphan-rule conflicts).
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/shared/integration-common>
 
 use vld::error::{PathSegment, VldError};
 

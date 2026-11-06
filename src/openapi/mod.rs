@@ -24,6 +24,7 @@
 use serde_json::{json, Value};
 
 #[cfg(feature = "diff")]
+#[cfg_attr(docsrs, doc(cfg(feature = "diff")))]
 pub mod diff;
 
 pub use crate::schema::NestedSchemaEntry;

@@ -1,11 +1,15 @@
-//! # vld-surrealdb — SurrealDB integration for the `vld` validation library
+//! # vld-surrealdb — SurrealDB helpers for `vld`
 //!
-//! Validate JSON documents **before** sending to SurrealDB and **after** receiving.
+//! Validate JSON documents against a [`vld`] schema **before** create /
+//! insert / merge and **after** select ([`validate_content`],
+//! [`validate_records`], [`validate_json`], [`validate_value`],
+//! [`validate_fields!`]), and return a serializable
+//! [`VldSurrealResponse`] to API clients.
 //!
-//! Zero dependency on `surrealdb` crate — works purely through `serde`, so it's
-//! compatible with any SurrealDB SDK version (2.x, 3.x, etc.).
+//! No dependency on the `surrealdb` crate: everything goes through `serde`,
+//! so any SDK version works.
 //!
-//! ## Quick Start
+//! ## Example
 //!
 //! ```rust
 //! use vld_surrealdb::prelude::*;
@@ -31,6 +35,10 @@
 //! // Validate before db.create("person").content(person)
 //! validate_content::<PersonSchema, _>(&person).unwrap();
 //! ```
+//!
+//! Issue paths have no leading dot (`user.email`, `items[0]`).
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/database/surrealdb>
 
 pub use vld;
 
@@ -49,7 +57,9 @@ pub use vld_integration_common::form::FieldError;
 /// Converts from [`VldSurrealError`] and can be sent over the wire.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VldSurrealResponse {
+    /// Error category (`"Validation failed"` or `"Serialization error"`).
     pub error: String,
+    /// One entry per issue.
     pub fields: Vec<FieldError>,
 }
 

@@ -9,13 +9,57 @@
 //! `415 Unsupported Media Type`. See the
 //! [error body format](vld_http_common#error-bodies).
 //!
+//! Guide: <https://s00d.github.io/vld/integrations/web/poem> (shared rules
+//! for all adapters: <https://s00d.github.io/vld/integrations/web/overview>).
+//!
+//! # Example
+//!
+//! ```no_run
+//! use poem::{get, handler, post, EndpointExt, Route};
+//! use vld_poem::prelude::*;
+//!
+//! vld::schema! {
+//!     #[derive(Debug, Clone)]
+//!     pub struct CreateUser {
+//!         pub name: String => vld::string().min(2).max(50),
+//!         pub email: String => vld::string().email(),
+//!     }
+//! }
+//!
+//! vld::schema! {
+//!     #[derive(Debug, Clone)]
+//!     pub struct UserPath {
+//!         pub id: i64 => vld::number().int().min(1),
+//!     }
+//! }
+//!
+//! #[handler]
+//! async fn create_user(user: VldJson<CreateUser>) -> String {
+//!     format!("created {}", user.name)
+//! }
+//!
+//! #[handler]
+//! async fn get_user(p: VldPath<UserPath>) -> String {
+//!     format!("user #{}", p.id)
+//! }
+//!
+//! let app = Route::new()
+//!     .at("/users", post(create_user))
+//!     .at("/users/:id", get(get_user));
+//! ```
+//!
 //! # Body limit
 //!
 //! `VldJson` and `VldForm` read at most [`DEFAULT_BODY_LIMIT`] (2 MiB);
 //! attach [`VldBodyLimit`] as request data to change it:
 //!
-//! ```ignore
-//! Route::new().at("/upload", post(handler)).data(vld_poem::VldBodyLimit(8 << 20))
+//! ```no_run
+//! use poem::{handler, post, EndpointExt, Route};
+//!
+//! #[handler]
+//! fn upload() -> &'static str { "ok" }
+//!
+//! let app = Route::new().at("/upload", post(upload).data(vld_poem::VldBodyLimit(8 << 20)));
 //! ```
 //!
 //! # Extractors

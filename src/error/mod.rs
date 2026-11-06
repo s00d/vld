@@ -38,6 +38,9 @@
 //! | `PathOutsideBase` | `path_outside_base` | — | `base` |
 //! | `PathNotAbsolute` | `path_not_absolute` | — | — |
 //! | `PathNotRelative` | `path_not_relative` | — | — |
+//! | `PathNotFound` | `path_not_found` | — | — |
+//! | `PathNotFile` | `path_not_file` | — | — |
+//! | `PathNotDir` | `path_not_dir` | — | — |
 //! | `JsonTooDeep` | `json_too_deep` | — | `max_depth` |
 //! | `FileTypeNotAllowed` | `file_type_not_allowed` | — | `kind`, `actual`, `allowed` |
 //! | `FileTypeDenied` | `file_type_denied` | — | `kind`, `actual` |
@@ -48,10 +51,6 @@
 //! | `IoError` | `io_error` | — | — |
 //! | `ParseError` | `parse_error` | — | — |
 //! | `Custom` | the user code | `<code>`, `custom` | `code` |
-//!
-//! | `PathNotFound` | `path_not_found` | — | — |
-//! | `PathNotFile` | `path_not_file` | — | — |
-//! | `PathNotDir` | `path_not_dir` | — | — |
 //!
 //! Origins ([`SizeOrigin::key`]): `string`, `number`, `decimal`, `array`,
 //! `tuple`, `set`, `record`, `object`, `bytes`, `date`, `datetime`, `time`,

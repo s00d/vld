@@ -7,7 +7,8 @@ use vld_http_common::headers_to_json;
 /// Rama extractor that validates **HTTP headers**.
 ///
 /// See [`vld_http_common::headers_to_json`]: names become snake_case
-/// (`X-Request-Id` → `x_request_id`), repeated headers are joined with `", "`.
+/// (`X-Request-Id` → `x_request_id`), names containing `_` are ignored,
+/// repeated headers are joined with `", "`.
 pub struct VldHeaders<T>(pub T);
 
 impl<T, State> FromPartsStateRefPair<State> for VldHeaders<T>

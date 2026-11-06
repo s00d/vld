@@ -18,6 +18,9 @@
 //! `application/x-www-form-urlencoded`; anything else is **415 Unsupported
 //! Media Type**. See the [error body format](vld_http_common#error-bodies).
 //!
+//! Guide: <https://s00d.github.io/vld/integrations/web/ntex> (shared rules
+//! for all adapters: <https://s00d.github.io/vld/integrations/web/overview>).
+//!
 //! # Body limits
 //!
 //! [`VldJson`] and [`VldForm`] read the body themselves up to
@@ -25,19 +28,19 @@
 //! not apply. Register [`VldBodyLimit`] as app state to change it:
 //! `App::new().state(VldBodyLimit(n))` (ntex 3) or
 //! `App::new().with_config(WebAppConfig::new().set_state(VldBodyLimit(n)))`
-//! (ntex 4). Compressed request bodies are not decoded.
+//! (ntex 4). Compressed request bodies are decoded only with the `compress`
+//! feature (the limit then applies to the decoded size).
 //!
 //! # ntex versions
 //!
 //! Features `ntex-4` (default) and `ntex-3` select the ntex major version;
 //! enable exactly one. The selected crate is re-exported as [`ntex`].
 //!
-//! # Quick example
+//! # Example
 //!
-//! ```ignore
-//! use ntex::web::{self, App, HttpResponse};
-//! use vld::prelude::*;
-//! use vld_ntex::{VldJson, VldQuery, VldPath, VldHeaders};
+//! ```no_run
+//! use vld_ntex::ntex::web::HttpResponse;
+//! use vld_ntex::{VldJson, VldPath};
 //!
 //! vld::schema! {
 //!     #[derive(Debug)]
@@ -59,6 +62,9 @@
 //! ) -> HttpResponse {
 //!     HttpResponse::Ok().body(format!("id={} name={}", path.id, body.name))
 //! }
+//!
+//! // Inside `HttpServer::new(...)`:
+//! // App::new().route("/users/{id}", web::post().to(handler))
 //! ```
 
 #[cfg(all(feature = "ntex-3", feature = "ntex-4"))]

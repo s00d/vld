@@ -306,6 +306,7 @@ impl ZObject {
     /// JSON Schema of this object; same as
     /// [`JsonSchema::json_schema`](crate::openapi::JsonSchema::json_schema).
     #[cfg(feature = "openapi")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "openapi")))]
     pub fn to_json_schema(&self) -> Value {
         crate::openapi::JsonSchema::json_schema(self)
     }

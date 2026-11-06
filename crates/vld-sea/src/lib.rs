@@ -1,23 +1,22 @@
 //! # vld-sea — SeaORM integration for `vld`
 //!
-//! Validate [`ActiveModel`](crate::sea_orm::ActiveModelTrait) fields **before**
-//! `insert()` / `update()` hits the database.
+//! Validate [`ActiveModel`](crate::sea_orm::ActiveModelTrait) fields against a
+//! [`vld`] schema **before** `insert()` / `update()` reaches the database:
 //!
-//! ## Approach
+//! - [`validate_active`] — turns the `Set` / `Unchanged` values into a JSON
+//!   object (`NotSet` fields are omitted) and runs the schema;
+//! - [`validate_model`] / [`validate_json`] — any `Serialize` value (an input
+//!   DTO, a `Model`) or raw JSON;
+//! - [`before_save`] / [`impl_vld_before_save!`] — validation inside
+//!   [`ActiveModelBehavior::before_save`](crate::sea_orm::ActiveModelBehavior::before_save).
 //!
-//! 1. Define a `vld::schema!` that mirrors the entity columns you want validated.
-//! 2. Call [`validate_active`] (extracts `Set`/`Unchanged` values from the
-//!    ActiveModel into JSON and runs the schema).
-//! 3. Or call [`validate_model`] on any `Serialize`-able struct (e.g. an input
-//!    DTO, or SeaORM `Model`).
-//! 4. Optionally hook into
-//!    [`ActiveModelBehavior::before_save`](crate::sea_orm::ActiveModelBehavior::before_save)
-//!    so validation runs automatically.
+//! Features: `sea-orm-1` (default) or `sea-orm-2` — exactly one; the selected
+//! crate is re-exported as [`vld_sea::sea_orm`](crate::sea_orm). `with-json`,
+//! `with-chrono`, `with-time`, `with-uuid`, `with-rust_decimal`,
+//! `with-bigdecimal`, `postgres-array` map those column types to JSON
+//! (without them such columns are validated as `null`).
 //!
-//! ## Quick Start
-//!
-//! ```rust,ignore
-//! use sea_orm::*;
+//! ```
 //! use vld_sea::prelude::*;
 //!
 //! vld::schema! {
@@ -28,15 +27,23 @@
 //!     }
 //! }
 //!
-//! // Before insert:
-//! let am = user::ActiveModel {
-//!     name: Set("Alice".to_owned()),
-//!     email: Set("alice@example.com".to_owned()),
-//!     ..Default::default()
-//! };
-//! vld_sea::validate_active::<UserInput, _>(&am)?;
-//! am.insert(&db).await?;
+//! #[derive(serde::Serialize)]
+//! struct NewUser { name: String, email: String }
+//!
+//! let dto = NewUser { name: "Alice".into(), email: "alice@example.com".into() };
+//! let parsed = validate_model::<UserInput, _>(&dto).unwrap();
+//! assert_eq!(parsed.name, "Alice");
 //! ```
+//!
+//! With an entity:
+//!
+//! ```rust,ignore
+//! vld_sea::validate_active::<UserInput, _>(&active_model)?;
+//! // or, in the entity module, on every insert / update:
+//! vld_sea::impl_vld_before_save!(ActiveModel, super::UserInput);
+//! ```
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/database/sea-orm>
 
 #[cfg(all(feature = "sea-orm-1", feature = "sea-orm-2"))]
 compile_error!("Enable exactly one SeaORM version feature: `sea-orm-1` or `sea-orm-2`.");

@@ -1,9 +1,11 @@
-//! # vld-config — Validate configuration files with `vld`
+//! # vld-config — validate configuration with `vld`
 //!
-//! Load configuration from TOML, YAML, JSON, or environment variables and
-//! validate it against `vld` schemas at load time. Supports both
-//! [config-rs](https://docs.rs/config) and [figment](https://docs.rs/figment)
-//! as backends.
+//! Load configuration with [config-rs](https://docs.rs/config) (feature
+//! `config-rs`, default; config `>=0.14, <0.16`) or
+//! [figment](https://docs.rs/figment) (feature `figment`, 0.10) and parse it
+//! into a `vld` type at startup: a typed settings struct, or a
+//! [`VldConfigError`] listing every invalid key. The backend crates are not
+//! re-exported; depend on them yourself.
 //!
 //! # Quick Start (config-rs)
 //!
@@ -35,7 +37,8 @@
 //!
 //! # Quick Start (figment)
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # #[cfg(feature = "figment")] {
 //! use vld::prelude::*;
 //! use vld_config::from_figment;
 //!
@@ -54,6 +57,7 @@
 //!     .merge(figment::providers::Env::prefixed("APP_"));
 //!
 //! let settings: AppSettings = from_figment(&figment).unwrap();
+//! # }
 //! ```
 //!
 //! # Typed env values
@@ -66,6 +70,8 @@
 //! the backend's parsed value, so a lossy parse (`"01234"` → `1234`) yields
 //! `"1234"`. [`from_value`] validates the JSON value **as is** (strict);
 //! [`from_value_coerced`] applies the same coercion as the backends.
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/config-cli/config>
 
 use std::fmt;
 use vld::schema::VldParse;

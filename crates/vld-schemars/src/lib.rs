@@ -1,11 +1,17 @@
-//! # vld-schemars — Bidirectional bridge between `vld` and `schemars`
+//! # vld-schemars — two-way bridge between `vld` and `schemars`
 //!
-//! Many Rust libraries (aide, paperclip, okapi, utoipa-rapidoc, etc.) already use
-//! [`schemars`](https://docs.rs/schemars) for JSON Schema generation. This crate
-//! lets you share schema definitions between `vld` and the broader `schemars`
-//! ecosystem — in **both** directions.
+//! Crates such as aide or okapi consume `schemars::JsonSchema`. This crate
+//! connects them to `vld` in both directions:
 //!
-//! ## vld → schemars
+//! - **vld → schemars**: [`impl_json_schema!`] implements `schemars::JsonSchema`
+//!   from a vld type's `json_schema()`; nested `vld::nested!` types are added to
+//!   the generator's definitions.
+//! - **schemars → vld**: [`impl_vld_parse!`] validates a `schemars::JsonSchema`
+//!   type against its schema ([`validate_with_schema`]) and implements
+//!   `vld::schema::VldParse`, so it works with vld extractors.
+//!
+//! Features: `schemars-0` (default, schemars `>=0.9, <1`) or `schemars-1` —
+//! enable exactly one; the selected crate is re-exported as [`schemars`].
 //!
 //! ```rust
 //! use vld::prelude::*;
@@ -23,8 +29,6 @@
 //! // User now implements schemars::JsonSchema
 //! ```
 //!
-//! ## schemars → vld (macro on type)
-//!
 //! ```rust
 //! use vld_schemars::{impl_vld_parse, SchemarsValidate};
 //! use vld_schemars::schemars;
@@ -35,11 +39,13 @@
 //! impl_vld_parse!(User);
 //!
 //! let user = User { name: "Alice".into(), age: 30 };
-//! user.vld_validate().unwrap(); // validate existing instance
+//! user.vld_validate().unwrap(); // validate an existing instance
 //!
 //! let json = serde_json::json!({"name": "Alice", "age": 30});
 //! let user = User::vld_parse(&json).unwrap(); // validate + deserialize
 //! ```
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/openapi/schemars>
 
 use serde_json::Value;
 use std::fmt;

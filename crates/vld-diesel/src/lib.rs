@@ -1,14 +1,18 @@
-//! # vld-diesel — Diesel integration for the `vld` validation library
+//! # vld-diesel — Diesel integration for `vld`
 //!
-//! Validate data **before** inserting into the database, and use strongly-typed
-//! validated column types.
+//! Validate values against a [`vld`] schema before Diesel writes them
+//! ([`validate_insert`], [`Validated`]) or after loading them
+//! ([`validate_row`]), and use validated column types ([`VldText`],
+//! [`VldInt`], [`VldFloat`], [`VldBool`]). The wrappers derive
+//! `AsExpression` / `FromSqlRow`, so they work in `#[derive(Insertable,
+//! Queryable)]` structs and in `.filter(col.eq(wrapper))`.
 //!
-//! ## Quick Start
+//! Features: `sqlite` (default), `postgres`, `mysql`.
 //!
-//! ```ignore
+//! ```
+//! use diesel::prelude::*;
 //! use vld_diesel::prelude::*;
 //!
-//! // 1. Define a vld schema for your insertable struct
 //! vld::schema! {
 //!     #[derive(Debug)]
 //!     pub struct NewUserSchema {
@@ -17,25 +21,36 @@
 //!     }
 //! }
 //!
-//! // 2. Wrap your Diesel Insertable with Validated
-//! let new_user = NewUser { name: "Alice".into(), email: "alice@example.com".into() };
-//! let validated = Validated::<NewUserSchema, _>::new(new_user)?;
+//! diesel::table! {
+//!     users (id) {
+//!         id -> Integer,
+//!         name -> Text,
+//!         email -> Text,
+//!     }
+//! }
 //!
-//! // 3. Insert — the inner value is guaranteed to be valid
+//! #[derive(Insertable, serde::Serialize)]
+//! #[diesel(table_name = users)]
+//! struct NewUser { name: String, email: String }
+//!
+//! let mut conn = SqliteConnection::establish(":memory:").unwrap();
+//! diesel::sql_query("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)")
+//!     .execute(&mut conn)
+//!     .unwrap();
+//!
+//! let user = NewUser { name: "Alice".into(), email: "alice@example.com".into() };
+//! let validated = Validated::<NewUserSchema, _>::new(user).unwrap();
 //! diesel::insert_into(users::table)
 //!     .values(validated.inner())
-//!     .execute(&mut conn)?;
+//!     .execute(&mut conn)
+//!     .unwrap();
 //! ```
 //!
-//! ## Validated column types
+//! Column wrappers validate `{"value": ...}`, so their schema needs a `value`
+//! field. `FromSql` does not re-validate (data from the database is trusted);
+//! call [`validate_row`] to re-check loaded rows.
 //!
-//! Use [`VldText`] for columns that must always satisfy a validation schema:
-//!
-//! ```ignore
-//! use vld_diesel::VldText;
-//!
-//! let email = VldText::<EmailSchema>::new("user@example.com")?;
-//! ```
+//! Guide: <https://s00d.github.io/vld/integrations/database/diesel>
 
 pub use vld;
 

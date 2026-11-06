@@ -4,6 +4,10 @@ mod boolean;
 mod bytes;
 mod character;
 #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "chrono", feature = "jiff", feature = "time")))
+)]
 pub mod date;
 #[cfg(feature = "decimal")]
 mod decimal;
@@ -34,12 +38,15 @@ pub use date::jiff::{ZDate, ZDateTime, ZTime};
 #[cfg(all(feature = "time", not(feature = "chrono"), not(feature = "jiff")))]
 pub use date::time::{ZDate, ZDateTime, ZTime};
 #[cfg(feature = "decimal")]
+#[cfg_attr(docsrs, doc(cfg(feature = "decimal")))]
 pub use decimal::ZDecimal;
 pub use duration::ZDuration;
 pub use enumeration::ZEnum;
 #[cfg(feature = "file")]
+#[cfg_attr(docsrs, doc(cfg(feature = "file")))]
 pub use file::{FileStorage, ValidatedFile, ZFile};
 #[cfg(feature = "net")]
+#[cfg_attr(docsrs, doc(cfg(feature = "net")))]
 pub use ip_network::ZIpNetwork;
 pub use json_value::ZJsonValue;
 pub use literal::{IntoLiteral, ZLiteral};

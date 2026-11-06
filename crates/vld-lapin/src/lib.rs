@@ -1,8 +1,4 @@
-//! # vld-lapin
-//!
-//! Lapin (RabbitMQ) integration for `vld`.
-//!
-//! ## Overview
+//! # vld-lapin — lapin (RabbitMQ) integration for `vld`
 //!
 //! Wrap a channel: `let channel = LapinChannel::new(channel);`
 //! (`impl_to_lapin!(channel)` only did that rebinding and is deprecated).
@@ -18,6 +14,39 @@
 //! - the same for `basic_get` messages: `ack_decode_get`, `nack_decode_get`, `reject_decode_get`
 //!
 //! All other native `lapin::Channel` methods are still available through deref.
+//!
+//! Published values are `Serialize + VldParse` (a `vld::schema!` struct with
+//! `#[derive(serde::Serialize)]`). Features: `lapin-2` (default), `lapin-3`,
+//! `lapin-4` — exactly one, matching your `lapin` dependency.
+//!
+//! ```no_run
+//! use vld_lapin::prelude::*;
+//!
+//! vld::schema! {
+//!     #[derive(Debug, serde::Serialize)]
+//!     pub struct EventSchema {
+//!         pub event: String => vld::string().min(1),
+//!     }
+//! }
+//!
+//! async fn roundtrip(channel: &LapinChannel) -> Result<(), VldLapinError> {
+//!     let event = EventSchema { event: "user.created".into() };
+//!     channel
+//!         .publish("", "events", Default::default(), Default::default(), &event)
+//!         .await?;
+//!
+//!     if let Some(message) = channel.basic_get("events", Default::default()).await? {
+//!         // Ack when valid, nack when invalid: every message is settled.
+//!         let parsed: EventSchema = channel
+//!             .ack_or_nack_decode(&message, Default::default(), Default::default())
+//!             .await?;
+//!         println!("{}", parsed.event);
+//!     }
+//!     Ok(())
+//! }
+//! ```
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/messaging/lapin>
 
 use std::fmt;
 use std::ops::{Deref, DerefMut};
@@ -53,10 +82,12 @@ pub struct LapinChannel {
 }
 
 impl LapinChannel {
+    /// Wrap a channel.
     pub fn new(inner: lapin::Channel) -> Self {
         Self { inner }
     }
 
+    /// Unwrap the inner channel.
     pub fn into_inner(self) -> lapin::Channel {
         self.inner
     }
@@ -79,6 +110,7 @@ impl LapinChannel {
         decode(payload)
     }
 
+    /// `lapin::Channel::queue_declare` taking a `&str` queue name.
     #[allow(clippy::useless_conversion)]
     pub async fn queue_declare(
         &self,
@@ -92,6 +124,8 @@ impl LapinChannel {
             .map_err(VldLapinError::Lapin)
     }
 
+    /// `lapin::Channel::basic_get` taking a `&str` queue name (the message is
+    /// not decoded; see [`decode_get`](Self::decode_get) and the `*_decode_get` helpers).
     #[allow(clippy::useless_conversion)]
     pub async fn basic_get(
         &self,
@@ -104,6 +138,8 @@ impl LapinChannel {
             .map_err(VldLapinError::Lapin)
     }
 
+    /// Validate `value`, encode it as JSON, publish it and await the publisher
+    /// confirmation.
     #[allow(clippy::useless_conversion)]
     pub async fn publish<V>(
         &self,
@@ -132,6 +168,7 @@ impl LapinChannel {
         confirm.await.map_err(VldLapinError::Lapin)
     }
 
+    /// Decode + validate a delivery's payload (does not settle it).
     pub fn decode_delivery<T>(
         &self,
         delivery: &lapin::message::Delivery,
@@ -142,6 +179,7 @@ impl LapinChannel {
         decode(&delivery.data)
     }
 
+    /// Decode + validate a `basic_get` message's payload (does not settle it).
     pub fn decode_get<T>(
         &self,
         message: &lapin::message::BasicGetMessage,
@@ -304,9 +342,13 @@ impl DerefMut for LapinChannel {
 /// Error type for `vld-lapin`.
 #[derive(Debug)]
 pub enum VldLapinError {
+    /// The payload failed schema validation.
     Validation(vld::error::VldError),
+    /// The value could not be serialized to JSON.
     Serialization(String),
+    /// The payload is not valid JSON.
     Deserialization(String),
+    /// A lapin operation (publish, ack, nack, …) failed.
     Lapin(lapin::Error),
 }
 

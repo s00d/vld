@@ -1,33 +1,70 @@
-//! # vld — Type-safe runtime validation for Rust
+//! # vld — type-safe runtime validation for Rust
 //!
-//! `vld` is a validation library inspired by [Zod](https://zod.dev/) that combines
-//! schema definition with type-safe parsing.
+//! `vld` is a validation library inspired by [Zod](https://zod.dev/). Schemas
+//! are values: chain checks on them, then parse untrusted input (JSON text,
+//! bytes, files or `serde_json::Value`) into typed Rust values. A failed parse
+//! returns a [`VldError`](error::VldError) with **every** issue, each with a
+//! path, a typed [`IssueCode`](error::IssueCode) and a message.
 //!
-//! ## Quick Start
+//! **Guide:** <https://s00d.github.io/vld/> · **Changelog / migration from
+//! 0.4:** <https://s00d.github.io/vld/guides/migration>
+//!
+//! ## Quick start
 //!
 //! ```rust
 //! use vld::prelude::*;
 //!
-//! // Define a validated struct
 //! vld::schema! {
 //!     #[derive(Debug)]
 //!     pub struct User {
-//!         pub name: String => vld::string().min(2).max(50),
+//!         pub name: String => vld::string().trim().min(2).max(50),
 //!         pub email: String => vld::string().email(),
 //!         pub age: Option<i64> => vld::number().int().gte(18).optional(),
 //!     }
 //! }
 //!
-//! // Parse from JSON string
-//! let user = User::parse(r#"{"name": "Alex", "email": "alex@example.com"}"#).unwrap();
+//! let user = User::parse(r#"{"name": " Alex ", "email": "alex@example.com"}"#).unwrap();
 //! assert_eq!(user.name, "Alex");
 //! assert_eq!(user.age, None);
+//!
+//! let err = User::parse(r#"{"name": "A", "email": "nope"}"#).unwrap_err();
+//! assert_eq!(err.issues.len(), 2);
+//! assert_eq!(err.issues[0].code.key(), "too_small");
 //! ```
+//!
+//! Single values work the same way:
+//!
+//! ```rust
+//! use vld::prelude::*;
+//!
+//! let port = vld::u16().min(1024);
+//! assert_eq!(port.parse("8080").unwrap(), 8080);
+//! assert!(port.parse("80").is_err());
+//! ```
+//!
+//! ## Features
+//!
+//! None are enabled by default.
+//!
+//! | Feature | Enables |
+//! |---|---|
+//! | `derive` | `#[derive(Validate)]` |
+//! | `openapi` | the `JsonSchema` trait and OpenAPI 3.1 documents |
+//! | `diff` | breaking-change detection between JSON Schemas (implies `openapi`) |
+//! | `regex` | `string().regex(...)` (via `regex-lite`) |
+//! | `chrono` / `jiff` / `time` | `vld::chrono`, `vld::jiff`, `vld::time` date schemas (additive) |
+//! | `decimal` | `decimal()` (`rust_decimal`) |
+//! | `net` | `ip_network()` (`ipnet`) |
+//! | `file` / `file-advanced` | `file()` with size / type checks; hashes, image size, EXIF |
+//! | `string-advanced` | `url_strict()`, `uri()`, `uuid_v4()` & co, `phone_e164_strict()`, `semver_full()` |
+//!
+//! `serialize` / `deserialize` are deprecated no-ops (removed in 0.6).
 //!
 //! ## Module map
 //!
 //! - [`mod@schema`] — the [`VldSchema`](schema::VldSchema) trait, [`VldParse`](schema::VldParse),
-//!   [`DynSchema`](schema::DynSchema), input sources and nested schemas
+//!   [`DynSchema`](schema::DynSchema), input sources, nested schemas and
+//!   [`parse_coerced`](schema::parse_coerced)
 //! - [`error`] — [`VldError`](error::VldError), [`IssueCode`](error::IssueCode),
 //!   formatting ([`error::format`]) and translations ([`error::i18n`])
 //! - [`primitives`], [`collections`], [`combinators`], [`modifiers`], [`mod@object`] — schema types
@@ -36,8 +73,7 @@
 //!
 //! ## Size method names
 //!
-//! Size bounds are named after what they count (the old names stay; there
-//! are no aliases):
+//! Size bounds are named after what they count:
 //!
 //! | Schema | Bounds | Exact |
 //! |---|---|---|
@@ -51,6 +87,8 @@
 //! `vld_parse()` instead, as `parse` would clash with `clap::Parser::parse`
 //! and similar derives.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 pub mod collections;
 pub mod combinators;
 pub mod error;
@@ -58,6 +96,7 @@ mod macros;
 pub mod modifiers;
 pub mod object;
 #[cfg(feature = "openapi")]
+#[cfg_attr(docsrs, doc(cfg(feature = "openapi")))]
 pub mod openapi;
 pub mod prelude;
 pub mod primitives;
@@ -70,17 +109,22 @@ pub mod __private;
 // Old module paths (pre-0.5), kept as aliases.
 pub use error::{format, i18n};
 #[cfg(feature = "openapi")]
+#[cfg_attr(docsrs, doc(cfg(feature = "openapi")))]
 pub use openapi as json_schema;
 #[cfg(feature = "diff")]
+#[cfg_attr(docsrs, doc(cfg(feature = "diff")))]
 pub use openapi::diff;
 pub use schema::input;
 
 // Date backends: additive, each in its own module.
 #[cfg(feature = "chrono")]
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 pub use primitives::date::chrono;
 #[cfg(feature = "jiff")]
+#[cfg_attr(docsrs, doc(cfg(feature = "jiff")))]
 pub use primitives::date::jiff;
 #[cfg(feature = "time")]
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 pub use primitives::date::time;
 
 // Re-export serde_json for use in macros
@@ -93,10 +137,12 @@ pub use serde;
 
 // Re-export regex_lite when the `regex` feature is enabled
 #[cfg(feature = "regex")]
+#[cfg_attr(docsrs, doc(cfg(feature = "regex")))]
 pub use regex_lite;
 
 // Re-export the derive macro when the `derive` feature is enabled
 #[cfg(feature = "derive")]
+#[cfg_attr(docsrs, doc(cfg(feature = "derive")))]
 pub use vld_derive::Validate;
 
 // ---------------------------------------------------------------------------
@@ -147,12 +193,14 @@ pub fn bytes() -> primitives::ZBytes {
 
 /// Create a decimal validation schema (`rust_decimal::Decimal`).
 #[cfg(feature = "decimal")]
+#[cfg_attr(docsrs, doc(cfg(feature = "decimal")))]
 pub fn decimal() -> primitives::ZDecimal {
     primitives::ZDecimal::new()
 }
 
 /// Create an IP network/CIDR schema (`ipnet::IpNet`).
 #[cfg(feature = "net")]
+#[cfg_attr(docsrs, doc(cfg(feature = "net")))]
 pub fn ip_network() -> primitives::ZIpNetwork {
     primitives::ZIpNetwork::new()
 }
@@ -180,6 +228,7 @@ pub fn json_value() -> primitives::ZJsonValue {
 /// [`within(base)`](primitives::ZFile::within), which resolves `..` and symlinks and returns
 /// the joined path.
 #[cfg(feature = "file")]
+#[cfg_attr(docsrs, doc(cfg(feature = "file")))]
 pub fn file() -> primitives::ZFile {
     primitives::ZFile::new()
 }
@@ -367,6 +416,14 @@ pub fn char() -> primitives::ZChar {
     all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
     all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
 ))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(
+        all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+        all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+        all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+    )))
+)]
 pub fn date() -> primitives::ZDate {
     primitives::ZDate::new()
 }
@@ -380,6 +437,14 @@ pub fn date() -> primitives::ZDate {
     all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
     all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
 ))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(
+        all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+        all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+        all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+    )))
+)]
 pub fn datetime() -> primitives::ZDateTime {
     primitives::ZDateTime::new()
 }
@@ -395,6 +460,14 @@ pub fn datetime() -> primitives::ZDateTime {
     all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
     all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
 ))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(
+        all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+        all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+        all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+    )))
+)]
 pub fn time_of_day() -> primitives::ZTime {
     primitives::ZTime::new()
 }
