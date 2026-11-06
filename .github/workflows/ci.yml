@@ -29,6 +29,10 @@ jobs:
   test:
     name: Build + test (workspace, doctests, playground)
     runs-on: ubuntu-latest
+    # No redis / rabbitmq services here: the live tests run in `integrations`
+    # (with CI set they otherwise fail when REDIS_URL / AMQP_URL are missing).
+    env:
+      VLD_LIVE_OPTIONAL: "1"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master

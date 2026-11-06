@@ -22,7 +22,8 @@
 # - profile `ci` (no debuginfo / no incremental); the default target dir
 #   (target/ci) is removed at the end unless VLD_CI_KEEP_TARGET=1. A caller's
 #   CARGO_TARGET_DIR is never removed.
-# - live redis / rabbitmq tests run when REDIS_URL / AMQP_URL are set
+# - live redis / rabbitmq tests run when REDIS_URL / AMQP_URL are set; with
+#   CI set and a URL missing they fail (VLD_LIVE_OPTIONAL=1 opts out)
 
 set -uo pipefail
 
