@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-sqlx"
 readme = "README.md"
 keywords = ["validation", "sqlx", "database", "sql", "vld"]
 categories = ["database", "web-programming"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [features]
 default = ["sqlx-0_8", "sqlite"]

@@ -225,11 +225,13 @@ fn widen_f32(v: f32) -> f64 {
 }
 
 /// `i64` → `i32` for an INTEGER column, failing instead of truncating.
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 fn narrow_int(v: i64) -> Result<i32, Box<dyn std::error::Error + Send + Sync>> {
     i32::try_from(v).map_err(|_| format!("{v} does not fit an INTEGER (i32) column").into())
 }
 
 /// `f64` → `f32` for a REAL / FLOAT column, failing when out of `f32` range.
+#[cfg(any(feature = "sqlite", feature = "postgres", feature = "mysql"))]
 fn narrow_float(v: f64) -> Result<f32, Box<dyn std::error::Error + Send + Sync>> {
     let f = v as f32;
     if v.is_finite() && !f.is_finite() {

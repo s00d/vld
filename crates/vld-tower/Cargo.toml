@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-tower"
 readme = "README.md"
 keywords = ["validation", "tower", "middleware", "http", "vld"]
 categories = ["web-programming", "web-programming::http-server"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true }

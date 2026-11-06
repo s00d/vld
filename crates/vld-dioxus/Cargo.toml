@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-dioxus"
 readme = "README.md"
 keywords = ["validation", "dioxus", "wasm", "server-functions", "vld"]
 categories = ["web-programming", "wasm"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true }

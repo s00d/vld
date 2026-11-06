@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-lapin"
 readme = "README.md"
 keywords = ["validation", "lapin", "rabbitmq", "amqp", "vld"]
 categories = ["web-programming"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [features]
 default = ["lapin-2"]

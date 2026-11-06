@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-clap"
 readme = "README.md"
 keywords = ["validation", "clap", "cli", "arguments", "parsing"]
 categories = ["command-line-interface", "parsing"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true, features = ["derive"] }

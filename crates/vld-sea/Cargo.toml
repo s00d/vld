@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-sea"
 readme = "README.md"
 keywords = ["validation", "sea-orm", "orm", "activemodel", "database"]
 categories = ["web-programming", "database"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [features]
 default = ["sea-orm-1"]

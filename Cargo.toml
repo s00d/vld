@@ -70,7 +70,7 @@ documentation = "https://docs.rs/vld"
 readme = "README.md"
 keywords = ["validation", "schema", "json", "zod", "parsing"]
 categories = ["parsing", "web-programming"]
-include = ["src/**", "README.md", "LICENSE", "CHANGELOG.md", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/CHANGELOG.md", "/Cargo.toml"]
 
 [features]
 default = []
@@ -131,11 +131,7 @@ features = ["derive", "regex", "openapi", "diff", "chrono", "jiff", "time", "dec
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.release]
-pre-release-hook = [
-  "bash",
-  "-lc",
-  "\"${WORKSPACE_ROOT}/scripts/release-hook.sh\" \"{{version}}\"",
-]
+pre-release-hook = ["just", "release-hook", "{{version}}"]
 
 # ---------------------------------------------------------------------------
 # Profiles — keep `target/` from eating tens of GB
@@ -144,7 +140,7 @@ pre-release-hook = [
 # Full debuginfo on every dependency is what balloons `target/debug` to 20–30G.
 #
 # - `dev`: line tables for workspace crates; no debuginfo for registry deps
-# - `ci`:  no debuginfo, no incremental (used by scripts/ci-all.sh)
+# - `ci`:  no debuginfo, no incremental (`just` recipes; output in target/ci)
 #
 # `split-debuginfo = "off"`: on macOS the default ("unpacked") keeps every
 # codegen unit's `.o` in `target/*/deps` for the debugger and cargo never

@@ -457,8 +457,9 @@ fn main() {
     println!("\n--- Reading from file ---");
 
     // Paths relative to the working directory (cargo run runs from the project root)
-    let valid_file = std::path::Path::new("examples/user.json");
-    let invalid_file = std::path::Path::new("examples/user_invalid.json");
+    let valid_file = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../user.json"));
+    let invalid_file =
+        std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../user_invalid.json"));
 
     // Valid file — parse directly from Path
     println!("File: {}", valid_file.display());
@@ -517,7 +518,8 @@ fn main() {
     // ---------------------------------------------------------------------------
     println!("\n--- save_to_file (from ParseResult) ---");
 
-    let save_path = std::path::Path::new("examples/user_saved.json");
+    let save_path = std::env::temp_dir().join("vld_user_saved.json");
+    let save_path = save_path.as_path();
     match result.save_to_file(save_path) {
         Ok(()) => println!("[OK] Saved to {}", save_path.display()),
         Err(e) => println!("[ERR] Write error: {}", e),

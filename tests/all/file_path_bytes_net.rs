@@ -179,11 +179,7 @@ fn path_shape_checks() {
         rel.parse_value(&json!("src/lib.rs")).unwrap(),
         std::path::PathBuf::from("src/lib.rs")
     );
-    assert_issue!(
-        parse_err(&rel, json!(ABS)),
-        "",
-        IssueCode::PathNotRelative
-    );
+    assert_issue!(parse_err(&rel, json!(ABS)), "", IssueCode::PathNotRelative);
     let abs = vld::path().absolute();
     assert!(abs.parse_value(&json!(ABS)).is_ok());
     assert_issue!(

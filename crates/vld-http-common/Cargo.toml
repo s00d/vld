@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-http-common"
 readme = "README.md"
 keywords = ["validation", "http", "helpers", "vld"]
 categories = ["web-programming"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [features]
 # Test support: shared HTTP conformance suite for the adapter crates.

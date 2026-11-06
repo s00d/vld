@@ -1,18 +1,7 @@
 /target
+/.ts-check/
+/.claude/
 .idea/
 .DS_Store
 *.snap.new
 *.pending-snap
-examples/user_saved.json
-examples/user_corrected.json
-# Local unification research harness (do not publish / push)
-/scratch/
-/.claude/worktrees/
-/.ts-check/
-
-# Docs site build output (docs/)
-/docs/node_modules/
-/docs/.nuxt/
-/docs/.output/
-/docs/.data/
-/docs/dist

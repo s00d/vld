@@ -1,10 +1,9 @@
 name: CI
 
-# Push / PR: one job (`check`) runs every blocking group of scripts/ci-all.sh
-# in sequence on one runner. The heavy or rarely-breaking checks (feature
-# matrix, MSRV toolchains, Windows/macOS, minimal versions, wasm, latest
-# stable) run in `extended` weekly and on demand (Actions -> CI -> Run workflow).
-# `scripts/ci-all.sh` with no arguments runs everything locally before a release.
+# Every step is a `just` recipe (see justfile), so CI and local runs are the same commands.
+# Push / PR: one job. Weekly and on demand (Actions -> CI -> Run workflow): the slow or
+# rarely-breaking checks (MSRV toolchains, Windows/macOS, minimal versions, wasm, vld
+# feature pairs, latest stable clippy).
 
 on:
   push:
@@ -24,35 +23,15 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Pinned so new clippy lints / rustdoc checks cannot break CI unannounced;
-  # the extended `latest stable` step warns about them early. Bump deliberately.
+  # Pinned so new clippy lints / rustdoc checks cannot break CI unannounced; the
+  # weekly latest-stable step warns about them early. Bump deliberately.
   RUST_TOOLCHAIN: "1.99.1"
-  # Keep target/ for Swatinem/rust-cache (ci-all.sh deletes only its own
-  # default target/ci).
-  CARGO_TARGET_DIR: target
 
 jobs:
   check:
-    name: Check (fmt, clippy, tests, integrations, docs, deny, package, fuzz)
+    name: Check
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s --health-timeout 3s --health-retries 10
-      rabbitmq:
-        image: rabbitmq:3-alpine
-        ports: ["5672:5672"]
-        options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
-          --health-interval 5s --health-timeout 10s --health-retries 20
-    env:
-      REDIS_URL: redis://127.0.0.1:6379/0
-      AMQP_URL: amqp://guest:guest@127.0.0.1:5672/%2f
-      VLD_TS_NODE_DIR: ${{ github.workspace }}/.ts-check
     steps:
       - uses: actions/checkout@v5
       # diesel postgres / mysql backends link libpq / libmysqlclient.
@@ -61,52 +40,72 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: mkdir -p .ts-check && cd .ts-check && echo '{"private":true}' > package.json && npm install --no-audit --no-fund zod@3 valibot@1
+      - run: |
+          dir="$RUNNER_TEMP/ts-check"
+          mkdir -p "$dir" && cd "$dir" && echo '{"private":true}' > package.json
+          npm install --no-audit --no-fund zod@3 valibot@1
+          echo "VLD_TS_NODE_DIR=$dir" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy, rustfmt
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-deny
+          tool: just,cargo-hack,cargo-deny
       - uses: Swatinem/rust-cache@v2
-      - run: bash scripts/ci-all.sh fmt clippy test integrations docs deny package fuzz playground
+      # Later steps run even if an earlier one failed, so one run shows every failure.
+      - run: just fmt
+      - if: ${{ !cancelled() }}
+        run: just lint
+      - if: ${{ !cancelled() }}
+        run: just test
+      - if: ${{ !cancelled() }}
+        run: just docs
+      - if: ${{ !cancelled() }}
+        run: just deny
+      - if: ${{ !cancelled() }}
+        run: just package
+      - if: ${{ !cancelled() }}
+        run: just fuzz
+      - if: ${{ !cancelled() }}
+        run: just playground
 
   extended:
-    name: Extended (features, MSRV, Windows/macOS, minimal, wasm, latest stable)
+    name: Extended
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # The pinned toolchain resolves the MSRV-aware lockfiles; the listed
-      # toolchains (MSRV.md) build. Keep in sync with group_msrv.
+      # The pinned toolchain resolves the probes' lockfiles; the listed ones (MSRV.md) build.
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32-unknown-unknown
       - run: |
-          for tc in 1.85 1.88 1.94 1.96 1.97; do
-            rustup toolchain install "${tc}" --profile minimal
-          done
+          for tc in 1.85 1.88 1.94 1.96 1.97; do rustup toolchain install "${tc}" --profile minimal; done
           rustup toolchain install nightly --profile minimal
           rustup toolchain install stable --profile minimal --component clippy
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-hack
+          tool: just,cargo-hack
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: extended
-      - run: bash scripts/ci-all.sh features msrv wasm
-      - name: minimal versions (non-blocking)
+      - run: just msrv
+      - if: ${{ !cancelled() }}
+        run: just wasm
+      - if: ${{ !cancelled() }}
+        run: just powerset
+      - name: just minimal (non-blocking)
+        if: ${{ !cancelled() }}
         continue-on-error: true
-        run: bash scripts/ci-all.sh minimal
+        run: just minimal
       - name: clippy on latest stable (non-blocking)
+        if: ${{ !cancelled() }}
         continue-on-error: true
         run: cargo +stable clippy --workspace --all-targets --profile ci --locked -- -D warnings
 
   # Path / file containment (ZPath::within, ZFile::within) is OS-sensitive.
   os:
-    name: vld file/path tests (${{ matrix.os }})
+    name: vld on ${{ matrix.os }}
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false

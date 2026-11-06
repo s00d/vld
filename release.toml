@@ -23,7 +23,7 @@ tag-message = "Release {{crate_name}} v{{version}}"
 # Commit message
 pre-release-commit-message = "chore: release v{{version}}"
 
-# Workspace-wide preflight + CHANGELOG run once from the root `vld` package hook
+# Workspace-wide checks + CHANGELOG run once from the root `vld` package hook (`just release-hook`)
 # (see [package.metadata.release] in Cargo.toml).
 
 # Pre-release checks

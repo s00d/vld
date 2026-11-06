@@ -413,8 +413,63 @@ mod tests {
     use std::cell::Cell;
 
     vld::schema! {
-        #[derive(Debug)]
-        struct Evt { event: String => vld::string().min(1) }
+        #[derive(Debug, serde::Serialize)]
+        struct Evt {
+            event: String => vld::string().min(1),
+            retries: i64 => vld::number().int().min(0).max(10),
+        }
+    }
+
+    fn paths(err: &VldLapinError) -> Vec<String> {
+        match err {
+            VldLapinError::Validation(e) => e
+                .issues
+                .iter()
+                .map(|i| i.path.iter().map(|s| s.to_string()).collect())
+                .collect(),
+            other => panic!("expected a validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn publish_payload_is_validated_json() {
+        let evt = Evt {
+            event: "signup".into(),
+            retries: 1,
+        };
+        let bytes = LapinChannel::encode_payload(&evt).unwrap();
+        let back: Evt = decode(&bytes).unwrap();
+        assert_eq!((back.event.as_str(), back.retries), ("signup", 1));
+
+        // Invalid values never become a payload, so nothing is published.
+        let bad = Evt {
+            event: String::new(),
+            retries: 99,
+        };
+        let err = LapinChannel::encode_payload(&bad).unwrap_err();
+        assert_eq!(paths(&err), [".event", ".retries"]);
+    }
+
+    #[test]
+    fn decode_reports_json_and_schema_errors() {
+        assert!(matches!(
+            decode::<Evt>(b"{"),
+            Err(VldLapinError::Deserialization(_))
+        ));
+        let err = decode::<Evt>(br#"{"event":"","retries":99}"#).unwrap_err();
+        assert_eq!(paths(&err), [".event", ".retries"]);
+    }
+
+    #[test]
+    fn settle_failure_is_returned_instead_of_the_decode_error() {
+        #[cfg(feature = "lapin-2")]
+        let failure = || lapin::Error::InvalidChannel(7);
+        #[cfg(not(feature = "lapin-2"))]
+        let failure = || lapin::Error::from(lapin::ErrorKind::InvalidChannel(7));
+        let r: Result<Evt, _> = run(decode_or_settle(b"not json", || async move {
+            Err::<(), _>(failure())
+        }));
+        assert!(matches!(r, Err(VldLapinError::Lapin(_))));
     }
 
     fn run<F: std::future::Future>(f: F) -> F::Output {
@@ -431,7 +486,7 @@ mod tests {
             settled.set(settled.get() + 1);
             async { Ok::<_, lapin::Error>(()) }
         };
-        let r: Result<Evt, _> = run(decode_or_settle(br#"{"event":""}"#, settle));
+        let r: Result<Evt, _> = run(decode_or_settle(br#"{"event":"","retries":0}"#, settle));
         assert!(matches!(r, Err(VldLapinError::Validation(_))));
         assert_eq!(settled.get(), 1);
 
@@ -443,7 +498,7 @@ mod tests {
     #[test]
     fn valid_payload_is_not_settled() {
         let settled = Cell::new(false);
-        let r: Result<Evt, _> = run(decode_or_settle(br#"{"event":"x"}"#, || {
+        let r: Result<Evt, _> = run(decode_or_settle(br#"{"event":"x","retries":0}"#, || {
             settled.set(true);
             async { Ok::<_, lapin::Error>(()) }
         }));

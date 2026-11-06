@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-aide"
 readme = "README.md"
 keywords = ["validation", "aide", "openapi", "schemars", "vld"]
 categories = ["web-programming", "development-tools"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [features]
 default = ["schemars-0"]

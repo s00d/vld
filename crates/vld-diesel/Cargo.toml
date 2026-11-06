@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-diesel"
 readme = "README.md"
 keywords = ["validation", "diesel", "orm", "database", "vld"]
 categories = ["database", "web-programming"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [features]
 default = ["sqlite"]
@@ -33,6 +33,11 @@ vld = { workspace = true }
 [[example]]
 name = "diesel_basic"
 path = "examples/diesel_basic.rs"
+required-features = ["sqlite"]
+
+[[test]]
+name = "integration"
+required-features = ["sqlite"]
 
 [package.metadata.docs.rs]
 all-features = true

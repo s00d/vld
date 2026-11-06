@@ -6,7 +6,7 @@ released together with [cargo-release](https://github.com/crate-ci/cargo-release
 ## One-time setup
 
 ```sh
-cargo install cargo-release cargo-hack cargo-deny --locked
+cargo install cargo-release just cargo-hack cargo-deny --locked
 cargo login            # crates.io token with publish rights for every vld crate
 gh auth login          # for the GitHub release
 ```
@@ -16,8 +16,8 @@ gh auth login          # for the GitHub release
 1. Add `## [Unreleased]` at the top of `CHANGELOG.md` and write the notes under it (Breaking
    changes / Migration / Added / Changed / Fixed / Security / Removed). The
    release stops if that section is empty: it is never regenerated from git.
-2. Make sure `main` is green in CI (MSRV, minimal versions, OS and live
-   redis/rabbitmq jobs run only there).
+2. Make sure `main` is green in CI, and run the weekly checks once by hand
+   (Actions → CI → Run workflow: MSRV, minimal versions, Windows / macOS).
 3. Dry run, then release (`minor` for 0.x breaking releases, `patch` for fixes):
 
    ```sh
@@ -27,10 +27,9 @@ gh auth login          # for the GitHub release
 
    cargo-release bumps every `Cargo.toml` (internal dependencies use
    `workspace = true`, so `[workspace.dependencies]` is the one place with
-   versions), then runs the pre-release hook once
-   (`scripts/release-hook.sh`):
-   - `scripts/release-preflight.sh` → `scripts/ci-all.sh test features clippy docs fmt package`
-   - `scripts/release-changelog.sh` → renames `[Unreleased]` to `[X.Y.Z] - date`
+   versions), then runs the pre-release hook once (`just release-hook`):
+   `just fmt lint test docs package`, renames `[Unreleased]` to
+   `[X.Y.Z] - date` in `CHANGELOG.md` and updates `fuzz/Cargo.lock`.
 
    It then commits `chore: release vX.Y.Z`, publishes every crate **in
    dependency order** (computed by cargo-release; no manual batches), tags
@@ -52,13 +51,15 @@ skips what is already published. 0.5.0 adds one new crate,
 
 A new crate also needs: a `crates/<name>` member in the root `Cargo.toml`, an
 entry in `[workspace.dependencies]` if other crates use it,
-`include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]`, a row in
-`MSRV.md`, and its feature branches in `scripts/ci-all.sh`.
+`include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]` (the leading
+`/` anchors the pattern: without it `README.md` also matches every README in
+`docs/node_modules`), a row in `MSRV.md`, and an entry in `feature_crates` in
+the `justfile` if it has optional features.
 
 ## Troubleshooting
 
 - **`[Unreleased]` is missing or empty**: add the heading and the notes, commit, rerun.
-- **Preflight fails**: fix on `main`, rerun the release (nothing was
+- **Hook checks fail**: fix on `main`, rerun the release (nothing was
   published yet; cargo-release has not committed).
 - **Publish stopped half-way** (rate limit, network, index lag): rerun
   `cargo release publish --workspace --execute`, then

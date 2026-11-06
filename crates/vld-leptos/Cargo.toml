@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-leptos"
 readme = "README.md"
 keywords = ["validation", "leptos", "wasm", "server-functions", "vld"]
 categories = ["web-programming", "wasm"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true }

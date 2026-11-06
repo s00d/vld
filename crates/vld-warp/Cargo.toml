@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-warp"
 readme = "README.md"
 keywords = ["validation", "warp", "web", "json", "filter"]
 categories = ["web-programming", "web-programming::http-server"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true }

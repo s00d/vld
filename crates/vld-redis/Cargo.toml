@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-redis"
 readme = "README.md"
 keywords = ["validation", "redis", "pubsub", "json", "vld"]
 categories = ["database", "web-programming"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [features]
 default = ["redis-0"]

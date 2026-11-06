@@ -1,2 +1,0 @@
-# Don't publish playground to crates.io
-release = false

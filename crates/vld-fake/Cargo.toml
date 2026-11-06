@@ -11,7 +11,7 @@ documentation = "https://docs.rs/vld-fake"
 readme = "README.md"
 keywords = ["validation", "fake", "testing", "json-schema", "generator"]
 categories = ["development-tools::testing", "parsing"]
-include = ["src/**", "README.md", "LICENSE", "Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [dependencies]
 vld = { workspace = true, features = ["openapi", "regex"] }
