@@ -1,5 +1,6 @@
 //! `vld::i18n`: resolvers, built-in sets, key fallback, exclusive bounds.
 
+use serde_json::json;
 use std::collections::HashMap;
 use vld::i18n::{english, translate_error, translate_issue, FnResolver, MapResolver};
 use vld::prelude::*;
@@ -97,5 +98,27 @@ fn builtin_sets_translate_and_keep_params() {
         let msg = translate_error(&err, &resolver).issues[0].message.clone();
         assert!(msg.contains("10"), "{msg}");
         assert_ne!(msg, en, "translated set must differ from English");
+    }
+}
+
+#[test]
+fn translations_cover_types_and_units() {
+    let ru = vld::i18n::russian();
+    let err = vld::string().parse_value(&json!(true)).unwrap_err();
+    let msg = &vld::i18n::translate_error(&err, &ru).issues[0].message;
+    assert_eq!(msg, "Ожидался тип «строка», получен «логическое значение»");
+
+    let err = vld::string().min(3).parse_value(&json!("ab")).unwrap_err();
+    let msg = &vld::i18n::translate_error(&err, &ru).issues[0].message;
+    assert!(msg.contains("3 символов"), "{msg}");
+
+    for lang in [
+        vld::i18n::russian(),
+        vld::i18n::german(),
+        vld::i18n::spanish(),
+    ] {
+        let err = vld::literal("a").parse_value(&json!("b")).unwrap_err();
+        let msg = &vld::i18n::translate_error(&err, &lang).issues[0].message;
+        assert!(!msg.starts_with("Expected"), "{msg}");
     }
 }

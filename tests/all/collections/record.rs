@@ -1,6 +1,7 @@
-use crate::common::{parse_err, paths};
+use crate::common::{code, parse_err, paths, Role};
 use serde_json::json;
-use vld::error::{IssueCode, SizeOrigin};
+use std::collections::{BTreeMap, HashMap};
+use vld::error::{IssueCode, SizeOrigin, StringValidation};
 use vld::prelude::*;
 
 #[test]
@@ -37,4 +38,65 @@ fn key_count_bounds() {
             ..
         }
     );
+}
+
+#[test]
+fn record_with_key_schema() {
+    let s = vld::record_with_keys(vld::from_str::<u32>(), vld::string());
+    let m: HashMap<u32, String> = s.parse(r#"{"1": "a", "20": "b"}"#).unwrap();
+    assert_eq!(m[&20], "b");
+
+    let err = s.parse(r#"{"x": "a", "2": 3}"#).unwrap_err();
+    let paths: Vec<_> = err.issues.iter().map(|i| i.path.clone()).collect();
+    assert!(paths.contains(&vec![PathSegment::Field("x".into())]));
+    assert!(paths.contains(&vec![PathSegment::Field("2".into())]));
+
+    // Bad key and bad value under the same key: both reported.
+    let err = s.parse(r#"{"x": 1}"#).unwrap_err();
+    assert_eq!(err.issues.len(), 2);
+
+    let uuid_keys = vld::record_with_keys(vld::string().uuid(), vld::boolean());
+    assert!(uuid_keys
+        .parse(r#"{"67e55044-10b1-426f-9247-bb680e5fe0c8": true}"#)
+        .is_ok());
+    let err = uuid_keys.parse(r#"{"nope": true}"#).unwrap_err();
+    assert_eq!(
+        err.issues[0].code,
+        IssueCode::InvalidString {
+            validation: StringValidation::Uuid
+        }
+    );
+
+    let roles = vld::record_with_keys(vld::from_serde::<Role>(), vld::number().int())
+        .min_keys(1)
+        .max_keys(2);
+    let m = roles.parse(r#"{"admin": 1, "user": 2}"#).unwrap();
+    assert_eq!(m[&Role::User], 2);
+    assert_eq!(code(roles.parse("{}")).key(), "too_small");
+    assert_eq!(code(roles.parse("[]")).key(), "invalid_type");
+}
+
+#[test]
+fn ordered_records() {
+    let m: BTreeMap<String, f64> = vld::record(vld::number())
+        .ordered()
+        .parse(r#"{"b": 2, "a": 1, "c": 3}"#)
+        .unwrap();
+    assert_eq!(
+        m.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["a", "b", "c"]
+    );
+
+    let s: ZOrderedRecord<ZBoolean, vld::collections::KeySchema<vld::primitives::ZFromStr<i32>>> =
+        vld::record_with_keys(vld::from_str::<i32>(), vld::boolean())
+            .max_keys(3)
+            .ordered();
+    let m = s.parse(r#"{"10": true, "-1": false, "2": true}"#).unwrap();
+    assert_eq!(m.keys().copied().collect::<Vec<_>>(), [-1, 2, 10]);
+    assert!(s
+        .parse(r#"{"1": true, "2": true, "3": true, "4": true}"#)
+        .is_err());
+
+    // Default record output is unchanged.
+    let _: HashMap<String, bool> = vld::record(vld::boolean()).parse("{}").unwrap();
 }

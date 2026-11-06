@@ -4,6 +4,7 @@
 
 mod differential;
 
+use crate::common::Role;
 use serde_json::{json, Map, Value};
 use vld::openapi::JsonSchema;
 use vld::prelude::*;
@@ -499,4 +500,155 @@ fn field_schema_is_field() {
         .field("a", vld::string().email())
         .json_schema();
     assert_eq!(a, b);
+}
+
+// ---- 0.5 schema types ----
+
+#[test]
+fn sized_int_schema() {
+    assert_eq!(
+        vld::u8().json_schema(),
+        json!({"type": "integer", "format": "uint8", "minimum": 0, "maximum": 255})
+    );
+    assert_eq!(
+        vld::i16().min(-10).json_schema(),
+        json!({"type": "integer", "format": "int16", "minimum": -10, "maximum": 32767})
+    );
+    assert_eq!(
+        vld::u64().json_schema(),
+        json!({"type": "integer", "format": "uint64", "minimum": 0, "maximum": u64::MAX})
+    );
+    assert_eq!(vld::i64().json_schema()["minimum"], json!(i64::MIN));
+    assert_eq!(vld::i32().json_schema()["format"], "int32");
+    assert_eq!(vld::u16().json_schema()["format"], "uint16");
+    assert_eq!(vld::u32().json_schema()["format"], "uint32");
+    assert_eq!(vld::i8().json_schema()["format"], "int8");
+    assert_eq!(vld::usize().json_schema()["format"], "uint64");
+    assert_eq!(vld::isize().json_schema()["format"], "int64");
+    // Exclusive bound at the type edge wins.
+    let js = vld::u8().positive().json_schema();
+    assert_eq!(js["exclusiveMinimum"], 0);
+    assert!(js.get("minimum").is_none());
+    // safe() is looser than i32: the type range wins.
+    let js = vld::i32().safe().lt(100).multiple_of(5).json_schema();
+    assert_eq!(js["minimum"], i32::MIN);
+    assert_eq!(js["exclusiveMaximum"], 100);
+    assert!(js.get("maximum").is_none());
+    assert_eq!(js["multipleOf"], 5);
+    // number().int() keeps its 0.4 schema.
+    assert_eq!(
+        vld::number().int().json_schema(),
+        json!({"type": "integer"})
+    );
+    assert_eq!(
+        vld::number().int().min(1).json_schema(),
+        json!({"type": "integer", "minimum": 1})
+    );
+}
+
+#[test]
+fn f32_schema() {
+    assert_eq!(
+        vld::f32().min(0.5).json_schema(),
+        json!({"type": "number", "format": "float", "minimum": 0.5})
+    );
+}
+
+#[test]
+fn adapter_schemas() {
+    assert_eq!(vld::from_serde::<Role>().json_schema(), json!({}));
+    let custom = json!({"type": "string", "enum": ["admin", "user"]});
+    assert_eq!(
+        vld::from_serde::<Role>()
+            .schema(custom.clone())
+            .json_schema(),
+        custom
+    );
+    assert_eq!(
+        vld::from_str::<std::net::IpAddr>().json_schema(),
+        json!({"type": "string"})
+    );
+    assert_eq!(
+        vld::from_str::<std::net::IpAddr>()
+            .schema(json!({"type": "string", "format": "ip"}))
+            .json_schema()["format"],
+        "ip"
+    );
+    assert_eq!(
+        vld::enum_of(&[("a", 1), ("b", 2)]).json_schema(),
+        json!({"type": "string", "enum": ["a", "b"]})
+    );
+}
+
+#[test]
+fn misc_schemas() {
+    assert_eq!(vld::null().json_schema(), json!({"type": "null"}));
+    assert_eq!(vld::never().json_schema(), json!({"not": {}}));
+    assert_eq!(
+        vld::char().json_schema(),
+        json!({"type": "string", "minLength": 1, "maxLength": 1})
+    );
+    assert_eq!(
+        vld::string().base64url().json_schema()["format"],
+        "base64url"
+    );
+    assert_eq!(vld::string().json().json_schema()["format"], "json");
+    assert_eq!(vld::string().hostname().json_schema()["format"], "hostname");
+    let t = (
+        vld::boolean(),
+        vld::boolean(),
+        vld::boolean(),
+        vld::boolean(),
+        vld::boolean(),
+        vld::boolean(),
+        vld::boolean(),
+        vld::boolean(),
+        vld::boolean(),
+        vld::boolean(),
+        vld::boolean(),
+        vld::string(),
+    );
+    let js = t.json_schema();
+    assert_eq!(js["maxItems"], 12);
+    assert_eq!(js["prefixItems"][11]["type"], "string");
+    let d = vld::duration()
+        .min(std::time::Duration::from_millis(1500))
+        .max_secs(5)
+        .json_schema();
+    assert_eq!(d["anyOf"][1]["type"], "number");
+    assert_eq!(d["anyOf"][1]["minimum"], 1.5);
+    assert_eq!(d["anyOf"][1]["maximum"], 5);
+}
+
+#[test]
+fn record_schemas() {
+    let js = vld::record(vld::number()).json_schema();
+    assert!(js.get("propertyNames").is_none());
+    assert_eq!(js, vld::record(vld::number()).ordered().json_schema());
+    let js = vld::record_with_keys(vld::string().uuid(), vld::boolean())
+        .min_keys(1)
+        .json_schema();
+    assert_eq!(
+        js["propertyNames"],
+        json!({"type": "string", "format": "uuid"})
+    );
+    assert_eq!(js["additionalProperties"], json!({"type": "boolean"}));
+    assert_eq!(js["minProperties"], 1);
+    let js = vld::record_with_keys(vld::enumeration(&["a", "b"]), vld::number())
+        .ordered()
+        .json_schema();
+    assert_eq!(js["propertyNames"]["enum"], json!(["a", "b"]));
+}
+
+#[cfg(feature = "chrono")]
+#[test]
+fn time_schema() {
+    assert_eq!(
+        vld::chrono::time()
+            .min("08:00:00")
+            .max("18:00:00")
+            .json_schema(),
+        json!({"type": "string", "pattern": r"^\d{2}:\d{2}:\d{2}(\.\d{1,9})?$",
+                   "formatMinimum": "08:00:00", "formatMaximum": "18:00:00"})
+    );
 }

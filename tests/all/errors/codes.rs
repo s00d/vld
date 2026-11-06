@@ -135,3 +135,38 @@ fn errors_round_trip_through_serde() {
     assert_eq!(back.issues[0].code, err.issues[0].code);
     assert_eq!(back.issues[0].message, err.issues[0].message);
 }
+
+vld::schema! {
+    #[derive(Debug)]
+    struct Person {
+        name: String => vld::string(),
+        nick: Option<String> => vld::string().optional(),
+    }
+}
+
+#[test]
+fn absent_required_field_is_missing_field() {
+    let err = Person::parse_value(&json!({})).unwrap_err();
+    assert_eq!(err.issues.len(), 1);
+    assert_eq!(err.issues[0].code, IssueCode::MissingField);
+
+    // Present but null: still a type error.
+    let err = Person::parse_value(&json!({"name": null})).unwrap_err();
+    assert!(matches!(err.issues[0].code, IssueCode::InvalidType { .. }));
+
+    let obj = vld::object().field("name", vld::string());
+    let err = obj.parse_value(&json!({})).unwrap_err();
+    assert_eq!(err.issues[0].code, IssueCode::MissingField);
+}
+
+#[test]
+fn display_does_not_repeat_received() {
+    let err = vld::string().parse_value(&json!(null)).unwrap_err();
+    assert_eq!(err.to_string(), "Expected string, received null");
+
+    let err = vld::union(vld::string(), vld::number())
+        .parse_value(&json!(true))
+        .unwrap_err();
+    let text = err.to_string();
+    assert!(!text.contains("received boolean, received"), "{text}");
+}

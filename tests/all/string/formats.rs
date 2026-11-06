@@ -90,10 +90,13 @@ formats! {
         bad: ["", "localhost", "1.2.3.256", "1.2.3.4/8"],
     }
     cidr => Cidr {
-        ok: ["10.0.0.0/8", "10.0.0.0/24", "0.0.0.0/0", "2001:db8::/32", "::/128"],
+        ok: [
+            "10.0.0.0/8", "10.0.0.0/24", "0.0.0.0/0", "192.168.1.1/32", "2001:db8::/32",
+            "::/128", "::/0",
+        ],
         bad: [
             "", "10.0.0.0", "10.0.0.0/+8", "10.0.0.0/08", "10.0.0.0/33", "2001:db8::/129",
-            "10.0.0.0/٨",
+            "10.0.0.0/٨", "::/129", "x/8", "10.0.0.0/",
         ],
     }
     mac => Mac {
@@ -133,8 +136,22 @@ formats! {
         bad: ["", "10", "10:3", "25:00", "24:00", "12:60", "12:00:60", "1é:00", "12:00Z"],
     }
     hostname => Hostname {
-        ok: ["example.com", "sub.example.com", "localhost", "a-b.c"],
-        bad: ["", "-invalid.com", "invalid-.com", "exa mple.com", "a..b"],
+        ok: [
+            "example.com", "sub.example.com", "localhost", "a-b.c", "a-b.c-d.io",
+            "xn--80ak6aa92e.com", &"a".repeat(63),
+        ],
+        bad: [
+            "", "-invalid.com", "invalid-.com", "exa mple.com", "a..b", "a_b.com", "é.com",
+            &"a".repeat(64),
+        ],
+    }
+    base64url => Base64Url {
+        ok: ["QQ", "QUI", "QUJD", "QQ==", "-_-_", "aGVsbG8gd29ybGQ"],
+        bad: ["", "Q", "a+b", "a+b/", "QQ=x", "QUJD=", "a b", "é"],
+    }
+    json => Json {
+        ok: ["{}", "[1,2]", r#"{"a": [true, null]}"#, "1", r#""s""#, " null "],
+        bad: ["", "{", "{'a': 1}", "[1,]", "1 2", "undefined"],
     }
     credit_card => CreditCard {
         ok: ["4111111111111111", "4111 1111 1111 1111", "4111-1111-1111-1111"],
@@ -253,4 +270,20 @@ formats! {
         ok: ["+14155552671", "+442071838750"],
         bad: ["", "14155552671", "+1", "+1abc"],
     }
+}
+
+/// 253 characters is the hostname limit (`received` is truncated, so not in the table).
+#[test]
+fn hostname_total_length_limit() {
+    let long = ["abcdefghi"; 26].join("."); // 259 chars
+    let err = vld::string()
+        .hostname()
+        .parse_value(&json!(long))
+        .unwrap_err();
+    assert_eq!(
+        err.issues[0].code,
+        IssueCode::InvalidString {
+            validation: StringValidation::Hostname
+        }
+    );
 }

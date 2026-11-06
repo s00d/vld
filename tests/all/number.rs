@@ -1,6 +1,6 @@
 //! `vld::number()` (f64): bounds, sign, multiple_of, safe, finite, coerce.
 
-use crate::common::{codes, parse_err};
+use crate::common::{code, codes, parse_err};
 use serde_json::json;
 use vld::error::{IssueCode, SizeOrigin};
 use vld::prelude::*;
@@ -127,4 +127,39 @@ fn messages() {
         "Must be <= 100"
     );
     assert_eq!(parse_err(&s, json!(200)).issues[0].code.key(), "too_big");
+}
+
+// ---- f32 ----
+
+#[test]
+fn f32_range_and_bounds() {
+    assert_eq!(vld::f32().parse("1.5").unwrap(), 1.5f32);
+    assert_eq!(
+        code(vld::f32().parse("1e39")),
+        IssueCode::TooBig {
+            origin: SizeOrigin::Number,
+            maximum: json!(f32::MAX as f64),
+            inclusive: true
+        }
+    );
+    assert_eq!(code(vld::f32().parse("-1e39")).key(), "too_small");
+    assert_eq!(
+        vld::f32().parse_value(&json!(f32::MAX as f64)).unwrap(),
+        f32::MAX
+    );
+    assert_eq!(vld::f32().parse("3.4028235e38").unwrap(), f32::MAX);
+    assert_eq!(vld::f32().parse("-3.4028235e38").unwrap(), f32::MIN);
+    // Bounds compare in f32 space: 0.1 passes min(0.1) / max(0.1).
+    assert!(vld::f32().min(0.1).max(0.1).parse("0.1").is_ok());
+    assert!(vld::f32().gt(0.0).parse("0").is_err());
+    assert!(vld::f32().lt(1.0).parse("1").is_err());
+    assert!(vld::f32().positive().parse("-0.5").is_err());
+    assert!(vld::f32().coerce().parse(r#""2.5""#).is_ok());
+    assert!(vld::f32().parse(r#""2.5""#).is_err());
+    assert!(vld::f32().multiple_of(0.5).parse("2.5").is_ok());
+    assert!(vld::f32().non_negative().non_positive().parse("0").is_ok());
+    assert!(vld::f32().negative().parse("0").is_err());
+    assert!(vld::f32().gte(1.0).lte(2.0).parse("1.5").is_ok());
+    let err = vld::f32().type_error("float!").parse("null").unwrap_err();
+    assert_eq!(err.issues[0].message, "float!");
 }

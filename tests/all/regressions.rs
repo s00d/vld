@@ -32,6 +32,12 @@ fn swallowed() -> Vec<&'static str> {
         ("array", vld::array(SilentFail).parse("[1]").is_err()),
         ("set", vld::set(SilentFail).parse("[1]").is_err()),
         (
+            "map",
+            vld::map(vld::string(), SilentFail)
+                .parse(r#"[["a", 1]]"#)
+                .is_err(),
+        ),
+        (
             "record",
             vld::record(SilentFail).parse(r#"{"a": 1}"#).is_err(),
         ),
@@ -76,4 +82,26 @@ fn issue_less_failures_do_not_panic() {
 #[test]
 fn issue_less_failures_are_never_swallowed() {
     assert_eq!(swallowed(), Vec::<&str>::new());
+}
+
+#[cfg(feature = "openapi")]
+impl vld::json_schema::JsonSchema for SilentFail {
+    fn json_schema(&self) -> serde_json::Value {
+        serde_json::json!({})
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl vld::json_schema::CollectNestedSchemas for SilentFail {}
+
+vld::schema! {
+    struct Silent {
+        x: () => SilentFail,
+    }
+}
+
+/// A `schema!` field failing without issues fails the struct (no panic on `issues[0]`).
+#[test]
+fn issue_less_field_error_fails_schema_without_panic() {
+    assert!(Silent::parse_value(&serde_json::json!({"x": 1})).is_err());
 }

@@ -32,6 +32,7 @@ fn msg_variants_replace_message_and_keep_code() {
         (s().emoji_msg("m"), "plain", "invalid_string"),
         (s().slug_msg("m"), "No Slug", "invalid_string"),
         (s().cron_msg("m"), "x", "invalid_string"),
+        (s().base64url_msg("m"), "+", "invalid_string"),
     ];
     for (schema, input, code) in cases {
         let err = parse_err(&schema, json!(input));
@@ -82,6 +83,14 @@ fn default_messages() {
         err.issues[0].message,
         "String must be at least 5 characters"
     );
+    let err = parse_err(&vld::string().base64url(), json!("+"));
+    assert_eq!(err.issues[0].message, "Invalid Base64URL string");
+    let err = parse_err(&vld::string().json(), json!("{"));
+    assert_eq!(err.issues[0].message, "Invalid JSON string");
+    let schema = vld::string()
+        .json()
+        .with_messages(|k| (k == "invalid_json").then(|| "json!".into()));
+    assert_eq!(parse_err(&schema, json!("{")).issues[0].message, "json!");
 }
 
 #[test]

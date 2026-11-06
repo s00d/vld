@@ -2,11 +2,11 @@
 //!
 //! Feature-gated areas are `cfg`'d modules, so the same binary runs under
 //! every feature combination (`--no-default-features` included).
-//! `tests/new_types.rs` stays a separate binary.
 
 #[macro_use]
 mod common;
 
+mod adapters;
 mod bool_enum_literal;
 mod collections;
 mod combinators;

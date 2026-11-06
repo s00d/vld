@@ -1,8 +1,8 @@
 //! `boolean`, `enumeration`, `literal`, `any`.
 
-use crate::common::parse_err;
+use crate::common::{code, parse_err};
 use serde_json::json;
-use vld::error::IssueCode;
+use vld::error::{IssueCode, SizeOrigin};
 use vld::prelude::*;
 
 #[test]
@@ -115,4 +115,47 @@ fn any_accepts_everything() {
     ] {
         assert_eq!(a.parse_value(&v).unwrap(), v);
     }
+}
+
+// ---- null / never / char ----
+
+#[test]
+fn null_never_char() {
+    vld::null().parse("null").unwrap();
+    assert_eq!(
+        code(vld::null().parse("0")),
+        IssueCode::InvalidType {
+            expected: "null".into(),
+            received: "number".into()
+        }
+    );
+    let err = vld::null()
+        .type_error("must be null")
+        .parse("{}")
+        .unwrap_err();
+    assert_eq!(err.issues[0].message, "must be null");
+
+    for input in ["null", "1", r#""x""#, "{}", "[]", "true"] {
+        assert_eq!(code(vld::never().parse(input)).key(), "invalid_type");
+    }
+    let err = vld::never().parse(r#""x""#).unwrap_err();
+    assert_eq!(err.issues[0].message, "Expected never, received string");
+    assert!(vld::never().optional().parse("null").unwrap().is_none());
+
+    assert_eq!(vld::char().parse(r#""a""#).unwrap(), 'a');
+    assert_eq!(vld::char().parse(r#""日""#).unwrap(), '日');
+    assert_eq!(vld::char().parse(r#""😀""#).unwrap(), '😀');
+    // Two scalars (flag emoji / combining mark) are not one char.
+    assert!(vld::char().parse(r#""🇺🇸""#).is_err());
+    assert!(vld::char().parse("\"e\u{301}\"").is_err());
+    assert_eq!(
+        code(vld::char().parse(r#""""#)),
+        IssueCode::InvalidLength {
+            origin: SizeOrigin::String,
+            expected: 1
+        }
+    );
+    assert_eq!(code(vld::char().parse("1")).key(), "invalid_type");
+    let err = vld::char().type_error("char!").parse("1").unwrap_err();
+    assert_eq!(err.issues[0].message, "char!");
 }
