@@ -161,7 +161,7 @@ group_integrations() {
   step "lapin 4" cargo test -p vld-lapin --no-default-features --features "lapin-4" "${CI[@]}"
   step "ntex 3" cargo test -p vld-ntex --no-default-features --features ntex-3 "${CI[@]}"
   if [[ -n "${VLD_TS_NODE_DIR:-}" ]]; then
-    step "vld-ts node cross-check" cargo test -p vld-ts --test live_findings "${CI[@]}"
+    step "vld-ts node cross-check" cargo test -p vld-ts --test regression "${CI[@]}"
   else
     skip "vld-ts node cross-check (set VLD_TS_NODE_DIR to a dir with zod@3 + valibot@1)"
   fi

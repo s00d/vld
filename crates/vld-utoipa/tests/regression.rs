@@ -1,4 +1,7 @@
+//! Regression tests for the 0.5.0 audit and live end-to-end findings.
+
 use serde_json::{json, Value};
+use vld::json_schema::JsonSchema;
 use vld_utoipa::utoipa::openapi::path::ParameterIn;
 use vld_utoipa::{json_schema_to_params, json_schema_to_schema};
 
@@ -208,4 +211,21 @@ fn any_of_siblings_go_into_the_branches() {
     // Nullable unions are unchanged.
     let n = conv(json!({"anyOf": [{"type": "string"}, {"type": "null"}]}));
     assert_eq!(n["anyOf"][1]["type"], "null", "{n}");
+}
+
+#[test]
+fn u64_bounds_stay_integers() {
+    let out = conv(vld::u64().json_schema());
+    assert_eq!(out["maximum"], json!(u64::MAX));
+    assert!(out["maximum"].is_u64(), "{out}");
+}
+
+#[test]
+fn tuple_keeps_prefix_items() {
+    let out = conv((vld::string(), vld::u16()).json_schema());
+    assert_eq!(out["prefixItems"][0]["type"], "string");
+    assert_eq!(out["prefixItems"][1]["type"], "integer");
+    assert_eq!(out["items"], json!(false));
+    assert_eq!(out["minItems"], 2);
+    assert_eq!(out["maxItems"], 2);
 }
