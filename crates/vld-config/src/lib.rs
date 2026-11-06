@@ -257,9 +257,9 @@ pub fn from_figment<T: VldParse>(figment: &figment::Figment) -> Result<T, VldCon
 
 /// Prelude — re-exports everything you need.
 pub mod prelude {
+    pub use crate::VldConfigError;
     #[cfg(feature = "figment")]
     pub use crate::from_figment;
-    pub use crate::VldConfigError;
     #[cfg(feature = "config-rs")]
     pub use crate::{from_builder, from_config};
     pub use crate::{from_value, from_value_coerced};

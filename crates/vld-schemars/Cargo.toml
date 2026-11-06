@@ -13,6 +13,9 @@ keywords = ["validation", "schemars", "json-schema", "openapi", "vld"]
 categories = ["web-programming", "development-tools"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["schemars-0"]
 schemars-0 = ["dep:schemars0"]
@@ -24,7 +27,7 @@ schemars0 = { package = "schemars", version = ">=0.9, <1", optional = true }
 schemars1 = { package = "schemars", version = ">=1, <2", optional = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
-regex-lite = "0.1.5"
+regex-lite = { workspace = true }
 
 [dev-dependencies]
 vld = { workspace = true, features = ["openapi", "derive"] }

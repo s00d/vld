@@ -13,6 +13,9 @@ keywords = ["validation", "rama", "web", "json", "extractor"]
 categories = ["web-programming", "web-programming::http-server"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
@@ -22,7 +25,7 @@ serde_json = { workspace = true }
 [dev-dependencies]
 vld-http-common = { workspace = true, features = ["conformance"] }
 vld = { workspace = true }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 serde = { workspace = true }
 
 [[example]]

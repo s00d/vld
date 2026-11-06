@@ -13,6 +13,9 @@ keywords = ["validation", "sea-orm", "orm", "activemodel", "database"]
 categories = ["web-programming", "database"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["sea-orm-1"]
 sea-orm-1 = ["dep:sea-orm"]
@@ -41,7 +44,7 @@ vld = { workspace = true }
 # sea-orm 1, tests/sea_orm2.rs aliases `sea_orm2 as sea_orm`.
 sea-orm = { version = "1", default-features = false, features = ["macros"] }
 sea-orm2 = { package = "sea-orm", version = "2", default-features = false, features = ["macros"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 time = "0.3"
 
 [[example]]

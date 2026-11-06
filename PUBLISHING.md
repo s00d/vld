@@ -6,7 +6,7 @@ released together with [cargo-release](https://github.com/crate-ci/cargo-release
 ## One-time setup
 
 ```sh
-cargo install cargo-release just cargo-hack cargo-deny --locked
+cargo install cargo-release just cargo-hack cargo-deny cargo-shear cargo-semver-checks --locked
 cargo login            # crates.io token with publish rights for every vld crate
 gh auth login          # for the GitHub release
 ```
@@ -29,7 +29,8 @@ gh auth login          # for the GitHub release
    cargo-release bumps every `Cargo.toml` (internal dependencies use
    `workspace = true`, so `[workspace.dependencies]` is the one place with
    versions), then runs the pre-release hook once (`just release-hook`):
-   `just fmt lint test docs package`, renames `[Unreleased]` to
+   `just fmt lint test docs semver package` (`semver` fails when the API
+   changed more than the bump allows, e.g. a breaking change in a patch), renames `[Unreleased]` to
    `[X.Y.Z] - date` in `CHANGELOG.md` and updates `fuzz/Cargo.lock`.
 
    It then commits `chore: release vX.Y.Z`, publishes every crate **in
@@ -55,7 +56,7 @@ entry in `[workspace.dependencies]` if other crates use it,
 `include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]` (the leading
 `/` anchors the pattern: without it `README.md` also matches every README in
 `docs/node_modules`), a row in `MSRV.md`, and an entry in `feature_crates` in
-the `justfile` if it has optional features.
+the `justfile` if it has optional features, and `[lints] workspace = true`.
 
 ## Troubleshooting
 

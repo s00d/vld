@@ -8,7 +8,7 @@ use rama::http::body::{Frame, StreamingBody};
 use rama::http::service::web::WebService;
 use rama::http::{Body, Method, Request, StatusCode};
 use rama::{Layer, Service};
-use vld_rama::{validated, ValidateJsonLayer, VldForm, VldJson};
+use vld_rama::{ValidateJsonLayer, VldForm, VldJson, validated};
 
 vld::schema! {
     #[derive(Debug, Clone)]

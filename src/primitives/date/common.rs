@@ -22,7 +22,7 @@ use serde_json::Value;
 use std::fmt::Display;
 use std::marker::PhantomData;
 
-use crate::error::{issue_error, DateKind, IssueCode, SizeOrigin, ValidationIssue, VldError};
+use crate::error::{DateKind, IssueCode, SizeOrigin, ValidationIssue, VldError, issue_error};
 use crate::primitives::iso::{is_valid_iso_date, is_valid_time_of_day, split_datetime};
 use crate::schema::VldSchema;
 

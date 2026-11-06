@@ -13,6 +13,9 @@ keywords = ["validation", "surrealdb", "database", "document", "vld"]
 categories = ["database", "web-programming"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true }
 serde = { workspace = true }

@@ -2,9 +2,9 @@
 
 use crate::common::{codes, paths};
 use serde_json::json;
+use vld::Validate;
 use vld::error::IssueCode;
 use vld::schema::VldParse;
-use vld::Validate;
 
 #[derive(Debug, Validate)]
 struct SimpleUser {

@@ -58,7 +58,7 @@ pub use vld as __vld;
 use dict::*;
 use rand::Rng;
 use rand::RngExt;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use vld::prelude::VldParse;
 
 trait RngCompat {
@@ -67,7 +67,7 @@ trait RngCompat {
         T: rand::distr::uniform::SampleUniform,
         R: rand::distr::uniform::SampleRange<T>;
     fn gen_bool(&mut self, p: f64) -> bool;
-    fn r#gen<T>(&mut self) -> T
+    fn generator<T>(&mut self) -> T
     where
         rand::distr::StandardUniform: rand::distr::Distribution<T>;
 }
@@ -85,7 +85,7 @@ impl<R: rand::Rng + ?Sized> RngCompat for R {
         self.random_bool(p)
     }
 
-    fn r#gen<T>(&mut self) -> T
+    fn generator<T>(&mut self) -> T
     where
         rand::distr::StandardUniform: rand::distr::Distribution<T>,
     {
@@ -111,8 +111,8 @@ pub fn fake_json(schema: &Value) -> String {
 
 /// Generate `count` random values from the same schema.
 pub fn fake_many(schema: &Value, count: usize) -> Vec<Value> {
-    let mut gen = FakeGen::new();
-    (0..count).map(|_| gen.value(schema)).collect()
+    let mut generator = FakeGen::new();
+    (0..count).map(|_| generator.value(schema)).collect()
 }
 
 /// Generate a random value **and** parse it through `T::vld_parse_value`,
@@ -597,7 +597,7 @@ impl<R: Rng> FakeGen<R> {
                 format!("+1{}", self.gen_chars(b"0123456789", n - 2))
             }
             "byte" if n >= 4 && n % 4 == 0 => {
-                let bytes: Vec<u8> = (0..n / 4 * 3).map(|_| self.rng.gen()).collect();
+                let bytes: Vec<u8> = (0..n / 4 * 3).map(|_| self.rng.generator()).collect();
                 base64_encode(&bytes)
             }
             _ => return None,
@@ -983,7 +983,7 @@ impl<R: Rng> FakeGen<R> {
             } else {
                 fits[self.rng.gen_range(0..fits.len())]
             };
-            let bytes: Vec<u8> = (0..n).map(|_| self.rng.gen()).collect();
+            let bytes: Vec<u8> = (0..n).map(|_| self.rng.generator()).collect();
             return match enc {
                 "-hex" => bytes.iter().map(|b| format!("{b:02x}")).collect(),
                 "-base64url" => base64url(&bytes),
@@ -1018,7 +1018,7 @@ impl<R: Rng> FakeGen<R> {
                     n - 1
                 };
             }
-            let bytes: Vec<u8> = (0..n * 3 / 4).map(|_| self.rng.gen()).collect();
+            let bytes: Vec<u8> = (0..n * 3 / 4).map(|_| self.rng.generator()).collect();
             return base64url(&bytes);
         }
 
@@ -1200,7 +1200,7 @@ impl<R: Rng> FakeGen<R> {
             (None, Some(h)) => (h - 1000.0, h),
             (None, None) => (0.0, 1000.0),
         };
-        let v = lo + self.rng.gen::<f64>() * (hi - lo);
+        let v = lo + self.rng.generator::<f64>() * (hi - lo);
         let s = format!("{v:.2}");
         if s.parse::<f64>().is_ok_and(|r| (lo..=hi).contains(&r)) {
             s
@@ -1308,7 +1308,7 @@ impl<R: Rng> FakeGen<R> {
 
     fn gen_base64(&mut self) -> String {
         let byte_len = self.rng.gen_range(8..32);
-        let bytes: Vec<u8> = (0..byte_len).map(|_| self.rng.gen()).collect();
+        let bytes: Vec<u8> = (0..byte_len).map(|_| self.rng.generator()).collect();
         base64_encode(&bytes)
     }
 
@@ -1430,20 +1430,16 @@ impl<R: Rng> FakeGen<R> {
 
     fn gen_password(&mut self) -> String {
         let len = self.rng.gen_range(10..18);
-        let mut s: String = (0..len)
-            .map(|_| PASSWORD_ALPHA[self.rng.gen_range(0..PASSWORD_ALPHA.len())] as char)
+        let mut bytes: Vec<u8> = (0..len)
+            .map(|_| PASSWORD_ALPHA[self.rng.gen_range(0..PASSWORD_ALPHA.len())])
             .collect();
-        // Guarantee at least one of each class
-        let positions: Vec<usize> = (0..s.len()).collect();
-        if s.len() >= 4 {
-            let bytes = unsafe { s.as_bytes_mut() };
-            bytes[positions[0]] = b'A' + self.rng.gen_range(0..26);
-            bytes[positions[1]] = b'a' + self.rng.gen_range(0..26);
-            bytes[positions[2]] = b'0' + self.rng.gen_range(0..10);
-            let specials = b"!@#$%&*";
-            bytes[positions[3]] = specials[self.rng.gen_range(0..specials.len())];
-        }
-        s
+        // Guarantee at least one of each class.
+        bytes[0] = b'A' + self.rng.gen_range(0..26);
+        bytes[1] = b'a' + self.rng.gen_range(0..26);
+        bytes[2] = b'0' + self.rng.gen_range(0..10);
+        let specials = b"!@#$%&*";
+        bytes[3] = specials[self.rng.gen_range(0..specials.len())];
+        bytes.into_iter().map(char::from).collect()
     }
 
     fn gen_street_address(&mut self) -> String {
@@ -1601,7 +1597,7 @@ impl<R: Rng> FakeGen<R> {
             return json!(lo);
         }
         for _ in 0..20 {
-            let val = lo + self.rng.gen::<f64>() * (hi - lo);
+            let val = lo + self.rng.generator::<f64>() * (hi - lo);
             // Prefer 2 decimals for readability, if that stays in range.
             let rounded = (val * 100.0).round() / 100.0;
             if in_range(rounded) {
@@ -1675,7 +1671,7 @@ impl<R: Rng> FakeGen<R> {
     // ═══════════════════════════════════════════════════════════════════════
 
     fn gen_boolean(&mut self) -> Value {
-        Value::Bool(self.rng.gen())
+        Value::Bool(self.rng.generator())
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -2426,8 +2422,8 @@ impl<T: ?Sized> __VldNestedSchemasFallback for T {}
 
 pub mod prelude {
     pub use crate::{
-        fake_json, fake_many, fake_parsed, fake_value, fake_value_seeded, impl_fake,
-        try_fake_parsed, FakeData, FakeGen,
+        FakeData, FakeGen, fake_json, fake_many, fake_parsed, fake_value, fake_value_seeded,
+        impl_fake, try_fake_parsed,
     };
 }
 

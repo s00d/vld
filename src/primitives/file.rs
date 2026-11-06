@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
-use crate::error::{value_type_name, FileTypeKind, IssueCode, SizeOrigin, VldError};
+use crate::error::{FileTypeKind, IssueCode, SizeOrigin, VldError, value_type_name};
 use crate::primitives::path::{outside_base_error, resolve_within};
 use crate::schema::VldSchema;
 #[cfg(feature = "file-advanced")]

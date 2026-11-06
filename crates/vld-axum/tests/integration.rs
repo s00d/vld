@@ -1,6 +1,6 @@
+use axum::Router;
 use axum::body::Body;
 use axum::routing::{get, post};
-use axum::Router;
 use http::{Request, StatusCode};
 use tower::ServiceExt;
 #[allow(unused_imports)]

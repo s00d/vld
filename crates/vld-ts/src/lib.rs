@@ -703,11 +703,7 @@ fn js_key(k: &str) -> String {
     let mut chars = k.chars();
     let ident = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '$')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$');
-    if ident {
-        k.to_string()
-    } else {
-        js_str(k)
-    }
+    if ident { k.to_string() } else { js_str(k) }
 }
 
 #[doc(hidden)]

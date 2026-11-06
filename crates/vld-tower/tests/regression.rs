@@ -4,7 +4,7 @@ use bytes::Bytes;
 use http::{Request, Response, StatusCode};
 use http_body_util::{BodyExt, Either, Full};
 use tower::{ServiceBuilder, ServiceExt};
-use vld_tower::{validated, ValidateJsonLayer, ValidatedBody};
+use vld_tower::{ValidateJsonLayer, ValidatedBody, validated};
 
 vld::schema! {
     #[derive(Debug, Clone)]
@@ -101,7 +101,7 @@ async fn malformed_json_returns_422_validation_shape() {
 /// `examples/tower_axum.rs`).
 #[tokio::test]
 async fn works_as_axum_router_layer() {
-    use axum::{routing::post, Extension, Router};
+    use axum::{Extension, Router, routing::post};
     async fn h(
         Extension(vld_tower::Validated(u)): Extension<vld_tower::Validated<User>>,
     ) -> String {

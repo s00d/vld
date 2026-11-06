@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::openapi::{nullable_schema, JsonSchema};
+use crate::openapi::{JsonSchema, nullable_schema};
 use crate::schema::VldSchema;
 
 crate::openapi::collect_inner_schemas! {

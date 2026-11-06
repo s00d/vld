@@ -5,7 +5,7 @@
 //! cargo run -p vld-actix --example actix_basic
 //! ```
 
-use actix_web::{web, App, HttpResponse, HttpServer};
+use actix_web::{App, HttpResponse, HttpServer, web};
 use serde::Serialize;
 #[allow(unused_imports)]
 use vld_actix::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};

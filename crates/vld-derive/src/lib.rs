@@ -9,7 +9,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::ext::IdentExt;
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, LitStr, Meta};
+use syn::{Data, DeriveInput, Fields, LitStr, Meta, parse_macro_input};
 
 /// Derive macro that generates `vld_parse()`, `parse_value()`, `validate()` /
 /// `is_valid()`, JSON Schema methods (with `openapi`) and implements the
@@ -127,14 +127,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 return Err(syn::Error::new(
                     other.span(),
                     "Validate can only be derived for structs with named fields",
-                ))
+                ));
             }
         },
         _ => {
             return Err(syn::Error::new(
                 name.span(),
                 "Validate can only be derived for structs",
-            ))
+            ));
         }
     };
 

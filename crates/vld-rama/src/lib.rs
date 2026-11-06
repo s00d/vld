@@ -74,7 +74,7 @@ mod rejection;
 pub use extract::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 #[allow(deprecated)]
 pub use layer::try_validated;
-pub use layer::{validated, ValidateJsonLayer, ValidateJsonService, Validated};
+pub use layer::{ValidateJsonLayer, ValidateJsonService, Validated, validated};
 pub use rejection::VldRejection;
 
 /// Body size limit (bytes) for [`VldJson`] and [`VldForm`], read from the
@@ -88,8 +88,8 @@ impl rama::extensions::Extension for VldBodyLimit {}
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        validated, ValidateJsonLayer, ValidateJsonService, Validated, VldBodyLimit, VldCookie,
-        VldForm, VldHeaders, VldJson, VldPath, VldQuery, VldRejection,
+        ValidateJsonLayer, ValidateJsonService, Validated, VldBodyLimit, VldCookie, VldForm,
+        VldHeaders, VldJson, VldPath, VldQuery, VldRejection, validated,
     };
     pub use vld::prelude::*;
 }

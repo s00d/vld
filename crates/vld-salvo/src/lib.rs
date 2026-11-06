@@ -60,16 +60,16 @@
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/web/salvo>
 
-use salvo::extract::metadata::{Metadata, Source, SourceFrom, SourceParser};
 use salvo::extract::Extractible;
+use salvo::extract::metadata::{Metadata, Source, SourceFrom, SourceParser};
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use std::sync::OnceLock;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
-    path_params_to_json, query_string_to_json, require_form_content_type,
-    require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
+    DEFAULT_BODY_LIMIT, VldHttpError, cookie_headers_to_json, headers_to_json, parse_coerced,
+    parse_form_body, parse_json_body, path_params_to_json, query_string_to_json,
+    require_form_content_type, require_json_content_type,
 };
 
 // ---------------------------------------------------------------------------

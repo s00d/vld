@@ -13,17 +13,20 @@ keywords = ["validation", "rocket", "web", "json", "extractor"]
 categories = ["web-programming", "web-programming::http-server"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
 rocket = { version = "0.5", default-features = false, features = ["json"] }
 serde_json = { workspace = true }
-serde = { workspace = true }
 
 [dev-dependencies]
 vld-http-common = { workspace = true, features = ["conformance"] }
 vld = { workspace = true }
 rocket = { version = "0.5", features = ["json"] }
+serde = { workspace = true }
 
 [[example]]
 name = "rocket_basic"

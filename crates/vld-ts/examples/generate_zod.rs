@@ -6,8 +6,8 @@
 //! ```
 
 use vld_ts::{
-    impl_to_openapi, impl_to_valibot, impl_to_zod, openapi_refs, to_openapi, to_valibot, to_zod,
-    ToOpenApi, ToRefs, ToValibot, ToZod,
+    ToOpenApi, ToRefs, ToValibot, ToZod, impl_to_openapi, impl_to_valibot, impl_to_zod,
+    openapi_refs, to_openapi, to_valibot, to_zod,
 };
 
 vld::schema! {

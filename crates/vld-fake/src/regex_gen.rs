@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn classifies_literals() {
-        use super::{literal, Literal::*};
+        use super::{Literal::*, literal};
         assert_eq!(literal("^pre_"), Some(Prefix("pre_".into())));
         assert_eq!(literal("_suf$"), Some(Suffix("_suf".into())));
         assert_eq!(literal(r"a\.b"), Some(Contains("a.b".into())));

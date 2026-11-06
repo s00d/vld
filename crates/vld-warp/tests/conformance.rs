@@ -6,8 +6,8 @@ use vld_http_common::conformance::{
     Cookies, Headers, PathId, PathNone, PathStr, Query, Request, Response, User,
 };
 use vld_warp::prelude::*;
-use warp::http::HeaderValue;
 use warp::Filter;
+use warp::http::HeaderValue;
 
 fn routes() -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone
 {

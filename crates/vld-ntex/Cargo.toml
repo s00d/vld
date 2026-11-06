@@ -13,6 +13,9 @@ keywords = ["validation", "ntex", "web", "json", "extractor"]
 categories = ["web-programming", "web-programming::http-server"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["ntex-4"]
 ntex-3 = ["dep:ntex3"]

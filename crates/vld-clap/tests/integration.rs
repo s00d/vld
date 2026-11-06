@@ -1,6 +1,6 @@
 use vld::Validate;
-use vld_clap::prelude::*;
 use vld_clap::ErrorSource;
+use vld_clap::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Derive Validate directly on the CLI struct — no separate schema needed

@@ -13,20 +13,21 @@ keywords = ["validation", "axum", "web", "json", "extractor"]
 categories = ["web-programming", "web-programming::http-server"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
-axum = { version = "0.8" }
+axum = { workspace = true }
 serde_json = { workspace = true }
-bytes = "1"
-http = "1"
+bytes = { workspace = true }
+http = { workspace = true }
 
 [dev-dependencies]
 vld-http-common = { workspace = true, features = ["conformance"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-hyper = "1"
-tower = { version = "0.5", features = ["util"] }
-http-body-util = "0.1"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower = { workspace = true, features = ["util"] }
 serde = { workspace = true }
 vld = { workspace = true, features = ["openapi"] }
 vld-utoipa = { workspace = true }

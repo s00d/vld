@@ -25,7 +25,7 @@ fn default_also_replaces_null() {
 // 0.5.0 re-audit: allOf siblings, regex translation, never, tuples, formats.
 // ---------------------------------------------------------------------------
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use vld_ts::{__to_valibot_from_value as valibot_of, __to_zod_from_value as zod_of};
 
 #[test]

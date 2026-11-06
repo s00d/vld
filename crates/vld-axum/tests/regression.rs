@@ -1,9 +1,9 @@
 //! Regression tests for the 0.5.0 audit fixes.
 
+use axum::Router;
 use axum::body::Body;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
-use axum::Router;
 use http::{Request, StatusCode};
 use tower::ServiceExt;
 use vld_axum::{VldCookie, VldForm, VldHeaders, VldJson, VldQuery};

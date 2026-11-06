@@ -10,7 +10,7 @@ use http::{Request, Response, StatusCode};
 use http_body_util::BodyExt;
 use serde::Serialize;
 use tower::{ServiceBuilder, ServiceExt};
-use vld_tower::{validated, ValidateJsonLayer, ValidatedBody};
+use vld_tower::{ValidateJsonLayer, ValidatedBody, validated};
 
 // ===========================================================================
 // Schemas

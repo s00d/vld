@@ -33,11 +33,11 @@ members = [
     "examples/playground",
 ]
 exclude = ["fuzz"]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 version = "0.5.0"
-edition = "2021"
+edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 repository = "https://github.com/s00d/vld"
@@ -57,6 +57,24 @@ vld-schemars = { path = "crates/vld-schemars", version = "0.5.0", default-featur
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 
+# Shared external (crates add their own features)
+tokio = "1"
+insta = { version = "1.49.0", features = ["json"] }
+bytes = "1.5"
+tower = "0.5"
+regex-lite = "0.1.5"
+http-body-util = "0.1"
+http = "1"
+axum = "0.8"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+
 [package]
 name = "vld"
 version.workspace = true
@@ -71,6 +89,9 @@ readme = "README.md"
 keywords = ["validation", "schema", "json", "zod", "parsing"]
 categories = ["parsing", "web-programming"]
 include = ["/src/**", "/README.md", "/LICENSE", "/CHANGELOG.md", "/Cargo.toml"]
+
+[lints]
+workspace = true
 
 [features]
 default = []
@@ -93,7 +114,7 @@ string-advanced = ["dep:semver", "dep:url", "dep:uuid", "dep:phonenumber"]
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-regex-lite = { version = "0.1.5", optional = true }
+regex-lite = { workspace = true, optional = true }
 chrono = { version = "0.4.38", optional = true, default-features = false, features = ["std", "clock", "serde"] }
 jiff = { version = "0.2.1", optional = true, default-features = false, features = ["std", "serde"] }
 time = { version = "0.3.36", optional = true, default-features = false, features = ["std", "parsing", "formatting", "macros", "serde-human-readable"] }
@@ -117,7 +138,7 @@ kamadak-exif = { version = "0.6.1", optional = true }
 criterion = { version = ">=0.5, <0.9", features = ["html_reports"] }
 serde = { workspace = true }
 proptest = "1"
-insta = { version = "1.49.0", features = ["json"] }
+insta = { workspace = true }
 jsonschema = { version = "0.60.2", default-features = false }
 tempfile = "3.27.0"
 

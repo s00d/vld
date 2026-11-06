@@ -449,11 +449,7 @@ fn lcm(a: f64, b: f64) -> f64 {
 }
 
 fn gcd(a: i128, b: i128) -> i128 {
-    if b == 0 {
-        a
-    } else {
-        gcd(b, a % b)
-    }
+    if b == 0 { a } else { gcd(b, a % b) }
 }
 
 fn decimals(n: f64) -> usize {

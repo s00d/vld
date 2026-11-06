@@ -1,6 +1,6 @@
 //! Regression tests for the 0.5.0 audit fixes.
 
-use actix_web::{test, web, App, HttpResponse};
+use actix_web::{App, HttpResponse, test, web};
 use vld_actix::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 
 vld::schema! {

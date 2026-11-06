@@ -1,7 +1,7 @@
 //! `vld::diff::diff_schemas`: breaking vs non-breaking JSON Schema changes.
 
-use serde_json::{json, Value};
-use vld::diff::{diff_schemas, ChangeKind, SchemaDiff};
+use serde_json::{Value, json};
+use vld::diff::{ChangeKind, SchemaDiff, diff_schemas};
 
 fn obj(prop: Value, required: bool) -> Value {
     let mut v = json!({"type": "object", "properties": {"a": prop}});
@@ -105,10 +105,11 @@ fn required_and_property_changes() {
     });
     let d = diff_schemas(&base, &add_required);
     assert!(d.has_breaking());
-    assert!(d
-        .breaking_changes()
-        .iter()
-        .any(|c| c.description.contains("email")));
+    assert!(
+        d.breaking_changes()
+            .iter()
+            .any(|c| c.description.contains("email"))
+    );
 
     let add_optional = json!({
         "type": "object", "required": ["name"],
@@ -139,10 +140,11 @@ fn making_a_field_optional_is_not_a_type_change() {
     );
     let d = diff_schemas(&old, &new);
     assert!(!d.has_breaking(), "{d}");
-    assert!(d
-        .changes
-        .iter()
-        .any(|c| c.description == "Now accepts null"));
+    assert!(
+        d.changes
+            .iter()
+            .any(|c| c.description == "Now accepts null")
+    );
 }
 
 #[test]
@@ -183,10 +185,11 @@ fn union_branches_are_diffed() {
         &json!({"anyOf": [{"type": "string", "minLength": 1}, {"type": "number"}, {"type": "boolean"}]}),
     );
     assert!(d.changes.iter().any(|c| c.path == "anyOf[0].minLength"));
-    assert!(d
-        .changes
-        .iter()
-        .any(|c| c.path == "anyOf" && c.kind == ChangeKind::NonBreaking));
+    assert!(
+        d.changes
+            .iter()
+            .any(|c| c.path == "anyOf" && c.kind == ChangeKind::NonBreaking)
+    );
 }
 
 #[test]

@@ -29,15 +29,15 @@ fn main() {
     println!("CreateUser schema name: {}", CreateUser::schema_name());
     println!("CreateUser schema id:   {}", CreateUser::schema_id());
 
-    let mut gen = schemars::SchemaGenerator::default();
-    let schema = <CreateUser as JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::SchemaGenerator::default();
+    let schema = <CreateUser as JsonSchema>::json_schema(&mut generator);
     println!(
         "\nCreateUser JSON Schema:\n{}",
         serde_json::to_string_pretty(schema.as_value()).unwrap()
     );
 
     println!("\nSearchQuery schema name: {}", SearchQuery::schema_name());
-    let schema2 = <SearchQuery as JsonSchema>::json_schema(&mut gen);
+    let schema2 = <SearchQuery as JsonSchema>::json_schema(&mut generator);
     println!(
         "\nSearchQuery JSON Schema:\n{}",
         serde_json::to_string_pretty(schema2.as_value()).unwrap()

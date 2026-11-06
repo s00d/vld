@@ -8,13 +8,13 @@
 //! assert_eq!(d.to_string(), "2024-06-15");
 //! ```
 
-use ::time::format_description::well_known::Rfc3339;
 use ::time::format_description::FormatItem;
+use ::time::format_description::well_known::Rfc3339;
 use ::time::macros::format_description;
 use ::time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
-use super::common::Sealed;
 use super::DateBackend;
+use super::common::Sealed;
 
 const DATE_FMT: &[FormatItem<'static>] = format_description!("[year]-[month]-[day]");
 const TIME_FMT: &[FormatItem<'static>] =

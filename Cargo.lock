@@ -2676,9 +2676,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8cb01cd46b0cf372153850f4c6c272d9cbea2da513e07538405148f95bd789f3"
 dependencies = [
  "atomic",
+ "parking_lot 0.12.5",
  "pear 0.2.9",
  "serde",
  "serde_json",
+ "tempfile",
  "toml 0.8.23",
  "uncased",
  "version_check",
@@ -9589,8 +9591,6 @@ dependencies = [
  "axum",
  "bytes",
  "http 1.5.0",
- "http-body-util",
- "hyper",
  "serde",
  "serde_json",
  "tokio",
@@ -9618,7 +9618,6 @@ version = "0.5.0"
 dependencies = [
  "config",
  "figment",
- "serde",
  "serde_json",
  "tempfile",
  "vld",
@@ -9843,7 +9842,6 @@ version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
- "tokio",
  "tonic",
  "vld",
  "vld-http-common",
@@ -9858,8 +9856,6 @@ dependencies = [
  "http 1.5.0",
  "http-body",
  "http-body-util",
- "hyper",
- "hyper-util",
  "serde",
  "serde_json",
  "tokio",

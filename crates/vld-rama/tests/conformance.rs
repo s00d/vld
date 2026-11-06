@@ -2,10 +2,10 @@
 //! the extractors through `WebService`, and the JSON cases through
 //! `ValidateJsonLayer`.
 
+use rama::Service;
 use rama::http::body::util::BodyExt;
 use rama::http::service::web::WebService;
 use rama::http::{Body, HeaderValue, Method};
-use rama::Service;
 use vld_http_common::conformance::{
     Cookies, Headers, PathId, PathNone, PathStr, Query, Request, Response, User,
 };
@@ -104,7 +104,7 @@ mod extractors {
 mod layer {
     use super::*;
     use rama::Layer;
-    use vld_rama::{validated, ValidateJsonLayer};
+    use vld_rama::{ValidateJsonLayer, validated};
 
     #[derive(Clone)]
     struct Inner;

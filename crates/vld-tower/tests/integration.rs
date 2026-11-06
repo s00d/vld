@@ -2,7 +2,7 @@ use bytes::Bytes;
 use http::{Request, Response, StatusCode};
 use http_body_util::BodyExt;
 use tower::{Service, ServiceBuilder, ServiceExt};
-use vld_tower::{validated, ValidateJsonLayer, ValidatedBody};
+use vld_tower::{ValidateJsonLayer, ValidatedBody, validated};
 
 type In = ValidatedBody<http_body_util::Full<Bytes>>;
 
@@ -140,11 +140,13 @@ async fn missing_fields_returns_422() {
     assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let body = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert!(json["issues"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|i| i["path"].as_str().unwrap().contains("email")));
+    assert!(
+        json["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["path"].as_str().unwrap().contains("email"))
+    );
 }
 
 #[tokio::test]

@@ -38,8 +38,8 @@ fn standalone_root_schema_has_resolvable_refs() {
 
 #[test]
 fn openapi3_generator_keeps_components_path() {
-    let mut gen = schemars::generate::SchemaSettings::openapi3().into_generator();
-    let schema = <RegCompany as schemars::JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::generate::SchemaSettings::openapi3().into_generator();
+    let schema = <RegCompany as schemars::JsonSchema>::json_schema(&mut generator);
     assert_eq!(
         schema.get("properties").unwrap()["hq"]["$ref"],
         "#/components/schemas/RegAddr"

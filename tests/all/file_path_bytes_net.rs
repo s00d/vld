@@ -212,13 +212,17 @@ fn path_filesystem_checks() {
     );
 
     assert!(vld::path().file().parse_value(&s(&file)).is_ok());
-    assert!(parse_err(&vld::path().file(), s(dir.path())).issues[0]
-        .message
-        .starts_with("Path is not a file"));
+    assert!(
+        parse_err(&vld::path().file(), s(dir.path())).issues[0]
+            .message
+            .starts_with("Path is not a file")
+    );
     assert!(vld::path().dir().parse_value(&s(dir.path())).is_ok());
-    assert!(parse_err(&vld::path().dir(), s(&file)).issues[0]
-        .message
-        .starts_with("Path is not a directory"));
+    assert!(
+        parse_err(&vld::path().dir(), s(&file)).issues[0]
+            .message
+            .starts_with("Path is not a directory")
+    );
 }
 
 /// `within(base)` joins relative input onto the base and cannot be escaped
@@ -336,9 +340,11 @@ mod file {
         assert_eq!(f.into_bytes(), Some(content.clone()));
 
         // `{"path": ...}` objects are accepted too.
-        assert!(vld::file()
-            .parse_value(&json!({"path": path.to_string_lossy()}))
-            .is_ok());
+        assert!(
+            vld::file()
+                .parse_value(&json!({"path": path.to_string_lossy()}))
+                .is_ok()
+        );
 
         let f = vld::file()
             .store_path_only()
@@ -394,12 +400,16 @@ mod file {
             }
         );
         let missing = dir.path().join("missing.txt");
-        assert!(parse_err(&vld::file(), s(&missing)).issues[0]
-            .message
-            .starts_with("Path does not exist"));
-        assert!(parse_err(&vld::file(), s(dir.path())).issues[0]
-            .message
-            .starts_with("Path is not a file"));
+        assert!(
+            parse_err(&vld::file(), s(&missing)).issues[0]
+                .message
+                .starts_with("Path does not exist")
+        );
+        assert!(
+            parse_err(&vld::file(), s(dir.path())).issues[0]
+                .message
+                .starts_with("Path is not a file")
+        );
     }
 
     #[test]
@@ -408,10 +418,12 @@ mod file {
         let path = dir.path().join("pic.bin");
         std::fs::write(&path, png(1, 1)).unwrap();
 
-        assert!(vld::file()
-            .media_types(&["image/*", "application/pdf"])
-            .parse_path(&path)
-            .is_ok());
+        assert!(
+            vld::file()
+                .media_types(&["image/*", "application/pdf"])
+                .parse_path(&path)
+                .is_ok()
+        );
         assert_issue!(
             vld::file().media_types(&["application/pdf"]).parse_path(&path),
             "",
@@ -425,10 +437,12 @@ mod file {
                 ..
             }
         );
-        assert!(vld::file()
-            .allow_magic_type("PNG")
-            .parse_path(&path)
-            .is_ok());
+        assert!(
+            vld::file()
+                .allow_magic_type("PNG")
+                .parse_path(&path)
+                .is_ok()
+        );
         assert_issue!(
             vld::file().allow_magic_type("jpg").parse_path(&path),
             "",

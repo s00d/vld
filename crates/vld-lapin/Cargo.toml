@@ -13,6 +13,9 @@ keywords = ["validation", "lapin", "rabbitmq", "amqp", "vld"]
 categories = ["web-programming"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["lapin-2"]
 lapin-2 = ["dep:lapin2"]
@@ -29,7 +32,7 @@ lapin4 = { package = "lapin", version = "4.10", optional = true }
 
 [dev-dependencies]
 vld = { workspace = true }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 [[example]]
 name = "lapin_basic"

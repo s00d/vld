@@ -1,6 +1,6 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use vld::prelude::*;
-use vld_fake::{fake_value_seeded, FakeData, FakeGen};
+use vld_fake::{FakeData, FakeGen, fake_value_seeded};
 
 mod common;
 use common::{fake_value, seed};
@@ -801,9 +801,9 @@ fn different_seeds_differ() {
 fn custom_rng() {
     use rand::SeedableRng;
     let rng = rand::rngs::StdRng::seed_from_u64(42);
-    let mut gen = FakeGen::with_rng(rng);
+    let mut generator = FakeGen::with_rng(rng);
     let schema = json!({"type": "string", "minLength": 5, "maxLength": 10});
-    let val = gen.value(&schema);
+    let val = generator.value(&schema);
     assert!(val.is_string());
     let s = val.as_str().unwrap();
     assert!(s.len() >= 5 && s.len() <= 10);
@@ -1369,9 +1369,9 @@ fn pattern_is_honoured() {
 fn hint_truncation_is_char_safe() {
     // CITIES contains "São Paulo"; max(2) used to split 'ã' and panic.
     let schema = json!({"type": "string", "maxLength": 2, "minLength": 2});
-    let mut gen = seeded_gen();
+    let mut generator = seeded_gen();
     for _ in 0..2000 {
-        let v = gen.value_with_hint(&schema, Some("city"));
+        let v = generator.value_with_hint(&schema, Some("city"));
         assert_eq!(v.as_str().unwrap().chars().count(), 2);
     }
 }
@@ -1388,7 +1388,7 @@ fn integer_one_sided_and_hinted_ranges_never_panic() {
     assert_fakes(n().gt(7)); // exclusive only
     assert_fakes(n().multiple_of(7).min(5000));
     assert_fakes(n().multiple_of(5).max(-12));
-    let mut gen = seeded_gen();
+    let mut generator = seeded_gen();
     for (hint, schema) in [
         ("year", json!({"type": "integer", "maximum": 1990})),
         ("age", json!({"type": "integer", "minimum": 150})),
@@ -1398,12 +1398,15 @@ fn integer_one_sided_and_hinted_ranges_never_panic() {
         let lo = schema["minimum"].as_i64().unwrap_or(i64::MIN);
         let hi = schema["maximum"].as_i64().unwrap_or(i64::MAX);
         for _ in 0..200 {
-            let v = gen.value_with_hint(&schema, Some(hint)).as_i64().unwrap();
+            let v = generator
+                .value_with_hint(&schema, Some(hint))
+                .as_i64()
+                .unwrap();
             assert!(lo <= v && v <= hi, "{hint}: {v}");
         }
     }
     // Hints still narrow a half-open range.
-    let year = gen.value_with_hint(&json!({"type": "integer", "minimum": 1}), Some("year"));
+    let year = generator.value_with_hint(&json!({"type": "integer", "minimum": 1}), Some("year"));
     assert!((2000..=2030).contains(&year.as_i64().unwrap()));
 }
 

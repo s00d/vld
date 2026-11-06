@@ -494,8 +494,8 @@ fn format_vld_error_inline(e: &vld::error::VldError) -> String {
 pub mod prelude {
     #[allow(deprecated)]
     pub use crate::{
-        validate, validate_args, validate_channel_message, validate_event, validate_plugin_config,
-        validate_state, TauriIssue, VldEvent, VldPayload, VldTauriError,
+        TauriIssue, VldEvent, VldPayload, VldTauriError, validate, validate_args,
+        validate_channel_message, validate_event, validate_plugin_config, validate_state,
     };
     pub use vld::prelude::*;
 }

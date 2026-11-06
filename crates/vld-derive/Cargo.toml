@@ -16,6 +16,9 @@ include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 [lib]
 proc-macro = true
 
+[lints]
+workspace = true
+
 [dependencies]
 syn = { version = "2.0.87", features = ["full"] }
 quote = "1.0.37"

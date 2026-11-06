@@ -471,8 +471,8 @@ macro_rules! impl_vld_before_save {
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        active_model_to_json, before_save, validate_active, validate_json, validate_model,
-        Validated, VldSeaError,
+        Validated, VldSeaError, active_model_to_json, before_save, validate_active, validate_json,
+        validate_model,
     };
     pub use vld::prelude::*;
 }

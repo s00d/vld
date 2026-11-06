@@ -6,7 +6,7 @@
 //! reason; a listed pair that stops diverging fails the test too, so the list
 //! stays exact.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use vld::openapi::JsonSchema;
 use vld::prelude::*;
 

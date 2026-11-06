@@ -99,8 +99,8 @@ fn generate_schemars_returns_schema_type() {
 
 #[test]
 fn impl_json_schema_basic() {
-    let mut gen = schemars::SchemaGenerator::default();
-    let schema = <UserSchema as schemars::JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::SchemaGenerator::default();
+    let schema = <UserSchema as schemars::JsonSchema>::json_schema(&mut generator);
     assert_eq!(schema.get("type").unwrap(), "object");
 
     let props = schema.get("properties").unwrap().as_object().unwrap();
@@ -688,13 +688,13 @@ impl_json_schema!(SchemarsCompany);
 
 #[test]
 fn nested_schema_registered_in_generator_definitions() {
-    let mut gen = schemars::SchemaGenerator::default();
-    let schema = <SchemarsCompany as schemars::JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::SchemaGenerator::default();
+    let schema = <SchemarsCompany as schemars::JsonSchema>::json_schema(&mut generator);
     let props = schema.get("properties").unwrap();
     // Refs follow the generator's definitions path (default `$defs`).
     assert_eq!(props["hq"]["$ref"], "#/$defs/SchemarsAddr");
 
-    let defs = gen.definitions();
+    let defs = generator.definitions();
     assert!(
         defs.contains_key("SchemarsAddr"),
         "SchemarsAddr should be in definitions, got: {:?}",
@@ -735,9 +735,9 @@ fn transitive_nested_schema_registered_in_definitions() {
     }
     impl_json_schema!(SchemarsSchedule);
 
-    let mut gen = schemars::SchemaGenerator::default();
-    let _schema = <SchemarsSchedule as schemars::JsonSchema>::json_schema(&mut gen);
-    let defs = gen.definitions();
+    let mut generator = schemars::SchemaGenerator::default();
+    let _schema = <SchemarsSchedule as schemars::JsonSchema>::json_schema(&mut generator);
+    let defs = generator.definitions();
 
     assert!(
         defs.contains_key("SchemarsDay"),

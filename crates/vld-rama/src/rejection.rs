@@ -2,7 +2,7 @@
 
 use rama::http::body::util::LengthLimitError;
 use rama::http::service::web::response::IntoResponse;
-use rama::http::{header, Response, StatusCode};
+use rama::http::{Response, StatusCode, header};
 use vld_http_common::VldHttpError;
 
 /// Rejection returned when validation (or body parsing) fails; wraps

@@ -1,4 +1,4 @@
-use super::{truncate_value, IssueCode, PathSegment, ValidationIssue, VldError};
+use super::{IssueCode, PathSegment, ValidationIssue, VldError, truncate_value};
 
 /// Fluent builder for constructing a single [`ValidationIssue`].
 ///

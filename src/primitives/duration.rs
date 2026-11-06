@@ -127,7 +127,7 @@ impl VldSchema for ZDuration {
                             inclusive: true,
                         },
                         value,
-                    ))
+                    ));
                 }
                 (None, Some(f)) => Duration::try_from_secs_f64(f).ok(),
                 _ => None,

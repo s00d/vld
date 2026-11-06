@@ -5,13 +5,13 @@
 //! cargo run -p vld-rama --example rama_basic
 //! ```
 
-use rama::http::service::web::response::Json;
 use rama::http::service::web::WebService;
+use rama::http::service::web::response::Json;
 use rama::http::{Body, Method, Request, StatusCode};
 use rama::{Layer, Service};
 use serde::Serialize;
 use vld_rama::{
-    validated, ValidateJsonLayer, VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery,
+    ValidateJsonLayer, VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery, validated,
 };
 
 vld::schema! {

@@ -358,13 +358,13 @@ macro_rules! impl_to_redis_async {
 }
 
 pub mod prelude {
+    #[cfg(feature = "aio")]
+    pub use crate::AsyncRedisConn;
     #[allow(deprecated)]
     pub use crate::impl_to_redis;
     #[cfg(feature = "aio")]
     #[allow(deprecated)]
     pub use crate::impl_to_redis_async;
-    #[cfg(feature = "aio")]
-    pub use crate::AsyncRedisConn;
     pub use crate::{RedisConn, VldRedisError};
     pub use vld::prelude::*;
 }

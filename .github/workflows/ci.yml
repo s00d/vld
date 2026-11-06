@@ -49,7 +49,7 @@ jobs:
           components: clippy, rustfmt
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,cargo-hack,cargo-deny
+          tool: just,cargo-hack,cargo-deny,cargo-shear
       - uses: Swatinem/rust-cache@v2
       # Later steps run even if an earlier one failed, so one run shows every failure.
       - run: just fmt

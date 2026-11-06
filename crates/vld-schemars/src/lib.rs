@@ -630,13 +630,17 @@ macro_rules! impl_json_schema {
             }
 
             fn json_schema(
-                gen: &mut $crate::schemars::SchemaGenerator,
+                generator: &mut $crate::schemars::SchemaGenerator,
             ) -> $crate::schemars::Schema {
                 // Inherent `__vld_nested_schemas` (from `vld::schema!` / derive) wins
                 // over this trait fallback in `<T>::f()` path resolution.
                 #[allow(unused_imports)]
                 use $crate::__VldNestedSchemasFallback as _;
-                $crate::__vld_json_schema(gen, <$ty>::json_schema(), <$ty>::__vld_nested_schemas())
+                $crate::__vld_json_schema(
+                    generator,
+                    <$ty>::json_schema(),
+                    <$ty>::__vld_nested_schemas(),
+                )
             }
         }
     };
@@ -646,14 +650,14 @@ macro_rules! impl_json_schema {
 /// `#/components/schemas/X` refs to the generator's definitions path.
 #[doc(hidden)]
 pub fn __vld_json_schema(
-    gen: &mut schemars::SchemaGenerator,
+    generator: &mut schemars::SchemaGenerator,
     mut root: Value,
     nested: Vec<vld::openapi::NestedSchemaEntry>,
 ) -> schemars::Schema {
-    let path = &gen.settings().definitions_path;
+    let path = &generator.settings().definitions_path;
     let path = path.strip_prefix('#').unwrap_or(path);
     let prefix = format!("#{}/", path.strip_suffix('/').unwrap_or(path));
-    let oas3 = gen
+    let oas3 = generator
         .settings()
         .meta_schema
         .as_deref()
@@ -667,7 +671,8 @@ pub fn __vld_json_schema(
             to_openapi3(&mut schema);
         }
         rewrite_refs(&mut schema, &prefix);
-        gen.definitions_mut()
+        generator
+            .definitions_mut()
             .entry(name.to_string())
             .or_insert(schema);
     }
@@ -830,11 +835,11 @@ pub mod prelude {
     pub use crate::impl_json_schema;
     pub use crate::impl_vld_parse;
     pub use crate::{
-        generate_from_schemars, generate_schemars, get_property, is_required, list_properties,
-        list_properties_schemars, merge_schemas, overlay_constraints, schema_type,
-        schemars_to_json, schemas_equal, try_vld_to_schemars, validate_with_schema,
-        validate_with_schemars, vld_schema_to_schemars, vld_to_schemars, PropertyInfo,
-        SchemarsValidate, VldSchemarsError,
+        PropertyInfo, SchemarsValidate, VldSchemarsError, generate_from_schemars,
+        generate_schemars, get_property, is_required, list_properties, list_properties_schemars,
+        merge_schemas, overlay_constraints, schema_type, schemars_to_json, schemas_equal,
+        try_vld_to_schemars, validate_with_schema, validate_with_schemars, vld_schema_to_schemars,
+        vld_to_schemars,
     };
     pub use vld::prelude::*;
 }

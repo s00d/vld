@@ -85,9 +85,9 @@ use rocket::serde::json::Json;
 use std::sync::Mutex;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
-    path_params_to_json, query_string_to_json, require_form_content_type,
-    require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
+    DEFAULT_BODY_LIMIT, VldHttpError, cookie_headers_to_json, headers_to_json, parse_coerced,
+    parse_form_body, parse_json_body, path_params_to_json, query_string_to_json,
+    require_form_content_type, require_json_content_type,
 };
 
 // ---------------------------------------------------------------------------
@@ -415,8 +415,8 @@ vld_http_common::impl_deref!(VldJson, VldQuery, VldPath, VldForm, VldHeaders, Vl
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        vld_400_catcher, vld_413_catcher, vld_415_catcher, vld_422_catcher, vld_catchers,
-        VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery,
+        VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery, vld_400_catcher,
+        vld_413_catcher, vld_415_catcher, vld_422_catcher, vld_catchers,
     };
     pub use vld::prelude::*;
 }

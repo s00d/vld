@@ -31,16 +31,20 @@ fn config_rs_parsed_env_fits_string_fields() {
 
 #[cfg(feature = "figment")]
 #[test]
+#[allow(clippy::result_large_err)] // figment::Jail closures return figment::Error
 fn figment_parsed_env_fits_string_fields() {
-    // Unique prefix: no other test reads these variables.
-    std::env::set_var("VLDLIVE_HOST", "12345");
-    std::env::set_var("VLDLIVE_PORT", "8080");
-    std::env::set_var("VLDLIVE_TAGS", "true");
-    let figment = figment::Figment::new().merge(figment::providers::Env::prefixed("VLDLIVE_"));
-    let s: Settings = vld_config::from_figment(&figment).unwrap();
-    assert_eq!(s.host, "12345");
-    assert_eq!(s.port, 8080);
-    assert_eq!(s.tags, vec!["true".to_string()]);
+    // figment's Jail serializes env changes and restores them afterwards.
+    figment::Jail::expect_with(|jail| {
+        jail.set_env("VLDLIVE_HOST", "12345");
+        jail.set_env("VLDLIVE_PORT", "8080");
+        jail.set_env("VLDLIVE_TAGS", "true");
+        let figment = figment::Figment::new().merge(figment::providers::Env::prefixed("VLDLIVE_"));
+        let s: Settings = vld_config::from_figment(&figment).unwrap();
+        assert_eq!(s.host, "12345");
+        assert_eq!(s.port, 8080);
+        assert_eq!(s.tags, vec!["true".to_string()]);
+        Ok(())
+    });
 }
 
 #[test]

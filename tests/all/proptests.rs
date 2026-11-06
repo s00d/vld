@@ -5,7 +5,7 @@
 //! generic JSON that almost never reaches the format validators.
 
 use proptest::prelude::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use vld::prelude::*;
 

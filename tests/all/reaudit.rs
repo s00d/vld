@@ -10,9 +10,10 @@ fn f01_multiple_of_minus_one_never_panics() {
     let s = vld::i64().multiple_of(-1);
     assert!(s.parse_value(&json!(-1e40)).is_err());
     let s = vld::i64().multiple_of(-1).coerce();
-    assert!(s
-        .parse_value(&json!("-170141183460469231731687303715884105728"))
-        .is_err());
+    assert!(
+        s.parse_value(&json!("-170141183460469231731687303715884105728"))
+            .is_err()
+    );
     assert_eq!(s.parse_value(&json!(-7)).unwrap(), -7);
 }
 
@@ -254,9 +255,11 @@ fn f19_messages() {
 fn f20_type_keys() {
     let err = crate::common::parse_err(&vld::duration(), json!(true));
     assert_issue!(&err, "", IssueCode::InvalidType { expected, .. } if expected == "duration");
-    assert!(err.issues[0]
-        .message
-        .starts_with("Expected duration as seconds"));
+    assert!(
+        err.issues[0]
+            .message
+            .starts_with("Expected duration as seconds")
+    );
     let t = vld::i18n::translate_error(&err, &vld::i18n::russian());
     assert_eq!(
         t.issues[0].message,
@@ -413,7 +416,7 @@ fn f34_object_merge() {
     let m = base.extend(other);
     assert!(m.parse(r#"{"a": "1", "b": "y", "z": 1}"#).is_err()); // strict kept
     assert!(m.parse(r#"{"a": "1"}"#).is_err()); // min_keys kept (and b missing)
-                                                // when-rule kept; its target is not "unrecognized" under strict
+    // when-rule kept; its target is not "unrecognized" under strict
     assert!(m.parse(r#"{"a": "1", "b": "x", "c": "ab"}"#).is_err());
     assert!(m.parse(r#"{"a": "1", "b": "x", "c": "abc"}"#).is_ok());
 
@@ -433,7 +436,7 @@ fn f34_object_merge() {
 #[cfg(feature = "diff")]
 #[test]
 fn f27_diff_keywords() {
-    use vld::diff::{diff_schemas, ChangeKind};
+    use vld::diff::{ChangeKind, diff_schemas};
     let kind = |old: serde_json::Value, new: serde_json::Value| {
         let d = diff_schemas(&old, &new);
         assert_eq!(d.changes.len(), 1, "{d}");
@@ -670,11 +673,13 @@ mod json_schema {
     // 18. multipleOf 0 is omitted.
     #[test]
     fn f18_multiple_of_zero() {
-        assert!(vld::number()
-            .multiple_of(0.0)
-            .json_schema()
-            .get("multipleOf")
-            .is_none());
+        assert!(
+            vld::number()
+                .multiple_of(0.0)
+                .json_schema()
+                .get("multipleOf")
+                .is_none()
+        );
         assert_eq!(
             vld::number().multiple_of(2.0).json_schema()["multipleOf"],
             2.0

@@ -61,10 +61,11 @@ fn strict_rejects_each_unknown_key() {
     let mut p = paths(&err);
     p.sort();
     assert_eq!(p, [".x", ".é"]);
-    assert!(err
-        .issues
-        .iter()
-        .all(|i| i.code == IssueCode::UnrecognizedField));
+    assert!(
+        err.issues
+            .iter()
+            .all(|i| i.code == IssueCode::UnrecognizedField)
+    );
     assert_eq!(err.issues[0].message, "Unrecognized field");
 }
 

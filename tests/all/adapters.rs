@@ -1,6 +1,6 @@
 //! `from_serde`, `from_str`, `enum_of` adapters.
 
-use crate::common::{code, Role};
+use crate::common::{Role, code};
 use serde_json::json;
 use vld::error::IssueCode;
 use vld::prelude::*;
@@ -68,9 +68,11 @@ fn from_str_third_party_types() {
         .parse(r#""1.2.3-beta.1""#)
         .unwrap();
     assert_eq!(v.minor, 2);
-    assert!(vld::from_str::<semver::Version>()
-        .parse(r#""1.2""#)
-        .is_err());
+    assert!(
+        vld::from_str::<semver::Version>()
+            .parse(r#""1.2""#)
+            .is_err()
+    );
 }
 
 #[test]

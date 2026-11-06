@@ -1,5 +1,5 @@
 # Development and CI tasks. `just` lists them; `just ci` is what CI runs on every push.
-# Tools: just, cargo-hack, cargo-deny (`cargo install just cargo-hack cargo-deny`).
+# Tools: `cargo install just cargo-hack cargo-deny cargo-shear cargo-semver-checks`.
 #
 # Builds use the `ci` profile (no debuginfo), so everything lands in target/ci and
 # `just clean` frees it without touching the dev build. Every build is `--locked`.
@@ -27,8 +27,10 @@ ci: fmt lint test docs deny package fuzz playground
 fmt:
     cargo fmt --all --check
 
-# clippy -D warnings: workspace, every vld feature alone and together, feature pairs of integration crates
+# Unused or misplaced dependencies, then clippy -D warnings: workspace, every vld feature
+# alone and together, feature pairs of integration crates
 lint:
+    cargo shear
     cargo clippy --workspace --all-targets {{ ci_flags }} -- -D warnings
     cargo hack clippy -p vld --each-feature --exclude-features serialize,deserialize --all-targets {{ ci_flags }} -- -D warnings
     cargo clippy -p vld --features {{ vld_all }} --all-targets {{ ci_flags }} -- -D warnings
@@ -89,8 +91,9 @@ msrv:
     set -euo pipefail
     target="${CARGO_TARGET_DIR:-$PWD/target}/msrv"
     # probe <toolchain> <crate> [features] [no-default]: a throwaway project that depends
-    # only on <crate>, its lockfile resolved for <toolchain> (resolving the whole workspace
-    # would pull versions other members need, e.g. rama pins time =0.3.47 / Rust 1.88).
+    # only on <crate>; edition 2024 (resolver 3) resolves its lockfile for its
+    # rust-version (resolving the whole workspace would pull versions other members
+    # need, e.g. rama pins time =0.3.47 / Rust 1.88).
     probe() {
       local tc="$1" crate="$2" features="${3:-}" nodefault="${4:-}" dir dep path="$PWD/crates/$2"
       [[ "${crate}" == vld ]] && path="$PWD"
@@ -99,10 +102,10 @@ msrv:
       dep="path = \"${path}\""
       [[ -n "${features}" ]] && dep+=", features = [\"${features//,/\", \"}\"]"
       [[ -n "${nodefault}" ]] && dep+=", default-features = false"
-      printf '[package]\nname = "msrv-probe"\nversion = "0.0.0"\nedition = "2021"\nrust-version = "%s"\npublish = false\n[dependencies]\n%s = { %s }\n[workspace]\n' \
+      printf '[package]\nname = "msrv-probe"\nversion = "0.0.0"\nedition = "2024"\nrust-version = "%s"\npublish = false\n[dependencies]\n%s = { %s }\n[workspace]\n' \
         "${tc}" "${crate}" "${dep}" > "${dir}/Cargo.toml"
       # --ignore-rust-version: vld-ntex declares 1.97 (ntex 4) but ntex-3 is probed on 1.88.
-      (cd "${dir}" && CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback cargo generate-lockfile -q \
+      (cd "${dir}" && cargo generate-lockfile -q \
         && CARGO_TARGET_DIR="${target}-${tc}" cargo "+${tc}" check -q --locked --ignore-rust-version)
       rm -rf "${dir}"
     }
@@ -146,16 +149,23 @@ minimal:
     cargo +nightly check --locked --manifest-path "$m" -p vld-config --features figment
     cargo +nightly check --locked --manifest-path "$m" -p vld-redis --features aio-tokio
 
+# Public API changes vs the latest release on crates.io match the version bump
+# (default features: the semver-checks heuristic would enable two dependency majors at once)
+semver:
+    cargo semver-checks -p vld --only-explicit-features --features {{ vld_all }}
+    cargo semver-checks --workspace --exclude vld --exclude playground --default-features
+
 # Remove CI build output (target/ci, target/msrv-*, target/minimal)
 clean:
     rm -rf target/ci target/msrv-* target/minimal
 
-# cargo-release pre-release hook (runs after the version bump): checks, then
+# cargo-release pre-release hook (runs after the version bump): checks (semver-checks
+# compares the API with crates.io for the new version), then
 # [Unreleased] -> [version] in CHANGELOG.md, and fuzz/Cargo.lock (fuzz/ is outside
 # the workspace) pointed at the new version.
 [private]
 release-hook version:
-    just fmt lint test docs
+    just fmt lint test docs semver
     just package --allow-dirty
     @if [[ "${DRY_RUN:-false}" == "true" ]]; then echo "dry run: CHANGELOG.md unchanged"; else just _changelog {{ version }}; fi
     cargo update --manifest-path fuzz/Cargo.toml --workspace --offline

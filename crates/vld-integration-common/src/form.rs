@@ -192,7 +192,7 @@ where
             return vec![FieldError {
                 field: String::new(),
                 message: ser_error(e),
-            }]
+            }];
         }
     };
     match S::vld_parse_value(&json) {

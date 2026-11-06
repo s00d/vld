@@ -76,18 +76,18 @@
 //! let app = App::new().route("/users/{id}", web::post().to(handler));
 //! ```
 
-use actix_web::body::{to_bytes_limited, BodyStream};
+use actix_web::body::{BodyStream, to_bytes_limited};
 use actix_web::dev::{Decompress, Payload};
-use actix_web::http::{header, StatusCode};
+use actix_web::http::{StatusCode, header};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, ResponseError};
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 pub use vld_http_common::VldBodyLimit;
 use vld_http_common::{
-    cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
-    path_params_to_json, percent_decode, query_string_to_json, require_form_content_type,
-    require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
+    DEFAULT_BODY_LIMIT, VldHttpError, cookie_headers_to_json, headers_to_json, parse_coerced,
+    parse_form_body, parse_json_body, path_params_to_json, percent_decode, query_string_to_json,
+    require_form_content_type, require_json_content_type,
 };
 
 // ============================= Error / Rejection =============================
@@ -155,7 +155,7 @@ impl ResponseError for VldActixError {
 fn read_body(
     req: &HttpRequest,
     payload: &mut Payload,
-) -> impl Future<Output = Result<actix_web::web::Bytes, VldHttpError>> + 'static {
+) -> impl Future<Output = Result<actix_web::web::Bytes, VldHttpError>> + 'static + use<> {
     let limit = req
         .app_data::<VldBodyLimit>()
         .map_or(DEFAULT_BODY_LIMIT, |l| l.0);

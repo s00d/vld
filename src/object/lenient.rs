@@ -1,6 +1,6 @@
 //! Results of lenient parsing (`validate_fields()` / `parse_lenient()`).
 
-use crate::error::{format_value_short, VldError};
+use crate::error::{VldError, format_value_short};
 
 /// Result of validating a single field.
 ///

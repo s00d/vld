@@ -31,8 +31,8 @@ fn keys(v: &Value, out: &mut Vec<String>) {
 
 #[test]
 fn openapi3_settings_yield_openapi3_schemas() {
-    let gen = schemars::generate::SchemaSettings::openapi3().into_generator();
-    let root = gen.into_root_schema_for::<Oas3>();
+    let generator = schemars::generate::SchemaSettings::openapi3().into_generator();
+    let root = generator.into_root_schema_for::<Oas3>();
     let json = serde_json::to_value(&root).unwrap();
     let mut all = Vec::new();
     keys(&json, &mut all);

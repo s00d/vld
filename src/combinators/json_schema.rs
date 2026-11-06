@@ -1,6 +1,6 @@
 //! [`JsonSchema`] / [`CollectNestedSchemas`] impls for the combinators.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::openapi::{CollectNestedSchemas, JsonSchema};
 use crate::schema::{NestedSchemaEntry, VldSchema};

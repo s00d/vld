@@ -50,14 +50,14 @@ pub use file::{FileStorage, ValidatedFile, ZFile};
 pub use ip_network::ZIpNetwork;
 pub use json_value::ZJsonValue;
 pub use literal::{IntoLiteral, ZLiteral};
-pub use number::{IntType, ZInt, ZInteger, ZNumber, ZF32};
+pub use number::{IntType, ZF32, ZInt, ZInteger, ZNumber};
 pub use path::ZPath;
 pub use socket_addr::ZSocketAddr;
 pub use string::ZString;
 
 use serde_json::Value;
 
-use crate::error::{issue_error, value_type_name, IssueCode, VldError};
+use crate::error::{IssueCode, VldError, issue_error, value_type_name};
 
 /// A `with_messages` closure: check key → replacement message.
 pub(crate) type Messages = Option<std::sync::Arc<dyn Fn(&str) -> Option<String> + Send + Sync>>;

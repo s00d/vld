@@ -123,8 +123,8 @@ fn impl_json_schema_id() {
 
 #[test]
 fn impl_json_schema_generates_schema() {
-    let mut gen = schemars::SchemaGenerator::default();
-    let schema = <TestUser as JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::SchemaGenerator::default();
+    let schema = <TestUser as JsonSchema>::json_schema(&mut generator);
     assert_eq!(schema.get("type").unwrap(), "object");
 
     let props = schema.get("properties").unwrap().as_object().unwrap();
@@ -159,8 +159,8 @@ fn impl_json_schema_custom_name() {
 
 #[test]
 fn impl_json_schema_custom_name_schema_works() {
-    let mut gen = schemars::SchemaGenerator::default();
-    let schema = <ReqBody as JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::SchemaGenerator::default();
+    let schema = <ReqBody as JsonSchema>::json_schema(&mut generator);
     assert_eq!(schema.get("type").unwrap(), "object");
 }
 
@@ -181,8 +181,8 @@ impl_json_schema!(DeriveUser);
 
 #[test]
 fn derive_impl_json_schema_works() {
-    let mut gen = schemars::SchemaGenerator::default();
-    let schema = <DeriveUser as JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::SchemaGenerator::default();
+    let schema = <DeriveUser as JsonSchema>::json_schema(&mut generator);
     assert_eq!(schema.get("type").unwrap(), "object");
 
     let props = schema.get("properties").unwrap().as_object().unwrap();
@@ -215,8 +215,8 @@ impl_json_schema!(DeriveRenamedRequest);
 
 #[test]
 fn derive_rename_all_camel_case_schema() {
-    let mut gen = schemars::SchemaGenerator::default();
-    let schema = <DeriveRenamedRequest as JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::SchemaGenerator::default();
+    let schema = <DeriveRenamedRequest as JsonSchema>::json_schema(&mut generator);
     assert_eq!(schema.get("type").unwrap(), "object");
 
     let props = schema.get("properties").unwrap().as_object().unwrap();
@@ -337,14 +337,16 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
     let converted = serde_json::to_value(vld_to_schemars(&js)).unwrap();
     assert_eq!(converted, js, "vld_to_schemars keeps the document");
 
-    let mut gen = schemars::SchemaGenerator::default();
-    let generated =
-        serde_json::to_value(<AideCreateTicket as JsonSchema>::json_schema(&mut gen)).unwrap();
+    let mut generator = schemars::SchemaGenerator::default();
+    let generated = serde_json::to_value(<AideCreateTicket as JsonSchema>::json_schema(
+        &mut generator,
+    ))
+    .unwrap();
     assert_eq!(aide_required(&generated), ["title", "body"]);
 
-    let mut gen = schemars::SchemaGenerator::default();
+    let mut generator = schemars::SchemaGenerator::default();
     let derive =
-        serde_json::to_value(<AideDerivePatch as JsonSchema>::json_schema(&mut gen)).unwrap();
+        serde_json::to_value(<AideDerivePatch as JsonSchema>::json_schema(&mut generator)).unwrap();
     assert_eq!(aide_required(&derive), ["title"]);
     assert_eq!(aide_required(&AideDerivePatch::json_schema()), ["title"]);
 
@@ -381,25 +383,25 @@ impl_json_schema!(AideOrder);
 #[test]
 fn nested_schema_ref_in_schemars() {
     // aide-style generator: definitions under #/components/schemas/
-    let mut gen = schemars::generate::SchemaSettings::draft07()
+    let mut generator = schemars::generate::SchemaSettings::draft07()
         .with(|s| s.definitions_path = "#/components/schemas/".into())
         .into_generator();
-    let schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut gen);
+    let schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut generator);
     let props = schema.get("properties").unwrap();
     assert_eq!(props["address"]["$ref"], "#/components/schemas/AideAddress");
 
     // default generator: refs follow its definitions path
-    let mut gen = schemars::SchemaGenerator::default();
-    let schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::SchemaGenerator::default();
+    let schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut generator);
     let props = schema.get("properties").unwrap();
     assert_eq!(props["address"]["$ref"], "#/$defs/AideAddress");
 }
 
 #[test]
 fn nested_schema_registered_in_definitions() {
-    let mut gen = schemars::SchemaGenerator::default();
-    let _schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut gen);
-    let defs = gen.definitions();
+    let mut generator = schemars::SchemaGenerator::default();
+    let _schema = <AideOrder as schemars::JsonSchema>::json_schema(&mut generator);
+    let defs = generator.definitions();
     assert!(
         defs.contains_key("AideAddress"),
         "AideAddress should be in definitions, got: {:?}",
@@ -439,9 +441,9 @@ fn transitive_nested_schema_registered_in_definitions() {
     }
     impl_json_schema!(AideSchedule);
 
-    let mut gen = schemars::SchemaGenerator::default();
-    let _schema = <AideSchedule as schemars::JsonSchema>::json_schema(&mut gen);
-    let defs = gen.definitions();
+    let mut generator = schemars::SchemaGenerator::default();
+    let _schema = <AideSchedule as schemars::JsonSchema>::json_schema(&mut generator);
+    let defs = generator.definitions();
 
     assert!(
         defs.contains_key("AideDay"),

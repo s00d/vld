@@ -13,6 +13,9 @@ keywords = ["validation", "http", "helpers", "vld"]
 categories = ["web-programming"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [features]
 # Test support: shared HTTP conformance suite for the adapter crates.
 conformance = []

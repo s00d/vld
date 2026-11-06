@@ -1,7 +1,7 @@
 //! Shared HTTP conformance suite (see `vld_http_common::conformance`).
 
 use poem::http::{HeaderValue, Method};
-use poem::{get, handler, post, Endpoint, Route};
+use poem::{Endpoint, Route, get, handler, post};
 use vld_http_common::conformance::{
     Cookies, Headers, PathId, PathNone, PathStr, Query, Request, Response, User,
 };

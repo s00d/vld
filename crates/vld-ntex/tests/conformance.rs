@@ -4,9 +4,9 @@
 mod common;
 #[cfg(feature = "ntex-4")]
 use common::TestRequestExt;
-use ntex::http::header::HeaderValue;
 use ntex::http::Method;
-use ntex::web::{self, test, App, HttpResponse};
+use ntex::http::header::HeaderValue;
+use ntex::web::{self, App, HttpResponse, test};
 use vld_http_common::conformance::{
     Cookies, Headers, PathId, PathNone, PathStr, Query, Request, Response, User,
 };

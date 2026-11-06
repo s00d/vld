@@ -52,11 +52,7 @@ pub trait MessageResolver {
 
 /// English / German / Spanish plural rule: `1` → `"one"`, else `"other"`.
 pub fn plural_en(n: u64) -> &'static str {
-    if n == 1 {
-        "one"
-    } else {
-        "other"
-    }
+    if n == 1 { "one" } else { "other" }
 }
 
 /// Russian plural rule: `"one"` (1, 21, 31, …), `"few"` (2-4, 22-24, …),
@@ -276,51 +272,129 @@ const ENGLISH: &[(&str, &str)] = &[
     ("type.byte", "byte (integer 0..=255)"),
     // Lower bounds
     ("too_small", "Value must be at least {minimum}"),
-    ("too_small.string", "String must be at least {minimum} characters"),
-    ("too_small.string_one", "String must be at least {minimum} character"),
+    (
+        "too_small.string",
+        "String must be at least {minimum} characters",
+    ),
+    (
+        "too_small.string_one",
+        "String must be at least {minimum} character",
+    ),
     ("too_small.number", "Number must be at least {minimum}"),
     ("too_small.decimal", "Decimal must be at least {minimum}"),
-    ("too_small.array", "Array must have at least {minimum} elements"),
-    ("too_small.array_one", "Array must have at least {minimum} element"),
-    ("too_small.set", "Set must have at least {minimum} unique elements"),
-    ("too_small.set_one", "Set must have at least {minimum} unique element"),
-    ("too_small.record", "Record must have at least {minimum} keys"),
-    ("too_small.record_one", "Record must have at least {minimum} key"),
-    ("too_small.object", "Object must contain at least {minimum} keys"),
-    ("too_small.object_one", "Object must contain at least {minimum} key"),
+    (
+        "too_small.array",
+        "Array must have at least {minimum} elements",
+    ),
+    (
+        "too_small.array_one",
+        "Array must have at least {minimum} element",
+    ),
+    (
+        "too_small.set",
+        "Set must have at least {minimum} unique elements",
+    ),
+    (
+        "too_small.set_one",
+        "Set must have at least {minimum} unique element",
+    ),
+    (
+        "too_small.record",
+        "Record must have at least {minimum} keys",
+    ),
+    (
+        "too_small.record_one",
+        "Record must have at least {minimum} key",
+    ),
+    (
+        "too_small.object",
+        "Object must contain at least {minimum} keys",
+    ),
+    (
+        "too_small.object_one",
+        "Object must contain at least {minimum} key",
+    ),
     ("too_small.bytes", "Bytes length must be at least {minimum}"),
     ("too_small.date", "Date must be on or after {minimum}"),
-    ("too_small.datetime", "Datetime must be on or after {minimum}"),
+    (
+        "too_small.datetime",
+        "Datetime must be on or after {minimum}",
+    ),
     ("too_small.time", "Time must be at or after {minimum}"),
     ("too_small.duration", "Duration must be at least {minimum}s"),
-    ("too_small.file", "File size must be at least {minimum} bytes"),
+    (
+        "too_small.file",
+        "File size must be at least {minimum} bytes",
+    ),
     ("too_small.image_width", "Image width must be >= {minimum}"),
-    ("too_small.image_height", "Image height must be >= {minimum}"),
+    (
+        "too_small.image_height",
+        "Image height must be >= {minimum}",
+    ),
     ("too_small.port", "Port must be at least {minimum}"),
     (
         "too_small.contains",
         "Array must contain required value at least {minimum} time(s)",
     ),
-    ("too_small_exclusive", "Value must be greater than {minimum}"),
-    ("too_small_exclusive.number", "Number must be greater than {minimum}"),
-    ("too_small_exclusive.decimal", "Decimal must be greater than {minimum}"),
+    (
+        "too_small_exclusive",
+        "Value must be greater than {minimum}",
+    ),
+    (
+        "too_small_exclusive.number",
+        "Number must be greater than {minimum}",
+    ),
+    (
+        "too_small_exclusive.decimal",
+        "Decimal must be greater than {minimum}",
+    ),
     // Upper bounds
     ("too_big", "Value must be at most {maximum}"),
-    ("too_big.string", "String must be at most {maximum} characters"),
-    ("too_big.string_one", "String must be at most {maximum} character"),
+    (
+        "too_big.string",
+        "String must be at most {maximum} characters",
+    ),
+    (
+        "too_big.string_one",
+        "String must be at most {maximum} character",
+    ),
     ("too_big.number", "Number must be at most {maximum}"),
     ("too_big.decimal", "Decimal must be at most {maximum}"),
-    ("too_big.array", "Array must have at most {maximum} elements"),
-    ("too_big.array_one", "Array must have at most {maximum} element"),
-    ("too_big.set", "Set must have at most {maximum} unique elements"),
-    ("too_big.set_one", "Set must have at most {maximum} unique element"),
+    (
+        "too_big.array",
+        "Array must have at most {maximum} elements",
+    ),
+    (
+        "too_big.array_one",
+        "Array must have at most {maximum} element",
+    ),
+    (
+        "too_big.set",
+        "Set must have at most {maximum} unique elements",
+    ),
+    (
+        "too_big.set_one",
+        "Set must have at most {maximum} unique element",
+    ),
     ("too_big.record", "Record must have at most {maximum} keys"),
-    ("too_big.record_one", "Record must have at most {maximum} key"),
-    ("too_big.object", "Object must contain at most {maximum} keys"),
-    ("too_big.object_one", "Object must contain at most {maximum} key"),
+    (
+        "too_big.record_one",
+        "Record must have at most {maximum} key",
+    ),
+    (
+        "too_big.object",
+        "Object must contain at most {maximum} keys",
+    ),
+    (
+        "too_big.object_one",
+        "Object must contain at most {maximum} key",
+    ),
     ("too_big.bytes", "Bytes length must be at most {maximum}"),
     ("too_big.date", "Date must be on or before {maximum}"),
-    ("too_big.datetime", "Datetime must be on or before {maximum}"),
+    (
+        "too_big.datetime",
+        "Datetime must be on or before {maximum}",
+    ),
     ("too_big.time", "Time must be at or before {maximum}"),
     ("too_big.duration", "Duration must be at most {maximum}s"),
     ("too_big.file", "File size must be at most {maximum} bytes"),
@@ -332,20 +406,44 @@ const ENGLISH: &[(&str, &str)] = &[
         "Array must contain required value at most {maximum} time(s)",
     ),
     ("too_big_exclusive", "Value must be less than {maximum}"),
-    ("too_big_exclusive.number", "Number must be less than {maximum}"),
-    ("too_big_exclusive.decimal", "Decimal must be less than {maximum}"),
+    (
+        "too_big_exclusive.number",
+        "Number must be less than {maximum}",
+    ),
+    (
+        "too_big_exclusive.decimal",
+        "Decimal must be less than {maximum}",
+    ),
     // Exact length
     ("invalid_length", "Length must be exactly {expected}"),
-    ("invalid_length.string", "String must be exactly {expected} characters"),
+    (
+        "invalid_length.string",
+        "String must be exactly {expected} characters",
+    ),
     (
         "invalid_length.string_one",
         "String must be exactly {expected} character",
     ),
-    ("invalid_length.array", "Array must have exactly {expected} elements"),
-    ("invalid_length.array_one", "Array must have exactly {expected} element"),
-    ("invalid_length.tuple", "Expected tuple of {expected} elements"),
-    ("invalid_length.tuple_one", "Expected tuple of {expected} element"),
-    ("invalid_length.bytes", "Bytes length must be exactly {expected}"),
+    (
+        "invalid_length.array",
+        "Array must have exactly {expected} elements",
+    ),
+    (
+        "invalid_length.array_one",
+        "Array must have exactly {expected} element",
+    ),
+    (
+        "invalid_length.tuple",
+        "Expected tuple of {expected} elements",
+    ),
+    (
+        "invalid_length.tuple_one",
+        "Expected tuple of {expected} element",
+    ),
+    (
+        "invalid_length.bytes",
+        "Bytes length must be exactly {expected}",
+    ),
     // Strings
     ("invalid_string", "Invalid string ({validation})"),
     ("invalid_string.email", "Invalid email address"),
@@ -364,9 +462,18 @@ const ENGLISH: &[(&str, &str)] = &[
     ("invalid_string.locale", "Invalid locale"),
     ("invalid_string.cron", "Invalid cron expression"),
     ("invalid_string.regex", "String does not match pattern"),
-    ("invalid_string.starts_with", "String must start with \"{prefix}\""),
-    ("invalid_string.ends_with", "String must end with \"{suffix}\""),
-    ("invalid_string.contains", "String must contain \"{substring}\""),
+    (
+        "invalid_string.starts_with",
+        "String must start with \"{prefix}\"",
+    ),
+    (
+        "invalid_string.ends_with",
+        "String must end with \"{suffix}\"",
+    ),
+    (
+        "invalid_string.contains",
+        "String must contain \"{substring}\"",
+    ),
     ("invalid_string.ipv4", "Invalid IPv4 address"),
     ("invalid_string.ipv6", "Invalid IPv6 address"),
     ("invalid_string.cidr", "Invalid CIDR"),
@@ -432,7 +539,10 @@ const ENGLISH: &[(&str, &str)] = &[
         "invalid_date.time",
         "Invalid time format: expected HH:MM:SS[.fraction]",
     ),
-    ("invalid_timezone_offset", "Timezone offset must be {expected}"),
+    (
+        "invalid_timezone_offset",
+        "Timezone offset must be {expected}",
+    ),
     ("not_in_past", "Value must be in the past"),
     ("not_in_past.date", "Date must be in the past"),
     ("not_in_past.datetime", "Datetime must be in the past"),
@@ -453,7 +563,10 @@ const ENGLISH: &[(&str, &str)] = &[
         "invalid_enum_value",
         "Invalid enum value. Expected one of: {options}",
     ),
-    ("invalid_union", "Input did not match any variant of the union"),
+    (
+        "invalid_union",
+        "Input did not match any variant of the union",
+    ),
     // Prefix of each variant's issues inside a union error.
     ("union_variant", "[variant {n}]"),
     (
@@ -470,7 +583,10 @@ const ENGLISH: &[(&str, &str)] = &[
     ("missing_field", "Required field is missing"),
     ("unrecognized_field", "Unrecognized field"),
     // Paths and files
-    ("path_outside_base", "Path must be within base directory: {base}"),
+    (
+        "path_outside_base",
+        "Path must be within base directory: {base}",
+    ),
     ("path_not_absolute", "Path must be absolute"),
     ("path_not_relative", "Path must be relative"),
     ("path_not_found", "Path does not exist"),

@@ -13,12 +13,15 @@ keywords = ["validation", "fake", "testing", "json-schema", "generator"]
 categories = ["development-tools::testing", "parsing"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true, features = ["openapi", "regex"] }
-serde = { workspace = true }
 serde_json = { workspace = true }
 rand = "0.10"
 regex-syntax = { version = "0.8", default-features = false, features = ["std", "unicode"] }
 
 [dev-dependencies]
 vld = { workspace = true, features = ["openapi", "chrono", "regex", "string-advanced", "decimal", "net"] }
+serde = { workspace = true }

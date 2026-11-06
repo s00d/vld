@@ -13,6 +13,9 @@ keywords = ["validation", "clap", "cli", "arguments", "parsing"]
 categories = ["command-line-interface", "parsing"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true, features = ["derive"] }
 vld-integration-common = { workspace = true }

@@ -13,10 +13,12 @@ fn long_non_ascii_string_in_error_does_not_panic() {
         .unwrap_err();
     assert!(!err.issues.is_empty());
     let long = "é".repeat(150);
-    assert!(vld::string()
-        .max(10)
-        .parse_value(&serde_json::json!(long))
-        .is_err());
+    assert!(
+        vld::string()
+            .max(10)
+            .parse_value(&serde_json::json!(long))
+            .is_err()
+    );
 }
 
 #[test]
@@ -31,21 +33,24 @@ fn iso_formats_reject_non_ascii_and_truncated_input_without_panicking() {
     for bad in ["2024-01-01T", "2024-01-01Té", "2024-01-01Té:00:00"] {
         assert!(dt.parse_value(&serde_json::json!(bad)).is_err(), "{bad}");
     }
-    assert!(dt
-        .parse_value(&serde_json::json!("2024-01-01T10:00:00Z"))
-        .is_ok());
+    assert!(
+        dt.parse_value(&serde_json::json!("2024-01-01T10:00:00Z"))
+            .is_ok()
+    );
 }
 
 #[cfg(feature = "time")]
 #[test]
 fn time_backend_datetime_out_of_range_is_an_error_not_a_panic() {
     let dt = vld::time::datetime();
-    assert!(dt
-        .parse_value(&serde_json::json!("9999-12-31T23:00:00-05:00"))
-        .is_err());
-    assert!(dt
-        .parse_value(&serde_json::json!("2024-01-01T10:00:00Z"))
-        .is_ok());
+    assert!(
+        dt.parse_value(&serde_json::json!("9999-12-31T23:00:00-05:00"))
+            .is_err()
+    );
+    assert!(
+        dt.parse_value(&serde_json::json!("2024-01-01T10:00:00Z"))
+            .is_ok()
+    );
 }
 
 #[cfg(feature = "string-advanced")]
@@ -83,11 +88,15 @@ fn path_within_rejects_traversal_of_missing_paths() {
     let schema = vld::path().within(&base);
     let escape = format!("{}/../etc/passwd-does-not-exist", base.display());
     assert!(schema.parse_value(&serde_json::json!(escape)).is_err());
-    assert!(schema
-        .parse_value(&serde_json::json!("../outside-does-not-exist"))
-        .is_err());
-    assert!(schema
-        .parse_value(&serde_json::json!("inside/new-file.txt"))
-        .is_ok());
+    assert!(
+        schema
+            .parse_value(&serde_json::json!("../outside-does-not-exist"))
+            .is_err()
+    );
+    assert!(
+        schema
+            .parse_value(&serde_json::json!("inside/new-file.txt"))
+            .is_ok()
+    );
     std::fs::remove_dir_all(&base).ok();
 }

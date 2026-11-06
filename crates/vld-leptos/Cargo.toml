@@ -13,14 +13,17 @@ keywords = ["validation", "leptos", "wasm", "server-functions", "vld"]
 categories = ["web-programming", "wasm"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true }
 vld-integration-common = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 
 [dev-dependencies]
 vld = { workspace = true }
+serde_json = { workspace = true }
 
 [[example]]
 name = "leptos_basic"

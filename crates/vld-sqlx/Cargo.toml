@@ -13,6 +13,9 @@ keywords = ["validation", "sqlx", "database", "sql", "vld"]
 categories = ["database", "web-programming"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["sqlx-0_8", "sqlite"]
 sqlx-0_8 = ["dep:sqlx08"]
@@ -26,13 +29,13 @@ vld = { workspace = true }
 sqlx08 = { package = "sqlx", version = "0.8", default-features = false, optional = true }
 sqlx09 = { package = "sqlx", version = "0.9", default-features = false, optional = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 vld-integration-common = { workspace = true }
 
 [dev-dependencies]
 sqlx08 = { package = "sqlx", version = "0.8", features = ["sqlite", "runtime-tokio"] }
 sqlx09 = { package = "sqlx", version = "0.9", features = ["sqlite", "runtime-tokio"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde_json = { workspace = true }
 
 [[example]]
 name = "sqlx_basic"

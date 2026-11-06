@@ -4,8 +4,8 @@ use rama::http::service::web::WebService;
 use rama::http::{Body, Method, Request, StatusCode};
 use rama::{Layer, Service};
 use vld_rama::{
-    validated, ValidateJsonLayer, Validated, VldCookie, VldForm, VldHeaders, VldJson, VldPath,
-    VldQuery,
+    ValidateJsonLayer, Validated, VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery,
+    validated,
 };
 
 vld::schema! {

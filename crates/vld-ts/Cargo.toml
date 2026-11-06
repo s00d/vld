@@ -13,6 +13,9 @@ keywords = ["validation", "typescript", "zod", "codegen", "json-schema"]
 categories = ["development-tools", "web-programming"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 serde_json = { workspace = true }
 vld = { workspace = true, features = ["openapi"] }
@@ -22,6 +25,6 @@ name = "generate_zod"
 path = "examples/generate_zod.rs"
 
 [dev-dependencies]
-insta = { version = "1.49.0", features = ["json"] }
+insta = { workspace = true }
 vld = { workspace = true, features = ["openapi", "regex", "string-advanced"] }
-regex-lite = "0.1"
+regex-lite = { workspace = true }

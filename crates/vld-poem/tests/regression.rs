@@ -1,7 +1,7 @@
 //! Regression tests for the 0.5.0 audit fixes.
 
 use poem::test::TestClient;
-use poem::{handler, post, Route};
+use poem::{Route, handler, post};
 use vld_poem::prelude::*;
 
 vld::schema! {
@@ -124,7 +124,7 @@ fn display_is_human_readable() {
 
 mod path_from_route {
     use poem::test::TestClient;
-    use poem::{handler, Route};
+    use poem::{Route, handler};
     use vld_poem::prelude::*;
     vld::schema! {
         #[derive(Debug, Clone)]

@@ -322,9 +322,9 @@ macro_rules! impl_validate {
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        impl_validate, metadata_interceptor, validate, validate_metadata, validate_ref,
-        validate_with, validate_with_ref, validated_metadata, vld_status, vld_status_with_code,
-        Validated, VldMessage,
+        Validated, VldMessage, impl_validate, metadata_interceptor, validate, validate_metadata,
+        validate_ref, validate_with, validate_with_ref, validated_metadata, vld_status,
+        vld_status_with_code,
     };
     pub use vld::prelude::*;
 }

@@ -1,6 +1,6 @@
 use serde_json::Value;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use crate::error::{IssueCode, PathSegment, VldError};
 use crate::schema::VldSchema;

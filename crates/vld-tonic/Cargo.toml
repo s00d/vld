@@ -13,15 +13,15 @@ keywords = ["validation", "tonic", "grpc", "protobuf", "vld"]
 categories = ["web-programming", "network-programming"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tonic = { version = ">=0.12, <0.15", default-features = false }
-
-[dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [[example]]
 name = "tonic_basic"

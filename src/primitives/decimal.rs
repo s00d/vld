@@ -186,7 +186,7 @@ impl VldSchema for ZDecimal {
                     &self.custom_type_error,
                     "decimal",
                     value,
-                ))
+                ));
             }
         };
         let n = parse_decimal(&s).ok_or_else(|| {

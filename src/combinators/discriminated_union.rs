@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::error::{value_type_name, IssueCode, PathSegment, VldError};
+use crate::error::{IssueCode, PathSegment, VldError, value_type_name};
 use crate::schema::DynSchema;
 use crate::schema::VldSchema;
 

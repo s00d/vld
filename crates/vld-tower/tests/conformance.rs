@@ -7,7 +7,7 @@ use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use tower::{ServiceBuilder, ServiceExt};
 use vld_http_common::conformance::{Request, Response, User};
-use vld_tower::{validated, ValidateJsonLayer, ValidatedBody};
+use vld_tower::{ValidateJsonLayer, ValidatedBody, validated};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 

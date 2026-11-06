@@ -13,6 +13,9 @@ keywords = ["validation", "vld", "helpers"]
 categories = ["parsing"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true }
 serde = { workspace = true }

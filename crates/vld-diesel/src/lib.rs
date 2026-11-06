@@ -317,8 +317,8 @@ mod mysql_narrow {
 pub mod prelude {
     #[allow(deprecated)]
     pub use crate::{
-        validate_insert, validate_row, validate_update, Validated, VldBool, VldDieselError,
-        VldFloat, VldInt, VldText,
+        Validated, VldBool, VldDieselError, VldFloat, VldInt, VldText, validate_insert,
+        validate_row, validate_update,
     };
     pub use vld::prelude::*;
 }

@@ -13,6 +13,9 @@ keywords = ["validation", "tauri", "ipc", "desktop", "json"]
 categories = ["gui", "parsing"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true }
 vld-integration-common = { workspace = true }

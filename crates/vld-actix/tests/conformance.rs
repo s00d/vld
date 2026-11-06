@@ -1,6 +1,6 @@
 //! Shared HTTP conformance suite (see `vld_http_common::conformance`).
 
-use actix_web::{test, web, App, HttpResponse};
+use actix_web::{App, HttpResponse, test, web};
 use vld_actix::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 use vld_http_common::conformance::{
     Cookies, Headers, PathId, PathNone, PathStr, Query, Request, Response, User,

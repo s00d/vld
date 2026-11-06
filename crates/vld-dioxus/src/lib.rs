@@ -68,16 +68,16 @@
 //! Guide: <https://s00d.github.io/vld/integrations/ui/dioxus>
 
 pub use vld_integration_common::form::{
-    check_all_fields, check_field, check_field_all, validate, validate_value, FieldError,
-    VldServerError,
+    FieldError, VldServerError, check_all_fields, check_field, check_field_all, validate,
+    validate_value,
 };
 pub use vld_integration_common::validate_args;
 
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        check_all_fields, check_field, check_field_all, validate, validate_args, validate_value,
-        FieldError, VldServerError,
+        FieldError, VldServerError, check_all_fields, check_field, check_field_all, validate,
+        validate_args, validate_value,
     };
     pub use vld::prelude::*;
 }

@@ -5,8 +5,8 @@
 use crate::error::{IssueCode, SizeOrigin, StringValidation};
 use crate::primitives::iso::{is_valid_iso_date, is_valid_iso_datetime, is_valid_iso_time};
 
-use super::formats::*;
 use super::ZString;
+use super::formats::*;
 
 /// Escape a literal for an ECMA-262 (`u` mode) JSON Schema `pattern`.
 #[cfg(feature = "openapi")]

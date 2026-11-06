@@ -5,7 +5,7 @@
 mod differential;
 
 use crate::common::Role;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use vld::openapi::JsonSchema;
 use vld::prelude::*;
 

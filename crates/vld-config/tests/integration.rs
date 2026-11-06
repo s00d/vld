@@ -26,7 +26,7 @@ vld::schema! {
 mod config_rs_tests {
     use super::*;
     use std::io::Write;
-    use vld_config::{from_builder, from_config, from_value, VldConfigError};
+    use vld_config::{VldConfigError, from_builder, from_config, from_value};
 
     #[test]
     fn from_value_valid() {
@@ -228,7 +228,7 @@ mod config_rs_tests {
 mod figment_tests {
     use super::*;
     use figment::providers::Format;
-    use vld_config::{from_figment, VldConfigError};
+    use vld_config::{VldConfigError, from_figment};
 
     #[test]
     fn from_figment_defaults_valid() {

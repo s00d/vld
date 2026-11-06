@@ -64,9 +64,10 @@ fn when_applies_extra_schema_only_on_match() {
         .field_optional("admin_key", vld::string())
         .when("role", "admin", "admin_key", vld::string().min(10));
 
-    assert!(s
-        .parse(r#"{"role": "admin", "admin_key": "super-secret-key"}"#)
-        .is_ok());
+    assert!(
+        s.parse(r#"{"role": "admin", "admin_key": "super-secret-key"}"#)
+            .is_ok()
+    );
     assert!(s.parse(r#"{"role": "user"}"#).is_ok());
     assert!(s.parse(r#"{"role": "user", "admin_key": "x"}"#).is_ok());
     assert_issue!(

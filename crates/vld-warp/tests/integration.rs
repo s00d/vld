@@ -118,8 +118,8 @@ fn routes() -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejectio
     create.or(list).or(get_user).or(get_post).or(get_comment)
 }
 
-fn routes_with_recovery(
-) -> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
+fn routes_with_recovery()
+-> impl Filter<Extract = (impl warp::Reply,), Error = std::convert::Infallible> + Clone {
     routes().recover(handle_rejection)
 }
 

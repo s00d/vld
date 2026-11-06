@@ -287,7 +287,7 @@ where
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        validate, validate_cli, validate_json, validate_or_exit, validate_with_schema, VldClapError,
+        VldClapError, validate, validate_cli, validate_json, validate_or_exit, validate_with_schema,
     };
     pub use vld::prelude::*;
 }

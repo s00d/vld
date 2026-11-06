@@ -12,12 +12,12 @@ pub use json::VldJson;
 pub use path::VldPath;
 pub use query::VldQuery;
 
-use crate::rejection::VldRejection;
 use crate::VldBodyLimit;
+use crate::rejection::VldRejection;
 
+use rama::http::Body;
 use rama::http::body::util::BodyExt;
 use rama::http::request::Parts;
-use rama::http::Body;
 use vld_http_common::DEFAULT_BODY_LIMIT;
 
 vld_http_common::impl_deref!(VldJson, VldQuery, VldPath, VldForm, VldHeaders, VldCookie);

@@ -329,9 +329,9 @@ macro_rules! validate_fields {
 pub mod prelude {
     #[allow(deprecated)]
     pub use crate::{
-        validate_content, validate_fields, validate_json, validate_record, validate_records,
-        validate_value, FieldError, Validated, VldBool, VldFloat, VldInt, VldSurrealError,
-        VldSurrealResponse, VldText,
+        FieldError, Validated, VldBool, VldFloat, VldInt, VldSurrealError, VldSurrealResponse,
+        VldText, validate_content, validate_fields, validate_json, validate_record,
+        validate_records, validate_value,
     };
     pub use vld::prelude::*;
 }

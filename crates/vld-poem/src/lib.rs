@@ -80,9 +80,9 @@ use std::fmt;
 use vld::schema::VldParse;
 pub use vld_http_common::VldBodyLimit;
 use vld_http_common::{
-    cookie_headers_to_json, headers_to_json, parse_form_body, parse_json_body, path_params_to_json,
-    query_string_to_json, require_form_content_type, require_json_content_type, VldHttpError,
-    DEFAULT_BODY_LIMIT,
+    DEFAULT_BODY_LIMIT, VldHttpError, cookie_headers_to_json, headers_to_json, parse_form_body,
+    parse_json_body, path_params_to_json, query_string_to_json, require_form_content_type,
+    require_json_content_type,
 };
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,10 @@ fn validate<T: VldParse>(value: &serde_json::Value) -> Result<T> {
 
 /// Read the body up to the [`VldBodyLimit`] request data, or
 /// [`DEFAULT_BODY_LIMIT`].
-async fn read_limited_body(req: &Request, body: &mut RequestBody) -> Result<impl AsRef<[u8]>> {
+async fn read_limited_body(
+    req: &Request,
+    body: &mut RequestBody,
+) -> Result<impl AsRef<[u8]> + use<>> {
     let limit = req
         .data::<VldBodyLimit>()
         .map_or(DEFAULT_BODY_LIMIT, |l| l.0);

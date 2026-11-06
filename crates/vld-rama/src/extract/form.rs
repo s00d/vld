@@ -2,7 +2,7 @@ use std::future::Future;
 
 use crate::rejection::VldRejection;
 use rama::http::service::web::extract::{FromRequest, FromRequestBody};
-use rama::http::{header, Body, Request};
+use rama::http::{Body, Request, header};
 use vld::schema::VldParse;
 use vld_http_common::{parse_form_body, require_form_content_type};
 

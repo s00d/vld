@@ -13,6 +13,9 @@ keywords = ["validation", "aide", "openapi", "schemars", "vld"]
 categories = ["web-programming", "development-tools"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["schemars-0"]
 schemars-0 = ["vld-schemars/schemars-0"]
@@ -26,7 +29,7 @@ vld-schemars = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 vld = { workspace = true, features = ["openapi", "derive"] }
-insta = { version = "1.49.0", features = ["json"] }
+insta = { workspace = true }
 
 [[example]]
 name = "aide_basic"

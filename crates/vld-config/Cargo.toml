@@ -13,6 +13,9 @@ keywords = ["validation", "config", "toml", "yaml", "vld"]
 categories = ["config", "web-programming"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["config-rs"]
 config-rs = ["dep:config"]
@@ -21,14 +24,13 @@ figment = ["dep:figment"]
 [dependencies]
 vld = { workspace = true }
 serde_json = { workspace = true }
-serde = { workspace = true }
 config = { version = ">=0.14, <0.16", optional = true, default-features = false, features = ["toml", "json"] }
 figment = { version = "0.10.10", optional = true, features = ["toml", "json", "env"] }
 
 [dev-dependencies]
 vld = { workspace = true }
 config = { version = ">=0.14, <0.16", features = ["toml", "json", "yaml"] }
-figment = { version = "0.10", features = ["toml", "json", "env"] }
+figment = { version = "0.10", features = ["toml", "json", "env", "test"] }
 tempfile = "3"
 
 [[example]]

@@ -64,11 +64,11 @@ use futures_util::{Stream, StreamExt};
 use std::convert::Infallible;
 use vld::schema::VldParse;
 use vld_http_common::{
-    cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
-    path_params_to_json, percent_decode, query_string_to_json, require_form_content_type,
-    require_json_content_type, VldHttpError,
+    VldHttpError, cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body,
+    parse_json_body, path_params_to_json, percent_decode, query_string_to_json,
+    require_form_content_type, require_json_content_type,
 };
-use warp::http::{header, HeaderValue, StatusCode};
+use warp::http::{HeaderValue, StatusCode, header};
 use warp::reject::Reject;
 use warp::{Filter, Rejection, Reply};
 
@@ -189,8 +189,8 @@ where
 ///         warp::reply::json(&serde_json::json!({"name": user.name}))
 ///     });
 /// ```
-pub fn vld_json<T: VldParse + Send + 'static>(
-) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
+pub fn vld_json<T: VldParse + Send + 'static>()
+-> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     vld_json_limit(vld_http_common::DEFAULT_BODY_LIMIT as u64)
 }
 
@@ -238,8 +238,8 @@ pub fn vld_json_limit<T: VldParse + Send + 'static>(
 ///         warp::reply::json(&serde_json::json!({"page": p.page, "limit": p.limit}))
 ///     });
 /// ```
-pub fn vld_query<T: VldParse + Send + 'static>(
-) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
+pub fn vld_query<T: VldParse + Send + 'static>()
+-> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     warp::query::raw()
         .or(warp::any().map(String::new))
         .unify()
@@ -324,8 +324,8 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> 
 /// (`application/x-www-form-urlencoded`, 415 otherwise).
 ///
 /// Values are parsed the same way as query parameters.
-pub fn vld_form<T: VldParse + Send + 'static>(
-) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
+pub fn vld_form<T: VldParse + Send + 'static>()
+-> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     vld_form_limit(vld_http_common::DEFAULT_BODY_LIMIT as u64)
 }
 
@@ -508,8 +508,8 @@ pub fn validate_path_params<T: VldParse>(params: &[(&str, &str)]) -> Result<T, R
 /// See [`vld_http_common::headers_to_json`]: names become snake_case
 /// (`Content-Type` → `content_type`), names containing `_` are ignored,
 /// repeated headers are joined with `", "`.
-pub fn vld_headers<T: VldParse + Send + 'static>(
-) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
+pub fn vld_headers<T: VldParse + Send + 'static>()
+-> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     warp::header::headers_cloned().and_then(|headers: warp::http::HeaderMap| async move {
         validate(&headers_to_json(
             headers.iter().map(|(n, v)| (n.as_str(), v.as_bytes())),
@@ -527,8 +527,8 @@ pub fn vld_headers<T: VldParse + Send + 'static>(
 ///
 /// Cookie names are used as-is for schema field matching.
 /// Values are unquoted, percent-decoded and coerced.
-pub fn vld_cookie<T: VldParse + Send + 'static>(
-) -> impl Filter<Extract = (T,), Error = Rejection> + Clone {
+pub fn vld_cookie<T: VldParse + Send + 'static>()
+-> impl Filter<Extract = (T,), Error = Rejection> + Clone {
     warp::header::headers_cloned().and_then(|headers: warp::http::HeaderMap| async move {
         validate(&cookie_headers_to_json(
             headers.get_all(header::COOKIE).iter().map(|v| v.as_bytes()),
@@ -539,8 +539,8 @@ pub fn vld_cookie<T: VldParse + Send + 'static>(
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{
-        handle_rejection, validate_path_params, vld_cookie, vld_form, vld_form_limit, vld_headers,
-        vld_json, vld_json_limit, vld_param, vld_path, vld_query, VldRejection,
+        VldRejection, handle_rejection, validate_path_params, vld_cookie, vld_form, vld_form_limit,
+        vld_headers, vld_json, vld_json_limit, vld_param, vld_path, vld_query,
     };
     pub use vld::prelude::*;
 }

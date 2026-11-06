@@ -10,8 +10,8 @@
 
 use ::chrono::TimeZone as _;
 
-use super::common::Sealed;
 use super::DateBackend;
+use super::common::Sealed;
 
 /// The `chrono` backend: `NaiveDate` dates, `DateTime<Utc>` instants.
 #[derive(Debug, Clone, Copy)]

@@ -183,10 +183,12 @@ fn json_body_parsing() {
     );
     let err = parse_json_body(b"{").unwrap_err();
     assert_eq!(err.status(), 422);
-    assert!(err.body()["issues"][0]["message"]
-        .as_str()
-        .unwrap()
-        .starts_with("Invalid JSON"));
+    assert!(
+        err.body()["issues"][0]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("Invalid JSON")
+    );
 }
 
 #[test]

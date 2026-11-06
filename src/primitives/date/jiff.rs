@@ -10,8 +10,8 @@
 
 use ::jiff::tz::{Offset, TimeZone};
 
-use super::common::Sealed;
 use super::DateBackend;
+use super::common::Sealed;
 
 /// The `jiff` backend: `civil::Date` dates, `Timestamp` instants.
 #[derive(Debug, Clone, Copy)]

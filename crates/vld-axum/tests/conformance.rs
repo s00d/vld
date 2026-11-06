@@ -1,8 +1,8 @@
 //! Shared HTTP conformance suite (see `vld_http_common::conformance`).
 
+use axum::Router;
 use axum::body::Body;
 use axum::routing::{get, post};
-use axum::Router;
 use tower::ServiceExt;
 use vld_axum::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
 use vld_http_common::conformance::{

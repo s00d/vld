@@ -311,8 +311,8 @@ where
 #[cfg(all(test, feature = "postgres"))]
 mod pg_tests {
     use super::*;
-    use sqlx::postgres::Postgres;
     use sqlx::Type;
+    use sqlx::postgres::Postgres;
 
     struct AnySchema;
 
@@ -343,8 +343,8 @@ mod pg_tests {
 pub mod prelude {
     #[allow(deprecated)]
     pub use crate::{
-        validate_insert, validate_row, validate_rows, validate_update, Validated, VldBool,
-        VldFloat, VldInt, VldSqlxError, VldText,
+        Validated, VldBool, VldFloat, VldInt, VldSqlxError, VldText, validate_insert, validate_row,
+        validate_rows, validate_update,
     };
     pub use vld::prelude::*;
 }

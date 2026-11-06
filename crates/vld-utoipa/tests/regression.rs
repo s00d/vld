@@ -1,6 +1,6 @@
 //! Regression tests for the 0.5.0 audit and live end-to-end findings.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use vld::json_schema::JsonSchema;
 use vld_utoipa::utoipa::openapi::path::ParameterIn;
 use vld_utoipa::{json_schema_to_params, json_schema_to_schema};

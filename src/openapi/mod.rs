@@ -21,7 +21,7 @@
 //! assert_eq!(js["format"], "email");
 //! ```
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[cfg(feature = "diff")]
 #[cfg_attr(docsrs, doc(cfg(feature = "diff")))]

@@ -5,7 +5,7 @@
 //! cargo run -p vld-poem --example poem_basic
 //! ```
 
-use poem::{handler, listener::TcpListener, post, EndpointExt, Route, Server};
+use poem::{EndpointExt, Route, Server, handler, listener::TcpListener, post};
 use serde::Serialize;
 use vld_poem::prelude::*;
 

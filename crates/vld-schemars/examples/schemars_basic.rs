@@ -30,8 +30,8 @@ fn main() {
 
     // 1. Forward: vld type → schemars::JsonSchema
     println!("--- impl_json_schema! (vld → schemars) ---");
-    let mut gen = schemars::SchemaGenerator::default();
-    let schema = <UserSchema as schemars::JsonSchema>::json_schema(&mut gen);
+    let mut generator = schemars::SchemaGenerator::default();
+    let schema = <UserSchema as schemars::JsonSchema>::json_schema(&mut generator);
     println!(
         "schema_name: {}",
         <UserSchema as schemars::JsonSchema>::schema_name()

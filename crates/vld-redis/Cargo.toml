@@ -13,6 +13,9 @@ keywords = ["validation", "redis", "pubsub", "json", "vld"]
 categories = ["database", "web-programming"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["redis-0"]
 redis-0 = ["dep:redis"]
@@ -34,7 +37,7 @@ vld = { workspace = true }
 # A runtime for the `aio` tests (`aio` itself leaves the choice to the user).
 redis = { version = ">=0.32, <1", features = ["tokio-comp"] }
 redis1 = { package = "redis", version = ">=1, <2", features = ["tokio-comp"] }
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros"] }
 
 [[example]]
 name = "redis_basic"

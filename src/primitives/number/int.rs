@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::marker::PhantomData;
 
-use crate::error::{issue_error, IssueCode, SizeOrigin, VldError};
+use crate::error::{IssueCode, SizeOrigin, VldError, issue_error};
 use crate::schema::VldSchema;
 
 use super::{Num, ZNumber};

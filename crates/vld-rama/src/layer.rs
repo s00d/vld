@@ -10,7 +10,7 @@ use rama::http::header;
 use rama::http::{Body, Request, Response};
 use rama::{Layer, Service};
 use vld::schema::VldParse;
-use vld_http_common::{is_json_content_type, parse_json_body, DEFAULT_BODY_LIMIT};
+use vld_http_common::{DEFAULT_BODY_LIMIT, is_json_content_type, parse_json_body};
 
 use crate::rejection::VldRejection;
 

@@ -2,7 +2,7 @@
 
 use serde_json::json;
 use std::collections::HashMap;
-use vld::i18n::{english, translate_error, translate_issue, FnResolver, MapResolver};
+use vld::i18n::{FnResolver, MapResolver, english, translate_error, translate_issue};
 use vld::prelude::*;
 
 #[test]

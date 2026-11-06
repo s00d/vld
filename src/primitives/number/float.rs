@@ -2,7 +2,7 @@ use serde_json::Value;
 #[cfg(feature = "openapi")]
 use std::cmp::Ordering;
 
-use crate::error::{issue_error, IssueCode, ValidationIssue, VldError};
+use crate::error::{IssueCode, ValidationIssue, VldError, issue_error};
 use crate::schema::VldSchema;
 
 use super::{Kind, Num, NumberCheck, ZInt};

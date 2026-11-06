@@ -79,15 +79,15 @@ pub use ntex3 as ntex;
 #[cfg(feature = "ntex-4")]
 pub use ntex4 as ntex;
 
-use ntex::http::{header, Payload, StatusCode};
+use ntex::http::{Payload, StatusCode, header};
 use ntex::web::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use std::fmt;
 use vld::schema::VldParse;
 pub use vld_http_common::VldBodyLimit;
 use vld_http_common::{
-    cookie_headers_to_json, headers_to_json, parse_coerced, parse_form_body, parse_json_body,
-    path_params_to_json, query_string_to_json, require_form_content_type,
-    require_json_content_type, VldHttpError, DEFAULT_BODY_LIMIT,
+    DEFAULT_BODY_LIMIT, VldHttpError, cookie_headers_to_json, headers_to_json, parse_coerced,
+    parse_form_body, parse_json_body, path_params_to_json, query_string_to_json,
+    require_form_content_type, require_json_content_type,
 };
 
 // ============================= Error / Rejection =============================
@@ -219,8 +219,8 @@ mod compat {
 #[cfg(feature = "ntex-4")]
 mod compat {
     use super::*;
-    use ntex::web::error::WebResponseError;
     use ntex::web::FromRequest;
+    use ntex::web::error::WebResponseError;
 
     impl<St, Err> WebResponseError<St, Err> for VldNtexError {
         fn error_response(&self, _: &St) -> HttpResponse {

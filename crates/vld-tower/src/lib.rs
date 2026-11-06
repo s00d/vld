@@ -76,7 +76,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use vld::schema::VldParse;
-use vld_http_common::{is_json_content_type, parse_json_body, VldHttpError, DEFAULT_BODY_LIMIT};
+use vld_http_common::{DEFAULT_BODY_LIMIT, VldHttpError, is_json_content_type, parse_json_body};
 
 /// Body type seen by the inner service (`Left`: the buffered bytes of a
 /// validated JSON request, `Right`: the untouched original body of a
@@ -274,6 +274,6 @@ pub fn try_validated<T: Clone + Send + Sync + 'static>(req: &Request<impl Body>)
 
 /// Prelude — import everything you need.
 pub mod prelude {
-    pub use crate::{validated, ValidateJsonLayer, ValidateJsonService, Validated, ValidatedBody};
+    pub use crate::{ValidateJsonLayer, ValidateJsonService, Validated, ValidatedBody, validated};
     pub use vld::prelude::*;
 }

@@ -1,5 +1,5 @@
 use poem::test::TestClient;
-use poem::{handler, post, Route};
+use poem::{Route, handler, post};
 use vld_poem::prelude::*;
 
 // ---------------------------------------------------------------------------

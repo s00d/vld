@@ -13,26 +13,27 @@ keywords = ["validation", "tower", "middleware", "http", "vld"]
 categories = ["web-programming", "web-programming::http-server"]
 include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
+[lints]
+workspace = true
+
 [dependencies]
 vld = { workspace = true }
 vld-http-common = { workspace = true }
-serde_json = { workspace = true }
 tower-layer = "0.3"
 tower-service = "0.3"
-http = "1"
+http = { workspace = true }
 http-body = "1"
-http-body-util = "0.1"
-bytes = "1"
+http-body-util = { workspace = true }
+bytes = { workspace = true }
 
 [dev-dependencies]
 vld-http-common = { workspace = true, features = ["conformance"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
-tower = { version = "0.5", features = ["util"] }
-axum = "0.8"
-hyper = { version = "1", features = ["server", "http1"] }
-hyper-util = { version = "0.1", features = ["tokio"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+tower = { workspace = true, features = ["util"] }
+axum = { workspace = true }
 serde = { workspace = true }
 vld = { workspace = true }
+serde_json = { workspace = true }
 
 [[example]]
 name = "tower_basic"

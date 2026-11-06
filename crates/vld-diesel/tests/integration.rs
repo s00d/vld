@@ -698,10 +698,12 @@ fn int_and_float_wrappers_on_integer_and_real_columns() {
         n: VldInt::new(i64::from(i32::MAX) + 1).unwrap(),
         r: VldFloat::new(1.0).unwrap(),
     };
-    assert!(diesel::insert_into(narrow::table)
-        .values(&too_big)
-        .execute(&mut conn)
-        .is_err());
+    assert!(
+        diesel::insert_into(narrow::table)
+            .values(&too_big)
+            .execute(&mut conn)
+            .is_err()
+    );
 }
 
 #[test]
