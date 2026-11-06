@@ -1,6 +1,8 @@
 //! Live RabbitMQ tests: run when `AMQP_URL` is set (CI starts a rabbitmq
-//! service), otherwise print a note and pass. Each test uses its own
-//! exclusive queue, deleted with the connection.
+//! service). Without it they fail when `CI` is set (unless
+//! `VLD_LIVE_OPTIONAL` is set, for CI jobs without the service) and
+//! otherwise print a note and pass. Each test uses its own exclusive queue,
+//! deleted with the connection.
 #![allow(clippy::useless_conversion)] // `.into()` bridges &str / ShortString across lapin 2-4
 
 #[cfg(feature = "lapin-2")]
@@ -32,6 +34,13 @@ async fn connect() -> Option<Connection> {
     let url = match std::env::var("AMQP_URL") {
         Ok(url) if !url.is_empty() => url,
         _ => {
+            let in_ci = std::env::var_os("CI").is_some();
+            let optional = std::env::var_os("VLD_LIVE_OPTIONAL").is_some();
+            assert!(
+                !in_ci || optional,
+                "CI is set but AMQP_URL is missing: the live rabbitmq tests would silently skip \
+                 (set VLD_LIVE_OPTIONAL=1 in CI jobs without a rabbitmq service)"
+            );
             eprintln!("note: AMQP_URL not set, skipping live rabbitmq test");
             return None;
         }

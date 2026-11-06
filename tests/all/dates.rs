@@ -314,3 +314,134 @@ fn single_backend_shortcut() {
     let _: ZDate = vld::date();
     assert_eq!(d.to_string(), "2024-06-15");
 }
+
+// ---- time of day ----
+
+use crate::common::code;
+use serde_json::json;
+use vld::error::{DateKind, IssueCode, SizeOrigin};
+use vld::prelude::*;
+
+fn check_time_backend<B: vld::primitives::date::DateBackend>()
+where
+    B::Time: std::fmt::Debug,
+{
+    let t = vld::primitives::date::ZTime::<B>::new;
+    assert!(t().parse(r#""00:00:00""#).is_ok());
+    assert!(t().parse(r#""23:59:59""#).is_ok());
+    assert!(t().parse(r#""12:30:45.123456789""#).is_ok());
+    for bad in [
+        "24:00:00",
+        "12:60:00",
+        "12:00:60",
+        "12:00",
+        "12:00:00Z",
+        "12:00:00+01:00",
+        "1:00:00",
+        "12:00:00.",
+        "12:00:00.1234567890",
+        "12:00:00 ",
+        "",
+        "é",
+    ] {
+        let v = serde_json::Value::String(bad.into());
+        assert_eq!(
+            t().parse_value(&v).unwrap_err().issues[0].code,
+            IssueCode::InvalidDate {
+                kind: DateKind::Time
+            },
+            "{bad}"
+        );
+    }
+    assert_eq!(code(t().parse("1200")).key(), "invalid_type");
+
+    let s = t().min("08:00:00").max("17:30:00");
+    assert!(s.parse(r#""08:00:00""#).is_ok());
+    assert!(s.parse(r#""17:30:00""#).is_ok());
+    let err = s.parse(r#""07:59:59.999""#).unwrap_err();
+    assert_eq!(
+        err.issues[0].code,
+        IssueCode::TooSmall {
+            origin: SizeOrigin::Time,
+            minimum: json!("08:00:00"),
+            inclusive: true
+        }
+    );
+    assert_eq!(err.issues[0].message, "Time must be at or after 08:00:00");
+    let err = s.parse(r#""17:30:00.5""#).unwrap_err();
+    assert_eq!(err.issues[0].message, "Time must be at or before 17:30:00");
+
+    let parsed = t().parse(r#""10:15:00""#).unwrap();
+    let bounded = t().min_time(parsed.clone()).max_time(parsed);
+    assert!(bounded.parse(r#""10:15:00""#).is_ok());
+    assert!(bounded.parse(r#""10:15:01""#).is_err());
+}
+
+#[test]
+#[should_panic(expected = "Invalid time literal")]
+#[cfg(feature = "chrono")]
+fn time_bad_literal_panics() {
+    let _ = vld::chrono::time().min("25:00:00");
+}
+
+#[cfg(feature = "chrono")]
+#[test]
+fn chrono_time() {
+    check_time_backend::<vld::chrono::Chrono>();
+    let t = vld::chrono::time().parse(r#""09:05:01.5""#).unwrap();
+    assert_eq!(
+        t,
+        ::chrono::NaiveTime::from_hms_milli_opt(9, 5, 1, 500).unwrap()
+    );
+}
+
+#[cfg(feature = "jiff")]
+#[test]
+fn jiff_time() {
+    check_time_backend::<vld::jiff::Jiff>();
+    let t = vld::jiff::time().parse(r#""09:05:01""#).unwrap();
+    assert_eq!(t, ::jiff::civil::time(9, 5, 1, 0));
+}
+
+#[cfg(feature = "time")]
+#[test]
+fn time_crate_time() {
+    check_time_backend::<vld::time::Time>();
+    let t = vld::time::time().parse(r#""09:05:01.25""#).unwrap();
+    assert_eq!(t, ::time::Time::from_hms_milli(9, 5, 1, 250).unwrap());
+    // Bound display is zero-padded HH:MM:SS for the `time` crate too.
+    let s = vld::time::time().min_time(::time::Time::from_hms(8, 0, 0).unwrap());
+    let err = s.parse(r#""07:00:00""#).unwrap_err();
+    assert!(err.issues[0].message.ends_with("08:00:00.0"), "{err}");
+}
+
+#[cfg(any(
+    all(feature = "chrono", not(feature = "jiff"), not(feature = "time")),
+    all(feature = "jiff", not(feature = "chrono"), not(feature = "time")),
+    all(feature = "time", not(feature = "chrono"), not(feature = "jiff"))
+))]
+#[test]
+fn time_of_day_shortcut() {
+    let s: ZTime = vld::time_of_day().max("12:00:00");
+    assert_eq!(
+        s.parse(r#""11:59:59""#).unwrap(),
+        vld::time_of_day().parse(r#""11:59:59""#).unwrap()
+    );
+    assert_eq!(code(s.parse(r#""12:00:01""#)).key(), "too_big");
+}
+
+#[cfg(all(feature = "time", feature = "openapi"))]
+#[test]
+fn time_datetime_default_is_rfc3339() {
+    use vld::json_schema::JsonSchema;
+    let dt = vld::time::datetime()
+        .parse_value(&json!("2024-01-02T03:04:05Z"))
+        .unwrap();
+    let schema = vld::time::datetime().with_default(dt).json_schema();
+    let default = schema["default"].clone();
+    assert_eq!(
+        vld::time::datetime().parse_value(&default).unwrap(),
+        dt,
+        "{default}"
+    );
+}

@@ -3,6 +3,9 @@
 
 use vld_sea::prelude::*;
 
+mod common;
+use common::{issues, pairs};
+
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
@@ -81,8 +84,9 @@ fn active_model_valid() {
         email: Set("alice@example.com".to_owned()),
     };
 
-    let result = validate_active::<UserInput, _>(&am);
-    assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
+    let user = validate_active::<UserInput, _>(&am).unwrap();
+    assert_eq!(user.name, "Alice");
+    assert_eq!(user.email, "alice@example.com");
 }
 
 #[test]
@@ -95,8 +99,10 @@ fn active_model_invalid_email() {
         email: Set("not-an-email".to_owned()),
     };
 
-    let result = validate_active::<UserInput, _>(&am);
-    assert!(result.is_err());
+    assert_eq!(
+        issues(validate_active::<UserInput, _>(&am)),
+        pairs(&[(".email", "invalid_string")])
+    );
 }
 
 #[test]
@@ -109,8 +115,10 @@ fn active_model_invalid_name_too_short() {
         email: Set("bob@example.com".to_owned()),
     };
 
-    let result = validate_active::<UserInput, _>(&am);
-    assert!(result.is_err());
+    assert_eq!(
+        issues(validate_active::<UserInput, _>(&am)),
+        pairs(&[(".name", "too_small")])
+    );
 }
 
 #[test]
@@ -124,8 +132,10 @@ fn active_model_item_valid() {
         qty: Set(10),
     };
 
-    let result = validate_active::<ItemInput, _>(&am);
-    assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
+    let item = validate_active::<ItemInput, _>(&am).unwrap();
+    assert_eq!(item.title, "Widget");
+    assert_eq!(item.price, 9.99);
+    assert_eq!(item.qty, 10);
 }
 
 #[test]
@@ -139,8 +149,10 @@ fn active_model_item_invalid_price() {
         qty: Set(10),
     };
 
-    let result = validate_active::<ItemInput, _>(&am);
-    assert!(result.is_err());
+    assert_eq!(
+        issues(validate_active::<ItemInput, _>(&am)),
+        pairs(&[(".price", "too_small")])
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -196,8 +208,11 @@ fn validate_model_valid() {
         email: "eve@example.com".into(),
     };
 
-    let result = validate_model::<UserInput, _>(&input);
-    assert!(result.is_ok());
+    let user = validate_model::<UserInput, _>(&input).unwrap();
+    assert_eq!(
+        (user.name.as_str(), user.email.as_str()),
+        ("Eve", "eve@example.com")
+    );
 }
 
 #[test]
@@ -213,8 +228,10 @@ fn validate_model_invalid() {
         email: "bad".into(),
     };
 
-    let result = validate_model::<UserInput, _>(&input);
-    assert!(result.is_err());
+    assert_eq!(
+        issues(validate_model::<UserInput, _>(&input)),
+        pairs(&[(".name", "too_small"), (".email", "invalid_string")])
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -227,8 +244,8 @@ fn validate_json_valid() {
         "name": "Frank",
         "email": "frank@example.com",
     });
-    let result = validate_json::<UserInput>(&json);
-    assert!(result.is_ok());
+    let user = validate_json::<UserInput>(&json).unwrap();
+    assert_eq!(user.name, "Frank");
 }
 
 #[test]
@@ -237,8 +254,10 @@ fn validate_json_invalid() {
         "name": "",
         "email": "not-email",
     });
-    let result = validate_json::<UserInput>(&json);
-    assert!(result.is_err());
+    assert_eq!(
+        issues(validate_json::<UserInput>(&json)),
+        pairs(&[(".name", "too_small"), (".email", "invalid_string")])
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +292,10 @@ fn validated_wrapper_invalid() {
         name: "".into(),
         email: "bad".into(),
     };
-    assert!(Validated::<UserInput, _>::new(row).is_err());
+    assert_eq!(
+        issues(Validated::<UserInput, _>::new(row)),
+        pairs(&[(".name", "too_small"), (".email", "invalid_string")])
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +313,15 @@ fn before_save_ok() {
     };
 
     let result: Result<(), sea_orm::DbErr> = before_save::<UserInput, _>(&am);
-    assert!(result.is_ok());
+    result.unwrap();
+    let bad = user_entity::ActiveModel {
+        email: Set("nope".to_owned()),
+        ..am
+    };
+    match before_save::<UserInput, _>(&bad) {
+        Err(sea_orm::DbErr::Custom(msg)) => assert!(msg.contains(".email: "), "{msg}"),
+        other => panic!("expected DbErr::Custom, got {other:?}"),
+    }
 }
 
 #[test]

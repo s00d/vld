@@ -22,7 +22,8 @@
 # - profile `ci` (no debuginfo / no incremental); the default target dir
 #   (target/ci) is removed at the end unless VLD_CI_KEEP_TARGET=1. A caller's
 #   CARGO_TARGET_DIR is never removed.
-# - live redis / rabbitmq tests run when REDIS_URL / AMQP_URL are set
+# - live redis / rabbitmq tests run when REDIS_URL / AMQP_URL are set; with
+#   CI set and a URL missing they fail (VLD_LIVE_OPTIONAL=1 opts out)
 
 set -uo pipefail
 
@@ -161,7 +162,7 @@ group_integrations() {
   step "lapin 4" cargo test -p vld-lapin --no-default-features --features "lapin-4" "${CI[@]}"
   step "ntex 3" cargo test -p vld-ntex --no-default-features --features ntex-3 "${CI[@]}"
   if [[ -n "${VLD_TS_NODE_DIR:-}" ]]; then
-    step "vld-ts node cross-check" cargo test -p vld-ts --test live_findings "${CI[@]}"
+    step "vld-ts node cross-check" cargo test -p vld-ts --test regression "${CI[@]}"
   else
     skip "vld-ts node cross-check (set VLD_TS_NODE_DIR to a dir with zod@3 + valibot@1)"
   fi

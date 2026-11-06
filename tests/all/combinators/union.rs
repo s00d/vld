@@ -43,9 +43,12 @@ fn union3_and_macro() {
 #[test]
 fn literal_union() {
     let s = vld::union(vld::literal("hello"), vld::literal(42i64));
-    assert!(s.parse_value(&json!("hello")).is_ok());
-    assert!(s.parse_value(&json!(42)).is_ok());
-    assert!(s.parse_value(&json!("world")).is_err());
+    assert_eq!(
+        s.parse_value(&json!("hello")).unwrap().left().unwrap(),
+        "hello"
+    );
+    assert_eq!(s.parse_value(&json!(42)).unwrap().right().unwrap(), 42);
+    assert_issue!(parse_err(&s, json!("world")), "", IssueCode::InvalidUnion);
 }
 
 /// The first issue is `invalid_union` (with the received value), followed by

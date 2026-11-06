@@ -6,6 +6,9 @@
 use sea_orm2 as sea_orm;
 use vld_sea::prelude::*;
 
+mod common;
+use common::{issues, pairs};
+
 vld::schema! {
     #[derive(Debug, Clone)]
     pub struct UserInput {
@@ -46,8 +49,15 @@ fn active(email: &str) -> user_entity::ActiveModel {
 
 #[test]
 fn validate_active_and_json() {
-    assert!(validate_active::<UserInput, _>(&active("a@b.co")).is_ok());
-    assert!(validate_active::<UserInput, _>(&active("nope")).is_err());
+    let user = validate_active::<UserInput, _>(&active("a@b.co")).unwrap();
+    assert_eq!(
+        (user.name.as_str(), user.email.as_str()),
+        ("Alice", "a@b.co")
+    );
+    assert_eq!(
+        issues(validate_active::<UserInput, _>(&active("nope"))),
+        pairs(&[(".email", "invalid_string")])
+    );
     let json = active_model_to_json(&active("a@b.co"));
     // f32 maps through its decimal form.
     assert_eq!(json["score"], serde_json::json!(0.1));
@@ -56,8 +66,11 @@ fn validate_active_and_json() {
 #[test]
 fn before_save_helper() {
     let ok: Result<(), sea_orm::DbErr> = before_save::<UserInput, _>(&active("a@b.co"));
-    assert!(ok.is_ok());
-    assert!(before_save::<UserInput, _>(&active("nope")).is_err());
+    ok.unwrap();
+    match before_save::<UserInput, _>(&active("nope")) {
+        Err(sea_orm::DbErr::Custom(msg)) => assert!(msg.contains(".email: "), "{msg}"),
+        other => panic!("expected DbErr::Custom, got {other:?}"),
+    }
 }
 
 #[tokio::test]

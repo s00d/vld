@@ -1,5 +1,6 @@
 use vld::Validate;
 use vld_clap::prelude::*;
+use vld_clap::ErrorSource;
 
 // ---------------------------------------------------------------------------
 // Derive Validate directly on the CLI struct — no separate schema needed
@@ -29,6 +30,35 @@ struct UserCli {
 // Tests: validate — struct with #[derive(Validate)]
 // ---------------------------------------------------------------------------
 
+/// `(path, code)` of every validation issue (panics on `Ok` / serialization errors).
+#[track_caller]
+fn issues<T: std::fmt::Debug>(r: Result<T, VldClapError>) -> Vec<(String, String)> {
+    match r {
+        Err(VldClapError {
+            source: ErrorSource::Validation(e),
+            ..
+        }) => e
+            .issues
+            .iter()
+            .map(|i| {
+                (
+                    i.path.iter().map(ToString::to_string).collect(),
+                    i.code.key().to_string(),
+                )
+            })
+            .collect(),
+        other => panic!("expected a validation error, got {other:?}"),
+    }
+}
+
+/// Owned `(path, code)` pairs for comparing with [`issues`].
+fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
+    expected
+        .iter()
+        .map(|(p, c)| (p.to_string(), c.to_string()))
+        .collect()
+}
+
 #[test]
 fn server_valid() {
     let cli = ServerCli {
@@ -36,7 +66,14 @@ fn server_valid() {
         port: 8080,
         workers: 4,
     };
-    assert!(validate(&cli).is_ok());
+    validate(&cli).unwrap();
+    // Inclusive bounds.
+    let edge = ServerCli {
+        host: "h".into(),
+        port: 65535,
+        workers: 256,
+    };
+    validate(&edge).unwrap();
 }
 
 #[test]
@@ -79,7 +116,9 @@ fn user_valid() {
         name: "Alice".into(),
         age: 30,
     };
-    assert!(validate(&cli).is_ok());
+    validate(&cli).unwrap();
+    let bad = UserCli { age: 151, ..cli };
+    assert_eq!(issues(validate(&bad)), pairs(&[(".age", "too_big")]));
 }
 
 #[test]
@@ -126,8 +165,8 @@ fn with_schema_valid() {
         port: i64,
     }
     let args = Args { port: 3000 };
-    let result = validate_with_schema::<PortSchema, _>(&args);
-    assert!(result.is_ok());
+    let parsed = validate_with_schema::<PortSchema, _>(&args).unwrap();
+    assert_eq!(parsed.port, 3000);
 }
 
 #[test]
@@ -138,7 +177,7 @@ fn with_schema_invalid() {
     }
     let args = Args { port: 0 };
     let result = validate_with_schema::<PortSchema, _>(&args);
-    assert!(result.is_err());
+    assert_eq!(issues(result), pairs(&[(".port", "too_small")]));
 }
 
 // ---------------------------------------------------------------------------
@@ -148,15 +187,25 @@ fn with_schema_invalid() {
 #[test]
 fn json_valid() {
     let json = serde_json::json!({"host": "127.0.0.1", "port": 3000, "workers": 8});
-    let result = validate_json::<ServerCli>(&json);
-    assert!(result.is_ok());
+    let cli = validate_json::<ServerCli>(&json).unwrap();
+    assert_eq!(
+        (cli.host.as_str(), cli.port, cli.workers),
+        ("127.0.0.1", 3000, 8)
+    );
 }
 
 #[test]
 fn json_invalid() {
     let json = serde_json::json!({"host": "", "port": 0, "workers": 999});
     let result = validate_json::<ServerCli>(&json);
-    assert!(result.is_err());
+    assert_eq!(
+        issues(result),
+        pairs(&[
+            (".host", "too_small"),
+            (".port", "too_small"),
+            (".workers", "too_big")
+        ])
+    );
 }
 
 // ---------------------------------------------------------------------------

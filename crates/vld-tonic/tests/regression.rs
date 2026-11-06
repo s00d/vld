@@ -26,17 +26,21 @@ fn metadata_uses_lossless_shared_coercion() {
         #[derive(Debug, Clone)]
         struct Meta {
             x_account: String => vld::string(),
+            x_user: String => vld::string(),
             x_page: i64 => vld::number().int(),
         }
     }
 
+    // Non-canonical ("01234") and canonical ("42") numbers both stay strings.
     let mut req = Request::new(());
     req.metadata_mut()
         .insert("x-account", "01234".parse().unwrap());
+    req.metadata_mut().insert("x-user", "42".parse().unwrap());
     req.metadata_mut().insert("x-page", "3".parse().unwrap());
 
     let meta: Meta = vld_tonic::validate_metadata(&req).unwrap();
     assert_eq!(meta.x_account, "01234");
+    assert_eq!(meta.x_user, "42");
     assert_eq!(meta.x_page, 3);
 }
 

@@ -56,6 +56,32 @@ struct NewUser {
 
 // ========================= Tests: validate_insert ============================
 
+/// `(path, code)` of every issue of a `Validation` error (panics on `Ok`).
+#[track_caller]
+fn issues<T: std::fmt::Debug>(r: Result<T, VldSqlxError>) -> Vec<(String, String)> {
+    match r {
+        Err(VldSqlxError::Validation(e)) => e
+            .issues
+            .iter()
+            .map(|i| {
+                (
+                    i.path.iter().map(ToString::to_string).collect(),
+                    i.code.key().to_string(),
+                )
+            })
+            .collect(),
+        other => panic!("expected a validation error, got {other:?}"),
+    }
+}
+
+/// Owned `(path, code)` pairs for comparing with [`issues`].
+fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
+    expected
+        .iter()
+        .map(|(p, c)| (p.to_string(), c.to_string()))
+        .collect()
+}
+
 #[test]
 fn validate_insert_valid() {
     let user = NewUser {
@@ -63,7 +89,14 @@ fn validate_insert_valid() {
         email: "alice@example.com".into(),
         age: 30,
     };
-    assert!(validate_insert::<UserSchema, _>(&user).is_ok());
+    validate_insert::<UserSchema, _>(&user).unwrap();
+    // Bounds are inclusive.
+    let edge = NewUser {
+        name: "A".into(),
+        email: "a@b.co".into(),
+        age: 150,
+    };
+    validate_insert::<UserSchema, _>(&edge).unwrap();
 }
 
 #[test]
@@ -88,7 +121,10 @@ fn validate_insert_invalid_age() {
         email: "charlie@example.com".into(),
         age: -5,
     };
-    assert!(validate_insert::<UserSchema, _>(&user).is_err());
+    assert_eq!(
+        issues(validate_insert::<UserSchema, _>(&user)),
+        pairs(&[(".age", "too_small")])
+    );
 }
 
 #[test]
@@ -98,7 +134,10 @@ fn validate_insert_empty_name() {
         email: "x@y.com".into(),
         age: 20,
     };
-    assert!(validate_insert::<UserSchema, _>(&user).is_err());
+    assert_eq!(
+        issues(validate_insert::<UserSchema, _>(&user)),
+        pairs(&[(".name", "too_small")])
+    );
 }
 
 #[test]
@@ -124,7 +163,12 @@ fn validate_update_works() {
         email: "updated@example.com".into(),
         age: 40,
     };
-    assert!(validate_update::<UserSchema, _>(&user).is_ok());
+    validate_update::<UserSchema, _>(&user).unwrap();
+    let bad = NewUser { age: 151, ..user };
+    assert_eq!(
+        issues(validate_update::<UserSchema, _>(&bad)),
+        pairs(&[(".age", "too_big")])
+    );
 }
 
 #[test]
@@ -134,7 +178,15 @@ fn validate_row_works() {
         email: "db@example.com".into(),
         age: 50,
     };
-    assert!(validate_row::<UserSchema, _>(&user).is_ok());
+    validate_row::<UserSchema, _>(&user).unwrap();
+    let bad = NewUser {
+        email: "nope".into(),
+        ..user
+    };
+    assert_eq!(
+        issues(validate_row::<UserSchema, _>(&bad)),
+        pairs(&[(".email", "invalid_string")])
+    );
 }
 
 // ========================= Tests: validate_rows ==============================
@@ -153,7 +205,8 @@ fn validate_rows_all_valid() {
             age: 20,
         },
     ];
-    assert!(validate_rows::<UserSchema, _>(&rows).is_ok());
+    validate_rows::<UserSchema, _>(&rows).unwrap();
+    validate_rows::<UserSchema, NewUser>(&[]).unwrap();
 }
 
 #[test]
@@ -194,7 +247,14 @@ fn validated_wrapper_invalid() {
         email: "bad".into(),
         age: -1,
     };
-    assert!(Validated::<UserSchema, _>::new(user).is_err());
+    assert_eq!(
+        issues(Validated::<UserSchema, _>::new(user)),
+        pairs(&[
+            (".name", "too_small"),
+            (".email", "invalid_string"),
+            (".age", "too_small")
+        ])
+    );
 }
 
 #[test]
@@ -232,7 +292,10 @@ fn vld_text_valid() {
 
 #[test]
 fn vld_text_invalid() {
-    assert!(VldText::<EmailFieldSchema>::new("not-an-email").is_err());
+    assert_eq!(
+        issues(VldText::<EmailFieldSchema>::new("not-an-email")),
+        pairs(&[(".value", "invalid_string")])
+    );
 }
 
 #[test]
@@ -257,9 +320,12 @@ fn vld_text_deserialize() {
 
 #[test]
 fn vld_text_deserialize_invalid() {
-    let result: Result<VldText<EmailFieldSchema>, _> =
-        serde_json::from_value(serde_json::json!("bad"));
-    assert!(result.is_err());
+    let err =
+        serde_json::from_value::<VldText<EmailFieldSchema>>(serde_json::json!("bad")).unwrap_err();
+    assert!(
+        err.to_string().starts_with("Validation error: .value: "),
+        "{err}"
+    );
 }
 
 #[test]
@@ -281,8 +347,14 @@ fn vld_int_valid() {
 
 #[test]
 fn vld_int_invalid() {
-    assert!(VldInt::<AgeFieldSchema>::new(-1).is_err());
-    assert!(VldInt::<AgeFieldSchema>::new(200).is_err());
+    assert_eq!(
+        issues(VldInt::<AgeFieldSchema>::new(-1)),
+        pairs(&[(".value", "too_small")])
+    );
+    assert_eq!(
+        issues(VldInt::<AgeFieldSchema>::new(200)),
+        pairs(&[(".value", "too_big")])
+    );
 }
 
 #[test]
@@ -306,8 +378,11 @@ fn vld_int_deserialize() {
 
 #[test]
 fn vld_int_deserialize_invalid() {
-    let result: Result<VldInt<AgeFieldSchema>, _> = serde_json::from_value(serde_json::json!(-5));
-    assert!(result.is_err());
+    let err = serde_json::from_value::<VldInt<AgeFieldSchema>>(serde_json::json!(-5)).unwrap_err();
+    assert!(
+        err.to_string().starts_with("Validation error: .value: "),
+        "{err}"
+    );
 }
 
 // ========================= Tests: VldFloat ===================================
@@ -320,7 +395,10 @@ fn vld_float_valid() {
 
 #[test]
 fn vld_float_invalid() {
-    assert!(VldFloat::<PriceFieldSchema>::new(-0.01).is_err());
+    assert_eq!(
+        issues(VldFloat::<PriceFieldSchema>::new(-0.01)),
+        pairs(&[(".value", "too_small")])
+    );
 }
 
 #[test]
@@ -470,8 +548,10 @@ async fn validate_row_from_db() {
             email: row.get("email"),
             age: row.get("age"),
         };
-        assert!(validate_row::<UserSchema, _>(&user).is_ok());
+        validate_row::<UserSchema, _>(&user).unwrap();
+        assert_eq!((user.name.as_str(), user.age), ("Test", 20));
     }
+    assert_eq!(rows.len(), 1);
 }
 
 #[tokio::test]
@@ -556,8 +636,12 @@ fn vld_float_rejects_nan() {
             pub value: Option<f64> => vld::number().optional(),
         }
     }
-    assert!(VldFloat::<OptFloat>::new(f64::NAN).is_err());
-    assert!(VldFloat::<OptFloat>::new(2.5).is_ok());
+    // NaN serializes as null, which must not satisfy `optional()`.
+    assert_eq!(
+        issues(VldFloat::<OptFloat>::new(f64::NAN)),
+        pairs(&[("", "not_finite")])
+    );
+    assert_eq!(*VldFloat::<OptFloat>::new(2.5).unwrap(), 2.5);
 }
 
 #[tokio::test]

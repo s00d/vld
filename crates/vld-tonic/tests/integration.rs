@@ -1,6 +1,32 @@
 use serde::{Deserialize, Serialize};
 use tonic::Request;
 
+/// `(path, code)` of every issue in an `InvalidArgument` status body.
+#[track_caller]
+fn details(status: &tonic::Status) -> Vec<(String, String)> {
+    assert_eq!(status.code(), tonic::Code::InvalidArgument, "{status:?}");
+    let body: serde_json::Value = serde_json::from_str(status.message()).unwrap();
+    body["details"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| {
+            (
+                d["path"].as_str().unwrap().to_string(),
+                d["code"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect()
+}
+
+/// Owned `(path, code)` pairs for comparing with [`details`].
+fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
+    expected
+        .iter()
+        .map(|(p, c)| (p.to_string(), c.to_string()))
+        .collect()
+}
+
 // ---- impl_validate! + validate/validate_ref ----
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,7 +76,13 @@ fn validate_ref_valid() {
         email: "bob@test.com".into(),
         age: 25,
     };
-    assert!(vld_tonic::validate_ref(&msg).is_ok());
+    vld_tonic::validate_ref(&msg).unwrap();
+    let edge = TestMessage {
+        name: "Bo".into(),
+        email: "b@t.co".into(),
+        age: 150,
+    };
+    vld_tonic::validate_ref(&edge).unwrap();
 }
 
 #[test]
@@ -60,9 +92,15 @@ fn validate_ref_invalid() {
         email: "nope".into(),
         age: -1,
     };
-    let result = vld_tonic::validate_ref(&msg);
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    let status = vld_tonic::validate_ref(&msg).unwrap_err();
+    assert_eq!(
+        details(&status),
+        pairs(&[
+            (".name", "too_small"),
+            (".email", "invalid_string"),
+            (".age", "too_small")
+        ])
+    );
 }
 
 #[test]
@@ -106,7 +144,11 @@ fn validate_with_valid() {
         name: "Alice".into(),
         email: "a@b.com".into(),
     });
-    assert!(vld_tonic::validate_with::<UserSchema, _>(req).is_ok());
+    let msg = vld_tonic::validate_with::<UserSchema, _>(req).unwrap();
+    assert_eq!(
+        (msg.name.as_str(), msg.email.as_str()),
+        ("Alice", "a@b.com")
+    );
 }
 
 #[test]
@@ -126,13 +168,17 @@ fn validate_with_ref_works() {
         name: "Bob".into(),
         email: "b@c.com".into(),
     };
-    assert!(vld_tonic::validate_with_ref::<UserSchema, _>(&msg).is_ok());
+    vld_tonic::validate_with_ref::<UserSchema, _>(&msg).unwrap();
 
     let bad = SimpleMsg {
         name: "".into(),
         email: "x".into(),
     };
-    assert!(vld_tonic::validate_with_ref::<UserSchema, _>(&bad).is_err());
+    let status = vld_tonic::validate_with_ref::<UserSchema, _>(&bad).unwrap_err();
+    assert_eq!(
+        details(&status),
+        pairs(&[(".name", "too_small"), (".email", "invalid_string")])
+    );
 }
 
 // ---- Metadata validation ----
@@ -159,8 +205,11 @@ fn validate_metadata_valid() {
 #[test]
 fn validate_metadata_missing() {
     let req = Request::new(());
-    let result = vld_tonic::validate_metadata::<AuthMeta, _>(&req);
-    assert!(result.is_err());
+    let status = vld_tonic::validate_metadata::<AuthMeta, _>(&req).unwrap_err();
+    assert_eq!(
+        details(&status),
+        pairs(&[(".authorization", "missing_field")])
+    );
 }
 
 #[test]

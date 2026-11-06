@@ -2,6 +2,9 @@ use serde_json::json;
 use vld_schemars::schemars;
 use vld_schemars::*;
 
+mod common;
+use common::{invalid, valid};
+
 vld::schema! {
     #[derive(Debug)]
     pub struct RegAddr {
@@ -29,8 +32,8 @@ fn standalone_root_schema_has_resolvable_refs() {
     // and the validator follows it
     let ok = json!({"name": "Acme", "hq": {"city": "Paris", "zip": "75001"}});
     let bad = json!({"name": "Acme", "hq": {"city": "Paris", "zip": "1"}});
-    assert!(validate_with_schema(&root, &ok).is_ok());
-    assert!(validate_with_schema(&root, &bad).is_err());
+    valid(&root, &ok);
+    invalid(&root, &bad, &[(".hq.zip", "too_small")]);
 }
 
 #[test]
@@ -61,50 +64,47 @@ fn validator_follows_ref_to_nested_struct() {
     let schema = generate_from_schemars::<Outer>();
     let ok = json!({"inner": {"code": "abc"}, "pair": [1, "x"]});
     let bad = json!({"inner": {"code": "a"}, "pair": [1, "x"]});
-    assert!(validate_with_schema(&schema, &ok).is_ok());
-    let err = validate_with_schema(&schema, &bad).unwrap_err();
-    assert_eq!(err.issues[0].path.len(), 2, "{err:?}");
+    valid(&schema, &ok);
+    invalid(&schema, &bad, &[(".inner.code", "too_small")]);
 }
 
 #[test]
 fn validator_enforces_additional_properties_false() {
     let schema = generate_from_schemars::<Outer>();
     let extra = json!({"inner": {"code": "abc"}, "pair": [1, "x"], "extra": 1});
-    let err = validate_with_schema(&schema, &extra).unwrap_err();
-    assert!(matches!(
-        err.issues[0].code,
-        vld::error::IssueCode::UnrecognizedField
-    ));
+    invalid(&schema, &extra, &[(".extra", "unrecognized_field")]);
 }
 
 #[test]
 fn validator_additional_properties_schema() {
     let schema = json!({"type": "object", "additionalProperties": {"type": "integer"}});
-    assert!(validate_with_schema(&schema, &json!({"a": 1})).is_ok());
-    assert!(validate_with_schema(&schema, &json!({"a": "x"})).is_err());
+    valid(&schema, &json!({"a": 1}));
+    invalid(&schema, &json!({"a": "x"}), &[(".a", "invalid_type")]);
 }
 
 #[test]
 fn validator_checks_prefix_items() {
     let schema = generate_from_schemars::<Outer>();
     let bad = json!({"inner": {"code": "abc"}, "pair": ["no", "x"]});
-    assert!(validate_with_schema(&schema, &bad).is_err());
+    invalid(&schema, &bad, &[(".pair[0]", "invalid_type")]);
     let raw = json!({"prefixItems": [{"type": "integer"}], "items": {"type": "string"}});
-    assert!(validate_with_schema(&raw, &json!([1, "a", "b"])).is_ok());
-    assert!(validate_with_schema(&raw, &json!([1, 2])).is_err());
+    valid(&raw, &json!([1, "a", "b"]));
+    invalid(&raw, &json!([1, 2]), &[("[1]", "invalid_type")]);
 }
 
 #[test]
 fn validator_string_length_counts_chars() {
     let schema = json!({"type": "string", "maxLength": 3, "minLength": 3});
-    assert!(validate_with_schema(&schema, &json!("äöü")).is_ok());
+    valid(&schema, &json!("äöü"));
+    invalid(&schema, &json!("äö"), &[("", "too_small")]);
+    invalid(&schema, &json!("äöüß"), &[("", "too_big")]);
 }
 
 #[test]
 fn validator_multiple_of_float_tolerance() {
     let schema = json!({"type": "number", "multipleOf": 0.1});
-    assert!(validate_with_schema(&schema, &json!(0.3)).is_ok());
-    assert!(validate_with_schema(&schema, &json!(0.35)).is_err());
+    valid(&schema, &json!(0.3));
+    invalid(&schema, &json!(0.35), &[("", "multipleOf")]);
 }
 
 #[test]
@@ -112,31 +112,32 @@ fn validator_invalid_pattern_is_error() {
     let schema = json!({"type": "string", "pattern": "(unclosed"});
     let err = validate_with_schema(&schema, &json!("x")).unwrap_err();
     assert!(err.issues[0].message.contains("Invalid pattern"));
+    invalid(&schema, &json!("x"), &[("", "invalid_pattern")]);
 }
 
 #[test]
 fn validator_uri_accepts_any_scheme() {
     let schema = json!({"type": "string", "format": "uri"});
     for ok in ["mailto:a@b.c", "urn:isbn:123", "ftp://x.y", "https://x.y"] {
-        assert!(validate_with_schema(&schema, &json!(ok)).is_ok(), "{ok}");
+        valid(&schema, &json!(ok));
     }
     for bad in ["no-scheme", "1http://x", "http://a b"] {
-        assert!(validate_with_schema(&schema, &json!(bad)).is_err(), "{bad}");
+        invalid(&schema, &json!(bad), &[("", "invalid_string")]);
     }
 }
 
 #[test]
 fn validator_any_of_union() {
     let schema = json!({"anyOf": [{"type": "string"}, {"type": "null"}]});
-    assert!(validate_with_schema(&schema, &json!(null)).is_ok());
-    assert!(validate_with_schema(&schema, &json!(1)).is_err());
+    valid(&schema, &json!(null));
+    invalid(&schema, &json!(1), &[("", "anyOf")]);
 }
 
 #[test]
 fn validator_self_ref_does_not_overflow() {
-    assert!(validate_with_schema(&json!({"$ref": "#"}), &json!(1)).is_err());
+    invalid(&json!({"$ref": "#"}), &json!(1), &[("", "ref_depth")]);
     let dangling = json!({"$ref": "#/$defs/Missing"});
-    assert!(validate_with_schema(&dangling, &json!(1)).is_err());
+    invalid(&dangling, &json!(1), &[("", "invalid_ref")]);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,8 +210,8 @@ fn validator_contains_counts() {
     }
     // Default minContains is 1.
     let s = json!({"contains": {"const": "x"}});
-    assert!(validate_with_schema(&s, &json!(["x"])).is_ok());
-    assert!(validate_with_schema(&s, &json!([])).is_err());
+    valid(&s, &json!(["x"]));
+    invalid(&s, &json!([]), &[("", "contains")]);
 }
 
 #[test]
@@ -219,7 +220,7 @@ fn validator_property_names() {
         vld::string().min(2),
         vld::number(),
     ));
-    assert!(validate_with_schema(&schema, &json!({"ab": 1})).is_ok());
+    valid(&schema, &json!({"ab": 1}));
     let err = validate_with_schema(&schema, &json!({"a": 1})).unwrap_err();
     assert_eq!(
         err.issues[0].path,
@@ -230,39 +231,49 @@ fn validator_property_names() {
 #[test]
 fn validator_format_bounds() {
     let d = json!({"type": "string", "format": "date", "formatMinimum": "2020-01-01", "formatMaximum": "2020-12-31"});
-    assert!(validate_with_schema(&d, &json!("2020-06-01")).is_ok());
-    assert!(validate_with_schema(&d, &json!("2019-12-31")).is_err());
-    assert!(validate_with_schema(&d, &json!("2021-01-01")).is_err());
+    valid(&d, &json!("2020-06-01"));
+    invalid(&d, &json!("2019-12-31"), &[("", "too_small")]);
+    invalid(&d, &json!("2021-01-01"), &[("", "too_big")]);
     let dt =
         json!({"type": "string", "format": "date-time", "formatMinimum": "2020-01-01T10:00:00Z"});
     // 12:00+03:00 is 09:00Z: too early, although lexically larger.
-    assert!(validate_with_schema(&dt, &json!("2020-01-01T12:00:00+03:00")).is_err());
-    assert!(validate_with_schema(&dt, &json!("2020-01-01T10:00:00Z")).is_ok());
-    assert!(validate_with_schema(&dt, &json!("2020-01-01T08:00:00-03:00")).is_ok());
+    invalid(
+        &dt,
+        &json!("2020-01-01T12:00:00+03:00"),
+        &[("", "too_small")],
+    );
+    valid(&dt, &json!("2020-01-01T10:00:00Z"));
+    valid(&dt, &json!("2020-01-01T08:00:00-03:00"));
     let t = json!({"type": "string", "format": "time", "formatMaximum": "10:00:00"});
-    assert!(validate_with_schema(&t, &json!("10:00")).is_ok());
-    assert!(validate_with_schema(&t, &json!("10:00:00.5")).is_err());
+    valid(&t, &json!("10:00"));
+    invalid(&t, &json!("10:00:00.5"), &[("", "too_big")]);
 }
 
 #[test]
 fn validator_compares_large_integers_exactly() {
     let s = json!({"type": "integer", "maximum": 9007199254740992u64});
     // 2^53 + 1 rounds to 2^53 as f64.
-    assert!(validate_with_schema(&s, &json!(9007199254740993u64)).is_err());
+    invalid(&s, &json!(9007199254740993u64), &[("", "too_big")]);
     let s = json!({"type": "integer", "minimum": u64::MAX});
-    assert!(validate_with_schema(&s, &json!(u64::MAX - 1)).is_err());
-    assert!(validate_with_schema(&s, &json!(u64::MAX)).is_ok());
+    invalid(&s, &json!(u64::MAX - 1), &[("", "too_small")]);
+    valid(&s, &json!(u64::MAX));
     let m = json!({"multipleOf": 3});
     // 2^53 + 3 rounds to 2^53 + 4 (a multiple of 3) as f64.
-    assert!(validate_with_schema(&m, &json!(9007199254740995u64)).is_err());
-    assert!(validate_with_schema(&m, &json!(9007199254740993u64)).is_ok());
+    invalid(&m, &json!(9007199254740995u64), &[("", "multipleOf")]);
+    valid(&m, &json!(9007199254740993u64));
 }
 
 #[test]
 fn validator_email_matches_vld() {
     let s = json!({"type": "string", "format": "email"});
-    assert!(vld::schema::VldSchema::parse_value(&vld::string().email(), &json!("a@b")).is_ok());
-    assert!(validate_with_schema(&s, &json!("a@b")).is_ok());
-    assert!(validate_with_schema(&s, &json!("ab")).is_err());
-    assert!(validate_with_schema(&s, &json!("@b")).is_err());
+    let email = vld::string().email();
+    assert_eq!(
+        vld::schema::VldSchema::parse_value(&email, &json!("a@b")).unwrap(),
+        "a@b"
+    );
+    valid(&s, &json!("a@b"));
+    for bad in ["ab", "@b"] {
+        assert!(vld::schema::VldSchema::parse_value(&email, &json!(bad)).is_err());
+        invalid(&s, &json!(bad), &[("", "invalid_string")]);
+    }
 }

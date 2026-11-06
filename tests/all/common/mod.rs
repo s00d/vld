@@ -36,6 +36,20 @@ pub fn codes(err: &VldError) -> Vec<String> {
         .collect()
 }
 
+/// The first issue code of a failed `Result` (panics on `Ok`).
+#[track_caller]
+pub fn code<T: Debug>(r: Result<T, VldError>) -> vld::error::IssueCode {
+    IntoErr::into_err(r).issues[0].code.clone()
+}
+
+/// A serde enum shared by the adapter and keyed-record tests.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    Admin,
+    User,
+}
+
 /// A fresh temporary directory, removed on drop.
 pub fn tempdir() -> tempfile::TempDir {
     tempfile::tempdir().expect("create temp dir")

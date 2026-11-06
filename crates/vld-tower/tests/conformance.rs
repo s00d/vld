@@ -51,6 +51,8 @@ vld_http_common::conformance_suite! {
         json_content_type_case_insensitive,
         json_content_type_bare_param,
         json_content_type_unterminated_quote,
+        json_content_type_json_suffix,
+        json_content_type_json_suffix_params,
         json_malformed,
         json_validation_error,
         json_oversized,

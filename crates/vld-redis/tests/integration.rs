@@ -138,14 +138,22 @@ mod aio {
 }
 
 // ---------------------------------------------------------------------------
-// Live server tests: run when REDIS_URL is set (CI starts a redis service),
-// otherwise print a note and pass.
+// Live server tests: run when REDIS_URL is set (CI starts a redis service).
+// Without it they fail when `CI` is set (unless `VLD_LIVE_OPTIONAL` is set,
+// for CI jobs without the service) and otherwise print a note and pass.
 // ---------------------------------------------------------------------------
 
 fn redis_url() -> Option<String> {
     match std::env::var("REDIS_URL") {
         Ok(url) if !url.is_empty() => Some(url),
         _ => {
+            let in_ci = std::env::var_os("CI").is_some();
+            let optional = std::env::var_os("VLD_LIVE_OPTIONAL").is_some();
+            assert!(
+                !in_ci || optional,
+                "CI is set but REDIS_URL is missing: the live redis tests would silently skip \
+                 (set VLD_LIVE_OPTIONAL=1 in CI jobs without a redis service)"
+            );
             eprintln!("note: REDIS_URL not set, skipping live redis test");
             None
         }

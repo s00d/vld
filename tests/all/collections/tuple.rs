@@ -1,4 +1,4 @@
-use crate::common::{parse_err, paths};
+use crate::common::{code, parse_err, paths};
 use serde_json::json;
 use std::f64::consts::PI;
 use vld::error::{IssueCode, SizeOrigin};
@@ -38,4 +38,38 @@ fn wrong_length_and_element_errors() {
         "",
         IssueCode::InvalidType { .. }
     );
+}
+
+#[test]
+fn tuple_of_twelve() {
+    let n = || vld::number().int();
+    let s = (
+        n(),
+        n(),
+        n(),
+        n(),
+        n(),
+        n(),
+        n(),
+        n(),
+        n(),
+        n(),
+        n(),
+        vld::string(),
+    );
+    let out = s.parse(r#"[1,2,3,4,5,6,7,8,9,10,11,"z"]"#).unwrap();
+    assert_eq!(out.10, 11);
+    assert_eq!(out.11, "z");
+    assert_eq!(
+        code(s.parse("[1,2,3]")),
+        IssueCode::InvalidLength {
+            origin: SizeOrigin::Tuple,
+            expected: 12
+        }
+    );
+    let err = s.parse(r#"[1,2,3,4,5,6,7,8,9,10,11,12]"#).unwrap_err();
+    assert_eq!(err.issues[0].path, vec![PathSegment::Index(11)]);
+
+    let seven = (n(), n(), n(), n(), n(), n(), vld::boolean());
+    assert!(seven.parse("[1,2,3,4,5,6,true]").unwrap().6);
 }

@@ -181,3 +181,37 @@ fn schema_validated_and_into_params_attribute_are_accepted() {
     let lenient = ValidatedRenamed::parse_lenient(r#"{"fullName": "", "score": 101}"#).unwrap();
     assert_eq!(lenient.error_count(), 2);
 }
+
+// ---- parse_coerced: values coerced from text follow the schema ----
+
+vld::schema! {
+    #[derive(Debug)]
+    struct Query {
+        q: String => vld::string(),
+        age: i64 => vld::number().int(),
+        zip: String => vld::string(),
+        tags: Vec<String> => vld::array(vld::string()),
+        ids: Vec<String> => vld::array(vld::string()),
+        flag: String => vld::string(),
+    }
+}
+
+#[test]
+fn parse_coerced_follows_schema() {
+    let v = json!({"q": 123, "age": 30, "zip": "01234", "tags": "a", "ids": 7, "flag": true});
+    let q: Query = vld::schema::parse_coerced(&v).unwrap();
+    assert_eq!(q.q, "123");
+    assert_eq!(q.age, 30);
+    assert_eq!(q.zip, "01234");
+    assert_eq!(q.tags, ["a"]);
+    assert_eq!(q.ids, ["7"]);
+    assert_eq!(q.flag, "true");
+}
+
+#[test]
+fn parse_coerced_keeps_real_errors() {
+    let v = json!({"q": 1, "age": "abc", "zip": "1", "tags": [], "ids": [], "flag": "x"});
+    let err = vld::schema::parse_coerced::<Query>(&v).unwrap_err();
+    assert_eq!(err.issues.len(), 1);
+    assert!(matches!(err.issues[0].code, IssueCode::InvalidType { .. }));
+}

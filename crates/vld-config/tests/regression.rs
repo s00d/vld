@@ -46,7 +46,21 @@ fn figment_parsed_env_fits_string_fields() {
 #[test]
 fn from_value_stays_strict() {
     let v = serde_json::json!({"host": 12345, "port": 1, "tags": []});
-    assert!(vld_config::from_value::<Settings>(&v).is_err());
+    match vld_config::from_value::<Settings>(&v) {
+        Err(vld_config::VldConfigError::Validation(e)) => {
+            assert_eq!(e.issues.len(), 1, "{e}");
+            assert_eq!(e.issues[0].code.key(), "invalid_type");
+            assert_eq!(
+                e.issues[0]
+                    .path
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<String>(),
+                ".host"
+            );
+        }
+        other => panic!("expected a validation error, got {other:?}"),
+    }
 }
 
 /// `from_value_coerced` behaves like `from_config` / `from_figment`.

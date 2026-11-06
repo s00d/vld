@@ -1,7 +1,7 @@
 //! `bytes`, `duration`, `path`, `file`, `ip_network`, `socket_addr`,
 //! `json_value`, `decimal`.
 
-use crate::common::{codes, parse_err, tempdir};
+use crate::common::{code, codes, parse_err, tempdir};
 use serde_json::json;
 use std::time::Duration;
 use vld::error::{FormatKind, IssueCode, SizeOrigin};
@@ -109,7 +109,13 @@ fn bytes_string_modes() {
 
 #[test]
 fn bytes_base64url_rejects_standard_alphabet() {
-    assert!(vld::bytes().base64url().parse_value(&json!("+/8")).is_err());
+    assert_issue!(
+        parse_err(&vld::bytes().base64url(), json!("+/8")),
+        "",
+        IssueCode::InvalidFormat {
+            format: FormatKind::Base64Url
+        }
+    );
 }
 
 // --- duration -----------------------------------------------------------------
@@ -699,4 +705,46 @@ fn decimal_bounds_and_checks() {
     ] {
         assert!(schema.parse_value(&json!(bad)).is_err(), "{bad}");
     }
+}
+
+#[test]
+fn duration_fractional_seconds() {
+    use std::time::Duration;
+    let d = vld::duration();
+    assert_eq!(d.parse("1.5").unwrap(), Duration::from_millis(1500));
+    assert_eq!(d.parse("0").unwrap(), Duration::ZERO);
+    assert_eq!(d.parse("3").unwrap(), Duration::from_secs(3));
+    assert_eq!(d.parse(r#""1.5s""#).unwrap(), Duration::from_millis(1500));
+    assert_eq!(d.parse(r#""PT0.25S""#).unwrap(), Duration::from_millis(250));
+    assert_eq!(d.parse(r#""10s""#).unwrap(), Duration::from_secs(10));
+    assert_eq!(d.parse(r#""250ms""#).unwrap(), Duration::from_millis(250));
+    assert_eq!(
+        code(d.parse("-1")),
+        IssueCode::TooSmall {
+            origin: SizeOrigin::Duration,
+            minimum: json!(0),
+            inclusive: true
+        }
+    );
+    assert_eq!(code(d.parse("-0.5")).key(), "too_small");
+    for bad in [
+        r#""-1s""#,
+        r#""+1s""#,
+        r#""1e3s""#,
+        r#""infs""#,
+        r#""NaNs""#,
+        r#""1.2.3s""#,
+        r#"".s""#,
+        r#""s""#,
+        r#""1.5ms""#,
+        r#""PTS""#,
+        "true",
+        "1e300",
+    ] {
+        assert_eq!(code(d.parse(bad)).key(), "invalid_type", "{bad}");
+    }
+    let bounded = vld::duration().min(Duration::from_millis(500)).max_secs(2);
+    assert!(bounded.parse("0.5").is_ok());
+    assert!(bounded.parse("0.499").is_err());
+    assert!(bounded.parse("2.001").is_err());
 }

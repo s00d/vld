@@ -33,7 +33,8 @@ macro_rules! edge_suite {
                     "9999-12-30T22:00:01Z",
                     "0000-01-01T00:30:00+01:00",
                 ] {
-                    assert!(s.parse_value(&json!(bad)).is_err(), "{bad}");
+                    let err = s.parse_value(&json!(bad)).unwrap_err();
+                    assert_eq!(crate::common::codes(&err), ["invalid_date"], "{bad}");
                 }
                 for ok in [
                     "9999-12-30T22:00:00.999999999Z",
@@ -41,13 +42,17 @@ macro_rules! edge_suite {
                     "0000-01-01T00:00:00Z",
                     "0000-01-01T00:30:00-01:00",
                 ] {
-                    assert!(s.parse_value(&json!(ok)).is_ok(), "{ok}");
+                    if let Err(e) = s.parse_value(&json!(ok)) {
+                        panic!("{ok} rejected: {e}");
+                    }
                 }
                 // Naive input shifted past either end by the naive offset.
                 let n = vld::$backend::datetime().naive_timezone_offset(-5 * 3600);
-                assert!(n.parse_value(&json!("9999-12-31T23:00:00")).is_err());
+                let err = n.parse_value(&json!("9999-12-31T23:00:00")).unwrap_err();
+                assert_eq!(crate::common::codes(&err), ["invalid_date"]);
                 let n = vld::$backend::datetime().naive_timezone_offset(3600);
-                assert!(n.parse_value(&json!("0000-01-01T00:00:00")).is_err());
+                let err = n.parse_value(&json!("0000-01-01T00:00:00")).unwrap_err();
+                assert_eq!(crate::common::codes(&err), ["invalid_date"]);
             }
         }
     };
@@ -520,9 +525,14 @@ fn f37_impl_rules_serialize_error() {
 #[test]
 fn f22_discriminator_numeric_equality() {
     let s = vld::discriminated_union("v").variant(1, vld::object().field("v", vld::number()));
-    assert!(s.parse(r#"{"v": 1.0}"#).is_ok());
-    assert!(s.parse(r#"{"v": 1}"#).is_ok());
-    assert!(s.parse(r#"{"v": 2}"#).is_err());
+    // 1.0 and 1 both select variant 1 (numeric, not textual, equality).
+    for input in [r#"{"v": 1.0}"#, r#"{"v": 1}"#] {
+        let out = s.parse(input).unwrap();
+        assert_eq!(out.get("v"), Some(&json!(1.0)), "{input}");
+    }
+    let err = s.parse(r#"{"v": 2}"#).unwrap_err();
+    assert_eq!(crate::common::codes(&err), ["invalid_discriminator"]);
+    assert_eq!(crate::common::paths(&err), [".v"]);
 }
 
 // 35. Literals of every integer type and f32.
@@ -551,7 +561,7 @@ fn f13_iso_datetime_grammar() {
         "2024-01-15T10:30:00.5+02:00",
         "2024-01-15T10:30:00",
     ] {
-        assert!(s.parse_value(&json!(ok)).is_ok(), "{ok}");
+        assert_eq!(s.parse_value(&json!(ok)).unwrap(), ok);
         #[cfg(feature = "chrono")]
         assert!(
             vld::chrono::datetime().parse_value(&json!(ok)).is_ok(),
@@ -563,12 +573,15 @@ fn f13_iso_datetime_grammar() {
         "2024-01-15T10:30",
         "2024-01-15 10:30:00Z",
     ] {
-        assert!(s.parse_value(&json!(bad)).is_err(), "{bad}");
+        let err = s.parse_value(&json!(bad)).unwrap_err();
+        assert_eq!(crate::common::codes(&err), ["invalid_string"], "{bad}");
         #[cfg(feature = "chrono")]
-        assert!(
-            vld::chrono::datetime().parse_value(&json!(bad)).is_err(),
-            "{bad}"
-        );
+        {
+            let err = vld::chrono::datetime()
+                .parse_value(&json!(bad))
+                .unwrap_err();
+            assert_eq!(crate::common::codes(&err), ["invalid_date"], "{bad}");
+        }
     }
 }
 

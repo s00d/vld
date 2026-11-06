@@ -128,7 +128,21 @@ fn validate_valid() {
         name: "Alice".into(),
         email: "alice@example.com".into(),
     };
-    assert!(validate::<UserSchema, _>(&args).is_ok());
+    validate::<UserSchema, _>(&args).unwrap();
+    // Both name bounds are inclusive.
+    for name in ["Al", &"x".repeat(50)] {
+        let args = UserArgs {
+            name: name.into(),
+            email: "a@b.co".into(),
+        };
+        validate::<UserSchema, _>(&args).unwrap();
+    }
+    let long = UserArgs {
+        name: "x".repeat(51),
+        email: "a@b.co".into(),
+    };
+    let err = validate::<UserSchema, _>(&long).unwrap_err();
+    assert_eq!(err.error_fields(), ["name"]);
 }
 
 #[test]
@@ -166,7 +180,10 @@ fn validate_multiple_errors() {
 #[test]
 fn validate_value_ok() {
     let json = serde_json::json!({ "name": "Alice", "email": "a@b.com" });
-    assert!(vld_dioxus::validate_value::<UserSchema>(&json).is_ok());
+    vld_dioxus::validate_value::<UserSchema>(&json).unwrap();
+    let err = vld_dioxus::validate_value::<UserSchema>(&serde_json::json!({ "name": "Alice" }))
+        .unwrap_err();
+    assert_eq!(err.error_fields(), ["email"]);
 }
 
 #[test]
@@ -236,7 +253,16 @@ fn validate_args_macro_valid() {
         email => vld::string().email(),
         age   => vld::number().int().min(0).max(150),
     };
-    assert!(result.is_ok());
+    result.unwrap();
+
+    // Inclusive bounds.
+    let name = "Al".to_string();
+    let age: i64 = 150;
+    vld_dioxus::validate_args! {
+        name  => vld::string().min(2).max(50),
+        age   => vld::number().int().min(0).max(150),
+    }
+    .unwrap();
 }
 
 #[test]
@@ -310,7 +336,16 @@ fn shared_schema_server_side() {
         name  => name_schema(),
         email => email_schema(),
     };
-    assert!(result.is_ok());
+    result.unwrap();
+
+    // The same schemas reject on the server what the client would reject.
+    let name = "x".repeat(51);
+    let err = vld_dioxus::validate_args! {
+        name  => name_schema(),
+        email => email_schema(),
+    }
+    .unwrap_err();
+    assert_eq!(err.error_fields(), ["name"]);
 }
 
 #[test]
