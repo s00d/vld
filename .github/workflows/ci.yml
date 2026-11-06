@@ -1,7 +1,7 @@
 name: CI
 
 # Every step is a `just` recipe (see justfile), so CI and local runs are the same commands.
-# Push / PR: one job. Weekly and on demand (Actions -> CI -> Run workflow): the slow or
+# Push / PR: one job. Before a release, by hand (Actions -> CI -> Run workflow): the slow or
 # rarely-breaking checks (MSRV toolchains, Windows/macOS, minimal versions, wasm, vld
 # feature pairs, latest stable clippy).
 
@@ -10,8 +10,6 @@ on:
     branches: [master, main]
   pull_request:
     branches: [master, main]
-  schedule:
-    - cron: "0 3 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -24,7 +22,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   # Pinned so new clippy lints / rustdoc checks cannot break CI unannounced; the
-  # weekly latest-stable step warns about them early. Bump deliberately.
+  # pre-release latest-stable step warns about them early. Bump deliberately.
   RUST_TOOLCHAIN: "1.99.1"
 
 jobs:
@@ -72,7 +70,7 @@ jobs:
 
   extended:
     name: Extended
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -106,7 +104,7 @@ jobs:
   # Path / file containment (ZPath::within, ZFile::within) is OS-sensitive.
   os:
     name: vld on ${{ matrix.os }}
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:

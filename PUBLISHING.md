@@ -16,8 +16,9 @@ gh auth login          # for the GitHub release
 1. Add `## [Unreleased]` at the top of `CHANGELOG.md` and write the notes under it (Breaking
    changes / Migration / Added / Changed / Fixed / Security / Removed). The
    release stops if that section is empty: it is never regenerated from git.
-2. Make sure `main` is green in CI, and run the weekly checks once by hand
-   (Actions → CI → Run workflow: MSRV, minimal versions, Windows / macOS).
+2. Make sure `main` is green in CI, then run the pre-release checks
+   (Actions → CI → Run workflow, or `gh workflow run ci.yml`: MSRV, minimal
+   versions, wasm, Windows / macOS) and wait for them to pass.
 3. Dry run, then release (`minor` for 0.x breaking releases, `patch` for fixes):
 
    ```sh
