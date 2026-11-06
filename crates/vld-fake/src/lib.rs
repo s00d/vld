@@ -52,6 +52,9 @@ mod constraints;
 mod dict;
 mod regex_gen;
 
+#[doc(hidden)]
+pub use vld as __vld;
+
 use dict::*;
 use rand::Rng;
 use rand::RngExt;
@@ -2373,7 +2376,7 @@ macro_rules! impl_fake {
                 $crate::parse_or_panic(&$crate::fake_value_seeded(&schema, seed))
             }
 
-            fn try_fake() -> Result<Self, ::vld::error::VldError> {
+            fn try_fake() -> Result<Self, $crate::__vld::error::VldError> {
                 $crate::try_fake_parsed::<$ty>(&$crate::__fake_schema!($ty))
             }
         }
