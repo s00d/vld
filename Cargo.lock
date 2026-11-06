@@ -9676,7 +9676,7 @@ dependencies = [
 
 [[package]]
 name = "vld-integration-common"
-version = "0.4.6"
+version = "0.4.7"
 dependencies = [
  "serde",
  "serde_json",
