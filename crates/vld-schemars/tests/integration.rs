@@ -3,6 +3,9 @@ use vld::openapi::JsonSchema;
 use vld_schemars::schemars;
 use vld_schemars::*;
 
+mod common;
+use common::{invalid, pairs, valid};
+
 // ========================= Schemas ===========================================
 
 vld::schema! {
@@ -323,8 +326,12 @@ fn validate_with_schema_valid_object() {
             "age":  { "type": "integer", "minimum": 0, "maximum": 150 }
         }
     });
-    let value = json!({"name": "Alice", "age": 30});
-    assert!(vld_schemars::validate_with_schema(&schema, &value).is_ok());
+    valid(&schema, &json!({"name": "Alice", "age": 30}));
+    invalid(
+        &schema,
+        &json!({"name": "", "age": 151}),
+        &[(".age", "too_big"), (".name", "too_small")], // properties in key order
+    );
 }
 
 #[test]
@@ -337,78 +344,81 @@ fn validate_with_schema_missing_required() {
     let value = json!({});
     let err = vld_schemars::validate_with_schema(&schema, &value).unwrap_err();
     assert!(err.issues.iter().any(|i| i.message.contains("name")));
+    invalid(&schema, &value, &[(".name", "missing_field")]);
 }
 
 #[test]
 fn validate_with_schema_wrong_type() {
-    let schema = json!({"type": "string"});
-    let value = json!(42);
-    assert!(vld_schemars::validate_with_schema(&schema, &value).is_err());
+    invalid(
+        &json!({"type": "string"}),
+        &json!(42),
+        &[("", "invalid_type")],
+    );
 }
 
 #[test]
 fn validate_with_schema_string_min_length() {
     let schema = json!({"type": "string", "minLength": 3});
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("ab")).is_err());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("abc")).is_ok());
+    invalid(&schema, &json!("ab"), &[("", "too_small")]);
+    valid(&schema, &json!("abc"));
 }
 
 #[test]
 fn validate_with_schema_string_max_length() {
     let schema = json!({"type": "string", "maxLength": 3});
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("abcd")).is_err());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("abc")).is_ok());
+    invalid(&schema, &json!("abcd"), &[("", "too_big")]);
+    valid(&schema, &json!("abc"));
 }
 
 #[test]
 fn validate_with_schema_number_minimum() {
     let schema = json!({"type": "number", "minimum": 10});
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(5)).is_err());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(10)).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(15)).is_ok());
+    invalid(&schema, &json!(5), &[("", "too_small")]);
+    valid(&schema, &json!(10));
+    valid(&schema, &json!(15));
 }
 
 #[test]
 fn validate_with_schema_number_maximum() {
     let schema = json!({"type": "number", "maximum": 100});
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(150)).is_err());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(100)).is_ok());
+    invalid(&schema, &json!(150), &[("", "too_big")]);
+    valid(&schema, &json!(100));
 }
 
 #[test]
 fn validate_with_schema_exclusive_min_max() {
     let schema = json!({"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 10});
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(0)).is_err());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(10)).is_err());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(5)).is_ok());
+    invalid(&schema, &json!(0), &[("", "too_small")]);
+    invalid(&schema, &json!(10), &[("", "too_big")]);
+    valid(&schema, &json!(5));
 }
 
 #[test]
 fn validate_with_schema_string_pattern() {
     let schema = json!({"type": "string", "pattern": "^[a-z]+$"});
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("hello")).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("Hello123")).is_err());
+    valid(&schema, &json!("hello"));
+    invalid(&schema, &json!("Hello123"), &[("", "invalid_string")]);
 }
 
 #[test]
 fn validate_with_schema_string_format_email() {
     let schema = json!({"type": "string", "format": "email"});
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("user@example.com")).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("not-email")).is_err());
+    valid(&schema, &json!("user@example.com"));
+    invalid(&schema, &json!("not-email"), &[("", "invalid_string")]);
 }
 
 #[test]
 fn validate_with_schema_enum() {
     let schema = json!({"enum": ["red", "green", "blue"]});
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("red")).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("yellow")).is_err());
+    valid(&schema, &json!("red"));
+    invalid(&schema, &json!("yellow"), &[("", "enum")]);
 }
 
 #[test]
 fn validate_with_schema_array_min_items() {
     let schema = json!({"type": "array", "minItems": 2});
-    assert!(vld_schemars::validate_with_schema(&schema, &json!([1])).is_err());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!([1, 2])).is_ok());
+    invalid(&schema, &json!([1]), &[("", "too_small")]);
+    valid(&schema, &json!([1, 2]));
 }
 
 #[test]
@@ -417,8 +427,8 @@ fn validate_with_schema_array_items() {
         "type": "array",
         "items": {"type": "integer", "minimum": 0}
     });
-    assert!(vld_schemars::validate_with_schema(&schema, &json!([1, 2, 3])).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!([1, -1, 3])).is_err());
+    valid(&schema, &json!([1, 2, 3]));
+    invalid(&schema, &json!([1, -1, 3]), &[("[1]", "too_small")]);
 }
 
 #[test]
@@ -436,19 +446,23 @@ fn validate_with_schema_nested_object() {
             }
         }
     });
-    assert!(
-        vld_schemars::validate_with_schema(&schema, &json!({"address": {"city": "NYC"}})).is_ok()
+    valid(&schema, &json!({"address": {"city": "NYC"}}));
+    invalid(
+        &schema,
+        &json!({"address": {"city": ""}}),
+        &[(".address.city", "too_small")],
     );
-    assert!(
-        vld_schemars::validate_with_schema(&schema, &json!({"address": {"city": ""}})).is_err()
+    invalid(
+        &schema,
+        &json!({"address": {}}),
+        &[(".address.city", "missing_field")],
     );
-    assert!(vld_schemars::validate_with_schema(&schema, &json!({"address": {}})).is_err());
 }
 
 #[test]
 fn validate_with_schema_boolean_schema() {
-    assert!(vld_schemars::validate_with_schema(&json!(true), &json!("anything")).is_ok());
-    assert!(vld_schemars::validate_with_schema(&json!(false), &json!("anything")).is_err());
+    valid(&json!(true), &json!("anything"));
+    invalid(&json!(false), &json!("anything"), &[("", "false_schema")]);
 }
 
 #[test]
@@ -459,9 +473,9 @@ fn validate_with_schema_any_of() {
             {"type": "integer"}
         ]
     });
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("hello")).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(42)).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(true)).is_err());
+    valid(&schema, &json!("hello"));
+    valid(&schema, &json!(42));
+    invalid(&schema, &json!(true), &[("", "anyOf")]);
 }
 
 #[test]
@@ -472,8 +486,9 @@ fn validate_with_schema_all_of() {
             {"type": "number", "maximum": 100}
         ]
     });
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(50)).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(150)).is_err());
+    valid(&schema, &json!(50));
+    invalid(&schema, &json!(150), &[("", "too_big")]);
+    invalid(&schema, &json!(-1), &[("", "too_small")]);
 }
 
 #[test]
@@ -481,8 +496,8 @@ fn validate_with_schema_not() {
     let schema = json!({
         "not": {"type": "string"}
     });
-    assert!(vld_schemars::validate_with_schema(&schema, &json!(42)).is_ok());
-    assert!(vld_schemars::validate_with_schema(&schema, &json!("hello")).is_err());
+    valid(&schema, &json!(42));
+    invalid(&schema, &json!("hello"), &[("", "not")]);
 }
 
 // ========================= validate_with_schemars ============================
@@ -490,13 +505,14 @@ fn validate_with_schema_not() {
 #[test]
 fn validate_with_schemars_valid() {
     let schema = vld_to_schemars(&json!({"type": "string", "minLength": 2}));
-    assert!(vld_schemars::validate_with_schemars(&schema, &json!("hello")).is_ok());
+    vld_schemars::validate_with_schemars(&schema, &json!("hello")).unwrap();
 }
 
 #[test]
 fn validate_with_schemars_invalid() {
     let schema = vld_to_schemars(&json!({"type": "string", "minLength": 5}));
-    assert!(vld_schemars::validate_with_schemars(&schema, &json!("hi")).is_err());
+    let err = vld_schemars::validate_with_schemars(&schema, &json!("hi")).unwrap_err();
+    assert_eq!(pairs(&err), [("".to_string(), "too_small".to_string())]);
 }
 
 // ========================= impl_vld_parse! + SchemarsValidate ================
@@ -532,14 +548,27 @@ fn impl_vld_parse_valid() {
 fn impl_vld_parse_missing_field() {
     use vld::schema::VldParse;
     let json = json!({"name": "Widget"});
-    assert!(Item::vld_parse_value(&json).is_err());
+    let err = Item::vld_parse_value(&json).unwrap_err();
+    assert_eq!(
+        pairs(&err),
+        [(".qty".to_string(), "missing_field".to_string())]
+    );
 }
 
 #[test]
 fn impl_vld_parse_wrong_type() {
     use vld::schema::VldParse;
     let json = json!({"name": 123, "qty": "not a number"});
-    assert!(Item::vld_parse_value(&json).is_err());
+    let err = Item::vld_parse_value(&json).unwrap_err();
+    let got = pairs(&err);
+    assert!(
+        got.contains(&(".name".into(), "invalid_type".into())),
+        "{got:?}"
+    );
+    assert!(
+        got.contains(&(".qty".into(), "invalid_type".into())),
+        "{got:?}"
+    );
 }
 
 // --- SchemarsValidate::vld_validate (validate existing instance) ---
@@ -551,7 +580,7 @@ fn schemars_validate_valid_instance() {
         name: "Alice".into(),
         age: 30,
     };
-    assert!(user.vld_validate().is_ok());
+    user.vld_validate().unwrap();
 }
 
 #[test]
@@ -561,7 +590,7 @@ fn schemars_validate_item() {
         name: "Widget".into(),
         qty: 5,
     };
-    assert!(item.vld_validate().is_ok());
+    item.vld_validate().unwrap();
 }
 
 // --- SchemarsValidate::vld_validate_json (validate JSON against type's schema) ---
@@ -570,21 +599,34 @@ fn schemars_validate_item() {
 fn schemars_validate_json_valid() {
     use vld_schemars::SchemarsValidate;
     let json = json!({"name": "Alice", "age": 30});
-    assert!(User::vld_validate_json(&json).is_ok());
+    User::vld_validate_json(&json).unwrap();
 }
 
 #[test]
 fn schemars_validate_json_missing_field() {
     use vld_schemars::SchemarsValidate;
     let json = json!({"name": "Alice"});
-    assert!(User::vld_validate_json(&json).is_err());
+    let err = User::vld_validate_json(&json).unwrap_err();
+    assert_eq!(
+        pairs(&err),
+        [(".age".to_string(), "missing_field".to_string())]
+    );
 }
 
 #[test]
 fn schemars_validate_json_wrong_type() {
     use vld_schemars::SchemarsValidate;
     let json = json!({"name": 123, "age": "not a number"});
-    assert!(User::vld_validate_json(&json).is_err());
+    let err = User::vld_validate_json(&json).unwrap_err();
+    let got = pairs(&err);
+    assert!(
+        got.contains(&(".name".into(), "invalid_type".into())),
+        "{got:?}"
+    );
+    assert!(
+        got.contains(&(".age".into(), "invalid_type".into())),
+        "{got:?}"
+    );
 }
 
 // --- SchemarsValidate::vld_parse (validate + deserialize) ---
@@ -602,7 +644,15 @@ fn schemars_vld_parse_valid() {
 fn schemars_vld_parse_invalid() {
     use vld_schemars::SchemarsValidate;
     let json = json!({"name": "Bob"});
-    assert!(User::vld_parse(&json).is_err());
+    match User::vld_parse(&json) {
+        Err(VldSchemarsError::Validation(err)) => {
+            assert_eq!(
+                pairs(&err),
+                [(".age".to_string(), "missing_field".to_string())]
+            );
+        }
+        other => panic!("expected a validation error, got {other:?}"),
+    }
 }
 
 #[test]
