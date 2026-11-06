@@ -2,66 +2,8 @@ use serde_json::{json, Value};
 use vld::prelude::*;
 use vld_fake::{fake_value_seeded, FakeData, FakeGen};
 
-/// Every random draw in this file is seeded: `VLD_FAKE_SEED` (default fixed)
-/// mixed with the test name, so each test sees the same sequence on every run.
-/// A failing test prints the base seed and the seed of its last draw.
-mod seed {
-    use std::cell::Cell;
-    use std::sync::Once;
-
-    thread_local! {
-        static NEXT: Cell<Option<u64>> = const { Cell::new(None) };
-        static LAST: Cell<Option<u64>> = const { Cell::new(None) };
-    }
-
-    pub fn base() -> u64 {
-        std::env::var("VLD_FAKE_SEED")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0x5eed_f00d)
-    }
-
-    /// FNV-1a of the test (thread) name.
-    fn name_hash() -> u64 {
-        let name = std::thread::current().name().unwrap_or("").to_string();
-        name.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
-            (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-        })
-    }
-
-    fn install_hook() {
-        static ONCE: Once = Once::new();
-        ONCE.call_once(|| {
-            let prev = std::panic::take_hook();
-            std::panic::set_hook(Box::new(move |info| {
-                if let Some(last) = LAST.with(Cell::get) {
-                    eprintln!(
-                        "vld-fake: VLD_FAKE_SEED={} (last draw: fake_value_seeded(.., {last}))",
-                        base()
-                    );
-                }
-                prev(info)
-            }));
-        });
-    }
-
-    pub fn next() -> u64 {
-        install_hook();
-        NEXT.with(|n| {
-            let cur = n.get().unwrap_or_else(|| base() ^ name_hash());
-            n.set(Some(
-                cur.wrapping_mul(6_364_136_223_846_793_005)
-                    .wrapping_add(1_442_695_040_888_963_407),
-            ));
-            LAST.with(|l| l.set(Some(cur)));
-            cur
-        })
-    }
-}
-
-fn fake_value(schema: &Value) -> Value {
-    fake_value_seeded(schema, seed::next())
-}
+mod common;
+use common::{fake_value, seed};
 
 fn fake_many(schema: &Value, count: usize) -> Vec<Value> {
     (0..count).map(|_| fake_value(schema)).collect()
@@ -897,8 +839,27 @@ fn deeply_nested_stops_at_depth_limit() {
             })
         }
     }
-    let schema = deep_schema(20);
-    let _val = fake_value(&schema);
+    /// Objects along the `child` chain, and the value where the chain ends.
+    fn chain(mut v: &Value) -> (usize, &Value) {
+        let mut objects = 0;
+        while let Some(child) = v.get("child") {
+            objects += 1;
+            v = child;
+        }
+        (objects, v)
+    }
+
+    // Shallow schemas are generated completely.
+    let full = fake_value(&deep_schema(5));
+    let (objects, leaf) = chain(&full);
+    assert_eq!(objects, 5, "{full}");
+    assert!(leaf.is_string(), "{full}");
+
+    // Recursion stops after 13 levels (MAX_DEPTH = 12): the 14th is null.
+    let cut = fake_value(&deep_schema(20));
+    let (objects, leaf) = chain(&cut);
+    assert_eq!(objects, 13, "{cut}");
+    assert!(leaf.is_null(), "{cut}");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

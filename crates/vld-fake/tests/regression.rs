@@ -1,13 +1,17 @@
 //! Regression tests for the live end-to-end findings (0.5.0): 1000 fake
 //! values per schema must all pass the schema they were generated from.
+//! Draws are seeded (see `common::seed`; override with `VLD_FAKE_SEED`).
 
 use vld::json_schema::JsonSchema;
 use vld::schema::VldSchema;
 
+mod common;
+use common::fake_value;
+
 fn check<S: VldSchema + JsonSchema>(name: &str, schema: S) {
     let js = schema.json_schema();
     for _ in 0..1000 {
-        let v = vld_fake::fake_value(&js);
+        let v = fake_value(&js);
         if let Err(e) = schema.parse_value(&v) {
             panic!("{name}: {v} -> {e} (schema {js})");
         }
@@ -76,7 +80,7 @@ fn check_n<S: VldSchema + JsonSchema>(name: &str, schema: S, patch: serde_json::
         }
     }
     for _ in 0..300 {
-        let v = vld_fake::fake_value(&js);
+        let v = fake_value(&js);
         if let Err(e) = schema.parse_value(&v) {
             panic!("{name}: {v} -> {e} (schema {js})");
         }
@@ -284,7 +288,7 @@ fn any_of_branches_keep_sibling_constraints() {
     });
     let schema = vld::chrono::datetime().past();
     for _ in 0..300 {
-        let v = vld_fake::fake_value(&js);
+        let v = fake_value(&js);
         assert!(schema.parse_value(&v).is_ok(), "{v}");
     }
     let bounded = serde_json::json!({
@@ -295,7 +299,7 @@ fn any_of_branches_keep_sibling_constraints() {
     });
     let d = vld::chrono::date().min("2020-03-01").max("2020-03-02");
     for _ in 0..100 {
-        let v = vld_fake::fake_value(&bounded);
+        let v = fake_value(&bounded);
         assert!(d.parse_value(&v).is_ok(), "{v}");
     }
 }
@@ -305,7 +309,7 @@ fn any_of_branches_keep_sibling_constraints() {
 fn ulid_first_char_fits_128_bits() {
     let js = serde_json::json!({"type": "string", "format": "ulid"});
     for _ in 0..300 {
-        let v = vld_fake::fake_value(&js);
+        let v = fake_value(&js);
         let c = v.as_str().unwrap().as_bytes()[0];
         assert!((b'0'..=b'7').contains(&c), "{v}");
     }
