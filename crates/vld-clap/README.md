@@ -35,7 +35,7 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
-    validate_or_exit(&cli); // prints "--port: Value must be at least 1" etc., exits with 2
+    validate_or_exit(&cli); // prints "--port: Number must be at least 1" etc., exits with 2
     println!("{cli:?}");
 }
 ```

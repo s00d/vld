@@ -30,7 +30,7 @@
 //! let err = vld_clap::validate_cli(&cli).unwrap_err();
 //! assert_eq!(
 //!     err.message,
-//!     "Invalid arguments:\n       --email: Invalid email address\n       --port: Value must be at least 1",
+//!     "Invalid arguments:\n       --email: Invalid email address\n       --port: Number must be at least 1",
 //! );
 //! // In `main`: `vld_clap::validate_or_exit(&cli)` prints this and exits with code 2.
 //! ```
