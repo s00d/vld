@@ -1,22 +1,43 @@
-//! # vld-dioxus — Dioxus integration for the `vld` validation library
+//! # vld-dioxus — Dioxus helpers for `vld`
 //!
-//! Shared validation for Dioxus server functions and WASM clients.
-//! Define validation rules once, use them on both the server and the browser.
+//! Shared validation for Dioxus server functions and WASM clients: define the
+//! rules once, check them on the server and in the browser.
 //!
-//! **Zero dependency on `dioxus`** — works with any Dioxus version (0.5, 0.6, 0.7+).
-//! Compatible with WASM and native targets.
+//! No dependency on `dioxus`, so any Dioxus version works; builds for native
+//! and WASM targets.
 //!
-//! ## Key Features
-//!
-//! | Feature | Description |
+//! | Item | Use |
 //! |---|---|
-//! | [`validate_args!`] | Inline validation of server function arguments |
-//! | [`validate`] / [`validate_value`] | Validate a serializable value against a schema |
-//! | [`check_field`] | Single-field validation for reactive UI |
-//! | [`check_all_fields`] | Multi-field validation returning per-field errors |
-//! | [`VldServerError`] | Serializable error type for server→client error transport |
+//! | [`validate_args!`] | Validate server-function arguments inline |
+//! | [`validate`] / [`validate_value`] | Validate a value against a schema type |
+//! | [`check_field`] / [`check_field_all`] | Single-field validation for reactive UI |
+//! | [`check_all_fields`] | Whole-form validation returning per-field errors |
+//! | [`VldServerError`] | Serializable error for server → client transport |
 //!
-//! ## Quick Example
+//! Field paths have no leading dot (`name`, `user.email`, `items[0]`).
+//!
+//! ```
+//! fn name_schema() -> vld::primitives::ZString { vld::string().min(2).max(50) }
+//! fn email_schema() -> vld::primitives::ZString { vld::string().email() }
+//!
+//! let name = "A".to_string();
+//! let email = "bad".to_string();
+//! let err = vld_dioxus::validate_args! {
+//!     name  => name_schema(),
+//!     email => email_schema(),
+//! }
+//! .unwrap_err();
+//! assert_eq!(err.error_fields(), ["name", "email"]);
+//!
+//! // The client side gets it back from `ServerFnError`'s message:
+//! let shown = format!("error running server function: {err}");
+//! let back = vld_dioxus::VldServerError::from_server_message(&shown).unwrap();
+//! assert!(back.has_field_error("email"));
+//!
+//! assert!(vld_dioxus::check_field(&"Alice".to_string(), &name_schema()).is_none());
+//! ```
+//!
+//! In an app:
 //!
 //! ```ignore
 //! // Shared validation rules (used on server AND client)
@@ -43,6 +64,8 @@
 //!     // ... render form with error display
 //! }
 //! ```
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/ui/dioxus>
 
 pub use vld_integration_common::form::{
     check_all_fields, check_field, check_field_all, validate, validate_value, FieldError,

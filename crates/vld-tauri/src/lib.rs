@@ -1,22 +1,23 @@
-//! # vld-tauri — Tauri validation for `vld`
+//! # vld-tauri — Tauri IPC validation for `vld`
 //!
-//! Provides helpers for validating [Tauri](https://tauri.app/) IPC commands,
-//! events, state, plugin config and channel messages using `vld` schemas.
+//! Validate [Tauri](https://tauri.app/) IPC commands, events, state, plugin
+//! config and channel messages with `vld` schemas.
 //!
-//! **This crate does not depend on `tauri` itself** — it only needs `vld`,
-//! `serde` and `serde_json`, keeping the dependency tree minimal.
-//! You add `tauri` as a separate dependency in your app.
+//! No dependency on `tauri`: the crate only needs `vld`, `serde` and
+//! `serde_json`; add `tauri` to your app separately.
 //!
-//! # Overview
-//!
-//! | Item | Use case |
-//! |------|----------|
-//! | [`validate`] | General-purpose JSON validation |
-//! | [`validate_args`] | Validate a raw JSON string |
-//! | `validate_event` / `validate_state` / `validate_channel_message` / `validate_plugin_config` | Deprecated aliases of [`validate`] |
+//! | Item | Use |
+//! |------|-----|
+//! | [`validate`] | Validate a `serde_json::Value` (commands, events, state, config, channel messages) |
+//! | [`validate_args`] | Parse and validate a raw JSON string |
 //! | [`VldTauriError`] | Serializable error for `#[tauri::command]` results |
-//! | [`VldPayload<T>`] | Auto-validating `Deserialize` wrapper |
-//! | [`VldEvent<T>`] | Auto-validating `Deserialize` wrapper for events |
+//! | [`VldPayload<T>`] | `Deserialize` wrapper that validates |
+//! | [`VldEvent<T>`] | Type alias of [`VldPayload<T>`] for event payloads |
+//! | `validate_event` / `validate_state` / `validate_channel_message` / `validate_plugin_config` | Deprecated aliases of [`validate`] |
+//!
+//! Issue paths have no leading dot (`name`, `user.email`, `items[0]`).
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/ui/tauri>
 //!
 //! # Usage patterns
 //!
@@ -46,8 +47,9 @@
 //! ## IPC commands — auto-validated payload
 //!
 //! `VldPayload<T>` implements `Deserialize` and validates during
-//! deserialization. If validation fails, Tauri reports a deserialization
-//! error with the full validation message.
+//! deserialization. If validation fails, Tauri reports an argument
+//! deserialization error carrying the validation message as a string (not a
+//! structured [`VldTauriError`]).
 //!
 //! ```rust,ignore
 //! #[tauri::command]
@@ -66,13 +68,13 @@
 //! // Backend: validate incoming event from frontend
 //! app.listen("user:update", |event| {
 //!     let payload: serde_json::Value = serde_json::from_str(event.payload()).unwrap();
-//!     match validate_event::<UserUpdate>(payload) {
+//!     match validate::<UserUpdate>(payload) {
 //!         Ok(update) => println!("Valid update: {:?}", update),
 //!         Err(e)     => eprintln!("Bad event: {e}"),
 //!     }
 //! });
 //!
-//! // Or auto-validate with VldEvent<T>:
+//! // Or validate while deserializing (VldEvent<T> is VldPayload<T>):
 //! let event: VldEvent<UserUpdate> = serde_json::from_str(event.payload()).unwrap();
 //! ```
 //!
@@ -80,7 +82,7 @@
 //!
 //! ```rust,ignore
 //! let config_json = std::fs::read_to_string("config.json").unwrap();
-//! let config = validate_state::<AppConfig>(
+//! let config = validate::<AppConfig>(
 //!     serde_json::from_str(&config_json).unwrap()
 //! ).expect("Invalid app config");
 //! app.manage(config);
@@ -90,7 +92,7 @@
 //!
 //! ```rust,ignore
 //! let plugin_cfg: serde_json::Value = /* from tauri.conf.json */;
-//! let cfg = validate_plugin_config::<MyPluginConfig>(plugin_cfg)
+//! let cfg = validate::<MyPluginConfig>(plugin_cfg)
 //!     .expect("Invalid plugin config");
 //! ```
 //!
@@ -100,7 +102,7 @@
 //! #[tauri::command]
 //! fn stream(channel: Channel<serde_json::Value>) -> Result<(), VldTauriError> {
 //!     let msg = ProgressUpdate { percent: 50, status: "working".into() };
-//!     let validated = validate_channel_message::<ProgressUpdate>(
+//!     let validated = validate::<ProgressUpdate>(
 //!         serde_json::to_value(&msg).unwrap()
 //!     )?;
 //!     channel.send(serde_json::to_value(&validated).unwrap()).unwrap();

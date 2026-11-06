@@ -1,8 +1,11 @@
-//! # vld-fake
+//! # vld-fake — random test data that passes `vld` schemas
 //!
-//! Generate fake / test data that satisfies a [`vld`](https://docs.rs/vld) JSON Schema.
+//! Generates values that satisfy a JSON Schema produced by `vld` (or written
+//! by hand): formats, patterns, length / numeric / count bounds,
+//! `multipleOf`, unions, tuples and `$ref`s. Field names (`email`, `city`,
+//! `first_name`, …) pick realistic values when no format is set.
 //!
-//! ## Quick start — typed API
+//! ## Typed API
 //!
 //! ```rust
 //! use vld::prelude::*;
@@ -11,45 +14,39 @@
 //! vld::schema! {
 //!     #[derive(Debug)]
 //!     pub struct User {
-//!         pub name:  String      => vld::string().min(2).max(50),
-//!         pub email: String      => vld::string().email(),
-//!         pub age:   i64         => vld::number().int().min(18).max(99),
+//!         pub name:  String => vld::string().min(2).max(50),
+//!         pub email: String => vld::string().email(),
+//!         pub age:   i64    => vld::number().int().min(18).max(99),
 //!     }
 //! }
 //!
 //! vld_fake::impl_fake!(User);
 //!
-//! let user = User::fake();
-//! assert!(user.name.len() >= 2);
+//! let user = User::fake(); // generated, then parsed through `User::parse_value`
+//! assert!(user.name.chars().count() >= 2);
 //! assert!(user.email.contains('@'));
 //!
-//! // Multiple
 //! let users = User::fake_many(5);
+//! assert_eq!(users.len(), 5);
 //!
 //! // Reproducible
-//! let u1 = User::fake_seeded(42);
-//! let u2 = User::fake_seeded(42);
-//! assert_eq!(u1.name, u2.name);
+//! assert_eq!(User::fake_seeded(42).name, User::fake_seeded(42).name);
 //! ```
 //!
-//! ## Low-level (untyped) API
+//! ## Untyped API
 //!
 //! ```rust
-//! use vld::prelude::*;
-//!
-//! vld::schema! {
-//!     #[derive(Debug)]
-//!     pub struct User {
-//!         pub name:  String      => vld::string().min(2).max(50),
-//!         pub email: String      => vld::string().email(),
-//!         pub age:   i64         => vld::number().int().min(18).max(99),
-//!     }
-//! }
-//!
-//! let schema = User::json_schema();
-//! let value  = vld_fake::fake_value(&schema);
-//! // value is a random serde_json::Value
+//! let schema = serde_json::json!({
+//!     "type": "object",
+//!     "required": ["port"],
+//!     "properties": { "port": { "type": "integer", "minimum": 1, "maximum": 65535 } }
+//! });
+//! let value = vld_fake::fake_value(&schema);
+//! let port = value["port"].as_i64().unwrap();
+//! assert!((1..=65535).contains(&port));
 //! ```
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/codegen/fake>
 
 mod constraints;
 mod dict;
@@ -2303,7 +2300,13 @@ fn base64_encode(data: &[u8]) -> String {
 ///
 /// Implement it with the [`impl_fake!`] macro on any `vld::schema!` struct:
 ///
-/// ```rust,ignore
+/// ```rust
+/// # vld::schema! {
+/// #     #[derive(Debug)]
+/// #     pub struct User { pub name: String => vld::string().min(2) }
+/// # }
+/// use vld_fake::FakeData;
+///
 /// vld_fake::impl_fake!(User);
 ///
 /// let user = User::fake();
@@ -2331,7 +2334,9 @@ pub trait FakeData: Sized {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
+/// use vld_fake::FakeData;
+///
 /// vld::schema! {
 ///     #[derive(Debug)]
 ///     pub struct User {

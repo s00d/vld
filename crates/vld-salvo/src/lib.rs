@@ -1,9 +1,8 @@
 //! # vld-salvo — Salvo integration for `vld`
 //!
-//! Validation extractors for [Salvo](https://salvo.rs).
-//! All extractors implement [`Extractible`] and can be used directly as
-//! `#[handler]` function parameters — just like Salvo's built-in `JsonBody`
-//! or `PathParam`.
+//! Validation extractors for [Salvo](https://salvo.rs) 1.x. Every extractor
+//! implements [`Extractible`], so it is a plain `#[handler]` parameter, like
+//! Salvo's own `JsonBody` or `PathParam`.
 //!
 //! | Extractor | Source |
 //! |-----------|--------|
@@ -14,12 +13,39 @@
 //! | [`VldHeaders<T>`] | HTTP headers |
 //! | [`VldCookie<T>`] | Cookie values |
 //!
-//! All extractors return **422 Unprocessable Entity** on validation failure
-//! or malformed input, and **413 Payload Too Large** when the body exceeds
-//! the limit. [`VldJson`] requires a JSON `Content-Type` (`application/json`
-//! or `application/*+json`) and [`VldForm`]
-//! `application/x-www-form-urlencoded`; anything else is **415 Unsupported
-//! Media Type**. See the [error body format](vld_http_common#error-bodies).
+//! A failed extraction is written as JSON by [`VldSalvoError`] (see the
+//! [error body format](vld_http_common#error-bodies)): **422** for invalid or
+//! malformed input, **413** for a body over the limit, **415** when
+//! [`VldJson`] gets no JSON `Content-Type` (`application/json` or
+//! `application/*+json`) or [`VldForm`] no
+//! `application/x-www-form-urlencoded`.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use salvo::prelude::*;
+//! use vld_salvo::prelude::*;
+//!
+//! vld::schema! {
+//!     #[derive(Debug, Clone)]
+//!     pub struct CreateUser {
+//!         pub name: String  => vld::string().min(2),
+//!         pub email: String => vld::string().email(),
+//!     }
+//! }
+//!
+//! #[handler]
+//! async fn create(body: VldJson<CreateUser>, res: &mut Response) {
+//!     res.render(Json(serde_json::json!({ "name": body.name })));
+//! }
+//!
+//! # #[tokio::main]
+//! # async fn main() {
+//! let router = Router::with_path("users").post(create);
+//! let acceptor = TcpListener::new("0.0.0.0:5800").bind().await;
+//! Server::new(acceptor).serve(router).await;
+//! # }
+//! ```
 //!
 //! # Body limits
 //!
@@ -30,26 +56,9 @@
 //! like in every other `vld` adapter — so setting exactly 64 KiB counts as
 //! unset.
 //!
-//! # Quick Example
+//! Requires Rust **1.94+** (Salvo 1.x).
 //!
-//! ```rust,ignore
-//! use salvo::prelude::*;
-//! use vld_salvo::prelude::*;
-//!
-//! vld::schema! {
-//!     #[derive(Debug, Clone, serde::Serialize)]
-//!     pub struct CreateUser {
-//!         pub name: String  => vld::string().min(2),
-//!         pub email: String => vld::string().email(),
-//!     }
-//! }
-//!
-//! // VldJson<T> is used as a handler parameter — no manual extraction needed!
-//! #[handler]
-//! async fn create(body: VldJson<CreateUser>, res: &mut Response) {
-//!     res.render(Json(serde_json::json!({"name": body.name})));
-//! }
-//! ```
+//! Guide: <https://s00d.github.io/vld/integrations/web/salvo>
 
 use salvo::extract::metadata::{Metadata, Source, SourceFrom, SourceParser};
 use salvo::extract::Extractible;

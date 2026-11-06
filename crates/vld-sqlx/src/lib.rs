@@ -1,11 +1,15 @@
-//! # vld-sqlx — SQLx integration for the `vld` validation library
+//! # vld-sqlx — SQLx integration for `vld`
 //!
-//! Validate data **before** inserting into the database, and use strongly-typed
-//! validated column types with SQLx.
+//! Validate values against a [`vld`] schema before writing them with SQLx
+//! ([`validate_insert`], [`Validated`]) or after loading them
+//! ([`validate_row`], [`validate_rows`]), and bind validated column wrappers
+//! ([`VldText`], [`VldInt`], [`VldFloat`], [`VldBool`]) that implement
+//! `sqlx::Type`, `Encode` and `Decode`.
 //!
-//! ## Quick Start
+//! Features: `sqlx-0_8` (default) or `sqlx-0_9` — exactly one; `sqlite`
+//! (default), `postgres`, `mysql`.
 //!
-//! ```ignore
+//! ```
 //! use vld_sqlx::prelude::*;
 //!
 //! vld::schema! {
@@ -16,13 +20,30 @@
 //!     }
 //! }
 //!
+//! // Column schemas validate `{"value": ...}`.
+//! vld::schema! {
+//!     #[derive(Debug)]
+//!     pub struct EmailField {
+//!         pub value: String => vld::string().email(),
+//!     }
+//! }
+//!
 //! #[derive(serde::Serialize)]
 //! struct NewUser { name: String, email: String }
 //!
 //! let user = NewUser { name: "Alice".into(), email: "alice@example.com".into() };
-//! validate_insert::<NewUserSchema, _>(&user)?;
-//! // now safe to insert via sqlx::query!(...)
+//! validate_insert::<NewUserSchema, _>(&user).unwrap();
+//! // sqlx::query("INSERT ...").bind(&user.name).bind(&user.email).execute(&pool).await?;
+//!
+//! let email = VldText::<EmailField>::new("carol@example.com").unwrap(); // bind(&email)
+//! assert!(VldText::<EmailField>::new("bad").is_err());
+//! # let _ = email;
 //! ```
+//!
+//! Decoding does not re-validate (data from the database is trusted); call
+//! [`validate_row`] to re-check loaded rows.
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/database/sqlx>
 
 #[cfg(all(feature = "sqlx-0_8", feature = "sqlx-0_9"))]
 compile_error!("Enable exactly one SQLx version feature: `sqlx-0_8` or `sqlx-0_9`.");

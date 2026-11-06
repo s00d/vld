@@ -1,15 +1,12 @@
-//! # vld-clap — Clap integration for `vld`
+//! # vld-clap — validate clap arguments with `vld`
 //!
-//! Validate CLI arguments **after** `clap` has parsed them, using
-//! `#[derive(Validate)]` directly on the clap struct. No separate schema
-//! needed.
+//! clap parses types, defaults and required arguments; `vld-clap` checks the
+//! values (formats, ranges, lengths) afterwards, using `#[derive(Validate)]`
+//! rules on the same clap struct. No separate schema.
 //!
-//! # Quick Start
-//!
-//! ```rust,ignore
+//! ```rust
 //! use clap::Parser;
 //! use vld::Validate;
-//! use vld_clap::prelude::*;
 //!
 //! #[derive(Parser, Debug, serde::Serialize, Validate)]
 //! struct Cli {
@@ -23,17 +20,19 @@
 //!     #[vld(vld::number().int().min(1).max(65535))]
 //!     port: i64,
 //!
-//!     /// Application name
-//!     #[arg(long)]
-//!     #[vld(vld::string().min(2).max(50))]
-//!     name: String,
+//!     /// Output file
+//!     #[arg(long = "out")]
+//!     #[vld(vld::string().min(1))]
+//!     output_file: String,
 //! }
 //!
-//! fn main() {
-//!     let cli = Cli::parse(); // clap's parse — no conflict
-//!     validate_or_exit(&cli);
-//!     println!("Valid! {:?}", cli);
-//! }
+//! let cli = Cli::parse_from(["app", "--email", "nope", "--port", "0", "--out", "x"]);
+//! let err = vld_clap::validate_cli(&cli).unwrap_err();
+//! assert_eq!(
+//!     err.message,
+//!     "Invalid arguments:\n       --email: Invalid email address\n       --port: Value must be at least 1",
+//! );
+//! // In `main`: `vld_clap::validate_or_exit(&cli)` prints this and exits with code 2.
 //! ```
 //!
 //! # Flag names in errors
@@ -43,6 +42,8 @@
 //! `#[arg(long = "out")] output_file` is `--out`, a positional `input` is
 //! `<INPUT>`. [`validate`] works on any `Serialize` struct and guesses
 //! `--kebab-case` from the field name.
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/config-cli/clap>
 
 use std::fmt;
 use vld::schema::VldParse;

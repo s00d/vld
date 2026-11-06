@@ -1,22 +1,39 @@
-//! # vld-leptos — Leptos integration for the `vld` validation library
+//! # vld-leptos — Leptos helpers for `vld`
 //!
-//! Shared validation for Leptos server functions and WASM clients.
-//! Define validation rules once, use them on both the server and the browser.
+//! Shared validation for Leptos server functions and WASM clients: define the
+//! rules once, check them on the server and in the browser.
 //!
-//! **Zero dependency on `leptos`** — works with any Leptos version (0.6, 0.7, 0.8+).
-//! Compatible with WASM and native targets.
+//! No dependency on `leptos`, so any Leptos version works; builds for native
+//! and WASM targets.
 //!
-//! ## Key Features
-//!
-//! | Feature | Description |
+//! | Item | Use |
 //! |---|---|
-//! | [`validate_args!`] | Inline validation of server function arguments |
-//! | [`validate`] / [`validate_value`] | Validate a serializable value against a schema |
-//! | [`check_field`] | Single-field validation for reactive UI |
-//! | [`check_all_fields`] | Multi-field validation returning per-field errors |
-//! | [`VldServerError`] | Serializable error type for server→client error transport |
+//! | [`validate_args!`] | Validate server-function arguments inline |
+//! | [`validate`] / [`validate_value`] | Validate a value against a schema type |
+//! | [`check_field`] / [`check_field_all`] | Single-field validation for reactive UI |
+//! | [`check_all_fields`] | Whole-form validation returning per-field errors |
+//! | [`VldServerError`] | Serializable error for server → client transport |
 //!
-//! ## Quick Example
+//! Field paths have no leading dot (`name`, `user.email`, `items[0]`).
+//!
+//! ```
+//! vld::schema! {
+//!     struct CreateUserSchema {
+//!         name: String => vld::string().min(2).max(50),
+//!         email: String => vld::string().email(),
+//!     }
+//! }
+//!
+//! #[derive(serde::Serialize)]
+//! struct CreateUserArgs { name: String, email: String }
+//!
+//! let args = CreateUserArgs { name: "X".into(), email: "bad".into() };
+//! let errors = vld_leptos::check_all_fields::<CreateUserSchema, _>(&args);
+//! assert_eq!(errors.len(), 2);
+//! assert_eq!(errors[0].field, "name");
+//! ```
+//!
+//! In an app:
 //!
 //! ```ignore
 //! // Shared validation rules (used on server AND client)
@@ -44,6 +61,8 @@
 //!     // ... render form with error display
 //! }
 //! ```
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/ui/leptos>
 
 pub use vld_integration_common::form::{
     check_all_fields, check_field, check_field_all, validate, validate_value, FieldError,

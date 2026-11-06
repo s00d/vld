@@ -18,23 +18,28 @@
 //! `application/x-www-form-urlencoded`; anything else is **415 Unsupported
 //! Media Type**. See the [error body format](vld_http_common#error-bodies).
 //!
+//! Guide: <https://s00d.github.io/vld/integrations/web/actix> (shared rules
+//! for all adapters: <https://s00d.github.io/vld/integrations/web/overview>).
+//!
 //! # Body limits
 //!
 //! [`VldJson`] and [`VldForm`] read the body themselves (compressed bodies
-//! are decoded) up to [`DEFAULT_BODY_LIMIT`] (2 MiB). Register
-//! [`VldBodyLimit`] to change it — actix's `JsonConfig` / `PayloadConfig`
-//! do not apply:
+//! are decoded; the limit applies to the decoded size) up to
+//! [`DEFAULT_BODY_LIMIT`] (2 MiB). Register [`VldBodyLimit`] with
+//! `app_data` to change it — actix's `JsonConfig` / `PayloadConfig` do not
+//! apply:
 //!
-//! ```ignore
-//! App::new().app_data(vld_actix::VldBodyLimit(8 * 1024 * 1024))
+//! ```no_run
+//! use actix_web::App;
+//!
+//! let app = App::new().app_data(vld_actix::VldBodyLimit(8 * 1024 * 1024));
 //! ```
 //!
-//! # Quick example
+//! # Example
 //!
-//! ```ignore
+//! ```no_run
 //! use actix_web::{web, App, HttpResponse};
-//! use vld::prelude::*;
-//! use vld_actix::{VldPath, VldQuery, VldJson, VldHeaders};
+//! use vld_actix::{VldHeaders, VldJson, VldPath};
 //!
 //! vld::schema! {
 //!     #[derive(Debug)]
@@ -67,6 +72,8 @@
 //!         path.id, headers.authorization, body.name,
 //!     ))
 //! }
+//!
+//! let app = App::new().route("/users/{id}", web::post().to(handler));
 //! ```
 
 use actix_web::body::{to_bytes_limited, BodyStream};

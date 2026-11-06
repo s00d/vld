@@ -1,31 +1,21 @@
-[![Crates.io](https://img.shields.io/crates/v/vld-clap?style=for-the-badge)](https://crates.io/crates/vld-clap)
-[![docs.rs](https://img.shields.io/docsrs/vld-clap?style=for-the-badge)](https://docs.rs/vld-clap)
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/s00d/vld)
-[![GitHub issues](https://img.shields.io/badge/github-issues-orange?style=for-the-badge)](https://github.com/s00d/vld/issues)
-[![GitHub stars](https://img.shields.io/badge/github-stars-yellow?style=for-the-badge)](https://github.com/s00d/vld/stargazers)
-
 # vld-clap
 
-[Clap](https://docs.rs/clap) integration for the **vld** validation library.
+[![crates.io](https://img.shields.io/crates/v/vld-clap.svg)](https://crates.io/crates/vld-clap)
+[![docs.rs](https://img.shields.io/docsrs/vld-clap)](https://docs.rs/vld-clap)
 
-Validate CLI arguments **after** clap has parsed them — email format, URL, ranges, string lengths, regex patterns, and everything else `vld` supports. Validation rules go directly on the Cli struct via `#[derive(Validate)]`.
+Validate [clap](https://crates.io/crates/clap) 4 arguments with [vld](https://crates.io/crates/vld) rules on the same struct (`#[derive(Validate)]`), with errors that name the real flags (`--out`, `<INPUT>`).
 
-## Why
-
-Clap handles argument parsing (types, defaults, required/optional), but doesn't validate semantic constraints like "must be a valid email" or "port must be 1–65535". `vld-clap` fills that gap — no separate schema struct needed.
-
-## Installation
+## Install
 
 ```toml
 [dependencies]
-vld-clap = "0.5"
 vld = { version = "0.5", features = ["derive"] }
+vld-clap = "0.5"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 ```
 
-## Quick Start
+## Example
 
 ```rust
 use clap::Parser;
@@ -33,7 +23,6 @@ use vld::Validate;
 use vld_clap::prelude::*;
 
 #[derive(Parser, Debug, serde::Serialize, Validate)]
-#[command(name = "myapp")]
 struct Cli {
     #[arg(long)]
     #[vld(vld::string().email())]
@@ -42,49 +31,21 @@ struct Cli {
     #[arg(long, default_value_t = 8080)]
     #[vld(vld::number().int().min(1).max(65535))]
     port: i64,
-
-    #[arg(long)]
-    #[vld(vld::string().min(2).max(50))]
-    name: String,
 }
 
 fn main() {
     let cli = Cli::parse();
-    validate_or_exit(&cli);
-    println!("email={}, port={}", cli.email, cli.port);
+    validate_or_exit(&cli); // prints "--port: Value must be at least 1" etc., exits with 2
+    println!("{cli:?}");
 }
 ```
 
-## API
+## Documentation
 
-| Function | Description |
-|----------|-------------|
-| `validate(args)` | Validate a struct with `#[derive(Validate)]` + `Serialize` (flags guessed as `--kebab-case`) |
-| `validate_cli(args)` | Same for a clap `Parser`: errors use clap's real names (`#[arg(long = "out")]` → `--out`, positional → `<INPUT>`) |
-| `validate_or_exit(args)` | `validate_cli`; print error & exit(2) on failure (needs `clap::Parser`) |
-| `validate_with_schema::<S, T>(args)` | Validate `T: Serialize` against a separate schema `S` |
-| `validate_json::<S>(json)` | Validate raw JSON |
+- Guide: <https://s00d.github.io/vld/integrations/config-cli/clap>
+- API: <https://docs.rs/vld-clap>
 
-## Error Output
-
-```
-Invalid arguments:
-       --email: Invalid email address
-       --name: String must be at least 2 characters
-       --port: Number must be at most 65535
-```
-
-## Examples
-
-```bash
-# Valid
-cargo run -p vld-clap --example clap_basic -- \
-  --email alice@example.com --name Alice --port 3000 --workers 8
-
-# Invalid (exits with code 2)
-cargo run -p vld-clap --example clap_basic -- \
-  --email bad --name X --port 99999 --workers 0
-```
+MSRV: 1.85, see [MSRV.md](https://github.com/s00d/vld/blob/main/MSRV.md).
 
 ## License
 

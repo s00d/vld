@@ -1,16 +1,16 @@
-//! # vld-ts — Generate TypeScript Zod schemas from vld
+//! # vld-ts — TypeScript Zod / Valibot schemas from `vld`
 //!
-//! `vld-ts` is designed for a **vld-first** workflow:
-//! - generate Zod from `vld` schema instances (`to_zod`)
-//! - call `Type::to_zod()` on your `vld::schema!` type via `impl_to_zod!(Type)`
-//! - generate Valibot from `vld` schema instances (`to_valibot`)
-//! - call `Type::to_valibot()` via `impl_to_valibot!(Type)`
-//! - generate plain JSON Schema via `to_openapi(...)` or `Type::to_openapi()`
+//! Generates [Zod](https://zod.dev/) 3 or [Valibot](https://valibot.dev/) 1
+//! code that accepts the same values as a vld schema:
 //!
-//! # Example
+//! - [`to_zod`] / [`to_valibot`] — an expression for any schema value;
+//! - [`impl_to_zod!`] / [`impl_to_valibot!`] — `Type::to_zod()` /
+//!   `Type::to_valibot()` and named exports ([`ToZod::to_zod_export`]) for a
+//!   `vld::schema!` or `#[derive(Validate)]` type;
+//! - [`to_openapi`] / [`impl_to_openapi!`] — the plain JSON Schema and its `$ref`s.
 //!
 //! ```
-//! use vld_ts::{impl_to_openapi, impl_to_valibot, impl_to_zod, to_openapi, to_valibot, to_zod, ToOpenApi, ToRefs, ToValibot, ToZod};
+//! use vld_ts::{impl_to_valibot, impl_to_zod, to_zod, ToValibot, ToZod};
 //!
 //! vld::schema! {
 //!     pub struct Address {
@@ -24,31 +24,24 @@
 //!     }
 //! }
 //!
+//! impl_to_zod!(Address);
 //! impl_to_zod!(Order);
 //! impl_to_valibot!(Order);
-//! impl_to_openapi!(Order);
-//! impl_to_openapi!(Address);
 //!
-//! let zod = to_zod(&vld::string().min(2).email());
-//! assert!(zod.contains(".email()"));
+//! assert_eq!(to_zod(&vld::string().email()), "z.string().email()");
+//! assert!(Order::to_zod().contains("shipping: z.lazy(() => AddressSchema)"));
+//! assert!(Order::to_valibot().starts_with("v.object"));
 //!
-//! let ts = Order::to_zod();
-//! assert!(ts.starts_with("z.object("));
-//!
-//! let valibot = Order::to_valibot();
-//! assert!(valibot.starts_with("v.object"));
-//!
-//! let single_valibot = to_valibot(&vld::string().min(2).email());
-//! assert!(single_valibot.contains("v.string()"));
-//!
-//! let schema_json = Address::to_openapi();
-//! assert_eq!(schema_json["type"], "object");
-//! let refs = Order::to_refs();
-//! assert!(refs.contains(&"#/components/schemas/Address".to_string()));
-//!
-//! let email_schema = to_openapi(&vld::string().email());
-//! assert_eq!(email_schema["type"], "string");
+//! // A TypeScript module: exports for every type, the import is yours.
+//! let module = format!(
+//!     "import {{ z }} from \"zod\";\n\n{}\n{}",
+//!     Address::to_zod_export(),
+//!     Order::to_zod_export(),
+//! );
+//! assert!(module.contains("export type Order = z.infer<typeof OrderSchema>;"));
 //! ```
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/codegen/ts>
 
 use serde_json::Value;
 
@@ -274,7 +267,7 @@ macro_rules! impl_to_zod {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
 /// use vld_ts::{impl_to_openapi, ToOpenApi};
 ///
 /// vld::schema! {
@@ -309,7 +302,7 @@ macro_rules! impl_to_openapi {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
 /// use vld_ts::{impl_to_valibot, ToValibot};
 ///
 /// vld::schema! {

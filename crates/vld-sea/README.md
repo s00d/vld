@@ -1,56 +1,34 @@
-[![Crates.io](https://img.shields.io/crates/v/vld-sea?style=for-the-badge)](https://crates.io/crates/vld-sea)
-[![docs.rs](https://img.shields.io/docsrs/vld-sea?style=for-the-badge)](https://docs.rs/vld-sea)
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/s00d/vld)
-[![GitHub issues](https://img.shields.io/badge/github-issues-orange?style=for-the-badge)](https://github.com/s00d/vld/issues)
-[![GitHub stars](https://img.shields.io/badge/github-stars-yellow?style=for-the-badge)](https://github.com/s00d/vld/stargazers)
-
 # vld-sea
 
-[SeaORM](https://www.sea-ql.org/SeaORM/) integration for the **vld** validation library.
+[![crates.io](https://img.shields.io/crates/v/vld-sea.svg)](https://crates.io/crates/vld-sea)
+[![docs.rs](https://docs.rs/vld-sea/badge.svg)](https://docs.rs/vld-sea)
 
-Validate `ActiveModel` fields **before** `insert()` / `update()` hits the database.
+[SeaORM](https://www.sea-ql.org/SeaORM/) integration for [vld](https://crates.io/crates/vld): validate `ActiveModel` values before insert / update, manually or automatically in `before_save`.
 
-## Features
-
-- `validate_active` — extract `Set`/`Unchanged` values from `ActiveModel` into JSON and validate
-- `validate_model` — validate any `Serialize`-able struct (Model, DTO, etc.)
-- `validate_json` — validate raw JSON
-- `Validated<S, T>` — wrapper proving data has been validated
-- `before_save` — helper for `ActiveModelBehavior::before_save`
-- `impl_vld_before_save!` — macro for automatic validation on every insert/update
-- `active_model_to_json` — convert ActiveModel to JSON (skips `NotSet` fields)
-
-## Installation
+## Install
 
 ```toml
 [dependencies]
-vld-sea = "0.5"          # default: sea-orm 1.x
 vld = "0.5"
-sea-orm = "1"
+vld-sea = "0.5"
+sea-orm = { version = "1", features = ["macros"] }
 ```
 
-SeaORM 2.x (library API; enable exactly one feature):
+## Features
 
-```toml
-vld-sea = { version = "0.5", default-features = false, features = ["sea-orm-2"] }
-sea-orm = "2"
-```
+| Feature | Default | Effect |
+|---|---|---|
+| `sea-orm-1` | yes | SeaORM 1 |
+| `sea-orm-2` | | SeaORM 2 (Rust 1.94+) |
+| `with-json`, `with-chrono`, `with-time`, `with-uuid`, `with-rust_decimal`, `with-bigdecimal`, `postgres-array` | | Map these column types to JSON (also enable the SeaORM feature) |
 
-## Compatibility
+Enable exactly one of `sea-orm-1` / `sea-orm-2`. Column types without their `with-*` feature are validated as `null`.
 
-- Default `sea-orm-1`: crate MSRV follows the workspace (**1.85**); SeaORM 1.x itself may need a newer toolchain.
-- Feature `sea-orm-2`: requires the SeaORM 2 MSRV.
-- `validate_active`, `before_save` and `impl_vld_before_save!` work on both
-  versions (tests: `tests/integration.rs` on sea-orm 1, `tests/sea_orm2.rs` on
-  sea-orm 2 — entity derive macros emit `sea_orm::` paths, so that file imports
-  `sea_orm2 as sea_orm`).
-
-## Quick Start
-
-### 1. Define the validation schema
+## Example
 
 ```rust
+use vld_sea::prelude::*;
+
 vld::schema! {
     #[derive(Debug, Clone)]
     pub struct UserInput {
@@ -58,100 +36,20 @@ vld::schema! {
         pub email: String => vld::string().email(),
     }
 }
+
+// Manually:
+vld_sea::validate_active::<UserInput, _>(&active_model)?;
+
+// Or on every insert / update, in the entity module:
+vld_sea::impl_vld_before_save!(ActiveModel, super::UserInput);
 ```
 
-### 2. Validate ActiveModel before insert
+## Documentation
 
-```rust
-use sea_orm::Set;
+- Guide: <https://s00d.github.io/vld/integrations/database/sea-orm>
+- API: <https://docs.rs/vld-sea>
 
-let am = user::ActiveModel {
-    name: Set("Alice".to_owned()),
-    email: Set("alice@example.com".to_owned()),
-    ..Default::default()
-};
-
-// Validate — returns parsed schema or VldSeaError
-vld_sea::validate_active::<UserInput, _>(&am)?;
-
-// Now safe to insert
-am.insert(&db).await?;
-```
-
-### 3. Automatic validation via `before_save`
-
-**Option A — manual:**
-
-```rust
-#[async_trait::async_trait]
-impl ActiveModelBehavior for ActiveModel {
-    async fn before_save<C: ConnectionTrait>(
-        self, _db: &C, _insert: bool,
-    ) -> Result<Self, DbErr> {
-        vld_sea::before_save::<UserInput, _>(&self)?;
-        Ok(self)
-    }
-}
-```
-
-**Option B — macro:**
-
-```rust
-// Replace the default `impl ActiveModelBehavior for ActiveModel {}`
-vld_sea::impl_vld_before_save!(ActiveModel, UserInput);
-```
-
-**Option C — separate schemas for insert vs update:**
-
-```rust
-vld_sea::impl_vld_before_save!(
-    ActiveModel,
-    insert: UserInsertSchema,
-    update: UserUpdateSchema
-);
-```
-
-### 4. Validate a DTO
-
-```rust
-#[derive(serde::Serialize)]
-struct NewUser { name: String, email: String }
-
-let input = NewUser { name: "Bob".into(), email: "bob@example.com".into() };
-vld_sea::validate_model::<UserInput, _>(&input)?;
-```
-
-## ActiveModel → JSON
-
-`active_model_to_json` converts an ActiveModel to a JSON object. Only `Set` and `Unchanged` fields are included; `NotSet` fields are omitted.
-
-Always supported: `bool`, `i8`–`i64`, `u8`–`u64`, `f32` (through its decimal
-form: `0.1f32` → `0.1`), `f64`, `String`, `char`, bytes (array of `u8`),
-ActiveEnum (sea-orm 2, as string).
-
-Feature-gated column types need the matching **vld-sea** feature (it also enables
-the SeaORM feature); values mirror what `serde_json` produces for the Rust type:
-
-| vld-sea feature | JSON |
-|---|---|
-| `with-json` | the JSON value as-is |
-| `with-chrono` | `"2024-02-29"`, `"12:30:00"`, `"2024-02-29T12:30:00"`, RFC 3339 for zoned datetimes |
-| `with-time` | the same shapes for `time` values (`±HH:MM` offsets) |
-| `postgres-array` | a JSON array of the mapped items |
-| `with-uuid` | hyphenated string |
-| `with-rust_decimal`, `with-bigdecimal` | decimal string, e.g. `"12.50"` |
-
-```toml
-vld-sea = { version = "0.5", features = ["with-chrono", "with-uuid"] }
-```
-
-Without the matching feature (and for other types) the value becomes `null`.
-
-## Running Examples
-
-```bash
-cargo run -p vld-sea --example sea_basic
-```
+MSRV: 1.85 (`sea-orm-2`: 1.94), see [MSRV.md](https://github.com/s00d/vld/blob/main/MSRV.md).
 
 ## License
 

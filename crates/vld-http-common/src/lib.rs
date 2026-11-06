@@ -5,8 +5,52 @@
 //! `vld-poem`, `vld-rama`, `vld-rocket`, `vld-salvo`, `vld-tower`,
 //! `vld-warp` and `vld-tonic`.
 //!
-//! **Not intended for direct use by end users** — import via the
-//! framework-specific crate instead.
+//! Applications normally use it through a framework adapter. Depend on it
+//! directly to write an adapter for another framework or to build the same
+//! error body by hand. It is framework-agnostic: no HTTP framework or `http`
+//! crate dependency.
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/shared/http-common>
+//! (the rules below, per framework:
+//! <https://s00d.github.io/vld/integrations/web/overview>).
+//!
+//! # Example
+//!
+//! ```
+//! use vld_http_common::{parse_json_body, require_json_content_type, VldHttpError};
+//!
+//! vld::schema! {
+//!     #[derive(Debug)]
+//!     pub struct User {
+//!         pub name: String => vld::string().min(2),
+//!     }
+//! }
+//!
+//! fn extract(content_type: Option<&str>, body: &[u8]) -> Result<User, VldHttpError> {
+//!     require_json_content_type(content_type)?; // 415
+//!     let value = parse_json_body(body)?;       // 422 on malformed JSON
+//!     Ok(User::parse_value(&value)?)            // 422 on validation errors
+//! }
+//!
+//! let err = extract(Some("application/json"), br#"{"name": "A"}"#).unwrap_err();
+//! assert_eq!(err.status(), 422);
+//! assert_eq!(err.body()["issues"][0]["code"], "too_small");
+//! assert_eq!(extract(Some("text/plain"), b"{}").unwrap_err().status(), 415);
+//!
+//! // Text sources (query, form, path, headers, cookies) use `parse_coerced`.
+//! vld::schema! {
+//!     #[derive(Debug)]
+//!     pub struct Search {
+//!         pub q: String => vld::string(),
+//!         pub page: i64 => vld::number().int().min(1),
+//!         pub tags: Vec<String> => vld::array(vld::string()),
+//!     }
+//! }
+//!
+//! let value = vld_http_common::query_string_to_json("q=123&page=2&tags=a");
+//! let s: Search = vld_http_common::parse_coerced(&value).unwrap();
+//! assert_eq!((s.q.as_str(), s.page, s.tags.len()), ("123", 2, 1));
+//! ```
 //!
 //! # Value semantics (all adapters)
 //!
@@ -46,8 +90,9 @@ pub use vld::schema::parse_coerced;
 /// Default max request body size (2 MiB — same as axum `DefaultBodyLimit`).
 ///
 /// Every adapter applies it to JSON and form bodies unless a limit is
-/// configured (see each adapter's README for how: [`VldBodyLimit`], the
-/// framework's own setting, or a constructor argument).
+/// configured ([`VldBodyLimit`], the framework's own setting, or a
+/// constructor argument; per adapter:
+/// <https://s00d.github.io/vld/integrations/web/overview#body-limits>).
 pub const DEFAULT_BODY_LIMIT: usize = 2 * 1024 * 1024;
 
 /// Max number of `&`-separated fields in a form body ([`parse_form_body`]).

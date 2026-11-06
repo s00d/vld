@@ -1,50 +1,25 @@
-[![Crates.io](https://img.shields.io/crates/v/vld-tauri?style=for-the-badge)](https://crates.io/crates/vld-tauri)
-[![docs.rs](https://img.shields.io/docsrs/vld-tauri?style=for-the-badge)](https://docs.rs/vld-tauri)
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=for-the-badge)](https://github.com/s00d/vld)
-[![GitHub issues](https://img.shields.io/badge/github-issues-orange?style=for-the-badge)](https://github.com/s00d/vld/issues)
-[![GitHub stars](https://img.shields.io/badge/github-stars-yellow?style=for-the-badge)](https://github.com/s00d/vld/stargazers)
-
 # vld-tauri
 
-[Tauri](https://tauri.app/) validation for the **vld** validation library.
+[![crates.io](https://img.shields.io/crates/v/vld-tauri.svg)](https://crates.io/crates/vld-tauri)
+[![docs.rs](https://docs.rs/vld-tauri/badge.svg)](https://docs.rs/vld-tauri)
 
-**Zero dependency on `tauri` itself** — only `vld` + `serde` + `serde_json`.
-Add `tauri` separately in your app.
+[Tauri](https://tauri.app) IPC helpers for [vld](https://crates.io/crates/vld): validate command arguments, events, state and channel messages, and return a serializable error to the frontend. Framework-agnostic: no `tauri` dependency.
 
-> **0.5:** `validate_event`, `validate_state`, `validate_plugin_config` and
-> `validate_channel_message` are deprecated — they were identical to `validate`.
-> `VldEvent<T>` is now a type alias of `VldPayload<T>` (construct / match it as
-> `VldPayload(x)`).
-
-## What can be validated
-
-| Area | Function / Type | Description |
-|------|-----------------|-------------|
-| IPC commands, events, app state, plugin config, channel messages | `validate()`, `VldPayload<T>` | Validate `#[tauri::command]` arguments, `emit()`/`listen()` payloads, config before `app.manage()`, outgoing `Channel::send()` data |
-| Events | `VldEvent<T>` | Type alias of `VldPayload<T>` |
-| Raw JSON | `validate_args()` | Validate a raw JSON string |
-| Error type | `VldTauriError` | Serializable error for command results |
-
-## Installation
+## Install
 
 ```toml
 [dependencies]
-vld-tauri = "0.5"
 vld = "0.5"
-tauri = "2"
-serde_json = "1"
+vld-tauri = "0.5"
 ```
 
-## IPC Commands
+## Example
 
-### Pattern 1 — Explicit Validation (recommended)
-
-```rust,ignore
+```rust
 use vld_tauri::prelude::*;
 
 vld::schema! {
-    #[derive(Debug, Clone, serde::Serialize)]
+    #[derive(Debug, Clone)]
     pub struct CreateUser {
         pub name: String  => vld::string().min(2).max(50),
         pub email: String => vld::string().email(),
@@ -58,105 +33,14 @@ fn create_user(payload: serde_json::Value) -> Result<String, VldTauriError> {
 }
 ```
 
-### Pattern 2 — Auto-Validated Payload
+On failure the frontend receives `{"error": "Validation failed", "issues": [{"path": "name", "message": "..."}]}`.
 
-`VldPayload<T>` validates during deserialization. Fields accessible via `Deref`.
+## Documentation
 
-```rust,ignore
-#[tauri::command]
-fn create_user(payload: VldPayload<CreateUser>) -> Result<String, VldTauriError> {
-    Ok(format!("Created {}", payload.name))
-}
-```
+- Guide: <https://s00d.github.io/vld/integrations/ui/tauri>
+- API: <https://docs.rs/vld-tauri>
 
-## Event Payloads
-
-```rust,ignore
-use tauri::Listener;
-
-// Explicit validation
-app.listen("user:update", |event| {
-    let payload: serde_json::Value = serde_json::from_str(event.payload()).unwrap();
-    match validate_event::<UserUpdate>(payload) {
-        Ok(update) => println!("Valid: {:?}", update),
-        Err(e) => eprintln!("Invalid event: {e}"),
-    }
-});
-
-// Auto-validation via VldEvent<T>
-app.listen("user:update", |event| {
-    match serde_json::from_str::<VldEvent<UserUpdate>>(event.payload()) {
-        Ok(update) => println!("id={}", update.id),
-        Err(e) => eprintln!("Bad payload: {e}"),
-    }
-});
-```
-
-## State Validation at Init
-
-```rust,ignore
-let config_json = std::fs::read_to_string("config.json")?;
-let config = validate_state::<AppConfig>(
-    serde_json::from_str(&config_json)?
-).expect("Invalid config");
-app.manage(config);
-```
-
-## Plugin Config Validation
-
-```rust,ignore
-let plugin_cfg: serde_json::Value = /* from tauri.conf.json */;
-let cfg = validate_plugin_config::<MyPluginConfig>(plugin_cfg)
-    .expect("Invalid plugin config");
-```
-
-## Channel Messages
-
-```rust,ignore
-#[tauri::command]
-fn stream(channel: tauri::ipc::Channel<serde_json::Value>) -> Result<(), VldTauriError> {
-    let msg = serde_json::json!({"percent": 50, "status": "working"});
-    let validated = validate_channel_message::<Progress>(msg)?;
-    channel.send(serde_json::to_value(&validated).unwrap()).unwrap();
-    Ok(())
-}
-```
-
-## Error Format
-
-`VldTauriError` implements `Serialize`, so Tauri returns it directly:
-
-```json
-{
-  "error": "Validation failed",
-  "issues": [
-    { "path": "name", "message": "String must be at least 2 characters" },
-    { "path": "email", "message": "Invalid email address" }
-  ]
-}
-```
-
-## Frontend Usage (TypeScript)
-
-```typescript
-import { invoke } from '@tauri-apps/api/core';
-
-interface VldError {
-  error: string;
-  issues: Array<{ path: string; message: string }>;
-}
-
-try {
-  const result = await invoke('create_user', {
-    payload: { name: 'Alice', email: 'alice@example.com' }
-  });
-} catch (err) {
-  const vldErr = err as VldError;
-  for (const issue of vldErr.issues) {
-    console.error(`${issue.path}: ${issue.message}`);
-  }
-}
-```
+MSRV: 1.85, see [MSRV.md](https://github.com/s00d/vld/blob/main/MSRV.md).
 
 ## License
 

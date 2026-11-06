@@ -20,12 +20,14 @@
 //! **415 Unsupported Media Type**. See the
 //! [error body format](vld_http_common#error-bodies).
 //!
-//! # Quick example
+//! Guide: <https://s00d.github.io/vld/integrations/web/axum> (shared rules
+//! for all adapters: <https://s00d.github.io/vld/integrations/web/overview>).
 //!
-//! ```ignore
-//! use axum::{Router, routing::post};
-//! use vld::prelude::*;
-//! use vld_axum::{VldPath, VldQuery, VldJson, VldHeaders};
+//! # Example
+//!
+//! ```
+//! use axum::{routing::post, Router};
+//! use vld_axum::{VldHeaders, VldJson, VldPath};
 //!
 //! vld::schema! {
 //!     #[derive(Debug)]
@@ -51,10 +53,12 @@
 //! async fn handler(
 //!     VldPath(path): VldPath<PathParams>,
 //!     VldHeaders(headers): VldHeaders<Auth>,
-//!     VldJson(body): VldJson<Body>,
+//!     VldJson(body): VldJson<Body>, // body extractors go last
 //! ) -> String {
 //!     format!("id={} auth={} name={}", path.id, headers.authorization, body.name)
 //! }
+//!
+//! let app: Router = Router::new().route("/users/{id}", post(handler));
 //! ```
 
 use axum::extract::rejection::RawPathParamsRejection;

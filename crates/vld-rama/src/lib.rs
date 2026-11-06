@@ -1,7 +1,7 @@
-//! # vld-rama — Rama integration for the `vld` validation library
+//! # vld-rama — Rama integration for `vld`
 //!
-//! Provides extractors and a [`ValidateJsonLayer`] that validate HTTP request
-//! data using `vld` schemas (no `serde::Deserialize` required):
+//! Extractors and a [`ValidateJsonLayer`] that validate HTTP request data
+//! with `vld` schemas (no `serde::Deserialize` needed on your types).
 //!
 //! | API | Source |
 //! |---|---|
@@ -11,15 +11,50 @@
 //! | [`VldForm<T>`] | URL-encoded form body |
 //! | [`VldHeaders<T>`] | HTTP headers |
 //! | [`VldCookie<T>`] | Cookie values |
-//! | [`ValidateJsonLayer<T>`] | Middleware for Service stacks |
+//! | [`ValidateJsonLayer<T>`] | Middleware: validates JSON bodies, stores [`Validated<T>`] |
 //!
-//! All extractors return **422 Unprocessable Entity** on validation failure
-//! or malformed input, and **413 Payload Too Large** when a body exceeds
-//! the limit. [`VldJson`] requires a JSON `Content-Type` (`application/json`
-//! or `application/*+json`) and [`VldForm`]
-//! `application/x-www-form-urlencoded`; anything else is **415 Unsupported
-//! Media Type**. [`ValidateJsonLayer`] passes non-JSON requests through.
-//! See the [error body format](vld_http_common#error-bodies).
+//! Failures are JSON responses (see the
+//! [error body format](vld_http_common#error-bodies)): **422** for invalid or
+//! malformed input, **413** for a body over the limit, **415** when
+//! [`VldJson`] gets no JSON `Content-Type` (`application/json` or
+//! `application/*+json`) or [`VldForm`] no
+//! `application/x-www-form-urlencoded`. [`ValidateJsonLayer`] passes
+//! non-JSON requests through, so [`validated`] returns `Option<T>`.
+//!
+//! # Example
+//!
+//! ```
+//! use rama::http::service::web::WebService;
+//! use rama::http::{Body, Request, StatusCode};
+//! use rama::Service;
+//! use vld_rama::VldJson;
+//!
+//! vld::schema! {
+//!     #[derive(Debug)]
+//!     pub struct CreateUser {
+//!         pub name: String => vld::string().min(2),
+//!         pub email: String => vld::string().email(),
+//!     }
+//! }
+//!
+//! async fn create(VldJson(user): VldJson<CreateUser>) -> String {
+//!     format!("created {}", user.name)
+//! }
+//!
+//! # #[tokio::main]
+//! # async fn main() {
+//! let svc = WebService::default().with_post("/users", create);
+//!
+//! let req = Request::builder()
+//!     .method("POST")
+//!     .uri("http://example.com/users")
+//!     .header("content-type", "application/json")
+//!     .body(Body::from(r#"{"name":"A","email":"bad"}"#))
+//!     .unwrap();
+//! let resp = svc.serve(req).await.unwrap();
+//! assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+//! # }
+//! ```
 //!
 //! # Body limit
 //!
@@ -28,7 +63,9 @@
 //! with `rama::layer::AddInputExtensionLayer::new(VldBodyLimit(n))`; the
 //! layer takes [`ValidateJsonLayer::with_limit`].
 //!
-//! Requires Rust **1.96+** (Rama MSRV).
+//! Requires Rust **1.96+** (Rama's MSRV).
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/web/rama>
 
 mod extract;
 mod layer;

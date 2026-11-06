@@ -1,3 +1,9 @@
+//! `#[derive(Validate)]` for [vld](https://docs.rs/vld).
+//!
+//! Use it through `vld`'s `derive` feature (`vld::Validate`) rather than
+//! depending on this crate directly. See [`macro@Validate`] for the attributes
+//! and the guide at <https://s00d.github.io/vld/structs/derive>.
+
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;

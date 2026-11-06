@@ -1,17 +1,14 @@
-//! # vld-tower — Tower middleware for `vld` validation
+//! # vld-tower — Tower middleware for `vld`
 //!
-//! A [`tower::Layer`](tower_layer::Layer) that validates incoming HTTP JSON
-//! request bodies against a `vld` schema, for Tower services over the
-//! [`http`] types — an Axum `Router` (see `examples/tower_axum.rs`) or a
-//! hyper service via `hyper-util`'s `TowerToHyperService`.
+//! A [`tower::Layer`](tower_layer::Layer) that validates JSON request bodies
+//! against a `vld` schema, for any Tower service over the [`http`] types: an
+//! Axum `Router` (see `examples/tower_axum.rs`), a hyper service via
+//! `hyper-util`'s `TowerToHyperService`, or a plain `service_fn`. It depends
+//! only on `tower-layer` / `tower-service` / `http`, not on a web framework.
 //!
-//! On **success** the validated struct is stored in
-//! [`http::Request::extensions`] as [`Validated<T>`] so downstream handlers
-//! can retrieve it without re-parsing. The original body bytes are
-//! forwarded as-is.
-//!
-//! On **failure** a JSON error response is returned immediately — the inner
-//! service is never called (see the
+//! On **success** the validated value is stored in the request extensions as
+//! [`Validated<T>`] and the body bytes are forwarded. On **failure** a JSON
+//! error response is returned and the inner service is not called (see the
 //! [error body format](vld_http_common#error-bodies)):
 //!
 //! | Situation | Status |
@@ -21,8 +18,7 @@
 //!
 //! Requests whose `Content-Type` is not JSON (`application/json` or
 //! `application/*+json`, case-insensitive) are passed through **untouched**
-//! (body not read). Handlers must therefore treat the validated value as
-//! optional: [`validated`] returns `Option<T>`.
+//! (body not read), so [`validated`] returns `Option<T>`.
 //!
 //! The inner service receives `Request<`[`ValidatedBody<B>`]`>`: the buffered
 //! bytes for validated JSON requests, the original body otherwise. Responses
@@ -30,20 +26,46 @@
 //! service's. The layer never fails itself; its error type is the inner
 //! service's.
 //!
-//! # Quick Start (with Axum)
+//! # Example
 //!
-//! ```rust,ignore
-//! use axum::{routing::post, Extension, Router};
-//! use vld_tower::{ValidateJsonLayer, Validated};
+//! ```
+//! use bytes::Bytes;
+//! use http::{Request, Response, StatusCode};
+//! use http_body_util::Full;
+//! use tower::{ServiceBuilder, ServiceExt};
+//! use vld_tower::{validated, ValidateJsonLayer, ValidatedBody};
 //!
-//! async fn create(Extension(Validated(user)): Extension<Validated<CreateUser>>) -> String {
-//!     format!("created {}", user.name)
+//! vld::schema! {
+//!     #[derive(Debug, Clone)]
+//!     pub struct CreateUser {
+//!         pub name: String  => vld::string().min(2),
+//!         pub email: String => vld::string().email(),
+//!     }
 //! }
 //!
-//! let app: Router = Router::new()
-//!     .route("/users", post(create))
-//!     .layer(ValidateJsonLayer::<CreateUser>::new());
+//! async fn handler(
+//!     req: Request<ValidatedBody<Full<Bytes>>>,
+//! ) -> Result<Response<Full<Bytes>>, std::convert::Infallible> {
+//!     let name = validated::<CreateUser>(&req).map_or("not JSON".into(), |u| u.name);
+//!     Ok(Response::new(Full::new(Bytes::from(name))))
+//! }
+//!
+//! # #[tokio::main]
+//! # async fn main() {
+//! let svc = ServiceBuilder::new()
+//!     .layer(ValidateJsonLayer::<CreateUser>::new())
+//!     .service_fn(handler);
+//!
+//! let req = Request::post("/users")
+//!     .header("content-type", "application/json")
+//!     .body(Full::new(Bytes::from(r#"{"name":"A","email":"bad"}"#)))
+//!     .unwrap();
+//! let resp = svc.oneshot(req).await.unwrap();
+//! assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+//! # }
 //! ```
+//!
+//! Guide: <https://s00d.github.io/vld/integrations/web/tower>
 
 use bytes::Bytes;
 use http::{Request, Response, StatusCode};
@@ -91,8 +113,9 @@ impl<T> std::ops::Deref for Validated<T> {
 ///    error), parsed and validated via `T::vld_parse_value()`.
 /// 3. **Valid** — inserts [`Validated<T>`] into request extensions,
 ///    re-attaches the body bytes, and calls the inner service.
-/// 4. **Invalid** — returns `422 Unprocessable Entity` with a JSON body
-///    containing the validation errors. The inner service is **not** called.
+/// 4. **Invalid** — returns `422 Unprocessable Entity` (`413` when the body
+///    is over the limit) with a JSON error body. The inner service is **not**
+///    called.
 #[derive(Clone)]
 pub struct ValidateJsonLayer<T> {
     limit: usize,

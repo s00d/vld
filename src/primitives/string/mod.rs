@@ -131,6 +131,7 @@ impl ZString {
     ///
     /// Requires the `regex` feature.
     #[cfg(feature = "regex")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "regex")))]
     pub fn regex(self, re: regex_lite::Regex) -> Self {
         self.push(Kind::Regex(re), None)
     }
@@ -139,6 +140,7 @@ impl ZString {
     ///
     /// Requires the `regex` feature.
     #[cfg(feature = "regex")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "regex")))]
     pub fn regex_msg(self, re: regex_lite::Regex, msg: impl Into<String>) -> Self {
         self.push(Kind::Regex(re), Some(msg.into()))
     }

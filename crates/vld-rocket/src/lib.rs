@@ -9,6 +9,49 @@
 //! anything else is `415 Unsupported Media Type`. See the
 //! [error body format](vld_http_common#error-bodies).
 //!
+//! Guide: <https://s00d.github.io/vld/integrations/web/rocket> (shared rules
+//! for all adapters: <https://s00d.github.io/vld/integrations/web/overview>).
+//!
+//! # Example
+//!
+//! ```no_run
+//! use vld_rocket::prelude::*;
+//!
+//! vld::schema! {
+//!     #[derive(Debug, Clone)]
+//!     pub struct CreateUser {
+//!         pub name: String  => vld::string().min(2).max(50),
+//!         pub email: String => vld::string().email(),
+//!     }
+//! }
+//!
+//! vld::schema! {
+//!     #[derive(Debug, Clone)]
+//!     pub struct UserPath {
+//!         pub id: i64 => vld::number().int().min(1),
+//!     }
+//! }
+//!
+//! #[rocket::post("/users", data = "<user>")]
+//! fn create_user(user: VldJson<CreateUser>) -> String {
+//!     format!("created {}", user.name)
+//! }
+//!
+//! // Rocket needs every `<param>` as an argument too; `VldPath` validates them.
+//! #[rocket::get("/users/<id>")]
+//! fn get_user(id: &str, p: VldPath<UserPath>) -> String {
+//!     let _ = id;
+//!     format!("user #{}", p.id)
+//! }
+//!
+//! fn app() -> rocket::Rocket<rocket::Build> {
+//!     rocket::build()
+//!         .mount("/api", rocket::routes![create_user, get_user])
+//!         .register("/", vld_catchers())
+//! }
+//! # fn main() { let _ = app(); }
+//! ```
+//!
 //! # Extractors
 //!
 //! | Extractor | Source | Rocket equivalent |
@@ -31,14 +74,9 @@
 //!
 //! # Error catchers
 //!
-//! Register [`vld_catchers()`] to get JSON error responses instead of the
-//! default HTML:
-//!
-//! ```rust,ignore
-//! rocket::build()
-//!     .mount("/", routes![...])
-//!     .register("/", vld_rocket::vld_catchers())
-//! ```
+//! Register [`vld_catchers()`] (as in the example above) to get JSON error
+//! responses instead of Rocket's default HTML pages. A failed guard only sets
+//! the status; the catcher answers with the error body the guard stored.
 
 use rocket::data::{ByteUnit, Data, FromData, Limits, Outcome as DataOutcome, ToByteUnit};
 use rocket::http::Status;
