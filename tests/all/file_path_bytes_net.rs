@@ -169,6 +169,9 @@ fn duration_formats_and_bounds() {
 
 // --- path ----------------------------------------------------------------------
 
+/// An absolute path on the host OS (`/tmp` is relative on Windows).
+const ABS: &str = if cfg!(windows) { r"C:\tmp" } else { "/tmp" };
+
 #[test]
 fn path_shape_checks() {
     let rel = vld::path().relative();
@@ -177,12 +180,12 @@ fn path_shape_checks() {
         std::path::PathBuf::from("src/lib.rs")
     );
     assert_issue!(
-        parse_err(&rel, json!("/tmp")),
+        parse_err(&rel, json!(ABS)),
         "",
         IssueCode::PathNotRelative
     );
     let abs = vld::path().absolute();
-    assert!(abs.parse_value(&json!("/tmp")).is_ok());
+    assert!(abs.parse_value(&json!(ABS)).is_ok());
     assert_issue!(
         parse_err(&abs, json!("tmp")),
         "",

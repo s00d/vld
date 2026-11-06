@@ -99,7 +99,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: mkdir -p .ts-check && cd .ts-check && npm init -y >/dev/null && npm install --no-audit --no-fund zod@3 valibot@1
+      - run: mkdir -p .ts-check && cd .ts-check && echo '{"private":true}' > package.json && npm install --no-audit --no-fund zod@3 valibot@1
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
