@@ -7,7 +7,7 @@
 //! |---|---|---|
 //! | `POST /json` | JSON `User` | `"{name}:{age}"` |
 //! | `POST /form` | form `User` | `"{name}:{age}"` |
-//! | `GET /query` | query `Query` | `"{tag joined by ,}\|{q}"` |
+//! | `GET /query` | query `Query` | `"{tag joined by ,}\|{q}"` (+ `"\|{page}"` when set) |
 //! | `GET /path/{id}` | path `PathId` | `"id={id}"` |
 //! | `GET /pstr/{s}` | path `PathStr` | `"{s}"` |
 //! | `GET /pnone` (no params) | path `PathNone` | `PathNone::reply` |
@@ -42,6 +42,7 @@ vld::schema! {
     pub struct Query {
         pub tag: Vec<String> => vld::array(vld::string()),
         pub q: String => vld::string(),
+        pub page: Option<i64> => vld::number().int().optional(),
     }
 }
 
@@ -93,9 +94,13 @@ impl User {
 }
 
 impl Query {
-    /// The 200 body for `/query`.
+    /// The 200 body for `/query`; `|{page}` is appended when `page` is set.
     pub fn reply(&self) -> String {
-        format!("{}|{}", self.tag.join(","), self.q)
+        let mut out = format!("{}|{}", self.tag.join(","), self.q);
+        if let Some(page) = self.page {
+            out.push_str(&format!("|{page}"));
+        }
+        out
     }
 }
 
@@ -148,9 +153,10 @@ impl Response {
 pub enum Expect {
     /// 200 with exactly this text body.
     Ok(String),
-    /// 422 `{"error":"Validation failed","issues":[...]}` whose issue paths
-    /// are exactly these (in order).
-    Invalid(Vec<&'static str>),
+    /// 422 `{"error":"Validation failed","issues":[...]}` whose issues are
+    /// exactly these `(path, code)` pairs (in order; `code` is
+    /// [`IssueCode::key()`](vld::error::IssueCode::key)).
+    Invalid(Vec<(&'static str, &'static str)>),
     /// 413 `{"error":"Payload too large"}`.
     TooLarge,
     /// 415 `{"error":"Unsupported Media Type","message":"..."}`.
@@ -185,11 +191,11 @@ impl Case {
                 assert_eq!(resp.status, 200, "[{name}] body: {}", resp.text());
                 assert_eq!(resp.text(), text, "[{name}]");
             }
-            Expect::Invalid(paths) => {
+            Expect::Invalid(issues) => {
                 assert_eq!(resp.status, 422, "[{name}] body: {}", resp.text());
                 let body = resp.json();
                 assert_eq!(body["error"], "Validation failed", "[{name}] {body}");
-                let got: Vec<&str> = body["issues"]
+                let got: Vec<(&str, &str)> = body["issues"]
                     .as_array()
                     .unwrap_or_else(|| panic!("[{name}] no issues array: {body}"))
                     .iter()
@@ -198,10 +204,13 @@ impl Case {
                             i["message"].is_string(),
                             "[{name}] issue without message: {i}"
                         );
-                        i["path"].as_str().unwrap_or("<no path>")
+                        (
+                            i["path"].as_str().unwrap_or("<no path>"),
+                            i["code"].as_str().unwrap_or("<no code>"),
+                        )
                     })
                     .collect();
-                assert_eq!(got, paths, "[{name}] issue paths: {body}");
+                assert_eq!(got, issues, "[{name}] issues (path, code): {body}");
             }
             Expect::TooLarge => {
                 assert_eq!(resp.status, 413, "[{name}] body: {}", resp.text());
@@ -313,11 +322,53 @@ pub mod cases {
         )
     }
 
+    /// Structured `+json` suffixes are JSON (`application/vnd.api+json`).
+    pub fn json_content_type_json_suffix() -> Case {
+        case(
+            "json_content_type_json_suffix",
+            post(
+                "/json",
+                "application/vnd.api+json",
+                r#"{"name":"Alice","age":25}"#,
+            ),
+            ok("Alice:25"),
+        )
+    }
+
+    /// A `+json` suffix with parameters (`application/problem+json; charset=utf-8`).
+    pub fn json_content_type_json_suffix_params() -> Case {
+        case(
+            "json_content_type_json_suffix_params",
+            post(
+                "/json",
+                "application/problem+json; charset=utf-8",
+                r#"{"name":"Alice","age":25}"#,
+            ),
+            ok("Alice:25"),
+        )
+    }
+
+    /// A JSON body without a `Content-Type` header: 415.
+    pub fn json_content_type_missing() -> Case {
+        let mut r = req("POST", "/json");
+        r.body = br#"{"name":"Alice","age":25}"#.to_vec();
+        case("json_content_type_missing", r, Expect::Unsupported)
+    }
+
+    /// A JSON body sent as `text/plain`: 415.
+    pub fn json_content_type_not_json() -> Case {
+        case(
+            "json_content_type_not_json",
+            post("/json", "text/plain", r#"{"name":"Alice","age":25}"#),
+            Expect::Unsupported,
+        )
+    }
+
     pub fn json_malformed() -> Case {
         case(
             "json_malformed",
             post("/json", "application/json", "{"),
-            Expect::Invalid(vec![""]),
+            Expect::Invalid(vec![("", "parse_error")]),
         )
     }
 
@@ -325,7 +376,7 @@ pub mod cases {
         case(
             "json_validation_error",
             post("/json", "application/json", r#"{"name":"A","age":-1}"#),
-            Expect::Invalid(vec![".name", ".age"]),
+            Expect::Invalid(vec![(".name", "too_small"), (".age", "too_small")]),
         )
     }
 
@@ -378,7 +429,7 @@ pub mod cases {
         case(
             "form_too_many_fields",
             post("/form", FORM, body),
-            Expect::Invalid(vec![""]),
+            Expect::Invalid(vec![("", "parse_error")]),
         )
     }
 
@@ -386,7 +437,7 @@ pub mod cases {
         case(
             "form_validation_error",
             post("/form", FORM, "name=A&age=x"),
-            Expect::Invalid(vec![".name", ".age"]),
+            Expect::Invalid(vec![(".name", "too_small"), (".age", "invalid_type")]),
         )
     }
 
@@ -395,7 +446,7 @@ pub mod cases {
         case(
             "form_non_utf8",
             post("/form", FORM, b"name=\xff\xfe&age=1".to_vec()),
-            Expect::Invalid(vec![""]),
+            Expect::Invalid(vec![("", "parse_error")]),
         )
     }
 
@@ -426,11 +477,30 @@ pub mod cases {
         )
     }
 
+    /// Query values follow the schema: a numeric-looking value fills a string
+    /// field, a single value fills an array, an integer field is coerced.
+    pub fn query_coercion_follows_schema() -> Case {
+        case(
+            "query_coercion_follows_schema",
+            req("GET", "/query?q=123&tag=a&page=30"),
+            ok("a|123|30"),
+        )
+    }
+
+    /// A non-numeric value for an integer field is an `invalid_type` issue.
+    pub fn query_int_invalid() -> Case {
+        case(
+            "query_int_invalid",
+            req("GET", "/query?q=x&tag=a&page=abc"),
+            Expect::Invalid(vec![(".page", "invalid_type")]),
+        )
+    }
+
     pub fn query_missing_field() -> Case {
         case(
             "query_missing_field",
             req("GET", "/query?tag=a&tag=b"),
-            Expect::Invalid(vec![".q"]),
+            Expect::Invalid(vec![(".q", "missing_field")]),
         )
     }
 
@@ -442,7 +512,7 @@ pub mod cases {
         case(
             "path_invalid",
             req("GET", "/path/0"),
-            Expect::Invalid(vec![".id"]),
+            Expect::Invalid(vec![(".id", "too_small")]),
         )
     }
 
@@ -497,7 +567,7 @@ pub mod cases {
         case(
             "headers_underscore_only",
             r,
-            Expect::Invalid(vec![".x_tag"]),
+            Expect::Invalid(vec![(".x_tag", "missing_field")]),
         )
     }
 
@@ -505,7 +575,7 @@ pub mod cases {
         case(
             "headers_missing",
             req("GET", "/headers"),
-            Expect::Invalid(vec![".x_tag"]),
+            Expect::Invalid(vec![(".x_tag", "missing_field")]),
         )
     }
 
@@ -539,10 +609,21 @@ pub mod cases {
         case("cookie_non_ascii", r, ok("café"))
     }
 
+    /// A numeric-looking cookie value fills a string field.
+    pub fn cookie_numeric_value() -> Case {
+        let mut r = req("GET", "/cookie");
+        r.headers.push(("cookie", b"sid=42".to_vec()));
+        case("cookie_numeric_value", r, ok("42"))
+    }
+
     pub fn cookie_missing() -> Case {
         let mut r = req("GET", "/cookie");
         r.headers.push(("cookie", b"other=1".to_vec()));
-        case("cookie_missing", r, Expect::Invalid(vec![".sid"]))
+        case(
+            "cookie_missing",
+            r,
+            Expect::Invalid(vec![(".sid", "missing_field")]),
+        )
     }
 }
 
