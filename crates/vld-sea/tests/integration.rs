@@ -3,6 +3,9 @@
 
 use vld_sea::prelude::*;
 
+mod common;
+use common::{issues, pairs};
+
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
@@ -70,32 +73,6 @@ mod item_entity {
 // ---------------------------------------------------------------------------
 // Tests: validate_active (ActiveModel → JSON → vld)
 // ---------------------------------------------------------------------------
-
-/// `(path, code)` of every issue of a `Validation` error (panics on `Ok`).
-#[track_caller]
-fn issues<T: std::fmt::Debug>(r: Result<T, VldSeaError>) -> Vec<(String, String)> {
-    match r {
-        Err(VldSeaError::Validation(e)) => e
-            .issues
-            .iter()
-            .map(|i| {
-                (
-                    i.path.iter().map(ToString::to_string).collect(),
-                    i.code.key().to_string(),
-                )
-            })
-            .collect(),
-        other => panic!("expected a validation error, got {other:?}"),
-    }
-}
-
-/// Owned `(path, code)` pairs for comparing with [`issues`].
-fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
-    expected
-        .iter()
-        .map(|(p, c)| (p.to_string(), c.to_string()))
-        .collect()
-}
 
 #[test]
 fn active_model_valid() {
