@@ -370,6 +370,8 @@ fn check(f: &str, msg: &str) -> Act {
 
 /// `^…$` shape of an ISO time `HH:MM[:SS[.frac]]` (vld's `iso_time`).
 const TIME_RE: &str = r"([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?";
+/// Time part of `iso_datetime()` / `datetime()`: seconds are required.
+const DATETIME_TIME_RE: &str = r"([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?";
 
 /// The date part (first 10 chars) is a real calendar day.
 const CALENDAR_FN: &str = "(s) => { const d = new Date(s.slice(0, 10) + \"T00:00:00Z\"); return !isNaN(d) && d.toISOString().slice(0, 10) === s.slice(0, 10); }";
@@ -432,8 +434,8 @@ fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
         ],
         "date-time" => vec![
             re(format!(
-                "/^\\d{{4}}-\\d{{2}}-\\d{{2}}T{}([Zz]|[+-]([01]\\d|2[0-3]):[0-5]\\d)?$/",
-                TIME_RE
+                "/^\\d{{4}}-\\d{{2}}-\\d{{2}}[Tt]{}([Zz]|[+-]([01]\\d|2[0-3]):[0-5]\\d)?$/",
+                DATETIME_TIME_RE
             )),
             check(CALENDAR_FN, "Invalid datetime"),
         ],
@@ -443,7 +445,7 @@ fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
         "hex" => vec![re("/^[0-9A-Fa-f]+$/".to_string())],
         "slug" => vec![re("/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/".to_string())],
         "semver" => vec![re(
-            "/^\\s*v?\\d+\\.\\d+\\.\\d+(?:[-+][\\s\\S]*|\\s*)$/".to_string(),
+            "/^v?\\d+\\.\\d+\\.\\d+(?:[-+][\\s\\S]*)?$/".to_string(),
         )],
         "jwt" => vec![re(
             "/^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/".to_string(),

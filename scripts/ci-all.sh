@@ -319,7 +319,7 @@ group_minimal() {
     step "minimal: warp" "${min[@]}" -p vld-warp
     step "minimal: tonic" "${min[@]}" -p vld-tonic
     step "minimal: config-rs + figment" "${min[@]}" -p vld-config --features figment
-    step "minimal: redis 0 + aio" "${min[@]}" -p vld-redis --features aio
+    step "minimal: redis 0 + aio" "${min[@]}" -p vld-redis --features aio-tokio
     step "minimal: schemars 0 / aide" "${min[@]}" -p vld-schemars -p vld-aide
   fi
   rm -rf "${scratch}"
