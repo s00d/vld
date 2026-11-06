@@ -60,6 +60,7 @@
 //!
 //! let app: Router = Router::new().route("/users/{id}", post(handler));
 //! ```
+#![warn(missing_docs)]
 
 use axum::extract::rejection::RawPathParamsRejection;
 use axum::extract::{

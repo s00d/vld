@@ -66,6 +66,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/web/tower>
+#![warn(missing_docs)]
 
 use bytes::Bytes;
 use http::{Request, Response, StatusCode};

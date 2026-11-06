@@ -44,6 +44,7 @@
 //! `--kebab-case` from the field name.
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/config-cli/clap>
+#![warn(missing_docs)]
 
 use std::fmt;
 use vld::schema::VldParse;

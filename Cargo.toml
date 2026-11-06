@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    ".",
+    "crates/vld",
     "crates/vld-derive",
     "crates/vld-integration-common",
     "crates/vld-axum",
@@ -45,7 +45,7 @@ homepage = "https://github.com/s00d/vld"
 
 [workspace.dependencies]
 # Internal crates
-vld = { path = ".", version = "0.5.0" }
+vld = { path = "crates/vld", version = "0.5.0" }
 vld-derive = { path = "crates/vld-derive", version = "0.5.0" }
 vld-http-common = { path = "crates/vld-http-common", version = "0.5.0" }
 vld-integration-common = { path = "crates/vld-integration-common", version = "0.5.0" }
@@ -74,85 +74,6 @@ unsafe_code = "forbid"
 dbg_macro = "warn"
 todo = "warn"
 unimplemented = "warn"
-
-[package]
-name = "vld"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
-repository.workspace = true
-homepage.workspace = true
-description = "Type-safe runtime validation library for Rust, inspired by Zod"
-documentation = "https://docs.rs/vld"
-readme = "README.md"
-keywords = ["validation", "schema", "json", "zod", "parsing"]
-categories = ["parsing", "web-programming"]
-include = ["/src/**", "/README.md", "/LICENSE", "/CHANGELOG.md", "/Cargo.toml"]
-
-[lints]
-workspace = true
-
-[features]
-default = []
-regex = ["dep:regex-lite"]
-derive = ["dep:vld-derive"]
-# Deprecated no-ops (serde is always on): kept for compatibility, removed in 0.6.
-serialize = []
-deserialize = []
-openapi = []
-diff = ["openapi"]
-chrono = ["dep:chrono"]
-jiff = ["dep:jiff"]
-time = ["dep:time"]
-decimal = ["dep:rust_decimal"]
-net = ["dep:ipnet"]
-file = ["dep:infer"]
-file-advanced = ["file", "dep:sha2", "dep:md-5", "dep:image", "dep:kamadak-exif"]
-string-advanced = ["dep:semver", "dep:url", "dep:uuid", "dep:phonenumber"]
-
-[dependencies]
-serde = { workspace = true }
-serde_json = { workspace = true }
-regex-lite = { workspace = true, optional = true }
-chrono = { version = "0.4.38", optional = true, default-features = false, features = ["std", "clock", "serde"] }
-jiff = { version = "0.2.1", optional = true, default-features = false, features = ["std", "serde"] }
-time = { version = "0.3.36", optional = true, default-features = false, features = ["std", "parsing", "formatting", "macros", "serde-human-readable"] }
-vld-derive = { workspace = true, optional = true }
-infer = { version = "0.22.0", optional = true }
-rust_decimal = { version = "1.43.0", optional = true }
-semver = { version = "1.0.28", optional = true }
-url = { version = "2.5.8", optional = true }
-uuid = { version = "1.26.1", features = ["std", "v1", "v4", "v7"], optional = true }
-sha2 = { version = "0.11.0", optional = true }
-ipnet = { version = "2.12.2", optional = true, features = ["serde"] }
-phonenumber = { version = "0.3.10", optional = true }
-# Only image headers are read (dimensions). image's default formats minus
-# `avif` (an encoder only: pulls ravif/rav1e and the NCSA-licensed
-# libfuzzer-sys) and `rayon`. Floor 0.25.9: the last release on Rust 1.85.
-image = { version = "0.25.9", optional = true, default-features = false, features = ["bmp", "dds", "exr", "ff", "gif", "hdr", "ico", "jpeg", "png", "pnm", "qoi", "tga", "tiff", "webp"] }
-md-5 = { version = "0.11.0", optional = true }
-kamadak-exif = { version = "0.6.1", optional = true }
-
-[dev-dependencies]
-criterion = { version = ">=0.5, <0.9", features = ["html_reports"] }
-serde = { workspace = true }
-proptest = "1"
-insta = { workspace = true }
-jsonschema = { version = "0.60.2", default-features = false }
-tempfile = "3.27.0"
-
-[[bench]]
-name = "validation_bench"
-harness = false
-
-[package.metadata.docs.rs]
-# Every additive feature (all three date backends can be enabled together).
-features = ["derive", "regex", "openapi", "diff", "chrono", "jiff", "time", "decimal", "net", "file", "file-advanced", "string-advanced"]
-rustdoc-args = ["--cfg", "docsrs"]
-
-[package.metadata.release]
-pre-release-hook = ["just", "release-hook", "{{version}}"]
 
 # ---------------------------------------------------------------------------
 # Profiles — keep `target/` from eating tens of GB

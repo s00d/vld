@@ -77,6 +77,7 @@
 //! Register [`vld_catchers()`] (as in the example above) to get JSON error
 //! responses instead of Rocket's default HTML pages. A failed guard only sets
 //! the status; the catcher answers with the error body the guard stored.
+#![warn(missing_docs)]
 
 use rocket::data::{ByteUnit, Data, FromData, Limits, Outcome as DataOutcome, ToByteUnit};
 use rocket::http::Status;

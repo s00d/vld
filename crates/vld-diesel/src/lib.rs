@@ -51,6 +51,7 @@
 //! call [`validate_row`] to re-check loaded rows.
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/database/diesel>
+#![warn(missing_docs)]
 
 pub use vld;
 
@@ -314,6 +315,7 @@ mod mysql_narrow {
 // Prelude
 // ---------------------------------------------------------------------------
 
+/// Common imports: the diesel wrappers plus `vld::prelude`.
 pub mod prelude {
     #[allow(deprecated)]
     pub use crate::{

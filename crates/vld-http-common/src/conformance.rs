@@ -31,7 +31,9 @@ vld::schema! {
     /// `POST /json` and `POST /form` body.
     #[derive(Debug, Clone)]
     pub struct User {
+        /// At least 2 characters.
         pub name: String => vld::string().min(2),
+        /// Non-negative integer.
         pub age: i64 => vld::number().int().min(0),
     }
 }
@@ -40,8 +42,11 @@ vld::schema! {
     /// `GET /query` parameters.
     #[derive(Debug, Clone)]
     pub struct Query {
+        /// Repeated `tag=` parameters.
         pub tag: Vec<String> => vld::array(vld::string()),
+        /// Required search text.
         pub q: String => vld::string(),
+        /// Optional page number.
         pub page: Option<i64> => vld::number().int().optional(),
     }
 }
@@ -50,6 +55,7 @@ vld::schema! {
     /// `GET /path/{id}` parameters.
     #[derive(Debug, Clone)]
     pub struct PathId {
+        /// Positive integer id.
         pub id: i64 => vld::number().int().min(1),
     }
 }
@@ -58,6 +64,7 @@ vld::schema! {
     /// `GET /pstr/{s}` parameters.
     #[derive(Debug, Clone)]
     pub struct PathStr {
+        /// Any string segment.
         pub s: String => vld::string(),
     }
 }
@@ -66,6 +73,7 @@ vld::schema! {
     /// `GET /pnone` (a route without parameters) — every field optional.
     #[derive(Debug, Clone)]
     pub struct PathNone {
+        /// Absent on this route.
         pub id: Option<i64> => vld::number().int().optional(),
     }
 }
@@ -74,6 +82,7 @@ vld::schema! {
     /// `GET /headers` headers (`x-tag` → `x_tag`).
     #[derive(Debug, Clone)]
     pub struct Headers {
+        /// The `x-tag` header.
         pub x_tag: String => vld::string(),
     }
 }
@@ -82,6 +91,7 @@ vld::schema! {
     /// `GET /cookie` cookies.
     #[derive(Debug, Clone)]
     pub struct Cookies {
+        /// The `sid` cookie.
         pub sid: String => vld::string(),
     }
 }
@@ -122,18 +132,22 @@ impl PathNone {
 /// A framework-independent request.
 #[derive(Debug, Clone)]
 pub struct Request {
+    /// HTTP method (`"GET"`, `"POST"`).
     pub method: &'static str,
     /// Path and query, e.g. `/query?q=1`.
     pub uri: String,
     /// Header name/value pairs; values may be non-UTF-8.
     pub headers: Vec<(&'static str, Vec<u8>)>,
+    /// Request body.
     pub body: Vec<u8>,
 }
 
 /// A framework-independent response.
 #[derive(Debug, Clone)]
 pub struct Response {
+    /// HTTP status code.
     pub status: u16,
+    /// Response body.
     pub body: Vec<u8>,
 }
 
@@ -166,8 +180,11 @@ pub enum Expect {
 /// One conformance case.
 #[derive(Debug, Clone)]
 pub struct Case {
+    /// Case name, shown when it fails.
     pub name: &'static str,
+    /// The request to send.
     pub request: Request,
+    /// What must come back.
     pub expect: Expect,
 }
 
@@ -265,6 +282,7 @@ const FORM: &str = "application/x-www-form-urlencoded";
 pub mod cases {
     use super::*;
 
+    /// Valid JSON body: 200 `Alice:25`.
     pub fn json_valid() -> Case {
         case(
             "json_valid",
@@ -364,6 +382,7 @@ pub mod cases {
         )
     }
 
+    /// Malformed JSON: 422 with a root `parse_error`.
     pub fn json_malformed() -> Case {
         case(
             "json_malformed",
@@ -372,6 +391,7 @@ pub mod cases {
         )
     }
 
+    /// JSON that fails the schema: 422 with both field issues.
     pub fn json_validation_error() -> Case {
         case(
             "json_validation_error",
@@ -380,6 +400,7 @@ pub mod cases {
         )
     }
 
+    /// JSON body above the size limit: 413.
     pub fn json_oversized() -> Case {
         let pad = "x".repeat(OVERSIZED_LEN);
         case(
@@ -393,6 +414,7 @@ pub mod cases {
         )
     }
 
+    /// Valid form body (`+` decodes to a space): 200.
     pub fn form_valid() -> Case {
         case(
             "form_valid",
@@ -433,6 +455,7 @@ pub mod cases {
         )
     }
 
+    /// Form body that fails the schema: 422 with both field issues.
     pub fn form_validation_error() -> Case {
         case(
             "form_validation_error",
@@ -450,6 +473,7 @@ pub mod cases {
         )
     }
 
+    /// Form body above the size limit: 413.
     pub fn form_oversized() -> Case {
         let pad = "x".repeat(OVERSIZED_LEN);
         case(
@@ -496,6 +520,7 @@ pub mod cases {
         )
     }
 
+    /// Query without the required `q`: 422 `missing_field`.
     pub fn query_missing_field() -> Case {
         case(
             "query_missing_field",
@@ -504,10 +529,12 @@ pub mod cases {
         )
     }
 
+    /// Valid path parameter: 200 `id=42`.
     pub fn path_valid() -> Case {
         case("path_valid", req("GET", "/path/42"), ok("id=42"))
     }
 
+    /// Path parameter below the minimum: 422 `too_small`.
     pub fn path_invalid() -> Case {
         case(
             "path_invalid",
@@ -561,6 +588,7 @@ pub mod cases {
         case("headers_underscore_ignored", r, ok("good"))
     }
 
+    /// Only `x_tag` (underscore) is sent: it is ignored, so 422 `missing_field`.
     pub fn headers_underscore_only() -> Case {
         let mut r = req("GET", "/headers");
         r.headers.push(("x_tag", b"evil".to_vec()));
@@ -571,6 +599,7 @@ pub mod cases {
         )
     }
 
+    /// Required header absent: 422 `missing_field`.
     pub fn headers_missing() -> Case {
         case(
             "headers_missing",
@@ -616,6 +645,7 @@ pub mod cases {
         case("cookie_numeric_value", r, ok("42"))
     }
 
+    /// Required cookie absent: 422 `missing_field`.
     pub fn cookie_missing() -> Case {
         let mut r = req("GET", "/cookie");
         r.headers.push(("cookie", b"other=1".to_vec()));

@@ -59,6 +59,7 @@
 //! Requires Rust **1.94+** (Salvo 1.x).
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/web/salvo>
+#![warn(missing_docs)]
 
 use salvo::extract::Extractible;
 use salvo::extract::metadata::{Metadata, Source, SourceFrom, SourceParser};

@@ -75,6 +75,7 @@
 //!
 //! let app = App::new().route("/users/{id}", web::post().to(handler));
 //! ```
+#![warn(missing_docs)]
 
 use actix_web::body::{BodyStream, to_bytes_limited};
 use actix_web::dev::{Decompress, Payload};

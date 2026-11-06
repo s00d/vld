@@ -47,6 +47,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/codegen/fake>
+#![warn(missing_docs)]
 
 mod constraints;
 mod dict;
@@ -2420,6 +2421,7 @@ impl<T: ?Sized> __VldNestedSchemasFallback for T {}
 
 // ──────────────────── prelude ────────────────────────────────────────────
 
+/// Common imports: the fake-data traits, functions and `impl_fake!`.
 pub mod prelude {
     pub use crate::{
         FakeData, FakeGen, fake_json, fake_many, fake_parsed, fake_value, fake_value_seeded,

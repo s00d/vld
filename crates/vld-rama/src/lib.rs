@@ -66,6 +66,7 @@
 //! Requires Rust **1.96+** (Rama's MSRV).
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/web/rama>
+#![warn(missing_docs)]
 
 mod extract;
 mod layer;

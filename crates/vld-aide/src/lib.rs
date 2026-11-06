@@ -36,6 +36,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/openapi/aide>
+#![warn(missing_docs)]
 
 pub use vld_schemars::{impl_json_schema, schemars, vld_to_schemars};
 

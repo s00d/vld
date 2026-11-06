@@ -58,6 +58,7 @@
 //! [`vld_json_limit`] / [`vld_form_limit`] take an explicit limit.
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/web/warp>
+#![warn(missing_docs)]
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures_util::{Stream, StreamExt};

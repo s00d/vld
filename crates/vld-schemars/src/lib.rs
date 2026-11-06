@@ -46,6 +46,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/openapi/schemars>
+#![warn(missing_docs)]
 
 use serde_json::Value;
 use std::fmt;
@@ -831,6 +832,7 @@ impl<T: ?Sized> __VldNestedSchemasFallback for T {}
 
 // ========================= Prelude ===========================================
 
+/// Common imports: the conversion functions and macros plus `vld::prelude`.
 pub mod prelude {
     pub use crate::impl_json_schema;
     pub use crate::impl_vld_parse;

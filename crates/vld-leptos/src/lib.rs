@@ -63,6 +63,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/ui/leptos>
+#![warn(missing_docs)]
 
 pub use vld_integration_common::form::{
     FieldError, VldServerError, check_all_fields, check_field, check_field_all, validate,

@@ -39,6 +39,7 @@
 //! Issue paths have no leading dot (`user.email`, `items[0]`).
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/database/surrealdb>
+#![warn(missing_docs)]
 
 pub use vld;
 
@@ -326,6 +327,7 @@ macro_rules! validate_fields {
 
 // ========================= Prelude ===========================================
 
+/// Common imports: the SurrealDB helpers plus `vld::prelude`.
 pub mod prelude {
     #[allow(deprecated)]
     pub use crate::{

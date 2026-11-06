@@ -47,6 +47,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/web/tonic>
+#![warn(missing_docs)]
 
 use tonic::{Code, Request, Status};
 use vld::error::VldError;

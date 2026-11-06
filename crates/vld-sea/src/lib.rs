@@ -44,6 +44,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/database/sea-orm>
+#![warn(missing_docs)]
 
 #[cfg(all(feature = "sea-orm-1", feature = "sea-orm-2"))]
 compile_error!("Enable exactly one SeaORM version feature: `sea-orm-1` or `sea-orm-2`.");

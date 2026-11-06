@@ -48,6 +48,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/openapi/utoipa>
+#![warn(missing_docs)]
 
 #[cfg(all(feature = "utoipa-5", feature = "utoipa-6"))]
 compile_error!("Enable exactly one utoipa version feature: `utoipa-5` or `utoipa-6`.");

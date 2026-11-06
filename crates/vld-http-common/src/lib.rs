@@ -84,6 +84,7 @@
 //! `path` is `""` for the root (e.g. malformed JSON), `.field` for fields and
 //! `[0]` for array items (`.items[0].name`); `code` is
 //! [`IssueCode::key()`](vld::error::IssueCode::key).
+#![warn(missing_docs)]
 
 pub use vld::schema::parse_coerced;
 
@@ -536,6 +537,7 @@ vld::schema! {
     /// "Not Found", "Method Not Allowed", etc.
     #[derive(Debug, Clone, Serialize)]
     pub struct ErrorBody {
+        /// Short error title.
         pub error: String => vld::string(),
     }
 }
@@ -547,7 +549,9 @@ vld::schema! {
     /// [`VldHttpError::unsupported_form_media_type`]).
     #[derive(Debug, Clone, Serialize)]
     pub struct ErrorWithMessage {
+        /// Short error title.
         pub error: String   => vld::string(),
+        /// Details.
         pub message: String => vld::string(),
     }
 }
@@ -558,8 +562,11 @@ vld::schema! {
     /// [`IssueCode::key()`](vld::error::IssueCode::key)).
     #[derive(Debug, Clone, Serialize)]
     pub struct ValidationIssue {
+        /// Path of the invalid value (`.user.email`, `[0]`).
         pub path: String    => vld::string(),
+        /// Human-readable message.
         pub message: String => vld::string(),
+        /// Issue code key (`too_small`, `invalid_string`, …).
         pub code: String    => vld::string(),
     }
 }
@@ -573,7 +580,9 @@ vld::schema! {
     /// `{ "error": "Validation failed", "issues": [...] }`.
     #[derive(Debug, Clone, Serialize)]
     pub struct ValidationErrorBody {
+        /// Always `"Validation failed"`.
         pub error: String => vld::string(),
+        /// Every issue found.
         pub issues: Vec<ValidationIssue> => vld::array(vld::nested(ValidationIssue::parse_value)),
     }
 }

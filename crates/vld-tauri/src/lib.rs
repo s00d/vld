@@ -131,6 +131,7 @@
 //!   }
 //! }
 //! ```
+#![warn(missing_docs)]
 
 use serde::{Deserialize, Serialize};
 use vld::schema::VldParse;

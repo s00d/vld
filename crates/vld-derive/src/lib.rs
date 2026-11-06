@@ -3,6 +3,7 @@
 //! Use it through `vld`'s `derive` feature (`vld::Validate`) rather than
 //! depending on this crate directly. See [`macro@Validate`] for the attributes
 //! and the guide at <https://s00d.github.io/vld/structs/derive>.
+#![warn(missing_docs)]
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;

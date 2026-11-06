@@ -15,6 +15,7 @@
 //!   traits without orphan-rule conflicts).
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/shared/integration-common>
+#![warn(missing_docs)]
 
 use vld::error::{PathSegment, VldError};
 

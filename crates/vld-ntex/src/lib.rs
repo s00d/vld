@@ -66,6 +66,7 @@
 //! // Inside `HttpServer::new(...)`:
 //! // App::new().route("/users/{id}", web::post().to(handler))
 //! ```
+#![warn(missing_docs)]
 
 #[cfg(all(feature = "ntex-3", feature = "ntex-4"))]
 compile_error!("Enable exactly one ntex version feature: `ntex-3` or `ntex-4`.");

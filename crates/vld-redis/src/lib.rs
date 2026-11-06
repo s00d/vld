@@ -64,6 +64,7 @@
 //! ```ignore
 //! let raw: Option<String> = redis::Commands::get(&mut *conn, "key")?;
 //! ```
+#![warn(missing_docs)]
 
 use std::fmt;
 use std::ops::{Deref, DerefMut};
@@ -163,12 +164,14 @@ wrapper!(
 /// Each command builds a `redis::Cmd` (`build`), runs it into `raw`, then maps it.
 macro_rules! commands {
     ($(
+        $(#[$meta:meta])*
         fn $name:ident<$($gen:tt),*>($($arg:ident: $ty:ty),*) -> $ret:ty
         where [$($bound:tt)*]
         { build: $build:expr, raw: $raw:ty, map: $map:expr $(,)? }
     )*) => {
         impl<C: redis::ConnectionLike> RedisConn<C> {
             $(
+                $(#[$meta])*
                 pub fn $name<$($gen),*>(&mut self, $($arg: $ty),*) -> Result<$ret, VldRedisError>
                 where $($bound)*
                 {
@@ -182,6 +185,7 @@ macro_rules! commands {
         #[cfg(feature = "aio")]
         impl<C: redis::aio::ConnectionLike> AsyncRedisConn<C> {
             $(
+                $(#[$meta])*
                 pub async fn $name<$($gen),*>(&mut self, $($arg: $ty),*) -> Result<$ret, VldRedisError>
                 where $($bound)*
                 {
@@ -201,14 +205,17 @@ fn cmd1<A: redis::ToRedisArgs>(name: &str, a: A) -> redis::Cmd {
 }
 
 commands! {
+    /// `SET key value`: validate `value`, store it as JSON.
     fn set<K, V>(key: K, value: &V) -> ()
     where [K: redis::ToRedisArgs, V: serde::Serialize + vld::schema::VldParse]
     { build: { let mut c = cmd1("SET", key); c.arg(encode(value)?); c }, raw: (), map: Ok }
 
+    /// `GET key`: decode and validate the stored JSON (`None` if the key is missing).
     fn get<K, T>(key: K) -> Option<T>
     where [K: redis::ToRedisArgs, T: vld::schema::VldParse]
     { build: cmd1("GET", key), raw: Option<Vec<u8>>, map: decode_opt }
 
+    /// `MSET`: validate every value, then store them all as JSON.
     fn mset<'a, K, V, I>(items: I) -> ()
     where [I: IntoIterator<Item = (K, &'a V)>, K: redis::ToRedisArgs, V: serde::Serialize + vld::schema::VldParse + 'a]
     {
@@ -223,6 +230,7 @@ commands! {
         map: Ok,
     }
 
+    /// `MGET`: decode and validate each stored value (`None` for missing keys).
     fn mget<K, T, I>(keys: I) -> Vec<Option<T>>
     where [I: IntoIterator<Item = K>, K: redis::ToRedisArgs, T: vld::schema::VldParse]
     {
@@ -237,46 +245,57 @@ commands! {
         map: |raw: Vec<Option<Vec<u8>>>| raw.into_iter().map(decode_opt).collect(),
     }
 
+    /// `HSET key field value`: validate `value`, store it as JSON.
     fn hset<K, F, V>(key: K, field: F, value: &V) -> ()
     where [K: redis::ToRedisArgs, F: redis::ToRedisArgs, V: serde::Serialize + vld::schema::VldParse]
     { build: { let mut c = cmd1("HSET", key); c.arg(field).arg(encode(value)?); c }, raw: (), map: Ok }
 
+    /// `HGET key field`: decode and validate the stored JSON.
     fn hget<K, F, T>(key: K, field: F) -> Option<T>
     where [K: redis::ToRedisArgs, F: redis::ToRedisArgs, T: vld::schema::VldParse]
     { build: { let mut c = cmd1("HGET", key); c.arg(field); c }, raw: Option<Vec<u8>>, map: decode_opt }
 
+    /// `LPUSH`: validate `value`, push it as JSON; returns the new list length.
     fn lpush<K, V>(key: K, value: &V) -> usize
     where [K: redis::ToRedisArgs, V: serde::Serialize + vld::schema::VldParse]
     { build: { let mut c = cmd1("LPUSH", key); c.arg(encode(value)?); c }, raw: usize, map: Ok }
 
+    /// `RPUSH`: validate `value`, push it as JSON; returns the new list length.
     fn rpush<K, V>(key: K, value: &V) -> usize
     where [K: redis::ToRedisArgs, V: serde::Serialize + vld::schema::VldParse]
     { build: { let mut c = cmd1("RPUSH", key); c.arg(encode(value)?); c }, raw: usize, map: Ok }
 
+    /// `LPOP`: pop and validate the first element (`None` if the list is empty).
     fn lpop<K, T>(key: K) -> Option<T>
     where [K: redis::ToRedisArgs, T: vld::schema::VldParse]
     { build: cmd1("LPOP", key), raw: Option<Vec<u8>>, map: decode_opt }
 
+    /// `RPOP`: pop and validate the last element (`None` if the list is empty).
     fn rpop<K, T>(key: K) -> Option<T>
     where [K: redis::ToRedisArgs, T: vld::schema::VldParse]
     { build: cmd1("RPOP", key), raw: Option<Vec<u8>>, map: decode_opt }
 
+    /// `SADD`: validate `value`, add it as JSON; returns how many were added.
     fn sadd<K, V>(key: K, value: &V) -> usize
     where [K: redis::ToRedisArgs, V: serde::Serialize + vld::schema::VldParse]
     { build: { let mut c = cmd1("SADD", key); c.arg(encode(value)?); c }, raw: usize, map: Ok }
 
+    /// `SMEMBERS`: decode and validate every member.
     fn smembers<K, T>(key: K) -> Vec<T>
     where [K: redis::ToRedisArgs, T: vld::schema::VldParse]
     { build: cmd1("SMEMBERS", key), raw: Vec<Vec<u8>>, map: decode_all }
 
+    /// `ZADD key score value`: validate `value`, add it as JSON; returns how many were added.
     fn zadd<K, V>(key: K, score: f64, value: &V) -> usize
     where [K: redis::ToRedisArgs, V: serde::Serialize + vld::schema::VldParse]
     { build: { let mut c = cmd1("ZADD", key); c.arg(score).arg(encode(value)?); c }, raw: usize, map: Ok }
 
+    /// `ZRANGE key start stop`: decode and validate every element in the range.
     fn zrange<K, T>(key: K, start: isize, stop: isize) -> Vec<T>
     where [K: redis::ToRedisArgs, T: vld::schema::VldParse]
     { build: { let mut c = cmd1("ZRANGE", key); c.arg(start).arg(stop); c }, raw: Vec<Vec<u8>>, map: decode_all }
 
+    /// `PUBLISH`: validate `value`, publish it as JSON; returns the number of receivers.
     fn publish<Cn, V>(channel: Cn, value: &V) -> i64
     where [Cn: redis::ToRedisArgs, V: serde::Serialize + vld::schema::VldParse]
     { build: { let mut c = cmd1("PUBLISH", channel); c.arg(encode(value)?); c }, raw: i64, map: Ok }
@@ -357,6 +376,7 @@ macro_rules! impl_to_redis_async {
     };
 }
 
+/// Common imports: the connection wrappers, `VldRedisError` and `vld::prelude`.
 pub mod prelude {
     #[cfg(feature = "aio")]
     pub use crate::AsyncRedisConn;

@@ -72,6 +72,7 @@
 //! | `VldForm<T>` | Form body |
 //! | `VldHeaders<T>` | HTTP headers |
 //! | `VldCookie<T>` | Cookie values |
+#![warn(missing_docs)]
 
 use poem::error::{ReadBodyError, ResponseError};
 use poem::http::StatusCode;

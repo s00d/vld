@@ -44,6 +44,7 @@
 //! [`validate_row`] to re-check loaded rows.
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/database/sqlx>
+#![warn(missing_docs)]
 
 #[cfg(all(feature = "sqlx-0_8", feature = "sqlx-0_9"))]
 compile_error!("Enable exactly one SQLx version feature: `sqlx-0_8` or `sqlx-0_9`.");
@@ -340,6 +341,7 @@ mod pg_tests {
 
 // ========================= Prelude ===========================================
 
+/// Common imports: the sqlx wrappers plus `vld::prelude`.
 pub mod prelude {
     #[allow(deprecated)]
     pub use crate::{

@@ -96,7 +96,6 @@ msrv:
     # need, e.g. rama pins time =0.3.47 / Rust 1.88).
     probe() {
       local tc="$1" crate="$2" features="${3:-}" nodefault="${4:-}" dir dep path="$PWD/crates/$2"
-      [[ "${crate}" == vld ]] && path="$PWD"
       echo "==> MSRV ${tc}: ${crate}${features:+ [${features}]}"
       dir="$(mktemp -d)"; mkdir "${dir}/src"; echo 'fn main() {}' > "${dir}/src/main.rs"
       dep="path = \"${path}\""
@@ -127,7 +126,7 @@ minimal:
     set -euo pipefail
     # A scratch workspace with just these crates and no dev-dependencies: the whole
     # workspace can't resolve at minimal versions (rama pins time =0.3.47).
-    members=(. crates/vld-derive crates/vld-http-common crates/vld-warp crates/vld-tonic crates/vld-config crates/vld-redis crates/vld-schemars crates/vld-aide)
+    members=(crates/vld crates/vld-derive crates/vld-http-common crates/vld-warp crates/vld-tonic crates/vld-config crates/vld-redis crates/vld-schemars crates/vld-aide)
     scratch="$(mktemp -d)"; trap 'rm -rf "${scratch}"' EXIT
     git ls-files -z | grep -zv '^fuzz/\|^docs/' | xargs -0 tar -cf - | tar -xf - -C "${scratch}"
     list="$(printf '"%s", ' "${members[@]}")"

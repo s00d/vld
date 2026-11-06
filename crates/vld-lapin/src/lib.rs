@@ -47,6 +47,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/messaging/lapin>
+#![warn(missing_docs)]
 
 use std::fmt;
 use std::ops::{Deref, DerefMut};
@@ -400,6 +401,7 @@ macro_rules! impl_to_lapin {
     };
 }
 
+/// Common imports: `LapinChannel`, `VldLapinError` and `vld::prelude`.
 pub mod prelude {
     #[allow(deprecated)]
     pub use crate::impl_to_lapin;

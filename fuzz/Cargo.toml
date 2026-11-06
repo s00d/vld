@@ -10,7 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 serde_json = "1"
-vld = { path = ".." }
+vld = { path = "../crates/vld" }
 vld-http-common = { path = "../crates/vld-http-common" }
 
 # Standalone: not a member of the vld workspace (needs nightly to run).

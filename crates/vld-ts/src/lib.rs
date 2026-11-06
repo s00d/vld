@@ -42,6 +42,7 @@
 //! ```
 //!
 //! Guide: <https://s00d.github.io/vld/integrations/codegen/ts>
+#![warn(missing_docs)]
 
 use serde_json::Value;
 
@@ -207,6 +208,7 @@ pub trait ToOpenApi {
 
 /// Trait for types that can return discovered `$ref` paths.
 pub trait ToRefs {
+    /// The `$ref` paths this type's schema points to.
     fn to_refs() -> Vec<String>;
 }
 
