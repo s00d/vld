@@ -289,7 +289,14 @@ fn any_of_branches_keep_sibling_constraints() {
     let schema = vld::chrono::datetime().past();
     for _ in 0..300 {
         let v = fake_value(&js);
-        assert!(schema.parse_value(&v).is_ok(), "{v}");
+        let dt = schema
+            .parse_value(&v)
+            .unwrap_or_else(|e| panic!("{v}: {e}"));
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        assert!(dt.timestamp() < now, "{v} is not in the past");
     }
     let bounded = serde_json::json!({
         "type": "string",
@@ -300,7 +307,11 @@ fn any_of_branches_keep_sibling_constraints() {
     let d = vld::chrono::date().min("2020-03-01").max("2020-03-02");
     for _ in 0..100 {
         let v = fake_value(&bounded);
-        assert!(d.parse_value(&v).is_ok(), "{v}");
+        let day = d.parse_value(&v).unwrap_or_else(|e| panic!("{v}: {e}"));
+        assert!(
+            ["2020-03-01", "2020-03-02"].contains(&day.to_string().as_str()),
+            "{v}"
+        );
     }
 }
 

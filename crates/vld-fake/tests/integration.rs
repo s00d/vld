@@ -744,8 +744,10 @@ fn fake_parsed_typed() {
 fn try_fake_parsed_ok() {
     let schema = SimpleUser::json_schema();
     for _ in 0..10 {
-        let result = try_fake_parsed::<SimpleUser>(&schema);
-        assert!(result.is_ok());
+        let user = try_fake_parsed::<SimpleUser>(&schema).unwrap();
+        assert!((2..=50).contains(&user.name.chars().count()), "{user:?}");
+        assert!(user.email.contains('@'), "{user:?}");
+        assert!((18..=99).contains(&user.age), "{user:?}");
     }
 }
 
