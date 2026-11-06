@@ -9,3 +9,10 @@ examples/user_corrected.json
 /scratch/
 /.claude/worktrees/
 /.ts-check/
+
+# Docs site build output (docs/)
+/docs/node_modules/
+/docs/.nuxt/
+/docs/.output/
+/docs/.data/
+/docs/dist
