@@ -33,7 +33,10 @@ members = [
     "examples/playground",
 ]
 exclude = ["fuzz"]
-resolver = "3"
+# "2", not edition 2024's "3": the lockfile is for development and CI and
+# takes the newest releases (security fixes included). MSRV is checked by
+# `just msrv` with per-crate lockfiles resolved for each rust-version.
+resolver = "2"
 
 [workspace.package]
 version = "0.5.1"
