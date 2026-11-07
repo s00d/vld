@@ -183,6 +183,23 @@ pub trait VldSchema: Sized {
         crate::rules::ZRule::new(self, rule, Some(msg.into()))
     }
 
+    /// Transform the output with a fallible function; an `Err` becomes a
+    /// validation issue (`Custom { code: "transform" }`, message = the error).
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let big = vld::string().try_transform(|s| s.parse::<u128>());
+    /// assert_eq!(big.parse(r#""340282366920938463463374607431768211455""#).unwrap(), u128::MAX);
+    /// assert_eq!(big.parse(r#""x""#).unwrap_err().issues[0].code.key(), "transform");
+    /// ```
+    fn try_transform<F, U, E>(self, f: F) -> crate::combinators::ZTryTransform<Self, F, U>
+    where
+        F: Fn(Self::Output) -> Result<U, E>,
+        E: std::fmt::Display,
+    {
+        crate::combinators::ZTryTransform::new(self, f)
+    }
+
     /// Transform the output value after successful parsing.
     fn transform<F, U>(self, f: F) -> ZTransform<Self, F, U>
     where

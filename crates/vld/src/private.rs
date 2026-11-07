@@ -468,6 +468,7 @@ pub fn enum_schema(
     tag: Option<&str>,
     content: Option<&str>,
     untagged: bool,
+    deny_unknown: bool,
     variants: Vec<(&str, VariantSchema)>,
 ) -> Value {
     use serde_json::json;
@@ -485,15 +486,25 @@ pub fn enum_schema(
         variants
             .into_iter()
             .map(|(name, v)| match (content, v) {
-                (_, VariantSchema::Unit) => json!({
-                    "type": "object",
-                    "properties": tag_prop(t, name),
-                    "required": [t],
-                }),
+                (_, VariantSchema::Unit) => {
+                    let mut v = json!({
+                        "type": "object",
+                        "properties": tag_prop(t, name),
+                        "required": [t],
+                    });
+                    if deny_unknown {
+                        v["additionalProperties"] = Value::Bool(false);
+                    }
+                    v
+                }
                 (Some(c), VariantSchema::Value(s) | VariantSchema::Object(s)) => {
                     let mut props = tag_prop(t, name);
                     props[c] = s;
-                    json!({ "type": "object", "properties": props, "required": [t, c] })
+                    let mut v = json!({ "type": "object", "properties": props, "required": [t, c] });
+                    if deny_unknown {
+                        v["additionalProperties"] = Value::Bool(false);
+                    }
+                    v
                 }
                 (None, VariantSchema::Object(mut s)) => {
                     s["properties"][t] = json!({ "type": "string", "const": name });
@@ -586,4 +597,25 @@ pub fn flatten_schema(mut base: Value, parts: Vec<Value>) -> Value {
         }
     }
     base
+}
+
+/// `#[serde(deny_unknown_fields)]`: an `unrecognized_field` issue for every
+/// key of `obj` that is not in `known`.
+pub fn deny_unknown(obj: &Map<String, Value>, known: &[&str], errors: &mut VldError) {
+    for key in obj.keys().filter(|k| !known.contains(&k.as_str())) {
+        errors.issues.extend(
+            VldError::from_code(crate::error::IssueCode::UnrecognizedField)
+                .with_prefix(PathSegment::Field(key.clone()))
+                .issues,
+        );
+    }
+}
+
+/// `additionalProperties: false` on an object schema (`deny_unknown_fields`).
+#[cfg(feature = "openapi")]
+pub fn deny_additional(mut schema: Value) -> Value {
+    if let Some(obj) = schema.as_object_mut() {
+        obj.insert("additionalProperties".into(), Value::Bool(false));
+    }
+    schema
 }

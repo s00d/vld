@@ -6,11 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Added
+
+- `#[derive(Validate)]` honours `#[serde(deny_unknown_fields)]` on structs and enums: unknown keys fail with `unrecognized_field` (the tag / `content` keys of tagged enums are allowed), and the JSON Schema gets `additionalProperties: false`. On a unit variant of an internally tagged enum vld rejects extra keys, which serde lets through.
+- `VldSchema::try_transform(|v| -> Result<U, E>)`: a fallible transform whose `Err` (`E: Display`) becomes a validation issue (`Custom { code: "transform" }`).
+
 ## [0.6.0] - 2026-11-07
 
 ### Breaking changes
 
-- **Regex**: `regex-lite` is no longer public. `string().regex(Regex)` / `regex_msg` and the `vld::regex_lite` re-export are removed; use `string().pattern("...")` / `pattern_msg`, or `vld::rules::Pattern::new(..)` to handle an invalid pattern.
+- **Regex**: `regex-lite` is no longer public. `string().regex(Regex)` / `regex_msg` and the `vld::regex_lite` re-export are removed; use `string().pattern("...")` / `pattern_msg`, or `vld::rules::Pattern::new(..)` to handle an invalid pattern. Both need the `regex` feature, as `regex()` did.
 - **optional / nullable / nullish** now differ: `nullable()` object fields are required (absent → `missing_field`, `null` → `None`) and listed in JSON Schema `required`; `optional()` no longer adds `null` to its JSON Schema (parsing still accepts `null`, which serde writes for `None`). TypeScript output follows: `x?: T`, `x: T | null`, `x?: T | null`.
 - **Unions**: `Either` / `Either3` serialize untagged, so a union inside an object round-trips as the bare value instead of `{"Left": ...}`; unions forward `output_json` to the matching variant.
 - **Removed** everything deprecated in 0.5: the `serialize` / `deserialize` features, `ZFloat::finite`, `ZObject::field_schema` / `deep_partial`, `vld-actix::VldJsonError`, `vld-diesel` / `vld-sqlx::validate_update`, `vld-surrealdb::validate_record`, `vld-http-common::{ValidationIssueWithCode, format_issues_with_code, format_json_parse_error, format_utf8_error}`, `vld-tower` / `vld-rama::try_validated`, `vld-tauri::{validate_event, validate_state, validate_plugin_config, validate_channel_message}`, `impl_to_lapin!`, `impl_to_redis!`, `impl_to_redis_async!`, `vld-utoipa::{impl_into_params!, impl_to_schema_query!, impl_to_schema_path!}`.

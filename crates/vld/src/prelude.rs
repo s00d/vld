@@ -3,7 +3,8 @@
 pub use crate::collections::{ZArray, ZMap, ZOrderedRecord, ZRecord, ZSet};
 pub use crate::combinators::{
     Either, Either3, ZCatch, ZCustom, ZDescribe, ZDiscriminatedUnion, ZIntersection, ZLazy,
-    ZMessage, ZPipe, ZPreprocess, ZRefine, ZSuperRefine, ZTransform, ZUnion2, ZUnion3,
+    ZMessage, ZPipe, ZPreprocess, ZRefine, ZSuperRefine, ZTransform, ZTryTransform, ZUnion2,
+    ZUnion3,
 };
 pub use crate::error::format::{flatten_error, prettify_error, treeify_error};
 pub use crate::error::{

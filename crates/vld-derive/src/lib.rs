@@ -172,7 +172,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let infos = named_field_infos(fields, &serde_struct.rename_all, serde_struct.default)?;
     let generic = !input.generics.params.is_empty();
-    expand_struct(input, infos, generic, lenient, parameter_in_expr)
+    expand_struct(
+        input,
+        infos,
+        generic,
+        lenient,
+        serde_struct.deny_unknown,
+        parameter_in_expr,
+    )
 }
 
 /// [`FieldInfo`] of every named field, under the container's `rename_all`.
@@ -345,6 +352,31 @@ pub(crate) fn object_schema_tokens(infos: &[FieldInfo]) -> TokenStream2 {
     }
 }
 
+/// `deny_unknown_fields` cannot be combined with `flatten` (serde rejects it too).
+pub(crate) fn check_deny_unknown(infos: &[FieldInfo], deny_unknown: bool) -> syn::Result<()> {
+    match infos.iter().find(|f| deny_unknown && f.flatten) {
+        Some(f) => Err(syn::Error::new(
+            f.ident.span(),
+            "vld: #[serde(deny_unknown_fields)] cannot be combined with #[serde(flatten)] (as in serde)",
+        )),
+        None => Ok(()),
+    }
+}
+
+/// `deny_unknown(...)` over `__vld_obj`: the fields' keys (deserialize or
+/// serialize names, by `__vld_ser`) plus `extra` (an internal tag).
+pub(crate) fn deny_tokens(infos: &[FieldInfo], extra: &[String]) -> TokenStream2 {
+    let known = infos.iter().filter(|f| f.schema.is_some() && !f.flatten);
+    let de = known.clone().map(|f| &f.key).chain(extra);
+    let ser = known.map(|f| &f.ser_key).chain(extra);
+    quote! {
+        {
+            let __vld_known: &[&str] = if __vld_ser { &[ #( #ser ),* ] } else { &[ #( #de ),* ] };
+            ::vld::__private::deny_unknown(__vld_obj, __vld_known, &mut __vld_errors);
+        }
+    }
+}
+
 /// `collect_nested_schemas` calls for every field, flattened ones included.
 pub(crate) fn collect_field_tokens(infos: &[FieldInfo]) -> Vec<TokenStream2> {
     let mut out = collect_tokens(
@@ -383,8 +415,15 @@ fn expand_struct(
     infos: Vec<FieldInfo>,
     generic: bool,
     lenient: bool,
+    deny_unknown: bool,
     parameter_in_expr: TokenStream2,
 ) -> syn::Result<TokenStream2> {
+    check_deny_unknown(&infos, deny_unknown)?;
+    let deny_check = if deny_unknown {
+        deny_tokens(&infos, &[])
+    } else {
+        quote! {}
+    };
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let field_idents: Vec<_> = infos.iter().map(|f| &f.ident).collect();
@@ -487,6 +526,11 @@ fn expand_struct(
 
     let collect_calls = collect_field_tokens(&infos);
     let object_schema = object_schema_tokens(&infos);
+    let object_schema = if deny_unknown {
+        quote! { ::vld::__private::deny_additional(#object_schema) }
+    } else {
+        object_schema
+    };
     let json_schema_body = if generic {
         object_schema
     } else {
@@ -540,6 +584,7 @@ fn expand_struct(
                 let mut __vld_errors = ::vld::error::VldError::new();
 
                 #( #parse_lets )*
+                #deny_check
 
                 // A field may fail with an issue-less error: check the values too.
                 if !__vld_errors.is_empty() #( || #field_idents.is_none() )* {
@@ -657,6 +702,7 @@ pub(crate) type Names = (Option<String>, Option<String>);
 struct SerdeStruct {
     rename_all: Names,
     default: bool,
+    deny_unknown: bool,
 }
 
 #[derive(Default)]
@@ -720,6 +766,8 @@ fn parse_serde_struct_attrs(attrs: &[syn::Attribute]) -> syn::Result<SerdeStruct
                     de.or(out.rename_all.0.take()),
                     ser.or(out.rename_all.1.take()),
                 );
+            } else if meta.path.is_ident("deny_unknown_fields") {
+                out.deny_unknown = true;
             } else if meta.path.is_ident("default") {
                 out.default = true;
                 skip_meta(&meta)?;

@@ -25,6 +25,6 @@ pub use pipe::ZPipe;
 pub use preprocess::ZPreprocess;
 pub use refine::ZRefine;
 pub use super_refine::ZSuperRefine;
-pub use transform::ZTransform;
+pub use transform::{ZTransform, ZTryTransform};
 pub(crate) use union::split_variant_prefix;
 pub use union::{Either, Either3, ZUnion2, ZUnion3};

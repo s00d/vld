@@ -518,3 +518,149 @@ fn flatten_merges_the_schema() {
     assert!(v.is_valid(&json!({"title": "t", "author": "a", "x": 1, "y": 2})));
     assert!(!v.is_valid(&json!({"title": "t", "x": 1, "y": 2})));
 }
+
+// ---------------------------------------------------------------------------
+// #[serde(deny_unknown_fields)]: vld rejects exactly what serde rejects
+// ---------------------------------------------------------------------------
+
+mod deny_unknown {
+    use super::*;
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize, vld::Validate)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    struct Strict {
+        #[vld(vld::string())]
+        user_name: String,
+        #[serde(default)]
+        #[vld(vld::number().int())]
+        age: i64,
+    }
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize, vld::Validate)]
+    #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+    enum Act {
+        Sow,
+        Plant {
+            #[vld(vld::string())]
+            seed: String,
+        },
+    }
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize, vld::Validate)]
+    #[serde(tag = "t", content = "c", deny_unknown_fields)]
+    enum Adj {
+        A,
+        B {
+            #[vld(vld::number().int())]
+            n: i64,
+        },
+    }
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize, vld::Validate)]
+    #[serde(deny_unknown_fields)]
+    enum Ext {
+        S {
+            #[vld(vld::number().int())]
+            n: i64,
+        },
+    }
+
+    /// vld and serde agree on every input; `unrecognized` lists the paths
+    /// vld reports for rejected ones.
+    fn agree<T>(input: Value, unrecognized: &[&str])
+    where
+        T: vld::schema::VldParse + for<'de> Deserialize<'de> + PartialEq + std::fmt::Debug,
+    {
+        let serde = serde_json::from_value::<T>(input.clone());
+        let vld = T::vld_parse_value(&input);
+        match (&serde, &vld) {
+            (Ok(a), Ok(b)) => assert_eq!(a, b, "{input}"),
+            (Err(_), Err(e)) => {
+                let got: Vec<String> = e
+                    .issues
+                    .iter()
+                    .filter(|i| i.code.key() == "unrecognized_field")
+                    .map(|i| i.path_string())
+                    .collect();
+                assert_eq!(got, unrecognized, "{input}: {e}");
+            }
+            _ => panic!("{input}: serde {serde:?} vs vld {vld:?}"),
+        }
+    }
+
+    #[test]
+    fn structs() {
+        agree::<Strict>(json!({"userName": "a"}), &[]);
+        agree::<Strict>(json!({"userName": "a", "age": 3}), &[]);
+        agree::<Strict>(json!({"userName": "a", "extra": 1}), &[".extra"]);
+        agree::<Strict>(json!({"userName": "a", "user_name": "b"}), &[".user_name"]);
+        // validate() uses the serialize names, which serde writes.
+        assert!(Strict::is_valid(&Strict {
+            user_name: "a".into(),
+            age: 1
+        }));
+    }
+
+    #[test]
+    fn enums() {
+        agree::<Act>(json!({"type": "sow"}), &[]);
+        agree::<Act>(json!({"type": "plant", "seed": "x"}), &[]);
+        agree::<Act>(
+            json!({"type": "plant", "seed": "x", "extra": 1}),
+            &[".extra"],
+        );
+        agree::<Adj>(json!({"t": "B", "c": {"n": 1}}), &[]);
+        agree::<Adj>(json!({"t": "B", "c": {"n": 1, "m": 2}}), &[".c.m"]);
+        agree::<Adj>(json!({"t": "A", "x": 1}), &[".x"]);
+        agree::<Ext>(json!({"S": {"n": 1}}), &[]);
+        agree::<Ext>(json!({"S": {"n": 1, "z": 0}}), &[".S.z"]);
+    }
+
+    /// An extra key on a unit variant of an internally tagged enum: serde
+    /// ignores `deny_unknown_fields` there and accepts it; vld rejects it, as
+    /// the attribute asks (deliberately stricter than serde).
+    #[test]
+    fn internally_tagged_unit_variant_is_stricter_than_serde() {
+        let input = json!({"type": "sow", "extra": 1});
+        assert!(serde_json::from_value::<Act>(input.clone()).is_ok());
+        let e = Act::parse_value(&input).unwrap_err();
+        assert_eq!(issues(&e), [(".extra".into(), "unrecognized_field".into())]);
+    }
+
+    #[cfg(feature = "openapi")]
+    #[test]
+    fn schemas_forbid_additional_properties() {
+        assert_eq!(Strict::json_schema()["additionalProperties"], false);
+        let s = Act::json_schema();
+        for v in s["oneOf"].as_array().unwrap() {
+            assert_eq!(v["additionalProperties"], false, "{v}");
+        }
+        let v = jsonschema::draft202012::options()
+            .build(&Act::json_schema())
+            .unwrap();
+        assert!(v.is_valid(&json!({"type": "plant", "seed": "x"})));
+        assert!(!v.is_valid(&json!({"type": "plant", "seed": "x", "extra": 1})));
+    }
+}
+
+#[test]
+fn try_transform_turns_errors_into_issues() {
+    #[derive(Debug, vld::Validate)]
+    struct Order {
+        #[vld(vld::string().try_transform(|s| s.parse::<u128>()))]
+        amount: u128,
+    }
+    let big = "340282366920938463463374607431768211455";
+    assert_eq!(
+        Order::parse_value(&json!({ "amount": big }))
+            .unwrap()
+            .amount,
+        u128::MAX
+    );
+    let e = Order::parse_value(&json!({"amount": "12x"})).unwrap_err();
+    assert_eq!(issues(&e), [(".amount".into(), "transform".into())]);
+    assert_eq!(e.issues[0].message, "invalid digit found in string");
+    // The inner schema's errors come first and stop the transform.
+    let e = Order::parse_value(&json!({"amount": 5})).unwrap_err();
+    assert_eq!(issues(&e), [(".amount".into(), "invalid_type".into())]);
+}

@@ -8,8 +8,9 @@ use syn::spanned::Spanned;
 use syn::{DataEnum, DeriveInput, Fields, LitStr};
 
 use crate::{
-    FieldInfo, Names, RENAME_RULES, collect_tokens, field_parse_lets, named_field_infos, names,
-    object_schema_tokens, schema_ref, serde_attrs, skip_meta,
+    FieldInfo, Names, RENAME_RULES, check_deny_unknown, collect_tokens, deny_tokens,
+    field_parse_lets, named_field_infos, names, object_schema_tokens, schema_ref, serde_attrs,
+    skip_meta,
 };
 
 #[derive(Default)]
@@ -17,6 +18,7 @@ struct SerdeEnum {
     tag: Option<String>,
     content: Option<String>,
     untagged: bool,
+    deny_unknown: bool,
     /// Variant names.
     rename_all: Names,
     /// Field names of every struct variant.
@@ -129,7 +131,9 @@ pub(crate) fn expand_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<T
                 } else {
                     &serde.rename_all_fields
                 };
-                Shape::Struct(named_field_infos(&f.named, rule, false)?)
+                let infos = named_field_infos(&f.named, rule, false)?;
+                check_deny_unknown(&infos, serde.deny_unknown)?;
+                Shape::Struct(infos)
             }
         };
         if attrs.other && !matches!(shape, Shape::Unit) {
@@ -313,7 +317,9 @@ fn options(variants: &[Variant]) -> TokenStream2 {
 
 /// Expression `Result<Self, VldError>` parsing the variant's content from
 /// `__vld_content: &Value` (unused for unit variants).
-fn content_parse(v: &Variant, generic: bool) -> TokenStream2 {
+/// `deny`: `#[serde(deny_unknown_fields)]`, with the extra allowed keys
+/// (the tag of an internally tagged enum).
+fn content_parse(v: &Variant, generic: bool, deny: Option<&[String]>) -> TokenStream2 {
     let ident = &v.ident;
     match &v.shape {
         Shape::Unit => quote! { ::std::result::Result::Ok(Self::#ident) },
@@ -345,6 +351,7 @@ fn content_parse(v: &Variant, generic: bool) -> TokenStream2 {
         Shape::Struct(infos) => {
             let lets = field_parse_lets(infos, generic);
             let fields: Vec<_> = infos.iter().map(|f| &f.ident).collect();
+            let deny = deny.map(|extra| deny_tokens(infos, extra));
             quote! {
                 (|| {
                     let __vld_obj = ::vld::__private::expect_object(__vld_content)?;
@@ -352,6 +359,7 @@ fn content_parse(v: &Variant, generic: bool) -> TokenStream2 {
                     let __vld_whole = __vld_content;
                     let mut __vld_errors = ::vld::error::VldError::new();
                     #( #lets )*
+                    #deny
                     if !__vld_errors.is_empty() #( || #fields.is_none() )* {
                         return ::std::result::Result::Err(__vld_errors);
                     }
@@ -363,6 +371,10 @@ fn content_parse(v: &Variant, generic: bool) -> TokenStream2 {
 }
 
 fn parse_body(serde: &SerdeEnum, variants: &[Variant], generic: bool) -> TokenStream2 {
+    let no_extra: Vec<String> = Vec::new();
+    let tag_extra: Vec<String> = serde.tag.iter().cloned().collect();
+    let deny_plain = serde.deny_unknown.then_some(no_extra.as_slice());
+    let deny_internal = serde.deny_unknown.then_some(tag_extra.as_slice());
     let opts = options(variants);
     let field = |name: TokenStream2| {
         quote! { ::vld::error::PathSegment::Field(::std::string::ToString::to_string(#name)) }
@@ -376,7 +388,7 @@ fn parse_body(serde: &SerdeEnum, variants: &[Variant], generic: bool) -> TokenSt
                     ::vld::__private::expect_unit(::std::option::Option::Some(__vld_json)).map(|_| Self::#ident)
                 },
                 _ => {
-                    let parse = content_parse(v, generic);
+                    let parse = content_parse(v, generic, deny_plain);
                     quote! { { let __vld_content = __vld_json; #parse } }
                 }
             };
@@ -405,7 +417,7 @@ fn parse_body(serde: &SerdeEnum, variants: &[Variant], generic: bool) -> TokenSt
                         quote! { ::vld::__private::expect_unit(__vld_inner).map(|_| Self::#ident) }
                     }
                     _ => {
-                        let parse = content_parse(v, generic);
+                        let parse = content_parse(v, generic, deny_plain);
                         quote! {{
                             let __vld_content = __vld_inner.unwrap_or(&::vld::serde_json::Value::Null);
                             #parse
@@ -427,15 +439,27 @@ fn parse_body(serde: &SerdeEnum, variants: &[Variant], generic: bool) -> TokenSt
                 let m = name_match(v);
                 let body = match v.shape {
                     Shape::Newtype(_) => {
-                        let parse = content_parse(v, generic);
+                        let parse = content_parse(v, generic, deny_plain);
                         quote! {{
                             let __vld_rest = ::vld::__private::without_key(__vld_obj, #tag);
                             let __vld_content = &__vld_rest;
                             #parse
                         }}
                     }
+                    Shape::Unit if serde.deny_unknown => {
+                        let ident = &v.ident;
+                        quote! {{
+                            let mut __vld_errors = ::vld::error::VldError::new();
+                            ::vld::__private::deny_unknown(__vld_obj, &[#tag], &mut __vld_errors);
+                            if __vld_errors.is_empty() {
+                                ::std::result::Result::Ok(Self::#ident)
+                            } else {
+                                ::std::result::Result::Err(__vld_errors)
+                            }
+                        }}
+                    }
                     _ => {
-                        let parse = content_parse(v, generic);
+                        let parse = content_parse(v, generic, deny_internal);
                         quote! {{ let __vld_content = __vld_json; #parse }}
                     }
                 };
@@ -450,6 +474,15 @@ fn parse_body(serde: &SerdeEnum, variants: &[Variant], generic: bool) -> TokenSt
             }
         }
         (Some(tag), Some(content)) => {
+            let outer_deny = serde.deny_unknown.then(|| {
+                quote! {
+                    let mut __vld_errors = ::vld::error::VldError::new();
+                    ::vld::__private::deny_unknown(__vld_obj, &[#tag, #content], &mut __vld_errors);
+                    if !__vld_errors.is_empty() {
+                        return ::std::result::Result::Err(__vld_errors);
+                    }
+                }
+            });
             let key = field(quote! { #content });
             let arms = variants.iter().filter(|v| !v.other).map(|v| {
                 let m = name_match(v);
@@ -463,7 +496,7 @@ fn parse_body(serde: &SerdeEnum, variants: &[Variant], generic: bool) -> TokenSt
                         }
                     }
                     _ => {
-                        let parse = content_parse(v, generic);
+                        let parse = content_parse(v, generic, deny_plain);
                         quote! {{
                             let __vld_content = __vld_obj.get(#content).ok_or_else(|| {
                                 ::vld::error::VldError::from_code(::vld::error::IssueCode::MissingField)
@@ -479,6 +512,7 @@ fn parse_body(serde: &SerdeEnum, variants: &[Variant], generic: bool) -> TokenSt
             quote! {
                 let __vld_obj = ::vld::__private::expect_object(__vld_json)?;
                 let __vld_name = ::vld::__private::enum_tag(__vld_obj, #tag)?;
+                #outer_deny
                 #( #arms )*
                 #fallback
             }
@@ -515,7 +549,10 @@ fn schema_body(serde: &SerdeEnum, variants: &[Variant]) -> TokenStream2 {
                 ))
             },
             Shape::Struct(infos) => {
-                let obj = object_schema_tokens(infos);
+                let mut obj = object_schema_tokens(infos);
+                if serde.deny_unknown {
+                    obj = quote! { ::vld::__private::deny_additional(#obj) };
+                }
                 quote! { ::vld::__private::VariantSchema::Object(#obj) }
             }
         };
@@ -528,8 +565,9 @@ fn schema_body(serde: &SerdeEnum, variants: &[Variant]) -> TokenStream2 {
     let tag = opt(&serde.tag);
     let content = opt(&serde.content);
     let untagged = serde.untagged;
+    let deny = serde.deny_unknown;
     quote! {
-        ::vld::__private::enum_schema(#tag, #content, #untagged, ::std::vec![ #( #entries ),* ])
+        ::vld::__private::enum_schema(#tag, #content, #untagged, #deny, ::std::vec![ #( #entries ),* ])
     }
 }
 
@@ -558,6 +596,8 @@ fn parse_serde_enum_attrs(attrs: &[syn::Attribute]) -> syn::Result<SerdeEnum> {
                 out.content = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if p.is_ident("untagged") {
                 out.untagged = true;
+            } else if p.is_ident("deny_unknown_fields") {
+                out.deny_unknown = true;
             } else if p.is_ident("rename_all") {
                 let (de, ser) = rename_names(&meta, "rename_all")?;
                 out.rename_all = (
@@ -677,6 +717,12 @@ mod tests {
         assert!(e.contains("not supported with #[vld(lenient)]"), "{e}");
         let e = derive_error(r#"struct S { #[serde(alias = "b")] #[vld(x)] a: i64 }"#);
         assert!(e.contains("not supported"), "{e}");
+        let e =
+            derive_error(r#"#[serde(deny_unknown_fields)] struct S { #[serde(flatten)] m: M }"#);
+        assert!(
+            e.contains("cannot be combined with #[serde(flatten)]"),
+            "{e}"
+        );
         let e = derive_error(r#"union U { a: u8 }"#);
         assert!(e.contains("structs and enums"), "{e}");
     }
