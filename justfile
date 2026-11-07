@@ -154,7 +154,7 @@ minimal:
 semver:
     #!/usr/bin/env bash
     set -euo pipefail
-    trap 'rm -rf target/semver-checks' EXIT
+    trap 'rm -rf target/semver-checks || true' EXIT
     cargo semver-checks -p vld --only-explicit-features --features {{ vld_all }}
     cargo semver-checks --workspace --exclude vld --exclude playground --default-features
 
