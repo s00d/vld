@@ -9872,6 +9872,7 @@ name = "vld-ts"
 version = "0.5.1"
 dependencies = [
  "insta",
+ "serde",
  "serde_json",
  "vld",
 ]

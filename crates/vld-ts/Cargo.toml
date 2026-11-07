@@ -26,4 +26,5 @@ path = "examples/generate_zod.rs"
 
 [dev-dependencies]
 insta = { workspace = true }
-vld = { workspace = true, features = ["openapi", "regex", "string-advanced"] }
+vld = { workspace = true, features = ["openapi", "regex", "string-advanced", "derive"] }
+serde = { workspace = true }

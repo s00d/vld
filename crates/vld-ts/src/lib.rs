@@ -819,23 +819,28 @@ fn convert_core(t: Target, schema: &Value) -> (String, Vec<Act>) {
             // Sibling keywords (`type`, `x-past`, … next to e.g. vld's
             // naive-datetime `anyOf`) apply to every branch.
             let mut siblings = schema.as_object().cloned().unwrap_or_default();
-            for k in [key, "description", "default", "title"] {
+            for k in [key, "description", "default", "title", "discriminator"] {
                 siblings.remove(k);
             }
-            let rest: Vec<String> = variants
+            let options: Vec<Value> = variants
                 .iter()
                 .filter(|v| !is_null(v))
                 .map(|v| match v.as_object() {
                     Some(o) if !siblings.is_empty() => {
                         let mut m = siblings.clone();
                         m.extend(o.clone());
-                        convert(t, &Value::Object(m))
+                        Value::Object(m)
                     }
-                    _ => convert(t, v),
+                    _ => v.clone(),
                 })
                 .collect();
+            let declared = schema
+                .pointer("/discriminator/propertyName")
+                .and_then(Value::as_str);
+            let tag = discriminator(t, declared, &options);
+            let rest = options.iter().map(|v| convert(t, v)).collect();
             let has_null = variants.iter().any(is_null);
-            return (union_nullable(t, rest, has_null), vec![]);
+            return (union_nullable(t, rest, has_null, tag.as_deref()), vec![]);
         }
     }
 
@@ -864,18 +869,90 @@ fn convert_core(t: Target, schema: &Value) -> (String, Vec<Act>) {
                     rest.push(t.pipe(base, actions));
                 }
             }
-            (union_nullable(t, rest, has_null), vec![])
+            (union_nullable(t, rest, has_null, None), vec![])
         }
         _ => (format!("{}.unknown()", ns), vec![]),
     }
 }
 
-fn union_nullable(t: Target, variants: Vec<String>, nullable: bool) -> String {
-    match (variants.is_empty(), nullable) {
-        (true, true) => format!("{}.null()", t.ns()),
-        (true, false) => format!("{}.never()", t.ns()),
-        (false, true) => t.nullable(t.union(variants)),
-        (false, false) => t.union(variants),
+/// `tag`: a discriminated union (see [`discriminator`]).
+fn union_nullable(t: Target, variants: Vec<String>, nullable: bool, tag: Option<&str>) -> String {
+    if variants.is_empty() {
+        return format!("{}.{}()", t.ns(), if nullable { "null" } else { "never" });
+    }
+    let e = match tag {
+        Some(tag) if variants.len() > 1 => match t {
+            Zod => format!(
+                "z.discriminatedUnion({}, [{}])",
+                js_str(tag),
+                variants.join(", ")
+            ),
+            Valibot => format!("v.variant({}, [{}])", js_str(tag), variants.join(", ")),
+        },
+        _ => t.union(variants),
+    };
+    if nullable { t.nullable(e) } else { e }
+}
+
+/// The tag of a union `z.discriminatedUnion` / `v.variant` can express: every
+/// option is a plain object (no pipe, refinement or default around it) whose
+/// required property `tag` is a distinct string literal. `declared` is
+/// `discriminator.propertyName`; without one (vld's `discriminated_union`
+/// emits a bare `anyOf`), the first fitting required key of the first option.
+fn discriminator(t: Target, declared: Option<&str>, options: &[Value]) -> Option<String> {
+    const NOT_PLAIN: &[&str] = &[
+        "default",
+        "minProperties",
+        "maxProperties",
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "not",
+        "$ref",
+        "enum",
+        "const",
+    ];
+    let plain_object = |o: &Value| {
+        o.get("type").and_then(Value::as_str) == Some("object")
+            && o.get("properties").is_some_and(Value::is_object)
+            && !NOT_PLAIN.iter().any(|k| o.get(*k).is_some())
+            // Valibot: a `description` becomes a `v.pipe`, which `v.variant` rejects.
+            && (t == Zod || o.get("description").is_none())
+    };
+    let tag_value = |o: &Value, k: &str| -> Option<String> {
+        if !o.get("required")?.as_array()?.iter().any(|r| r == k) {
+            return None;
+        }
+        let p = o.get("properties")?.get(k)?;
+        if p.get("default").is_some() {
+            return None;
+        }
+        match (
+            p.get("const"),
+            p.get("enum").and_then(Value::as_array).map(Vec::as_slice),
+        ) {
+            (Some(c), _) => c.as_str(),
+            (None, Some([one])) => one.as_str(),
+            _ => None,
+        }
+        .map(str::to_string)
+    };
+    let fits = |k: &str| {
+        let mut seen = std::collections::HashSet::new();
+        options
+            .iter()
+            .all(|o| plain_object(o) && tag_value(o, k).is_some_and(|v| seen.insert(v)))
+    };
+    match declared {
+        Some(k) => fits(k).then(|| k.to_string()),
+        None => options
+            .first()?
+            .get("required")?
+            .as_array()?
+            .iter()
+            .filter_map(Value::as_str)
+            .find(|k| fits(k))
+            .map(str::to_string),
     }
 }
 
@@ -1002,11 +1079,18 @@ fn constraint_acts(t: Target, ty: &str, schema: &Value) -> Vec<Act> {
             // A tuple's length is fixed by its items; Zod tuples have no `.min()`.
             if schema.get("prefixItems").is_none() {
                 // Valibot: `minLength`/`maxLength` apply to arrays (`minSize` is for Set/Map/Blob).
-                if let Some(n) = u64_of("minItems") {
-                    acts.push(t.act("min", "minLength", n));
-                }
-                if let Some(n) = u64_of("maxItems") {
-                    acts.push(t.act("max", "maxLength", n));
+                match (u64_of("minItems"), u64_of("maxItems")) {
+                    (Some(min), Some(max)) if min == max => {
+                        acts.push(t.act("length", "length", min));
+                    }
+                    (min, max) => {
+                        if let Some(n) = min {
+                            acts.push(t.act("min", "minLength", n));
+                        }
+                        if let Some(n) = max {
+                            acts.push(t.act("max", "maxLength", n));
+                        }
+                    }
                 }
             }
             if schema.get("uniqueItems").and_then(Value::as_bool) == Some(true) {
@@ -1100,12 +1184,24 @@ fn convert_object(t: Target, schema: &Value) -> String {
         }
     };
 
-    let fields: Vec<String> = props
-        .iter()
-        .map(|(key, prop)| {
+    // serde_json's map sorts its keys (unless `preserve_order` is on), but
+    // `required` lists fields in declaration order: required fields fill the
+    // required fields' slots in that order (a no-op on an ordered map).
+    let mut declared = required.iter().filter(|k| props.contains_key(**k));
+    let keys: Vec<&str> = props
+        .keys()
+        .map(|k| match required.contains(&k.as_str()) {
+            true => declared.next().copied().unwrap_or(k),
+            false => k,
+        })
+        .collect();
+    let fields: Vec<String> = keys
+        .into_iter()
+        .map(|key| {
+            let prop = &props[key];
             let mut e = convert(t, prop);
             // A default already makes the field optional on input.
-            if !required.contains(&key.as_str()) && prop.get("default").is_none() {
+            if !required.contains(&key) && prop.get("default").is_none() {
                 e = t.optional(e);
             }
             format!("  {}: {}", js_key(key), e)
