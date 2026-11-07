@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `#[derive(Validate)]` on enums, following serde: externally tagged, `tag`, `tag` + `content`, `untagged`; unit, newtype, tuple and struct variants; variant `rename` / `alias` / `skip` / `other` / `rename_all` and enum `rename_all` / `rename_all_fields`. The output is the enum itself (typed, unlike `discriminated_union`); the JSON Schema is `oneOf` with an OpenAPI `discriminator` (`anyOf` when untagged).
+
 ### Fixed
 
 - `vld-schemars`: `pattern` and `patternProperties` regexes are compiled once and cached instead of on every validated value.

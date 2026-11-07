@@ -327,3 +327,228 @@ pub fn openapi_document(
     }
     crate::openapi::to_openapi_document_multi(&all)
 }
+
+// ---------------------------------------------------------------------------
+// `#[derive(Validate)]` on enums (serde representations)
+// ---------------------------------------------------------------------------
+
+/// `value` of a unit variant's content (externally / adjacently tagged): absent or `null`.
+pub fn expect_unit(content: Option<&Value>) -> Result<(), VldError> {
+    match content {
+        None | Some(Value::Null) => Ok(()),
+        Some(v) => Err(VldError::from_code_with_value(
+            crate::error::IssueCode::InvalidType {
+                expected: "null".into(),
+                received: crate::error::value_type_name(v),
+            },
+            v,
+        )),
+    }
+}
+
+/// Externally tagged input: `"Variant"` or `{"Variant": content}` (exactly one key).
+pub fn external_variant(value: &Value) -> Result<(&str, Option<&Value>), VldError> {
+    match value {
+        Value::String(s) => Ok((s.as_str(), None)),
+        Value::Object(obj) if obj.len() == 1 => {
+            let (k, v) = obj.iter().next().expect("one entry");
+            Ok((k.as_str(), Some(v)))
+        }
+        other => Err(VldError::from_code_with_value(
+            crate::error::IssueCode::InvalidType {
+                expected: "string or single-key object".into(),
+                received: crate::error::value_type_name(other),
+            },
+            other,
+        )),
+    }
+}
+
+/// The string tag of an internally / adjacently tagged enum; errors are at `.tag`.
+pub fn enum_tag<'a>(obj: &'a Map<String, Value>, tag: &str) -> Result<&'a str, VldError> {
+    let at = |e: VldError| e.with_prefix(PathSegment::Field(tag.to_string()));
+    match obj.get(tag) {
+        None => Err(at(VldError::from_code(
+            crate::error::IssueCode::MissingField,
+        ))),
+        Some(Value::String(s)) => Ok(s.as_str()),
+        Some(other) => Err(at(VldError::from_code_with_value(
+            crate::error::IssueCode::InvalidType {
+                expected: "string".into(),
+                received: crate::error::value_type_name(other),
+            },
+            other,
+        ))),
+    }
+}
+
+/// No variant has this name: `invalid_discriminator` listing the accepted
+/// names, at `.tag` (or the root for externally tagged enums).
+pub fn unknown_variant(tag: Option<&str>, name: &str, options: &[&str]) -> VldError {
+    let err = VldError::from_code_with_value(
+        crate::error::IssueCode::InvalidDiscriminator {
+            options: options.iter().map(|o| Value::String((*o).into())).collect(),
+        },
+        &Value::String(name.into()),
+    );
+    match tag {
+        Some(t) => err.with_prefix(PathSegment::Field(t.to_string())),
+        None => err,
+    }
+}
+
+/// The object without `tag` (content of an internally tagged newtype variant).
+pub fn without_key(obj: &Map<String, Value>, tag: &str) -> Value {
+    let mut rest = obj.clone();
+    rest.remove(tag);
+    Value::Object(rest)
+}
+
+/// Content of a tuple variant: an array of exactly `len` items.
+pub fn expect_tuple(value: &Value, len: usize) -> Result<&[Value], VldError> {
+    match value {
+        Value::Array(items) if items.len() == len => Ok(items),
+        Value::Array(items) => Err(VldError::from_code_with_value(
+            crate::error::IssueCode::InvalidLength {
+                origin: crate::error::SizeOrigin::Tuple,
+                expected: len,
+            },
+            &Value::from(items.len()),
+        )),
+        other => Err(VldError::from_code_with_value(
+            crate::error::IssueCode::InvalidType {
+                expected: "array".into(),
+                received: crate::error::value_type_name(other),
+            },
+            other,
+        )),
+    }
+}
+
+/// Parse tuple item `index`; on failure push its issues (prefixed `[index]`).
+pub fn parse_item<S: VldSchema>(
+    items: &[Value],
+    index: usize,
+    schema: &S,
+    errors: &mut VldError,
+) -> Option<S::Output> {
+    match schema.parse_value(&items[index]) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            errors
+                .issues
+                .extend(e.with_prefix(PathSegment::Index(index)).issues);
+            None
+        }
+    }
+}
+
+/// Every variant of an untagged enum failed: `invalid_union` plus each
+/// variant's issues (`[variant N]`), like `vld::union`.
+pub fn untagged_error(value: &Value, variants: Vec<VldError>) -> VldError {
+    crate::combinators::union::union_error(value, variants)
+}
+
+/// Schema of one enum variant for [`enum_schema`].
+#[cfg(feature = "openapi")]
+pub enum VariantSchema {
+    /// No content.
+    Unit,
+    /// Newtype or tuple content (any schema).
+    Value(Value),
+    /// Struct variant: an object schema.
+    Object(Value),
+}
+
+/// JSON Schema of a derived enum.
+///
+/// `tag` / `content` select the serde representation: `(None, None)` external,
+/// `(Some, None)` internal, `(Some, Some)` adjacent; `untagged` wins.
+#[cfg(feature = "openapi")]
+pub fn enum_schema(
+    tag: Option<&str>,
+    content: Option<&str>,
+    untagged: bool,
+    variants: Vec<(&str, VariantSchema)>,
+) -> Value {
+    use serde_json::json;
+    let tag_prop = |t: &str, name: &str| json!({ t: { "type": "string", "const": name } });
+    let one_of: Vec<Value> = if untagged {
+        let any: Vec<Value> = variants
+            .into_iter()
+            .map(|(_, v)| match v {
+                VariantSchema::Unit => json!({ "type": "null" }),
+                VariantSchema::Value(s) | VariantSchema::Object(s) => s,
+            })
+            .collect();
+        return json!({ "anyOf": any });
+    } else if let Some(t) = tag {
+        variants
+            .into_iter()
+            .map(|(name, v)| match (content, v) {
+                (_, VariantSchema::Unit) => json!({
+                    "type": "object",
+                    "properties": tag_prop(t, name),
+                    "required": [t],
+                }),
+                (Some(c), VariantSchema::Value(s) | VariantSchema::Object(s)) => {
+                    let mut props = tag_prop(t, name);
+                    props[c] = s;
+                    json!({ "type": "object", "properties": props, "required": [t, c] })
+                }
+                (None, VariantSchema::Object(mut s)) => {
+                    s["properties"][t] = json!({ "type": "string", "const": name });
+                    let required = s
+                        .get_mut("required")
+                        .and_then(Value::as_array_mut)
+                        .map(std::mem::take)
+                        .unwrap_or_default();
+                    let mut req = vec![Value::String(t.into())];
+                    req.extend(required);
+                    s["required"] = Value::Array(req);
+                    s
+                }
+                // Internally tagged newtype: the inner object plus the tag.
+                (None, VariantSchema::Value(s)) => json!({
+                    "allOf": [s, { "type": "object", "properties": tag_prop(t, name), "required": [t] }],
+                }),
+            })
+            .collect()
+    } else {
+        let mut units = Vec::new();
+        let mut out = Vec::new();
+        for (name, v) in variants {
+            match v {
+                VariantSchema::Unit => units.push(Value::String(name.into())),
+                VariantSchema::Value(s) | VariantSchema::Object(s) => out.push(json!({
+                    "type": "object",
+                    "properties": { name: s },
+                    "required": [name],
+                    "additionalProperties": false,
+                })),
+            }
+        }
+        if !units.is_empty() {
+            out.insert(0, json!({ "type": "string", "enum": units }));
+        }
+        out
+    };
+    let mut schema = json!({ "oneOf": one_of });
+    if let Some(t) = tag {
+        schema["discriminator"] = json!({ "propertyName": t });
+    }
+    schema
+}
+
+/// Tuple-variant content schema.
+#[cfg(feature = "openapi")]
+pub fn tuple_schema(items: Vec<Value>) -> Value {
+    let n = items.len();
+    serde_json::json!({
+        "type": "array",
+        "prefixItems": items,
+        "items": false,
+        "minItems": n,
+        "maxItems": n,
+    })
+}

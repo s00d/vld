@@ -12,7 +12,7 @@ mod preprocess;
 mod refine;
 mod super_refine;
 mod transform;
-mod union;
+pub(crate) mod union;
 
 pub use catch_val::ZCatch;
 pub use custom::ZCustom;

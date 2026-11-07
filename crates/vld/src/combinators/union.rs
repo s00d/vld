@@ -10,7 +10,7 @@ use crate::schema::VldSchema;
 /// A variant that is itself a union (`union!` nests them) is flattened: its
 /// `invalid_union` issue is dropped and its variants are renumbered, so `N`
 /// counts the leaf schemas and prefixes never stack.
-fn union_error(value: &Value, variants: Vec<VldError>) -> VldError {
+pub(crate) fn union_error(value: &Value, variants: Vec<VldError>) -> VldError {
     let mut err = VldError::from_code_with_value(IssueCode::InvalidUnion, value);
     let mut n = 0;
     for e in variants {
