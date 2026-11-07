@@ -263,7 +263,7 @@ fn validate_string(
     }
 
     if let Some(pattern) = schema.get("pattern").and_then(|v| v.as_str()) {
-        match regex_lite::Regex::new(pattern) {
+        match compiled(pattern) {
             Ok(re) if re.is_match(s) => {}
             Ok(_) => errors.issues.push(make_issue(
                 path,
@@ -654,7 +654,7 @@ fn validate_object(
         .into_iter()
         .flatten()
     {
-        match regex_lite::Regex::new(p) {
+        match compiled(p) {
             Ok(re) => patterns.push((re, sub)),
             Err(_) => errors.issues.push(invalid_pattern(path, p)),
         }
@@ -737,6 +737,33 @@ fn validate_object(
 }
 
 // ========================= Helpers ===========================================
+
+/// `pattern` compiled once and reused: schemas are validated many times with the
+/// same patterns. Invalid patterns are cached too (as `Err`).
+// ponytail: global map cleared when full; per-schema compiled validators if a
+// workload ever churns through more than CACHE_CAP distinct patterns.
+fn compiled(pattern: &str) -> Result<std::sync::Arc<regex_lite::Regex>, ()> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex, OnceLock};
+    const CACHE_CAP: usize = 1024;
+    type Cache = Mutex<HashMap<String, Result<Arc<regex_lite::Regex>, ()>>>;
+    static CACHE: OnceLock<Cache> = OnceLock::new();
+    let mut cache = CACHE
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if let Some(hit) = cache.get(pattern) {
+        return hit.clone();
+    }
+    if cache.len() >= CACHE_CAP {
+        cache.clear();
+    }
+    let re = regex_lite::Regex::new(pattern)
+        .map(Arc::new)
+        .map_err(|_| ());
+    cache.insert(pattern.to_string(), re.clone());
+    re
+}
 
 fn invalid_pattern(path: &[PathSegment], pattern: &str) -> ValidationIssue {
     make_issue(
@@ -880,5 +907,20 @@ fn make_error(
 ) -> VldError {
     VldError {
         issues: vec![make_issue(path, code, message, received)],
+    }
+}
+
+#[cfg(test)]
+mod pattern_cache {
+    use super::compiled;
+
+    #[test]
+    fn compiles_each_pattern_once() {
+        let a = compiled(r"^[a-z]+\d$").unwrap();
+        let b = compiled(r"^[a-z]+\d$").unwrap();
+        assert!(std::sync::Arc::ptr_eq(&a, &b));
+        assert!(a.is_match("ab1"));
+        assert!(compiled("(").is_err());
+        assert!(compiled("(").is_err());
     }
 }
