@@ -39,7 +39,7 @@ exclude = ["fuzz"]
 resolver = "2"
 
 [workspace.package]
-version = "0.6.1"
+version = "0.7.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
@@ -48,13 +48,13 @@ homepage = "https://github.com/s00d/vld"
 
 [workspace.dependencies]
 # Internal crates
-vld = { path = "crates/vld", version = "0.6.1" }
-vld-derive = { path = "crates/vld-derive", version = "0.6.1" }
-vld-http-common = { path = "crates/vld-http-common", version = "0.6.1" }
-vld-integration-common = { path = "crates/vld-integration-common", version = "0.6.1" }
-vld-utoipa = { path = "crates/vld-utoipa", version = "0.6.1" }
+vld = { path = "crates/vld", version = "0.7.0" }
+vld-derive = { path = "crates/vld-derive", version = "0.7.0" }
+vld-http-common = { path = "crates/vld-http-common", version = "0.7.0" }
+vld-integration-common = { path = "crates/vld-integration-common", version = "0.7.0" }
+vld-utoipa = { path = "crates/vld-utoipa", version = "0.7.0" }
 # default-features off: dependents pick the schemars major themselves.
-vld-schemars = { path = "crates/vld-schemars", version = "0.6.1", default-features = false }
+vld-schemars = { path = "crates/vld-schemars", version = "0.7.0", default-features = false }
 
 # Shared external
 serde = { version = "1.0.219", features = ["derive"] }
