@@ -103,6 +103,9 @@ impl ZF32 {
         non_positive,
         /// Coerce strings and booleans to numbers.
         coerce,
+        /// Clamp instead of failing; see [`ZNumber::clamp`]. Also saturates
+        /// to the finite `f32` range.
+        clamp,
     }
 }
 
@@ -110,7 +113,11 @@ impl VldSchema for ZF32 {
     type Output = f32;
 
     fn parse_value(&self, value: &Value) -> Result<f32, VldError> {
-        let f = self.inner.extract_number(value)?;
+        let mut f = self.inner.extract_number(value)?;
+        if self.inner.clamp {
+            let limit = f64::from(f32::MAX);
+            f = self.inner.clamped(Num::F(f)).as_f64().clamp(-limit, limit);
+        }
         let out = f as f32;
         // Rounding to f32 overflows to infinity only past the finite range
         // (values within half an ulp of f32::MAX round down to it).

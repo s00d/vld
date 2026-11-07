@@ -20,6 +20,7 @@ mod input;
 mod int;
 #[cfg(feature = "openapi")]
 mod json_schema;
+mod legacy;
 mod macros;
 mod modifiers;
 mod number;

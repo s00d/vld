@@ -169,6 +169,12 @@ impl<T: IntType> ZInteger<T> {
         self
     }
 
+    /// Clamp instead of failing; see [`ZNumber::clamp`]. Also saturates to
+    /// the integer type's range.
+    pub fn clamp(self) -> Self {
+        self.with(ZNumber::clamp)
+    }
+
     /// Minimum value (inclusive).
     pub fn min(self, val: T) -> Self {
         self.with(|n| n.min_n(Num::I(val.to_i128())))
@@ -290,7 +296,14 @@ impl<T: IntType> VldSchema for ZInteger<T> {
     type Output = T;
 
     fn parse_value(&self, value: &Value) -> Result<T, VldError> {
-        let n = self.extract_int(value)?;
+        let mut n = self.extract_int(value)?;
+        if self.inner.clamp {
+            n = match self.inner.clamped(Num::I(n)) {
+                Num::I(i) => i,
+                Num::F(f) => f as i128,
+            }
+            .clamp(T::MIN, T::MAX);
+        }
         // User bounds first: `u8().max(150)` reports 150, not 255, for 300.
         self.inner.validate(Num::I(n), value)?;
         self.type_range(n, value)?;

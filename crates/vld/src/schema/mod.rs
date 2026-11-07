@@ -8,6 +8,7 @@ use crate::modifiers::{ZDefault, ZNullable, ZNullish, ZOptional};
 
 mod coerced;
 mod dyn_schema;
+mod infer;
 /// Input sources accepted by `parse` (JSON text, files, values).
 pub mod input;
 mod nested;
@@ -16,6 +17,7 @@ pub(crate) use dyn_schema::to_json_value;
 
 pub use coerced::parse_coerced;
 pub use dyn_schema::DynSchema;
+pub use infer::VldType;
 pub use input::VldInput;
 pub use nested::{NestedSchema, NestedSchemaCollectFn, NestedSchemaEntry};
 
@@ -149,6 +151,25 @@ pub trait VldSchema: Sized {
         Self::Output: Clone,
     {
         ZDefault::new(self, value)
+    }
+
+    /// Like [`with_default`](Self::with_default), and a blank string (empty or
+    /// whitespace only) also becomes `value`: legacy stores that write `""`
+    /// or `null` for "unset".
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let n = vld::number().int().coerce().blank_as(0);
+    /// assert_eq!(n.parse("null").unwrap(), 0);
+    /// assert_eq!(n.parse(r#""  ""#).unwrap(), 0);
+    /// assert_eq!(n.parse(r#""42""#).unwrap(), 42);
+    /// assert!(n.parse(r#""x""#).is_err());
+    /// ```
+    fn blank_as(self, value: Self::Output) -> ZDefault<Self>
+    where
+        Self::Output: Clone,
+    {
+        ZDefault::new(self, value).or_blank()
     }
 
     /// Add a custom refinement check without changing the output type.

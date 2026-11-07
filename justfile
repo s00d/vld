@@ -1,5 +1,5 @@
 # Development and CI tasks. `just` lists them; `just ci` is what CI runs on every push.
-# Tools: `cargo install just cargo-hack cargo-deny cargo-shear cargo-semver-checks`.
+# Tools: `cargo install just cargo-hack cargo-deny cargo-shear cargo-semver-checks cargo-sweep`.
 #
 # Builds use the `ci` profile (no debuginfo), so everything lands in target/ci and
 # `just clean` frees it without touching the dev build. Every build is `--locked`.
@@ -21,7 +21,7 @@ default:
     @just --list
 
 # Everything the push/PR CI job runs
-ci: fmt lint test docs deny package fuzz playground
+ci: fmt lint test docs deny package fuzz playground trim
 
 # rustfmt check
 fmt:
@@ -148,15 +148,25 @@ minimal:
     cargo +nightly check --locked --manifest-path "$m" -p vld-config --features figment
     cargo +nightly check --locked --manifest-path "$m" -p vld-redis --features aio-tokio
 
+# Default features: the semver-checks heuristic would enable two dependency majors at once.
+# Its rustdoc builds of the baselines (~15G) are removed afterwards, pass or fail.
 # Public API changes vs the latest release on crates.io match the version bump
-# (default features: the semver-checks heuristic would enable two dependency majors at once)
 semver:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'rm -rf target/semver-checks' EXIT
     cargo semver-checks -p vld --only-explicit-features --features {{ vld_all }}
     cargo semver-checks --workspace --exclude vld --exclude playground --default-features
 
-# Remove CI build output (target/ci, target/msrv-*, target/minimal)
+# The feature matrix leaves one build per feature set behind; needs cargo-sweep.
+# Cap target/ at 10G, oldest artifacts first
+trim:
+    @if command -v cargo-sweep >/dev/null; then cargo sweep --maxsize 10GB .; else echo "cargo-sweep not installed: target/ not trimmed"; fi
+
+# Remove all build output
 clean:
-    rm -rf target/ci target/msrv-* target/minimal
+    cargo clean
+    rm -rf fuzz/target
 
 # cargo-release pre-release hook (runs after the version bump): checks (semver-checks
 # compares the API with crates.io for the new version), then
@@ -164,7 +174,7 @@ clean:
 # the workspace) pointed at the new version.
 [private]
 release-hook version:
-    just fmt lint test docs semver
+    just fmt lint test docs semver trim
     just package --allow-dirty
     @if [[ "${DRY_RUN:-false}" == "true" ]]; then echo "dry run: CHANGELOG.md unchanged"; else just _changelog {{ version }}; fi
     cargo update --manifest-path fuzz/Cargo.toml --workspace --offline

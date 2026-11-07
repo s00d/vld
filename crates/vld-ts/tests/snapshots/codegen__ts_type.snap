@@ -1,0 +1,19 @@
+---
+source: crates/vld-ts/tests/codegen.rs
+expression: ts
+---
+export type TsAddress = {
+  city: string;
+  zip: string;
+};
+
+export type TsProfile = {
+  email: string;
+  role: "admin" | "user";
+  nickname?: string;
+  address: TsAddress;
+};
+
+export type RequestBody = {
+  name: string;
+};

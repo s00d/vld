@@ -116,7 +116,12 @@
 //!
 //! interface VldError {
 //!   error: string;
-//!   issues: Array<{ path: string; message: string }>;
+//!   issues: Array<{
+//!     path: string;
+//!     message: string;
+//!     code: string;                    // "too_small", "invalid_type", a rule key, …
+//!     params: Record<string, string>;  // { minimum: "2", origin: "string", … }
+//!   }>;
 //! }
 //!
 //! try {
@@ -126,11 +131,14 @@
 //! } catch (err) {
 //!   const vldErr = err as VldError;
 //!   for (const issue of vldErr.issues) {
-//!     console.error(`${issue.path}: ${issue.message}`);
+//!     // vue-i18n: messages like `vld: { too_small: "At least {minimum}" }`
+//!     console.error(`${issue.path}: ${t(`vld.${issue.code}`, issue.params)}`);
 //!   }
 //! }
 //! ```
 #![warn(missing_docs)]
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use vld::schema::VldParse;
@@ -140,12 +148,37 @@ use vld::schema::VldParse;
 // ---------------------------------------------------------------------------
 
 /// Single validation issue, serialised for the frontend.
+///
+/// `code` and `params` are what a frontend i18n library needs to render its
+/// own message: with vue-i18n, `t(`vld.${issue.code}`, issue.params)` and a
+/// `vld.too_small` message such as `"At least {minimum}"`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TauriIssue {
     /// Path of the failing field, e.g. `name`, `user.email`, `items[0]`.
     pub path: String,
     /// Human-readable error message.
     pub message: String,
+    /// Issue code ([`IssueCode::key`](vld::error::IssueCode::key)):
+    /// `too_small`, `invalid_type`, a rule key, …; `invalid_json` / `custom`
+    /// for errors not produced by a schema.
+    #[serde(default)]
+    pub code: String,
+    /// Template parameters of the code
+    /// ([`IssueCode::params`](vld::error::IssueCode::params)): `minimum`,
+    /// `origin`, `expected`, …
+    #[serde(default)]
+    pub params: BTreeMap<String, String>,
+}
+
+impl TauriIssue {
+    fn plain(code: &str, message: String) -> Self {
+        Self {
+            path: String::new(),
+            message,
+            code: code.into(),
+            params: BTreeMap::new(),
+        }
+    }
 }
 
 /// Serializable error type for Tauri IPC commands, events, and channel
@@ -158,7 +191,12 @@ pub struct TauriIssue {
 /// {
 ///   "error": "Validation failed",
 ///   "issues": [
-///     { "path": "name", "message": "String must be at least 2 characters" }
+///     {
+///       "path": "name",
+///       "message": "String must be at least 2 characters",
+///       "code": "too_small",
+///       "params": { "inclusive": "true", "minimum": "2", "origin": "string" }
+///     }
 ///   ]
 /// }
 /// ```
@@ -173,9 +211,20 @@ pub struct VldTauriError {
 impl VldTauriError {
     /// Create from a [`VldError`](vld::error::VldError).
     pub fn from_vld(e: &vld::error::VldError) -> Self {
-        let issues = vld_integration_common::flatten_issues(e)
-            .into_iter()
-            .map(|(path, message)| TauriIssue { path, message })
+        let issues = e
+            .issues
+            .iter()
+            .map(|i| TauriIssue {
+                path: vld_integration_common::format_path(&i.path),
+                message: i.message.clone(),
+                code: i.code.key().to_string(),
+                params: i
+                    .code
+                    .params()
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                    .collect(),
+            })
             .collect();
         Self {
             error: "Validation failed".into(),
@@ -187,10 +236,7 @@ impl VldTauriError {
     pub fn json_parse_error(msg: impl std::fmt::Display) -> Self {
         Self {
             error: "Invalid JSON".into(),
-            issues: vec![TauriIssue {
-                path: String::new(),
-                message: msg.to_string(),
-            }],
+            issues: vec![TauriIssue::plain("invalid_json", msg.to_string())],
         }
     }
 
@@ -198,10 +244,7 @@ impl VldTauriError {
     pub fn custom(error: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             error: error.into(),
-            issues: vec![TauriIssue {
-                path: String::new(),
-                message: message.into(),
-            }],
+            issues: vec![TauriIssue::plain("custom", message.into())],
         }
     }
 

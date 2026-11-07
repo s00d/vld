@@ -62,10 +62,17 @@ mod enums;
 /// `vld::schema!`) so it does not shadow `clap::Parser::parse()` and similar
 /// trait methods; no `parse` alias is generated for the same reason.
 ///
-/// Field schemas of non-generic structs are built **once per process** (on
+/// A field without `#[vld(...)]` gets its type's default schema
+/// ([`vld::schema::VldType`](https://docs.rs/vld/latest/vld/schema/trait.VldType.html)):
+/// `String`, `bool`, the integer and float types, `Option<T>`, `Vec<T>`,
+/// `HashMap<String, T>`, `serde_json::Value` and derived types (nested).
+///
+/// Field schemas of non-generic types are built **once per process** (on
 /// first use) and cached in a `static`: they must be `Send + Sync + 'static`,
 /// and a schema built from runtime values freezes the values of the first
-/// parse. Generic structs rebuild their schemas on every call.
+/// parse. `#[vld(dynamic)]` on the struct or enum rebuilds them on every
+/// parse instead (limits read from settings, feature flags, …), as generic
+/// types always do.
 ///
 /// # Lenient parsing
 ///
@@ -142,7 +149,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let name = &input.ident;
 
     let serde_struct = parse_serde_struct_attrs(&input.attrs)?;
-    let lenient = parse_vld_struct_attrs(&input.attrs)?;
+    let (lenient, dynamic) = parse_vld_struct_attrs(&input.attrs)?;
     let parameter_in_expr = match get_into_params_parameter_in(&input.attrs).as_deref() {
         Some("query") => quote! { Some("query") },
         Some("path") => quote! { Some("path") },
@@ -171,7 +178,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
 
     let infos = named_field_infos(fields, &serde_struct.rename_all, serde_struct.default)?;
-    let generic = !input.generics.params.is_empty();
+    // `dynamic`: schemas are rebuilt on every parse, as in generic code.
+    let generic = dynamic || !input.generics.params.is_empty();
     expand_struct(
         input,
         infos,
@@ -215,17 +223,10 @@ pub(crate) fn named_field_infos<'a>(
                 .map(|a| a.parse_args::<TokenStream2>())
                 .transpose()?
         } else {
-            let attr = field
-                .attrs
-                .iter()
-                .find(|a| a.path().is_ident("vld"))
-                .ok_or_else(|| {
-                    syn::Error::new(
-                        ident.span(),
-                        format!("field `{}` is missing a #[vld(...)] attribute", ident),
-                    )
-                })?;
-            Some(attr.parse_args::<TokenStream2>()?)
+            Some(match vld_attr {
+                Some(a) => a.parse_args::<TokenStream2>()?,
+                None => infer_schema(&field.ty),
+            })
         };
 
         let default = serde_field.default.or_else(|| {
@@ -246,6 +247,36 @@ pub(crate) fn named_field_infos<'a>(
         });
     }
     Ok(infos)
+}
+
+/// The schema of a field without `#[vld(...)]`: its type's
+/// [`VldType`](https://docs.rs/vld/latest/vld/schema/trait.VldType.html).
+pub(crate) fn infer_schema(ty: &syn::Type) -> TokenStream2 {
+    quote! { <#ty as ::vld::schema::VldType>::vld_schema() }
+}
+
+/// `impl VldType` for a non-generic derived type: `vld::nested!(Name)`.
+pub(crate) fn vld_type_impl(input: &DeriveInput) -> TokenStream2 {
+    if !input.generics.params.is_empty() {
+        return quote! {};
+    }
+    let name = &input.ident;
+    quote! {
+        impl ::vld::schema::VldType for #name {
+            type Schema = ::vld::schema::NestedSchema<
+                Self,
+                fn(&::vld::serde_json::Value) -> ::std::result::Result<Self, ::vld::error::VldError>,
+            >;
+            fn vld_schema() -> Self::Schema {
+                ::vld::nested_named(
+                    stringify!(#name),
+                    Self::parse_value,
+                    ::vld::__vld_nested_schema_fn!(#name),
+                    ::vld::__vld_nested_collect_fn!(#name),
+                )
+            }
+        }
+    }
 }
 
 /// A reference to the built schema: cached process-wide for non-generic
@@ -541,7 +572,10 @@ fn expand_struct(
         }
     };
 
+    let vld_type = vld_type_impl(input);
     Ok(quote! {
+        #vld_type
+
         impl #impl_generics #name #ty_generics #where_clause {
             /// Parse and validate input data into this struct.
             ///
@@ -679,20 +713,23 @@ fn expand_struct(
 // Attribute parsing
 // ---------------------------------------------------------------------------
 
-/// Struct-level `#[vld(lenient)]`.
-fn parse_vld_struct_attrs(attrs: &[syn::Attribute]) -> syn::Result<bool> {
-    let mut lenient = false;
+/// Container-level `#[vld(lenient, dynamic)]`: `(lenient, dynamic)`.
+pub(crate) fn parse_vld_struct_attrs(attrs: &[syn::Attribute]) -> syn::Result<(bool, bool)> {
+    let (mut lenient, mut dynamic) = (false, false);
     for attr in attrs.iter().filter(|a| a.path().is_ident("vld")) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("lenient") {
                 lenient = true;
                 Ok(())
+            } else if meta.path.is_ident("dynamic") {
+                dynamic = true;
+                Ok(())
             } else {
-                Err(meta.error("unknown struct-level vld attribute; expected `lenient`"))
+                Err(meta.error("unknown vld attribute; expected `lenient` or `dynamic`"))
             }
         })?;
     }
-    Ok(lenient)
+    Ok((lenient, dynamic))
 }
 
 /// `(deserialize, serialize)` values.

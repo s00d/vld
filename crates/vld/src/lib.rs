@@ -92,6 +92,7 @@
 pub mod collections;
 /// Unions, intersections, refinements, transforms and pipes.
 pub mod combinators;
+pub mod de;
 pub mod error;
 mod macros;
 /// Optional, nullable, nullish and default wrappers.

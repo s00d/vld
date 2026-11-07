@@ -30,6 +30,8 @@ pub struct ZString {
     checks: Vec<StringCheck>,
     transforms: Vec<StringTransform>,
     coerce: bool,
+    /// `(true, false)` texts of coerced booleans; `None` = `"true"` / `"false"`.
+    bool_text: Option<(String, String)>,
     custom_type_error: Option<String>,
     messages: crate::primitives::Messages,
 }
@@ -41,6 +43,7 @@ impl ZString {
             checks: vec![],
             transforms: vec![],
             coerce: false,
+            bool_text: None,
             custom_type_error: None,
             messages: None,
         }
@@ -235,6 +238,22 @@ impl ZString {
         self.coerce = true;
         self
     }
+
+    /// Coerce like [`coerce`](Self::coerce), writing booleans as `on` / `off`
+    /// instead of `"true"` / `"false"` (legacy stores often keep `"1"` / `"0"`).
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let flag = vld::string().coerce_bools("1", "0");
+    /// assert_eq!(flag.parse("true").unwrap(), "1");
+    /// assert_eq!(flag.parse("false").unwrap(), "0");
+    /// assert_eq!(flag.parse("7").unwrap(), "7");
+    /// ```
+    pub fn coerce_bools(mut self, on: impl Into<String>, off: impl Into<String>) -> Self {
+        self.coerce = true;
+        self.bool_text = Some((on.into(), off.into()));
+        self
+    }
 }
 
 impl Default for ZString {
@@ -252,7 +271,10 @@ impl VldSchema for ZString {
         let mut s = match value {
             Value::String(s) => s.clone(),
             Value::Number(n) if self.coerce => n.to_string(),
-            Value::Bool(b) if self.coerce => b.to_string(),
+            Value::Bool(b) if self.coerce => match &self.bool_text {
+                Some((on, off)) => if *b { on } else { off }.clone(),
+                None => b.to_string(),
+            },
             _ => return Err(type_err()),
         };
 

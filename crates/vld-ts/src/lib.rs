@@ -1,12 +1,13 @@
-//! # vld-ts — TypeScript Zod / Valibot schemas from `vld`
+//! # vld-ts — TypeScript Zod / Valibot schemas and types from `vld`
 //!
-//! Generates [Zod](https://zod.dev/) 3 or [Valibot](https://valibot.dev/) 1
-//! code that accepts the same values as a vld schema:
+//! Generates [Zod](https://zod.dev/) 3 / 4 or [Valibot](https://valibot.dev/) 1
+//! code that accepts the same values as a vld schema, or a plain TypeScript type:
 //!
-//! - [`to_zod`] / [`to_valibot`] — an expression for any schema value;
-//! - [`impl_to_zod!`] / [`impl_to_valibot!`] — `Type::to_zod()` /
-//!   `Type::to_valibot()` and named exports ([`ToZod::to_zod_export`]) for a
-//!   `vld::schema!` or `#[derive(Validate)]` type;
+//! - [`to_zod`] / [`to_zod4`] / [`to_valibot`] — an expression for any schema value;
+//! - [`to_ts_type`] / [`impl_to_ts_type!`] — a TypeScript type, no runtime library;
+//! - [`impl_to_zod!`] / [`impl_to_zod4!`] / [`impl_to_valibot!`] — `Type::to_zod()`,
+//!   `Type::to_zod4()`, `Type::to_valibot()` and named exports
+//!   ([`ToZod::to_zod_export`]) for a `vld::schema!` or `#[derive(Validate)]` type;
 //! - [`to_openapi`] / [`impl_to_openapi!`] — the plain JSON Schema and its `$ref`s.
 //!
 //! ```
@@ -29,6 +30,8 @@
 //! impl_to_valibot!(Order);
 //!
 //! assert_eq!(to_zod(&vld::string().email()), "z.string().email()");
+//! assert_eq!(vld_ts::to_zod4(&vld::string().email()), "z.email()");
+//! assert_eq!(vld_ts::to_ts_type(&vld::string().email()), "string");
 //! assert!(Order::to_zod().contains("shipping: z.lazy(() => AddressSchema)"));
 //! assert!(Order::to_valibot().starts_with("v.object"));
 //!
@@ -86,6 +89,45 @@ where
     S: vld::openapi::JsonSchema,
 {
     convert(Valibot, &schema.json_schema())
+}
+
+/// Convert a vld schema instance directly to Zod 4.
+///
+/// Zod 4 idioms: top-level formats (`z.email()`, `z.iso.datetime()`, …),
+/// `z.int()`, `z.strictObject` / `z.looseObject`, `{ error }` messages.
+///
+/// # Example
+///
+/// ```
+/// use vld_ts::to_zod4;
+///
+/// assert_eq!(to_zod4(&vld::string().max(50).email()), "z.email().max(50)");
+/// assert_eq!(to_zod4(&vld::number().int().min(0)), "z.int().min(0)");
+/// ```
+pub fn to_zod4<S>(schema: &S) -> String
+where
+    S: vld::openapi::JsonSchema,
+{
+    convert(Zod4, &schema.json_schema())
+}
+
+/// Convert a vld schema instance to a plain TypeScript type expression (no
+/// runtime library).
+///
+/// # Example
+///
+/// ```
+/// use vld::schema::VldSchema as _;
+/// use vld_ts::to_ts_type;
+///
+/// assert_eq!(to_ts_type(&vld::string().email()), "string");
+/// assert_eq!(to_ts_type(&vld::array(vld::string().nullable())), "(string | null)[]");
+/// ```
+pub fn to_ts_type<S>(schema: &S) -> String
+where
+    S: vld::openapi::JsonSchema,
+{
+    ts_type(&schema.json_schema()).0
 }
 
 /// Convert a vld schema instance to plain JSON Schema (OpenAPI-compatible).
@@ -170,6 +212,49 @@ pub trait ToValibot {
     }
 }
 
+/// Trait for types that can generate their Zod 4 representation.
+///
+/// Implement with [`impl_to_zod4!`], then call `Type::to_zod4()`.
+pub trait ToZod4 {
+    /// Generate Zod 4 schema expression for this type (no imports/exports).
+    fn to_zod4() -> String;
+
+    /// Name used for exports (`export const <Name>Schema`).
+    ///
+    /// Defaults to the type name; `impl_to_zod4!(Type, "Name")` overrides it.
+    fn zod4_name() -> String {
+        short_type_name::<Self>()
+    }
+
+    /// `export const <Name>Schema = …;` plus `export type <Name> = z.infer<…>;`.
+    fn to_zod4_export() -> String {
+        zod4_export(&Self::zod4_name(), &Self::to_zod4())
+    }
+}
+
+/// Trait for types that can generate a plain TypeScript type.
+///
+/// Implement with [`impl_to_ts_type!`], then call `Type::to_ts_type()`.
+pub trait ToTsType {
+    /// TypeScript type expression for this type.
+    fn to_ts_type() -> String;
+
+    /// Name used for exports (`export type <Name>`).
+    ///
+    /// Defaults to the type name; `impl_to_ts_type!(Type, "Name")` overrides it.
+    fn ts_type_name() -> String {
+        short_type_name::<Self>()
+    }
+
+    /// `export type <Name> = …;`.
+    ///
+    /// `$ref`s to nested schemas become the bare type name, so export nested
+    /// types as well (under their type name).
+    fn to_ts_type_export() -> String {
+        ts_type_export(&Self::ts_type_name(), &Self::to_ts_type())
+    }
+}
+
 /// Render a named Zod export:
 /// `export const <name>Schema = <expr>;\nexport type <name> = z.infer<typeof <name>Schema>;\n`.
 ///
@@ -183,6 +268,22 @@ pub fn zod_export(name: &str, expr: &str) -> String {
         "export const {0}Schema = {1};\nexport type {0} = z.infer<typeof {0}Schema>;\n",
         name, expr
     )
+}
+
+/// Render a named Zod 4 export (same shape as [`zod_export`]; Zod 4 keeps
+/// `z.infer` and the `import { z } from "zod"` line).
+pub fn zod4_export(name: &str, expr: &str) -> String {
+    zod_export(name, expr)
+}
+
+/// Render a named TypeScript type: `export type <name> = <expr>;\n`.
+///
+/// ```
+/// let ts = vld_ts::ts_type_export("Tags", &vld_ts::to_ts_type(&vld::array(vld::string())));
+/// assert_eq!(ts, "export type Tags = string[];\n");
+/// ```
+pub fn ts_type_export(name: &str, expr: &str) -> String {
+    format!("export type {} = {};\n", name, expr)
 }
 
 /// Render a named Valibot export (see [`zod_export`]).
@@ -265,6 +366,72 @@ macro_rules! impl_to_zod {
     };
 }
 
+/// Implement [`ToZod4`] for a `vld::schema!` type (see [`impl_to_zod!`]).
+///
+/// # Example
+///
+/// ```
+/// use vld_ts::{impl_to_zod4, ToZod4};
+///
+/// vld::schema! {
+///     pub struct User {
+///         pub email: String => vld::string().email(),
+///     }
+/// }
+///
+/// impl_to_zod4!(User, "UserBody");
+/// assert_eq!(User::to_zod4(), "z.object({\n  email: z.email()\n})");
+/// assert!(User::to_zod4_export().contains("export type UserBody = z.infer<typeof UserBodySchema>;"));
+/// ```
+#[macro_export]
+macro_rules! impl_to_zod4 {
+    ($ty:ty $(, $name:expr)?) => {
+        impl $crate::ToZod4 for $ty {
+            fn to_zod4() -> ::std::string::String {
+                $crate::__to_zod4_from_value(&<$ty>::json_schema())
+            }
+            $(
+                fn zod4_name() -> ::std::string::String {
+                    ::std::string::String::from($name)
+                }
+            )?
+        }
+    };
+}
+
+/// Implement [`ToTsType`] for a `vld::schema!` type.
+///
+/// # Example
+///
+/// ```
+/// use vld_ts::{impl_to_ts_type, ToTsType};
+///
+/// vld::schema! {
+///     pub struct User {
+///         pub email: String => vld::string().email(),
+///         pub age: Option<i64> => vld::number().int().optional(),
+///     }
+/// }
+///
+/// impl_to_ts_type!(User);
+/// assert_eq!(User::to_ts_type_export(), "export type User = {\n  age?: number;\n  email: string;\n};\n");
+/// ```
+#[macro_export]
+macro_rules! impl_to_ts_type {
+    ($ty:ty $(, $name:expr)?) => {
+        impl $crate::ToTsType for $ty {
+            fn to_ts_type() -> ::std::string::String {
+                $crate::__to_ts_type_from_value(&<$ty>::json_schema())
+            }
+            $(
+                fn ts_type_name() -> ::std::string::String {
+                    ::std::string::String::from($name)
+                }
+            )?
+        }
+    };
+}
+
 /// Implement [`ToOpenApi`] for a `vld::schema!` type.
 ///
 /// # Example
@@ -337,15 +504,18 @@ macro_rules! impl_to_valibot {
 #[derive(Clone, Copy, PartialEq)]
 enum Target {
     Zod,
+    /// Zod 4: top-level formats (`z.email()`, `z.iso.date()`, …), `z.int()`,
+    /// `z.strictObject` / `z.looseObject`, `{ error }` messages.
+    Zod4,
     Valibot,
 }
 
-use Target::{Valibot, Zod};
+use Target::{Valibot, Zod, Zod4};
 
 /// One generated validation step.
 ///
 /// `Check`s become `.refine(...)` (Zod) / `v.check(...)` (Valibot) and are
-/// always attached last: a Zod refinement returns `ZodEffects`, which has no
+/// always attached last: a Zod 3 refinement returns `ZodEffects`, which has no
 /// `.min()` / `.regex()` etc.
 enum Act {
     Plain(String),
@@ -382,8 +552,19 @@ const LABEL_RE: &str = "[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
 /// Zod 3 / Valibot 1 allow. Unknown formats (`decimal`, `int32`, `path`, …)
 /// add nothing.
 fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
+    if t == Zod4 {
+        // A top-level Zod 4 format used as an extra check (an `allOf` fragment);
+        // on a plain string schema it replaces `z.string()` (see `zod4_format`).
+        if let Some((base, mut extra)) = zod4_format(fmt) {
+            extra.push(check(
+                &format!("(s) => {}.safeParse(s).success", base),
+                &format!("Invalid {}", fmt),
+            ));
+            return extra;
+        }
+    }
     let both = |zod: &str, valibot: &str| match t {
-        Zod => plain(zod),
+        Zod | Zod4 => plain(zod),
         Valibot => plain(valibot),
     };
     let re = |r: String| plain(format!("regex({})", r));
@@ -400,6 +581,7 @@ fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
             "z.string().ip({{ version: \"v{}\" }}).safeParse(a).success",
             n
         ),
+        Zod4 => format!("z.ipv{}().safeParse(a).success", n),
         Valibot => format!("v.safeParse(v.pipe(v.string(), v.ipv{}()), a).success", n),
     };
     match fmt {
@@ -414,6 +596,11 @@ fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
         "uuid-v7" => uuid_v(7),
         "ipv4" => vec![both("ip({ version: \"v4\" })", "ipv4()")],
         "ipv6" => vec![both("ip({ version: \"v6\" })", "ipv6()")],
+        // Zod 4 dropped `.ip()`.
+        "ip" if t == Zod4 => vec![check(
+            "(s) => z.ipv4().safeParse(s).success || z.ipv6().safeParse(s).success",
+            "Invalid IP",
+        )],
         "ip" => vec![both("ip()", "ip()")],
         "cidr" => vec![check(
             &format!(
@@ -489,6 +676,45 @@ fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
         )],
         _ => vec![],
     }
+}
+
+/// Zod 4 top-level string schema for `fmt` plus the checks it still needs, or
+/// `None` when the format stays a `z.string()` chain.
+///
+/// `uuid` maps to `z.guid()`: vld accepts any 8-4-4-4-12 hex string, while
+/// Zod 4's `z.uuid()` also checks the RFC 9562 variant bits.
+fn zod4_format(fmt: &str) -> Option<(String, Vec<Act>)> {
+    let uuid_v = |n: u8| {
+        Some((
+            "z.guid()".to_string(),
+            vec![plain(format!(
+                "regex(/^[0-9a-fA-F]{{8}}-[0-9a-fA-F]{{4}}-{}/)",
+                n
+            ))],
+        ))
+    };
+    let base = match fmt {
+        "email" => "z.email()",
+        "uuid" => "z.guid()",
+        "uuid-v1" => return uuid_v(1),
+        "uuid-v4" => return uuid_v(4),
+        "uuid-v7" => return uuid_v(7),
+        // `z.url()` accepts any scheme; vld wants http(s).
+        "uri" | "url" | "url-strict" => {
+            return Some((
+                "z.url()".to_string(),
+                vec![plain("regex(/^https?:\\/\\/\\S+$/)")],
+            ));
+        }
+        "ipv4" => "z.ipv4()",
+        "ipv6" => "z.ipv6()",
+        "date" => "z.iso.date()",
+        // vld: optional `Z` / `±HH:MM`, seconds required.
+        "date-time" => "z.iso.datetime({ offset: true, local: true })",
+        "time" => "z.iso.time()",
+        _ => return None,
+    };
+    Some((base.to_string(), vec![]))
 }
 
 /// Translate a Rust (`regex`/`regex-lite`) pattern into `new RegExp(source, flags)`
@@ -596,7 +822,7 @@ impl Target {
     /// Library namespace: `z` or `v`.
     fn ns(self) -> &'static str {
         match self {
-            Zod => "z",
+            Zod | Zod4 => "z",
             Valibot => "v",
         }
     }
@@ -604,7 +830,7 @@ impl Target {
     /// A validation/metadata action call, e.g. `min(2)` (Zod) / `minLength(2)` (Valibot).
     fn act(self, zod: &str, valibot: &str, arg: impl std::fmt::Display) -> Act {
         match self {
-            Zod => plain(format!("{}({})", zod, arg)),
+            Zod | Zod4 => plain(format!("{}({})", zod, arg)),
             Valibot => plain(format!("{}({})", valibot, arg)),
         }
     }
@@ -619,6 +845,7 @@ impl Target {
                 Act::Plain(s) => actions.push(s),
                 Act::Check(f, msg) => checks.push(match self {
                     Zod => format!("refine({}, {})", f, js_str(&msg)),
+                    Zod4 => format!("refine({}, {{ error: {} }})", f, js_str(&msg)),
                     Valibot => format!("check({}, {})", f, js_str(&msg)),
                 }),
                 Act::Note(n) => {
@@ -631,7 +858,7 @@ impl Target {
             return base;
         }
         match self {
-            Zod => actions.iter().fold(base, |acc, a| format!("{}.{}", acc, a)),
+            Zod | Zod4 => actions.iter().fold(base, |acc, a| format!("{}.{}", acc, a)),
             Valibot => {
                 let actions: Vec<String> = actions.iter().map(|a| format!("v.{}", a)).collect();
                 format!("v.pipe({}, {})", base, actions.join(", "))
@@ -641,14 +868,14 @@ impl Target {
 
     fn nullable(self, e: String) -> String {
         match self {
-            Zod => format!("{}.nullable()", e),
+            Zod | Zod4 => format!("{}.nullable()", e),
             Valibot => format!("v.nullable({})", e),
         }
     }
 
     fn optional(self, e: String) -> String {
         match self {
-            Zod => format!("{}.optional()", e),
+            Zod | Zod4 => format!("{}.optional()", e),
             Valibot => format!("v.optional({})", e),
         }
     }
@@ -659,7 +886,7 @@ impl Target {
     /// `.default()` / valibot's `v.optional(x, d)` would reject `null`).
     fn with_default(self, e: String, default: &Value) -> String {
         match self {
-            Zod => format!("{}.nullish().transform((v) => v ?? {})", e, default),
+            Zod | Zod4 => format!("{}.nullish().transform((v) => v ?? {})", e, default),
             Valibot => format!("v.nullish({}, {})", e, default),
         }
     }
@@ -675,7 +902,7 @@ impl Target {
         match (self, parts.len()) {
             (_, 0) => format!("{}.unknown()", self.ns()),
             (_, 1) => parts.remove(0),
-            (Zod, _) => parts[1..].iter().fold(parts[0].clone(), |acc, p| {
+            (Zod | Zod4, _) => parts[1..].iter().fold(parts[0].clone(), |acc, p| {
                 format!("z.intersection({}, {})", acc, p)
             }),
             (Valibot, _) => format!("v.intersect([{}])", parts.join(", ")),
@@ -716,6 +943,16 @@ pub fn __to_zod_from_value(schema: &Value) -> String {
 #[doc(hidden)]
 pub fn __to_valibot_from_value(schema: &Value) -> String {
     convert(Valibot, schema)
+}
+
+#[doc(hidden)]
+pub fn __to_zod4_from_value(schema: &Value) -> String {
+    convert(Zod4, schema)
+}
+
+#[doc(hidden)]
+pub fn __to_ts_type_from_value(schema: &Value) -> String {
+    ts_type(schema).0
 }
 
 /// Shared JSON Schema → Zod/Valibot walker.
@@ -801,7 +1038,7 @@ fn convert_core(t: Target, schema: &Value) -> (String, Vec<Act>) {
                 .as_object()
                 .is_some_and(|o| !STRUCTURAL.iter().any(|k| o.contains_key(*k)));
             match ty {
-                Some(ty) if fragment => acts.extend(constraint_acts(t, ty, part)),
+                Some(ty) if fragment => acts.extend(constraint_acts(t, ty, part, false)),
                 _ => others.push(convert(t, part)),
             }
         }
@@ -882,7 +1119,7 @@ fn union_nullable(t: Target, variants: Vec<String>, nullable: bool, tag: Option<
     }
     let e = match tag {
         Some(tag) if variants.len() > 1 => match t {
-            Zod => format!(
+            Zod | Zod4 => format!(
                 "z.discriminatedUnion({}, [{}])",
                 js_str(tag),
                 variants.join(", ")
@@ -917,7 +1154,7 @@ fn discriminator(t: Target, declared: Option<&str>, options: &[Value]) -> Option
             && o.get("properties").is_some_and(Value::is_object)
             && !NOT_PLAIN.iter().any(|k| o.get(*k).is_some())
             // Valibot: a `description` becomes a `v.pipe`, which `v.variant` rejects.
-            && (t == Zod || o.get("description").is_none())
+            && (t != Valibot || o.get("description").is_none())
     };
     let tag_value = |o: &Value, k: &str| -> Option<String> {
         if !o.get("required")?.as_array()?.iter().any(|r| r == k) {
@@ -959,9 +1196,24 @@ fn discriminator(t: Target, declared: Option<&str>, options: &[Value]) -> Option
 fn convert_typed(t: Target, ty: &str, schema: &Value) -> (String, Vec<Act>) {
     let ns = t.ns();
     let mut acts = Vec::new();
+    let zod4_fmt = match (t, ty) {
+        (Zod4, "string") => schema
+            .get("format")
+            .and_then(Value::as_str)
+            .and_then(zod4_format),
+        _ => None,
+    };
+    let format_in_base = zod4_fmt.is_some();
     let base = match ty {
-        "string" => format!("{}.string()", ns),
+        "string" => match zod4_fmt {
+            Some((base, extra)) => {
+                acts.extend(extra);
+                base
+            }
+            None => format!("{}.string()", ns),
+        },
         "number" => format!("{}.number()", ns),
+        "integer" if t == Zod4 => "z.int()".to_string(),
         "integer" => {
             acts.push(t.act("int", "integer", ""));
             format!("{}.number()", ns)
@@ -981,7 +1233,7 @@ fn convert_typed(t: Target, ty: &str, schema: &Value) -> (String, Vec<Act>) {
         "object" => convert_object(t, schema),
         _ => return (format!("{}.unknown()", ns), acts),
     };
-    acts.extend(constraint_acts(t, ty, schema));
+    acts.extend(constraint_acts(t, ty, schema, format_in_base));
     (base, acts)
 }
 
@@ -1001,6 +1253,8 @@ fn convert_tuple(t: Target, prefix: &[Value], items: Option<&Value>) -> String {
     match (t, rest) {
         (Zod, None) => format!("z.tuple([{}])", parts),
         (Zod, Some(r)) => format!("z.tuple([{}]).rest({})", parts, r),
+        (Zod4, None) => format!("z.tuple([{}])", parts),
+        (Zod4, Some(r)) => format!("z.tuple([{}], {})", parts, r),
         (Valibot, None) => format!("v.strictTuple([{}])", parts),
         (Valibot, Some(r)) => format!("v.tupleWithRest([{}], {})", parts, r),
     }
@@ -1020,7 +1274,9 @@ fn js_eq(c: &Value) -> String {
 const DISTINCT: &str = "new Set(a.map((x) => JSON.stringify(x))).size";
 
 /// Constraint keywords of a `ty`-typed schema (or an `allOf` fragment of one).
-fn constraint_acts(t: Target, ty: &str, schema: &Value) -> Vec<Act> {
+///
+/// `format_in_base`: the base already is the Zod 4 format schema.
+fn constraint_acts(t: Target, ty: &str, schema: &Value, format_in_base: bool) -> Vec<Act> {
     let u64_of = |k: &str| schema.get(k).and_then(Value::as_u64);
     let mut acts = Vec::new();
     match ty {
@@ -1032,7 +1288,9 @@ fn constraint_acts(t: Target, ty: &str, schema: &Value) -> Vec<Act> {
                 acts.push(t.act("max", "maxLength", n));
             }
             if let Some(fmt) = schema.get("format").and_then(Value::as_str) {
-                acts.extend(format_acts(t, fmt));
+                if !format_in_base {
+                    acts.extend(format_acts(t, fmt));
+                }
             }
             if let Some(p) = schema.get("pattern").and_then(Value::as_str) {
                 acts.push(pattern_act(p));
@@ -1131,7 +1389,7 @@ fn constraint_acts(t: Target, ty: &str, schema: &Value) -> Vec<Act> {
             ] {
                 if let Some(n) = u64_of(key) {
                     acts.push(match t {
-                        Zod => check(
+                        Zod | Zod4 => check(
                             &format!("(o) => Object.keys(o).length {} {}", op, n),
                             &format!("Must have {} {} keys", op, n),
                         ),
@@ -1179,6 +1437,8 @@ fn convert_object(t: Target, schema: &Value) -> String {
                 (Zod, Some(Value::Bool(false))) => "z.object({}).strict()".to_string(),
                 (Valibot, Some(Value::Bool(false))) => "v.strictObject({})".to_string(),
                 (Zod, _) => "z.object({}).passthrough()".to_string(),
+                (Zod4, Some(Value::Bool(false))) => "z.strictObject({})".to_string(),
+                (Zod4, _) => "z.looseObject({})".to_string(),
                 (Valibot, _) => "v.objectWithRest({}, v.unknown())".to_string(),
             };
         }
@@ -1221,11 +1481,244 @@ fn convert_object(t: Target, schema: &Value) -> String {
             format!("z.object({}).catchall({})", entries, convert(t, a))
         }
         (Zod, _) => format!("z.object({})", entries),
+        (Zod4, Some(Value::Bool(false))) => format!("z.strictObject({})", entries),
+        (Zod4, Some(a @ Value::Object(_))) => {
+            format!("z.object({}).catchall({})", entries, convert(t, a))
+        }
+        (Zod4, _) => format!("z.object({})", entries),
         (Valibot, Some(Value::Bool(false))) => format!("v.strictObject({})", entries),
         (Valibot, Some(a @ Value::Object(_))) => {
             format!("v.objectWithRest({}, {})", entries, convert(t, a))
         }
         (Valibot, _) => format!("v.object({})", entries),
+    }
+}
+
+/// Precedence of a TypeScript type expression: what it needs parens for.
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
+enum Prec {
+    /// `A | B`.
+    Union,
+    /// `A & B`.
+    Inter,
+    /// Anything else.
+    Atom,
+}
+
+/// `e`, parenthesized when it binds looser than `min`.
+fn ts_wrap((e, p): (String, Prec), min: Prec) -> String {
+    if p < min { format!("({})", e) } else { e }
+}
+
+/// `A | B` (deduplicated).
+fn ts_union(parts: Vec<(String, Prec)>) -> (String, Prec) {
+    let mut out: Vec<(String, Prec)> = Vec::new();
+    for p in parts {
+        if !out.iter().any(|o| o.0 == p.0) {
+            out.push(p);
+        }
+    }
+    match out.len() {
+        0 => ts_atom("never"),
+        1 => out.remove(0),
+        _ => (
+            out.into_iter()
+                .map(|p| ts_wrap(p, Prec::Union))
+                .collect::<Vec<_>>()
+                .join(" | "),
+            Prec::Union,
+        ),
+    }
+}
+
+/// `A & B`.
+fn ts_inter(mut parts: Vec<(String, Prec)>) -> (String, Prec) {
+    match parts.len() {
+        0 => ("unknown".to_string(), Prec::Atom),
+        1 => parts.remove(0),
+        _ => (
+            parts
+                .into_iter()
+                .map(|p| ts_wrap(p, Prec::Inter))
+                .collect::<Vec<_>>()
+                .join(" & "),
+            Prec::Inter,
+        ),
+    }
+}
+
+fn ts_atom(s: impl Into<String>) -> (String, Prec) {
+    (s.into(), Prec::Atom)
+}
+
+/// JSON Schema → TypeScript type expression.
+fn ts_type(schema: &Value) -> (String, Prec) {
+    match schema {
+        Value::Bool(true) => return ts_atom("unknown"),
+        Value::Bool(false) => return ts_atom("never"),
+        _ => {}
+    }
+    if let Some(name) = schema
+        .get("$ref")
+        .and_then(Value::as_str)
+        .and_then(extract_ref_name)
+    {
+        return ts_atom(name);
+    }
+    if matches!(schema.get("not"), Some(Value::Bool(true)))
+        || schema
+            .get("not")
+            .and_then(Value::as_object)
+            .is_some_and(|o| o.is_empty())
+    {
+        return ts_atom("never");
+    }
+    if let Some(all_of) = schema.get("allOf").and_then(Value::as_array) {
+        let mut rest = schema.clone();
+        if let Some(o) = rest.as_object_mut() {
+            o.remove("allOf");
+        }
+        let mut parts = Vec::new();
+        // `type` next to `allOf` (vld's extra patterns / formats): the typed
+        // base, plus whatever parts are real schemas.
+        if rest.get("type").is_some() {
+            parts.push(ts_type(&rest));
+        }
+        for part in all_of {
+            let fragment = part
+                .as_object()
+                .is_some_and(|o| !STRUCTURAL.iter().any(|k| o.contains_key(*k)));
+            if !fragment {
+                parts.push(ts_type(part));
+            }
+        }
+        return ts_inter(parts);
+    }
+    for key in ["oneOf", "anyOf"] {
+        if let Some(variants) = schema.get(key).and_then(Value::as_array) {
+            // A `type` sibling applies to every branch (see `convert_core`).
+            let ty = schema.get("type");
+            let parts = variants
+                .iter()
+                .map(|v| match (ty, v.as_object()) {
+                    (Some(ty), Some(o)) if !o.contains_key("type") && !o.contains_key("$ref") => {
+                        let mut v = v.clone();
+                        v["type"] = ty.clone();
+                        ts_type(&v)
+                    }
+                    _ => ts_type(v),
+                })
+                .collect();
+            return ts_union(parts);
+        }
+    }
+    if let Some(c) = schema.get("const") {
+        return ts_literal(c);
+    }
+    if let Some(values) = schema.get("enum").and_then(Value::as_array) {
+        return ts_union(values.iter().map(ts_literal).collect());
+    }
+    match schema.get("type") {
+        Some(Value::String(ty)) => ts_typed(ty, schema),
+        Some(Value::Array(types)) => ts_union(
+            types
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|ty| ts_typed(ty, schema))
+                .collect(),
+        ),
+        _ => ts_atom("unknown"),
+    }
+}
+
+/// A JSON scalar as a TS literal type (JSON scalars are valid TS literals).
+fn ts_literal(v: &Value) -> (String, Prec) {
+    match v {
+        Value::Null | Value::String(_) | Value::Number(_) | Value::Bool(_) => {
+            ts_atom(v.to_string())
+        }
+        _ => ts_atom("unknown"),
+    }
+}
+
+fn ts_typed(ty: &str, schema: &Value) -> (String, Prec) {
+    match ty {
+        "string" => ts_atom("string"),
+        "number" | "integer" => ts_atom("number"),
+        "boolean" => ts_atom("boolean"),
+        "null" => ts_atom("null"),
+        "array" => match schema.get("prefixItems").and_then(Value::as_array) {
+            Some(prefix) => {
+                let mut parts: Vec<String> = prefix.iter().map(|p| ts_type(p).0).collect();
+                match schema.get("items") {
+                    Some(Value::Bool(false)) => {}
+                    Some(i @ Value::Object(_)) => {
+                        parts.push(format!("...{}[]", ts_wrap(ts_type(i), Prec::Atom)))
+                    }
+                    _ => parts.push("...unknown[]".to_string()),
+                }
+                ts_atom(format!("[{}]", parts.join(", ")))
+            }
+            None => {
+                let items = schema
+                    .get("items")
+                    .map_or_else(|| ts_atom("unknown"), ts_type);
+                ts_atom(format!("{}[]", ts_wrap(items, Prec::Atom)))
+            }
+        },
+        "object" => ts_object(schema),
+        _ => ts_atom("unknown"),
+    }
+}
+
+/// `{ key: T; opt?: T }`, `Record<string, T>` or both intersected.
+fn ts_object(schema: &Value) -> (String, Prec) {
+    let required: Vec<&str> = schema
+        .get("required")
+        .and_then(Value::as_array)
+        .map(|arr| arr.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let record = match schema.get("additionalProperties") {
+        Some(Value::Bool(false)) => None,
+        Some(a @ Value::Object(_)) => Some(ts_type(a).0),
+        _ => Some("unknown".to_string()),
+    };
+    let props = schema.get("properties").and_then(Value::as_object);
+    let Some(props) = props.filter(|p| !p.is_empty()) else {
+        return match record {
+            Some(v) => ts_atom(format!("Record<string, {}>", v)),
+            None => ts_atom("Record<string, never>"),
+        };
+    };
+    // Same field order as `convert_object`.
+    let mut declared = required.iter().filter(|k| props.contains_key(**k));
+    let fields: Vec<String> = props
+        .keys()
+        .map(|k| match required.contains(&k.as_str()) {
+            true => declared.next().copied().unwrap_or(k),
+            false => k,
+        })
+        .map(|key| {
+            let opt = if required.contains(&key) { "" } else { "?" };
+            let ty = ts_type(&props[key]).0.replace('\n', "\n  ");
+            format!("  {}{}: {};", js_key(key), opt, ty)
+        })
+        .collect();
+    let obj = format!("{{\n{}\n}}", fields.join("\n"));
+    match record {
+        // An index signature must cover every property type, so a typed
+        // catch-all is a separate `Record` intersected with the fields.
+        Some(v)
+            if schema
+                .get("additionalProperties")
+                .is_some_and(Value::is_object) =>
+        {
+            ts_inter(vec![
+                ts_atom(obj),
+                ts_atom(format!("Record<string, {}>", v)),
+            ])
+        }
+        _ => ts_atom(obj),
     }
 }
 

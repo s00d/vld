@@ -16,6 +16,25 @@ macro_rules! __vld_cached {
     }};
 }
 
+/// A serde `deserialize_with` function that parses with a vld schema (built
+/// once per process).
+///
+/// `vld::deserialize_fn!(pub fn port -> u16 = vld::u16().min(1));` defines
+/// `pub fn port<'de, D: Deserializer<'de>>(d: D) -> Result<u16, D::Error>`.
+/// See [`vld::de`](crate::de).
+#[macro_export]
+macro_rules! deserialize_fn {
+    ($(#[$attr:meta])* $vis:vis fn $name:ident -> $ty:ty = $schema:expr $(;)?) => {
+        $(#[$attr])*
+        $vis fn $name<'de, D>(deserializer: D) -> ::std::result::Result<$ty, D::Error>
+        where
+            D: $crate::serde::Deserializer<'de>,
+        {
+            $crate::de::with($crate::__vld_cached!($schema), deserializer)
+        }
+    };
+}
+
 /// Emit the given tokens only when the `openapi` feature is enabled on `vld`.
 #[cfg(feature = "openapi")]
 #[doc(hidden)]

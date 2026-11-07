@@ -1,0 +1,39 @@
+---
+source: crates/vld-ts/tests/codegen.rs
+expression: zod4
+---
+z.object({
+  id: z.string().min(1),
+  shipping: z.lazy(() => TsAddressSchema)
+})
+
+export const TsProfileSchema = z.object({
+  email: z.email(),
+  role: z.union([z.literal("admin"), z.literal("user")]),
+  nickname: z.string().min(2).optional(),
+  address: z.lazy(() => TsAddressSchema)
+});
+export type TsProfile = z.infer<typeof TsProfileSchema>;
+
+
+export const RequestBodySchema = z.object({
+  name: z.string().min(1)
+});
+export type RequestBody = z.infer<typeof RequestBodySchema>;
+
+
+z.guid()
+
+z.iso.datetime({ offset: true, local: true })
+
+z.iso.date()
+
+z.iso.time()
+
+z.ipv4()
+
+z.url().regex(/^https?:\/\/\S+$/)
+
+z.int().min(1)
+
+z.array(z.string()).refine((a) => new Set(a.map((x) => JSON.stringify(x))).size === a.length, { error: "Items must be unique" })

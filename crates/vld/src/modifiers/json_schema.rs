@@ -56,6 +56,10 @@ where
             .output_json(self.default_value())
             .map(Ok)
             .unwrap_or_else(|| serde_json::to_value(self.default_value()));
+        if self.accepts_blank() {
+            let blank = serde_json::json!({ "type": "string", "pattern": "^\\s*$" });
+            schema = serde_json::json!({ "anyOf": [schema, blank] });
+        }
         if let (Some(obj), Ok(default)) = (schema.as_object_mut(), default) {
             obj.insert("default".to_string(), default);
         }

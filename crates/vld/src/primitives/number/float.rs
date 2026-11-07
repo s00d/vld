@@ -1,5 +1,4 @@
 use serde_json::Value;
-#[cfg(feature = "openapi")]
 use std::cmp::Ordering;
 
 use crate::error::{IssueCode, ValidationIssue, VldError, issue_error};
@@ -25,6 +24,8 @@ use super::{Kind, Num, NumberCheck, ZInt};
 pub struct ZNumber {
     checks: Vec<NumberCheck>,
     pub(super) coerce: bool,
+    /// `clamp()`: inclusive bounds clamp instead of failing.
+    pub(super) clamp: bool,
     custom_type_error: Option<String>,
     messages: crate::primitives::Messages,
 }
@@ -35,6 +36,7 @@ impl ZNumber {
         Self {
             checks: vec![],
             coerce: false,
+            clamp: false,
             custom_type_error: None,
             messages: None,
         }
@@ -183,6 +185,38 @@ impl ZNumber {
         self
     }
 
+    /// Clamp values outside the inclusive bounds (`min` / `max`,
+    /// `non_negative` / `non_positive`) to the bound instead of failing.
+    /// Integer schemas also saturate to their type (`u8`: `0..=255`), `f32`
+    /// to its finite range. Exclusive bounds (`gt`, `lt`, `positive`,
+    /// `negative`) still fail. The JSON Schema leaves out the clamped bounds.
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let volume = vld::number().int().min(0).max(100).clamp();
+    /// assert_eq!(volume.parse("150").unwrap(), 100);
+    /// assert_eq!(volume.parse("-5").unwrap(), 0);
+    /// assert_eq!(vld::u8().clamp().parse("300").unwrap(), 255u8);
+    /// ```
+    pub fn clamp(mut self) -> Self {
+        self.clamp = true;
+        self
+    }
+
+    /// `n` moved into the inclusive bounds when `clamp()` is on.
+    pub(super) fn clamped(&self, n: Num) -> Num {
+        if !self.clamp {
+            return n;
+        }
+        self.checks
+            .iter()
+            .fold(n, |n, c| match (c.kind.lower(), c.kind.upper()) {
+                (Some((b, false)), _) if n.cmp(b) == Some(Ordering::Less) => b,
+                (_, Some((b, false))) if n.cmp(b) == Some(Ordering::Greater) => b,
+                _ => n,
+            })
+    }
+
     fn type_err(&self, value: &Value) -> VldError {
         crate::primitives::type_error(&self.custom_type_error, "number", value)
     }
@@ -240,7 +274,7 @@ impl VldSchema for ZNumber {
     type Output = f64;
 
     fn parse_value(&self, value: &Value) -> Result<f64, VldError> {
-        let n = self.extract_number(value)?;
+        let n = self.clamped(Num::F(self.extract_number(value)?)).as_f64();
         self.validate(Num::F(n), value)?;
         Ok(n)
     }
@@ -271,15 +305,20 @@ impl ZNumber {
             Some(Ordering::Equal) if b.1 => b,
             _ => a,
         };
+        // With `clamp()` inclusive bounds (and the type range) accept anything.
+        let keep = |b: &(Num, bool)| !self.clamp || b.1;
+        let range = range.filter(|_| !self.clamp);
         let lower = range
             .map(|(lo, _)| (lo, false))
             .into_iter()
             .chain(self.checks.iter().filter_map(|c| c.kind.lower()))
+            .filter(keep)
             .reduce(|a, b| pick(a, b, Ordering::Greater));
         let upper = range
             .map(|(_, hi)| (hi, false))
             .into_iter()
             .chain(self.checks.iter().filter_map(|c| c.kind.upper()))
+            .filter(keep)
             .reduce(|a, b| pick(a, b, Ordering::Less));
         if let Some((v, excl)) = lower {
             let key = if excl { "exclusiveMinimum" } else { "minimum" };

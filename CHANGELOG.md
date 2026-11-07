@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Breaking changes
+
+- vld-tauri: `TauriIssue` has two new public fields, `code` and `params`; code that builds it with a struct literal must set them (deserializing old JSON still works, both default to empty).
+
+### Added
+
+- `#[derive(Validate)]`: a field without `#[vld(...)]` gets its type's default schema through the new `vld::schema::VldType` trait (`String`, `bool`, numbers, `Option<T>`, `Vec<T>`, `HashSet<T>`, `HashMap/BTreeMap<String, T>`, `serde_json::Value`, derived and `schema!` types as nested `$ref`s). Tuple and newtype enum variants infer the same way.
+- `#[vld(dynamic)]` on a derived struct or enum rebuilds its schemas on every parse, for limits read at runtime (non-generic types cache them once per process).
+- `vld::de`: `#[serde(deserialize_with = "vld::de::parse")]` for `VldParse` fields and `vld::deserialize_fn!(fn name -> T = <schema>)` to validate while serde deserializes.
+- Numbers: `clamp()` moves values outside the inclusive bounds onto them instead of failing; sized integers saturate to their type, `f32` to its finite range.
+- `VldSchema::blank_as(v)`: `with_default(v)` that also maps a blank string (`""`, whitespace).
+- `ZString::coerce_bools(on, off)`: coercion that writes booleans as e.g. `"1"` / `"0"`.
+- vld-tauri: `TauriIssue` carries `code` and `params` for frontend translation (vue-i18n & co.).
+- vld-ts: Zod 4 output (`to_zod4`, `impl_to_zod4!`, `zod4_export`) and plain TypeScript types (`to_ts_type`, `impl_to_ts_type!`, `ts_type_export`).
+
 ## [0.6.1] - 2026-11-07
 
 ### Added

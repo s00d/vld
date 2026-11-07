@@ -283,6 +283,21 @@ macro_rules! schema {
             }
         }
 
+        impl $crate::schema::VldType for $name {
+            type Schema = $crate::schema::NestedSchema<
+                Self,
+                fn(&$crate::serde_json::Value) -> ::std::result::Result<Self, $crate::error::VldError>,
+            >;
+            fn vld_schema() -> Self::Schema {
+                $crate::nested_named(
+                    stringify!($name),
+                    Self::parse_value,
+                    $crate::__vld_nested_schema_fn!($name),
+                    $crate::__vld_nested_collect_fn!($name),
+                )
+            }
+        }
+
         impl $name {
             /// Validate an existing Rust value that can be serialized to JSON.
             ///

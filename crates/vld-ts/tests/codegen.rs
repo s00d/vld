@@ -299,3 +299,171 @@ fn valibot_array_length_uses_min_length() {
         "v.pipe(v.array(v.string()), v.minLength(1), v.maxLength(3))"
     );
 }
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct TsProfile {
+        pub email: String => vld::string().email(),
+        pub nickname: Option<String> => vld::string().min(2).optional(),
+        pub role: String => vld::enumeration(&["admin", "user"]),
+        pub address: TsAddress => vld::nested!(TsAddress),
+    }
+}
+
+vld_ts::impl_to_zod4!(TsOrder);
+vld_ts::impl_to_zod4!(TsProfile);
+vld_ts::impl_to_zod4!(TsCustomNamed, "RequestBody");
+vld_ts::impl_to_ts_type!(TsAddress);
+vld_ts::impl_to_ts_type!(TsProfile);
+vld_ts::impl_to_ts_type!(TsCustomNamed, "RequestBody");
+
+fn zod4_of(v: &serde_json::Value) -> String {
+    vld_ts::__to_zod4_from_value(v)
+}
+
+fn ts_of(v: &serde_json::Value) -> String {
+    vld_ts::__to_ts_type_from_value(v)
+}
+
+/// Zod 4 output for typed structs and the Zod 4-specific mappings.
+#[test]
+fn zod4_snapshots() {
+    use vld_ts::ToZod4;
+    let zod4 = [
+        TsOrder::to_zod4(),
+        TsProfile::to_zod4_export(),
+        TsCustomNamed::to_zod4_export(),
+        vld_ts::to_zod4(&vld::string().uuid()),
+        vld_ts::to_zod4(&vld::string().iso_datetime()),
+        vld_ts::to_zod4(&vld::string().iso_date()),
+        vld_ts::to_zod4(&vld::string().iso_time()),
+        vld_ts::to_zod4(&vld::string().ipv4()),
+        vld_ts::to_zod4(&vld::string().url()),
+        vld_ts::to_zod4(&vld::number().int().min(1)),
+        vld_ts::to_zod4(&vld::array(vld::string()).unique()),
+    ]
+    .join("\n\n");
+    insta::assert_snapshot!("zod4", zod4);
+}
+
+#[test]
+fn zod4_specific_mappings() {
+    // Strict / loose objects.
+    let strict = json!({"type": "object", "properties": {"a": {"type": "string"}}, "required": ["a"], "additionalProperties": false});
+    assert_eq!(zod4_of(&strict), "z.strictObject({\n  a: z.string()\n})");
+    assert_eq!(zod4_of(&json!({"type": "object"})), "z.looseObject({})");
+    // Record with an explicit key schema.
+    let rec = json!({"type": "object", "additionalProperties": {"type": "integer"}});
+    assert_eq!(zod4_of(&rec), "z.record(z.string(), z.int())");
+    // Tuple rest is the second argument.
+    let tuple =
+        json!({"type": "array", "prefixItems": [{"type": "string"}], "items": {"type": "number"}});
+    assert_eq!(zod4_of(&tuple), "z.tuple([z.string()], z.number())");
+    // `.ip()` is gone in Zod 4; a format in an `allOf` fragment is a check.
+    assert_eq!(
+        zod4_of(&json!({"type": "string", "format": "ip"})),
+        "z.string().refine((s) => z.ipv4().safeParse(s).success || z.ipv6().safeParse(s).success, { error: \"Invalid IP\" })"
+    );
+    assert_eq!(
+        zod4_of(&json!({"type": "string", "allOf": [{"format": "email"}]})),
+        "z.string().refine((s) => z.email().safeParse(s).success, { error: \"Invalid email\" })"
+    );
+    // A format base keeps its string checks.
+    assert_eq!(
+        zod4_of(&json!({"type": "string", "format": "email", "minLength": 3, "pattern": "^a"})),
+        "z.email().min(3).regex(new RegExp(\"^a\"))"
+    );
+    // Zod 3 output is unchanged for the same schemas.
+    assert_eq!(
+        vld_ts::__to_zod_from_value(&rec),
+        "z.record(z.string(), z.number().int())"
+    );
+}
+
+/// Plain TypeScript types for typed structs.
+#[test]
+fn ts_type_snapshots() {
+    use vld_ts::ToTsType;
+    let ts = [
+        TsAddress::to_ts_type_export(),
+        TsProfile::to_ts_type_export(),
+        TsCustomNamed::to_ts_type_export(),
+    ]
+    .join("\n");
+    insta::assert_snapshot!("ts_type", ts);
+}
+
+#[test]
+fn ts_type_mappings() {
+    assert_eq!(vld_ts::to_ts_type(&vld::string()), "string");
+    assert_eq!(vld_ts::to_ts_type(&vld::number().int()), "number");
+    assert_eq!(vld_ts::to_ts_type(&vld::boolean()), "boolean");
+    assert_eq!(
+        vld_ts::to_ts_type(&vld::string().nullable()),
+        "string | null"
+    );
+    assert_eq!(
+        vld_ts::to_ts_type(&vld::enumeration(&["a\"b", "c"])),
+        "\"a\\\"b\" | \"c\""
+    );
+    assert_eq!(
+        vld_ts::to_ts_type(&vld::array(vld::union(vld::string(), vld::number()))),
+        "(string | number)[]"
+    );
+    assert_eq!(ts_of(&json!({})), "unknown");
+    assert_eq!(ts_of(&json!({"const": 3})), "3");
+    assert_eq!(
+        ts_of(&json!({"type": ["integer", "null"]})),
+        "number | null"
+    );
+    assert_eq!(
+        ts_of(&json!({"$ref": "#/components/schemas/Address"})),
+        "Address"
+    );
+    assert_eq!(
+        ts_of(
+            &json!({"type": "array", "prefixItems": [{"type": "string"}, {"type": "boolean"}], "items": false})
+        ),
+        "[string, boolean]"
+    );
+    assert_eq!(
+        ts_of(
+            &json!({"type": "array", "prefixItems": [{"type": "string"}], "items": {"type": "number"}})
+        ),
+        "[string, ...number[]]"
+    );
+    assert_eq!(
+        ts_of(&json!({"type": "object", "additionalProperties": {"type": "string"}})),
+        "Record<string, string>"
+    );
+    assert_eq!(
+        ts_of(
+            &json!({"type": "object", "properties": {"a b": {"type": "string"}}, "additionalProperties": {"type": "number"}})
+        ),
+        "{\n  \"a b\"?: string;\n} & Record<string, number>"
+    );
+    assert_eq!(
+        ts_of(
+            &json!({"allOf": [{"$ref": "#/components/schemas/A"}, {"anyOf": [{"$ref": "#/components/schemas/B"}, {"type": "null"}]}]})
+        ),
+        "A & (B | null)"
+    );
+    assert_eq!(
+        ts_of(
+            &json!({"type": "array", "items": {"allOf": [{"$ref": "#/components/schemas/A"}, {"$ref": "#/components/schemas/B"}]}})
+        ),
+        "(A & B)[]"
+    );
+    // vld's extra patterns sit in `allOf` next to `type`.
+    assert_eq!(
+        ts_of(&json!({"type": "string", "allOf": [{"pattern": "a"}, {"pattern": "b"}]})),
+        "string"
+    );
+    // Nested objects are re-indented.
+    assert_eq!(
+        ts_of(
+            &json!({"type": "object", "properties": {"o": {"type": "object", "properties": {"x": {"type": "number"}}, "required": ["x"]}}, "required": ["o"]})
+        ),
+        "{\n  o: {\n    x: number;\n  };\n}"
+    );
+}

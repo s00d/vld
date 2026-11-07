@@ -9,8 +9,8 @@ use syn::{DataEnum, DeriveInput, Fields, LitStr};
 
 use crate::{
     FieldInfo, Names, RENAME_RULES, check_deny_unknown, collect_tokens, deny_tokens,
-    field_parse_lets, named_field_infos, names, object_schema_tokens, schema_ref, serde_attrs,
-    skip_meta,
+    field_parse_lets, infer_schema, named_field_infos, names, object_schema_tokens,
+    parse_vld_struct_attrs, schema_ref, serde_attrs, skip_meta, vld_type_impl,
 };
 
 #[derive(Default)]
@@ -57,14 +57,15 @@ struct Variant {
 pub(crate) fn expand_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<TokenStream2> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let generic = !input.generics.params.is_empty();
     let serde = parse_serde_enum_attrs(&input.attrs)?;
-    if let Some(attr) = input.attrs.iter().find(|a| a.path().is_ident("vld")) {
+    let (lenient, dynamic) = parse_vld_struct_attrs(&input.attrs)?;
+    if lenient {
         return Err(syn::Error::new(
-            attr.span(),
-            "vld: no enum-level #[vld(...)] attributes are supported (`lenient` is struct-only)",
+            name.span(),
+            "vld: `lenient` is struct-only",
         ));
     }
+    let generic = dynamic || !input.generics.params.is_empty();
     if serde.content.is_some() && serde.tag.is_none() {
         return Err(syn::Error::new(
             name.span(),
@@ -101,11 +102,7 @@ pub(crate) fn expand_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<T
             Fields::Unit => Shape::Unit,
             Fields::Unnamed(f) if f.unnamed.len() == 1 => {
                 let field = &f.unnamed[0];
-                let ty = &field.ty;
-                // A derived (or `schema!`) inner type validates itself.
-                Shape::Newtype(
-                    field_schema(field)?.unwrap_or_else(|| quote! { ::vld::nested!(#ty) }),
-                )
+                Shape::Newtype(field_schema(field)?.unwrap_or_else(|| infer_schema(&field.ty)))
             }
             Fields::Unnamed(f) => {
                 if serde.tag.is_some() && serde.content.is_none() && !serde.untagged {
@@ -116,12 +113,7 @@ pub(crate) fn expand_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<T
                 }
                 let mut items = Vec::new();
                 for field in &f.unnamed {
-                    items.push(field_schema(field)?.ok_or_else(|| {
-                        syn::Error::new(
-                            field.span(),
-                            "tuple variant field is missing a #[vld(...)] attribute",
-                        )
-                    })?);
+                    items.push(field_schema(field)?.unwrap_or_else(|| infer_schema(&field.ty)));
                 }
                 Shape::Tuple(items)
             }
@@ -181,7 +173,10 @@ pub(crate) fn expand_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<T
         }
     };
 
+    let vld_type = vld_type_impl(input);
     Ok(quote! {
+        #vld_type
+
         impl #impl_generics #name #ty_generics #where_clause {
             /// Parse and validate input data into this enum.
             pub fn vld_parse<__VldInputT: ::vld::schema::VldInput + ?Sized>(
@@ -707,10 +702,6 @@ mod tests {
         assert!(e.contains("needs #[serde(tag"), "{e}");
         let e = derive_error(r#"enum E { #[serde(untagged)] A }"#);
         assert!(e.contains("not supported"), "{e}");
-        let e = derive_error(r#"enum E { A(i64, #[vld(x)] i64) }"#);
-        assert!(e.contains("missing a #[vld"), "{e}");
-        let e = derive_error(r#"enum E { A { x: i64 } }"#);
-        assert!(e.contains("missing a #[vld"), "{e}");
         let e = derive_error(r#"#[vld(lenient)] enum E { A }"#);
         assert!(e.contains("struct-only"), "{e}");
         let e = derive_error(r#"#[vld(lenient)] struct S { #[serde(flatten)] m: M }"#);
@@ -723,6 +714,8 @@ mod tests {
             e.contains("cannot be combined with #[serde(flatten)]"),
             "{e}"
         );
+        let e = derive_error(r#"#[vld(cached)] struct S { a: i64 }"#);
+        assert!(e.contains("expected `lenient` or `dynamic`"), "{e}");
         let e = derive_error(r#"union U { a: u8 }"#);
         assert!(e.contains("structs and enums"), "{e}");
     }
