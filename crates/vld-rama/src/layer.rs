@@ -145,13 +145,3 @@ pub fn validated<T: Clone + fmt::Debug + Send + Sync + 'static>(req: &Request) -
         .get_ref::<Validated<T>>()
         .map(|v| v.0.clone())
 }
-
-/// Try to extract the validated value from request extensions.
-#[must_use]
-#[deprecated(
-    since = "0.5.0",
-    note = "use `validated`, which now returns `Option<T>`"
-)]
-pub fn try_validated<T: Clone + fmt::Debug + Send + Sync + 'static>(req: &Request) -> Option<T> {
-    validated(req)
-}

@@ -161,21 +161,6 @@ where
     Ok(())
 }
 
-/// Validate a record loaded from SurrealDB against schema `S`.
-///
-/// Identical to [`validate_content`] (use it, or [`validate_records`] for a batch).
-#[deprecated(
-    since = "0.5.0",
-    note = "identical to `validate_content`; use it instead"
-)]
-pub fn validate_record<S, T>(value: &T) -> Result<(), VldSurrealError>
-where
-    S: vld::schema::VldParse,
-    T: serde::Serialize,
-{
-    validate_content::<S, T>(value)
-}
-
 /// Validate a batch of records against schema `S`.
 ///
 /// Returns the index and error of the first invalid record.
@@ -329,11 +314,10 @@ macro_rules! validate_fields {
 
 /// Common imports: the SurrealDB helpers plus `vld::prelude`.
 pub mod prelude {
-    #[allow(deprecated)]
     pub use crate::{
         FieldError, Validated, VldBool, VldFloat, VldInt, VldSurrealError, VldSurrealResponse,
-        VldText, validate_content, validate_fields, validate_json, validate_record,
-        validate_records, validate_value,
+        VldText, validate_content, validate_fields, validate_json, validate_records,
+        validate_value,
     };
     pub use vld::prelude::*;
 }

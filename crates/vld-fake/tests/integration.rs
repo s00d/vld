@@ -1353,7 +1353,7 @@ fn non_string_formats_are_generated_validly() {
 fn pattern_is_honoured() {
     let schema =
         json!({"type": "string", "pattern": r"^(red|green)/[0-9a-f]{4}$", "maxLength": 10});
-    let re = vld::regex_lite::Regex::new(r"^(red|green)/[0-9a-f]{4}$").unwrap();
+    let re = vld::rules::Pattern::new(r"^(red|green)/[0-9a-f]{4}$").unwrap();
     for _ in 0..100 {
         let v = fake_value(&schema);
         let s = v.as_str().unwrap();

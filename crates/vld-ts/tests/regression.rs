@@ -157,13 +157,10 @@ fn node_cases() -> Vec<Case> {
         ),
         case(vld::never(), vec![json!(1), json!(null), json!("x")]),
         case(
-            vld::string().regex(regex_lite::Regex::new("(?i)^abc$").unwrap()),
+            vld::string().pattern("(?i)^abc$"),
             s(&["abc", "ABC", "abcd"]),
         ),
-        case(
-            vld::string().regex(regex_lite::Regex::new(r"\Aa+\z").unwrap()),
-            s(&["aaa", "Aa", "aab"]),
-        ),
+        case(vld::string().pattern(r"\Aa+\z"), s(&["aaa", "Aa", "aab"])),
         case(
             (vld::string(), vld::number().int()),
             vec![

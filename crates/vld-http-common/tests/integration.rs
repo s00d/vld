@@ -276,15 +276,14 @@ fn format_issues_basic() {
 }
 
 #[test]
-#[allow(deprecated)]
-fn format_issues_with_code_joins_path_with_dots() {
+fn format_issues_joins_path_with_dots() {
     use vld::error::{IssueCode, PathSegment, VldError};
     let mut err = VldError::single(IssueCode::MissingField, "Required");
     err.issues[0].path = vec![
         PathSegment::Field("user".into()),
         PathSegment::Field("age".into()),
     ];
-    let issues = format_issues_with_code(&err);
+    let issues = format_issues(&err);
     assert_eq!(issues[0].path, ".user.age");
     assert_eq!(issues[0].code, IssueCode::MissingField.key());
 }
@@ -296,21 +295,6 @@ fn format_vld_error_structure() {
     assert_eq!(body["error"], "Validation failed");
     assert!(body["issues"].as_array().unwrap().len() == 1);
     assert_eq!(body["issues"][0]["message"], "Required");
-}
-
-#[test]
-#[allow(deprecated)]
-fn format_json_parse_error_structure() {
-    let body = format_json_parse_error("unexpected token");
-    assert_eq!(body["error"], "Invalid JSON");
-    assert_eq!(body["message"], "unexpected token");
-}
-
-#[test]
-#[allow(deprecated)]
-fn format_utf8_error_structure() {
-    let body = format_utf8_error();
-    assert_eq!(body["error"], "Invalid UTF-8");
 }
 
 #[test]

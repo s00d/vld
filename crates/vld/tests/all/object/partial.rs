@@ -1,4 +1,4 @@
-//! Optional fields: `field_optional`, `partial`, `required`, `deep_partial`.
+//! Optional fields: `field_optional`, `partial`, `required`.
 //! Absent and `null` keys are tested separately.
 
 use crate::common::{parse_err, paths};
@@ -50,13 +50,12 @@ fn required_undoes_partial_for_absent_and_null() {
 }
 
 #[test]
-#[allow(deprecated)]
-fn deep_partial_is_shallow_partial() {
+fn partial_is_shallow() {
     let inner = vld::object().field("city", vld::string());
     let s = vld::object()
         .field("name", vld::string().min(1))
         .field("addr", inner)
-        .deep_partial();
+        .partial();
     assert!(s.parse_value(&json!({})).is_ok());
     // Not recursive: the nested object keeps its required field.
     assert_issue!(

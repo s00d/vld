@@ -212,7 +212,7 @@ mod openapi {
         assert!(schemas["DerivedAddr"].is_object());
         assert!(schemas["Page_Item_"].is_object());
         assert_eq!(
-            schemas["DerivedUser"]["properties"]["page"]["anyOf"][0]["$ref"],
+            schemas["DerivedUser"]["properties"]["page"]["$ref"],
             "#/components/schemas/Page_Item_"
         );
     }

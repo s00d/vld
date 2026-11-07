@@ -120,19 +120,6 @@ where
     __vld_validate::<S, T>(value).map(|_| ())
 }
 
-/// Same as [`validate_insert`].
-#[deprecated(
-    since = "0.5.0",
-    note = "identical to `validate_insert`; use it instead"
-)]
-pub fn validate_update<S, T>(value: &T) -> Result<(), VldSqlxError>
-where
-    S: vld::schema::VldParse,
-    T: serde::Serialize,
-{
-    validate_insert::<S, T>(value)
-}
-
 /// Validate a row loaded from the database against schema `S`
 /// (same check as [`validate_insert`]).
 pub fn validate_row<S, T>(value: &T) -> Result<(), VldSqlxError>
@@ -343,10 +330,9 @@ mod pg_tests {
 
 /// Common imports: the sqlx wrappers plus `vld::prelude`.
 pub mod prelude {
-    #[allow(deprecated)]
     pub use crate::{
         Validated, VldBool, VldFloat, VldInt, VldSqlxError, VldText, validate_insert, validate_row,
-        validate_rows, validate_update,
+        validate_rows,
     };
     pub use vld::prelude::*;
 }

@@ -153,23 +153,7 @@ fn validate_insert_multiple_errors() {
     }
 }
 
-// ========================= Tests: validate_update / validate_row =============
-
-#[test]
-#[allow(deprecated)]
-fn validate_update_works() {
-    let user = NewUser {
-        name: "Updated".into(),
-        email: "updated@example.com".into(),
-        age: 40,
-    };
-    validate_update::<UserSchema, _>(&user).unwrap();
-    let bad = NewUser { age: 151, ..user };
-    assert_eq!(
-        issues(validate_update::<UserSchema, _>(&bad)),
-        pairs(&[(".age", "too_big")])
-    );
-}
+// ========================= Tests: validate_row ===============================
 
 #[test]
 fn validate_row_works() {

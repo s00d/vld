@@ -124,7 +124,7 @@ mod tests {
             r"^[^a-z]{2,5}$",
             r"^a/b\.c$",
         ] {
-            let re = vld::regex_lite::Regex::new(p).unwrap();
+            let re = regex_lite::Regex::new(p).unwrap();
             for _ in 0..50 {
                 let s = super::generate(&mut rng, p).unwrap();
                 assert!(re.is_match(&s), "{p} vs {s:?}");

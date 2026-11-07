@@ -51,14 +51,12 @@
 //! | `derive` | `#[derive(Validate)]` |
 //! | `openapi` | the `JsonSchema` trait and OpenAPI 3.1 documents |
 //! | `diff` | breaking-change detection between JSON Schemas (implies `openapi`) |
-//! | `regex` | `string().regex(...)` (via `regex-lite`) |
+//! | `regex` | `string().pattern(...)`, `rules::Pattern` (via `regex-lite`) |
 //! | `chrono` / `jiff` / `time` | `vld::chrono`, `vld::jiff`, `vld::time` date schemas (additive) |
 //! | `decimal` | `decimal()` (`rust_decimal`) |
 //! | `net` | `ip_network()` (`ipnet`) |
 //! | `file` / `file-advanced` | `file()` with size / type checks; hashes, image size, EXIF |
 //! | `string-advanced` | `url_strict()`, `uri()`, `uuid_v4()` & co, `phone_e164_strict()`, `semver_full()` |
-//!
-//! `serialize` / `deserialize` are deprecated no-ops (removed in 0.6).
 //!
 //! ## Module map
 //!
@@ -105,6 +103,7 @@ pub mod openapi;
 pub mod prelude;
 /// Strings, numbers, booleans, dates and other leaf schemas.
 pub mod primitives;
+pub mod rules;
 /// The `VldSchema` / `VldParse` traits and nested-schema helpers.
 pub mod schema;
 
@@ -120,6 +119,7 @@ pub use openapi as json_schema;
 #[cfg(feature = "diff")]
 #[cfg_attr(docsrs, doc(cfg(feature = "diff")))]
 pub use openapi::diff;
+pub use schema::Schema;
 pub use schema::input;
 
 // Date backends: additive, each in its own module.
@@ -140,11 +140,6 @@ pub use serde_json;
 // Re-export serde for DynSchema users
 #[doc(hidden)]
 pub use serde;
-
-// Re-export regex_lite when the `regex` feature is enabled
-#[cfg(feature = "regex")]
-#[cfg_attr(docsrs, doc(cfg(feature = "regex")))]
-pub use regex_lite;
 
 // Re-export the derive macro when the `derive` feature is enabled
 #[cfg(feature = "derive")]
@@ -310,7 +305,14 @@ where
 /// assert_eq!(vld::literal("admin").parse(r#""admin""#).unwrap(), "admin");
 /// assert!(vld::literal(42i64).parse("42").is_ok());
 /// assert!(vld::literal(true).parse("true").is_ok());
+///
+/// // A string known only at runtime: pass an owned `String`.
+/// let tag = format!("v{}", 2);
+/// assert!(vld::literal(tag).parse(r#""v2""#).is_ok());
 /// ```
+///
+/// Schemas may be cached for the whole process, so the value must be owned
+/// or `'static`: use `String` (`name.to_string()`) for a borrowed `&str`.
 pub fn literal<T: primitives::IntoLiteral>(val: T) -> primitives::ZLiteral<T> {
     primitives::ZLiteral::new(val)
 }

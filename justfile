@@ -32,7 +32,7 @@ fmt:
 lint:
     cargo shear
     cargo clippy --workspace --all-targets {{ ci_flags }} -- -D warnings
-    cargo hack clippy -p vld --each-feature --exclude-features serialize,deserialize --all-targets {{ ci_flags }} -- -D warnings
+    cargo hack clippy -p vld --each-feature --all-targets {{ ci_flags }} -- -D warnings
     cargo clippy -p vld --features {{ vld_all }} --all-targets {{ ci_flags }} -- -D warnings
     just _majors clippy --all-targets -- -D warnings
 
@@ -40,7 +40,7 @@ lint:
 test:
     cargo test --workspace --all-targets {{ ci_flags }}
     cargo test --workspace --doc {{ ci_flags }}
-    cargo hack test -p vld --each-feature --exclude-features serialize,deserialize {{ ci_flags }}
+    cargo hack test -p vld --each-feature {{ ci_flags }}
     cargo test -p vld --features {{ vld_all }} {{ ci_flags }}
     just _majors test
 
@@ -83,7 +83,7 @@ wasm:
 
 # Every pair of vld features compiles (slow: ~100 builds)
 powerset:
-    cargo hack check -p vld --feature-powerset --depth 2 --exclude-features serialize,deserialize --all-targets {{ ci_flags }}
+    cargo hack check -p vld --feature-powerset --depth 2 --all-targets {{ ci_flags }}
 
 # Each crate on its rust-version, as a downstream user resolves it (MSRV.md; needs those toolchains)
 msrv:

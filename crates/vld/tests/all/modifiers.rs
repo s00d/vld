@@ -76,3 +76,76 @@ fn default_value_accessor() {
     assert_eq!(*s.default_value(), 7);
     assert_eq!(s.inner_schema().parse_value(&json!(1)).unwrap(), 1);
 }
+
+/// optional / nullable / nullish differ on an absent key (and in JSON Schema).
+#[test]
+fn absent_key_semantics() {
+    use serde_json::json;
+    let obj = |s: vld::object::ZObject| s;
+    let opt = obj(vld::object().field("x", vld::string().optional()));
+    let nul = obj(vld::object().field("x", vld::string().nullable()));
+    let nsh = obj(vld::object().field("x", vld::string().nullish()));
+    for s in [&opt, &nul, &nsh] {
+        assert!(s.parse_value(&json!({"x": null})).is_ok());
+        assert!(s.parse_value(&json!({"x": "a"})).is_ok());
+    }
+    assert!(opt.parse_value(&json!({})).is_ok());
+    assert!(nsh.parse_value(&json!({})).is_ok());
+    let e = nul.parse_value(&json!({})).unwrap_err();
+    assert_eq!(e.issues[0].code.key(), "missing_field");
+    assert_eq!(e.issues[0].path_string(), ".x");
+
+    // Wrappers keep the semantics.
+    let wrapped = vld::object().field(
+        "x",
+        vld::string()
+            .nullable()
+            .describe("d")
+            .refine(|_| true, "never"),
+    );
+    assert_eq!(
+        wrapped.parse_value(&json!({})).unwrap_err().issues[0]
+            .code
+            .key(),
+        "missing_field"
+    );
+}
+
+#[cfg(feature = "derive")]
+#[test]
+fn absent_key_semantics_in_derive() {
+    use serde_json::json;
+    #[derive(Debug, vld::Validate)]
+    #[allow(dead_code)]
+    struct T {
+        #[vld(vld::number().int().optional())]
+        a: Option<i64>,
+        #[vld(vld::number().int().nullable())]
+        b: Option<i64>,
+        #[vld(vld::number().int().nullish())]
+        c: Option<i64>,
+    }
+    assert!(T::parse_value(&json!({"b": null})).is_ok());
+    let e = T::parse_value(&json!({})).unwrap_err();
+    assert_eq!(e.issues.len(), 1);
+    assert_eq!(e.issues[0].path_string(), ".b");
+}
+
+#[cfg(feature = "openapi")]
+#[test]
+fn absent_key_semantics_in_json_schema() {
+    use serde_json::json;
+    use vld::json_schema::JsonSchema;
+    let s = vld::object()
+        .field("o", vld::string().optional())
+        .field("n", vld::string().nullable())
+        .field("h", vld::string().nullish())
+        .json_schema();
+    assert_eq!(s["required"], json!(["n"]));
+    assert_eq!(s["properties"]["o"], json!({"type": "string"}));
+    assert_eq!(
+        s["properties"]["n"],
+        json!({"anyOf": [{"type": "string"}, {"type": "null"}]})
+    );
+    assert_eq!(s["properties"]["h"], s["properties"]["n"]);
+}

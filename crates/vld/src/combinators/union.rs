@@ -47,7 +47,11 @@ pub(crate) fn split_variant_prefix(message: &str) -> Option<(usize, &str)> {
 }
 
 /// A value that can be one of two types.
+///
+/// Serializes as the value itself (serde `untagged`), so a union inside an
+/// object round-trips as plain JSON (`"x"` / `5`, not `{"Left": "x"}`).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
 pub enum Either<A, B> {
     /// Value from the first schema.
     Left(A),
@@ -76,6 +80,15 @@ impl<A, B> Either<A, B> {
         match self {
             Either::Right(b) => Some(b),
             _ => None,
+        }
+    }
+}
+
+impl<T> Either<T, T> {
+    /// The value, whichever schema matched (both have the same output type).
+    pub fn into_inner(self) -> T {
+        match self {
+            Either::Left(v) | Either::Right(v) => v,
         }
     }
 }
@@ -121,10 +134,18 @@ impl<A: VldSchema, B: VldSchema> VldSchema for ZUnion2<A, B> {
         };
         Err(union_error(value, vec![e1, e2]))
     }
+
+    fn output_json(&self, o: &Self::Output) -> Option<Value> {
+        match o {
+            Either::Left(v) => self.first.output_json(v),
+            Either::Right(v) => self.second.output_json(v),
+        }
+    }
 }
 
-/// A value that can be one of three types.
+/// A value that can be one of three types (serialized untagged, like [`Either`]).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
 pub enum Either3<A, B, C> {
     /// Value from the first schema.
     First(A),
@@ -184,5 +205,12 @@ impl<A: VldSchema, B: VldSchema, C: VldSchema> VldSchema for ZUnion3<A, B, C> {
             Err(e) => e,
         };
         Err(union_error(value, vec![e1, e2, e3]))
+    }
+    fn output_json(&self, o: &Self::Output) -> Option<Value> {
+        match o {
+            Either3::First(v) => self.first.output_json(v),
+            Either3::Second(v) => self.second.output_json(v),
+            Either3::Third(v) => self.third.output_json(v),
+        }
     }
 }

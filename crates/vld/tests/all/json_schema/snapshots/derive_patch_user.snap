@@ -1,5 +1,5 @@
 ---
-source: tests/all/json_schema/mod.rs
+source: crates/vld/tests/all/json_schema/mod.rs
 expression: value
 ---
 {
@@ -8,17 +8,10 @@ expression: value
       "PatchUser": {
         "properties": {
           "age": {
-            "anyOf": [
-              {
-                "maximum": 150,
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "years"
+            "description": "years",
+            "maximum": 150,
+            "minimum": 0,
+            "type": "integer"
           },
           "bio": {
             "anyOf": [
@@ -36,19 +29,12 @@ expression: value
             "type": "string"
           },
           "labels": {
-            "anyOf": [
-              {
-                "items": {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "labels"
+            "description": "labels",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
           },
           "meta": {
             "anyOf": [
@@ -68,15 +54,8 @@ expression: value
             "type": "string"
           },
           "nickname": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "nick"
+            "description": "nick",
+            "type": "string"
           },
           "role": {
             "default": "user",
@@ -86,7 +65,8 @@ expression: value
         },
         "required": [
           "name",
-          "email"
+          "email",
+          "meta"
         ],
         "type": "object"
       }

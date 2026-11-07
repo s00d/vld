@@ -121,8 +121,12 @@ where
 /// `{"anyOf": [<variant schemas>]}`.
 impl JsonSchema for crate::combinators::ZDiscriminatedUnion {
     fn json_schema(&self) -> Value {
+        // Exactly one variant matches (picked by the discriminator value).
         let variants: Vec<Value> = self.variants().map(|(_, s)| s.dyn_json_schema()).collect();
-        json!({ "anyOf": variants })
+        json!({
+            "oneOf": variants,
+            "discriminator": { "propertyName": self.discriminator() },
+        })
     }
 }
 

@@ -155,11 +155,17 @@ pub(crate) fn expand_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<T
 
     let parse_body = parse_body(&serde, &variants, generic);
     let schema_body = schema_body(&serde, &variants);
-    let collect_calls = collect_tokens(variants.iter().flat_map(|v| match &v.shape {
-        Shape::Unit => Vec::new(),
-        Shape::Newtype(s) => vec![s],
-        Shape::Tuple(items) => items.iter().collect(),
-        Shape::Struct(infos) => infos.iter().filter_map(|f| f.schema.as_ref()).collect(),
+    let collect_calls = collect_tokens(variants.iter().flat_map(|v| {
+        match &v.shape {
+            Shape::Unit => Vec::new(),
+            Shape::Newtype(s) => vec![s],
+            Shape::Tuple(items) => items.iter().collect(),
+            Shape::Struct(infos) => infos
+                .iter()
+                .filter(|f| !f.flatten)
+                .filter_map(|f| f.schema.as_ref())
+                .collect(),
+        }
     }));
     let json_schema_body = if generic {
         schema_body
@@ -183,6 +189,14 @@ pub(crate) fn expand_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<T
 
             /// Parse and validate directly from a `serde_json::Value`.
             pub fn parse_value(
+                __vld_json: &::vld::serde_json::Value,
+            ) -> ::std::result::Result<Self, ::vld::error::VldError> {
+                Self::__vld_parse(__vld_json, false)
+            }
+
+            /// Same as [`parse_value`](Self::parse_value); callable as
+            /// `T::vld_parse_value` without importing `vld::schema::VldParse`.
+            pub fn vld_parse_value(
                 __vld_json: &::vld::serde_json::Value,
             ) -> ::std::result::Result<Self, ::vld::error::VldError> {
                 Self::__vld_parse(__vld_json, false)
@@ -334,6 +348,8 @@ fn content_parse(v: &Variant, generic: bool) -> TokenStream2 {
             quote! {
                 (|| {
                     let __vld_obj = ::vld::__private::expect_object(__vld_content)?;
+                    #[allow(unused_variables)]
+                    let __vld_whole = __vld_content;
                     let mut __vld_errors = ::vld::error::VldError::new();
                     #( #lets )*
                     if !__vld_errors.is_empty() #( || #fields.is_none() )* {
@@ -657,6 +673,10 @@ mod tests {
         assert!(e.contains("missing a #[vld"), "{e}");
         let e = derive_error(r#"#[vld(lenient)] enum E { A }"#);
         assert!(e.contains("struct-only"), "{e}");
+        let e = derive_error(r#"#[vld(lenient)] struct S { #[serde(flatten)] m: M }"#);
+        assert!(e.contains("not supported with #[vld(lenient)]"), "{e}");
+        let e = derive_error(r#"struct S { #[serde(alias = "b")] #[vld(x)] a: i64 }"#);
+        assert!(e.contains("not supported"), "{e}");
         let e = derive_error(r#"union U { a: u8 }"#);
         assert!(e.contains("structs and enums"), "{e}");
     }

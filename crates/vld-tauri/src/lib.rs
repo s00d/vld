@@ -13,7 +13,6 @@
 //! | [`VldTauriError`] | Serializable error for `#[tauri::command]` results |
 //! | [`VldPayload<T>`] | `Deserialize` wrapper that validates |
 //! | [`VldEvent<T>`] | Type alias of [`VldPayload<T>`] for event payloads |
-//! | `validate_event` / `validate_state` / `validate_channel_message` / `validate_plugin_config` | Deprecated aliases of [`validate`] |
 //!
 //! Issue paths have no leading dot (`name`, `user.email`, `items[0]`).
 //!
@@ -285,110 +284,6 @@ pub fn validate_args<T: VldParse>(json_str: &str) -> Result<T, VldTauriError> {
 }
 
 // ---------------------------------------------------------------------------
-// Specialised validators (semantically clear aliases)
-// ---------------------------------------------------------------------------
-
-/// Validate an **event payload** received from the frontend via
-/// `Emitter::emit()` / `Listener::listen()`.
-///
-/// Identical to [`validate`] (deprecated alias).
-///
-/// # Example
-///
-/// ```rust,ignore
-/// app.listen("user:update", |event| {
-///     let payload: serde_json::Value = serde_json::from_str(event.payload()).unwrap();
-///     let update = validate_event::<UserUpdate>(payload).unwrap();
-/// });
-/// ```
-#[deprecated(since = "0.5.0", note = "identical to `validate`; use `validate`")]
-pub fn validate_event<T: VldParse>(payload: serde_json::Value) -> Result<T, VldTauriError> {
-    validate(payload)
-}
-
-/// Validate **app state / configuration** before calling `app.manage()`.
-///
-/// Returns the validated value ready to be managed.
-///
-/// # Example
-///
-/// ```rust
-/// # #![allow(deprecated)]
-/// use vld_tauri::validate_state;
-///
-/// vld::schema! {
-///     #[derive(Debug)]
-///     struct AppConfig {
-///         db_url: String => vld::string().min(1),
-///         max_connections: i64 => vld::number().int().min(1).max(100),
-///     }
-/// }
-///
-/// let cfg = serde_json::json!({"db_url": "postgres://...", "max_connections": 10});
-/// let config = validate_state::<AppConfig>(cfg).unwrap();
-/// assert_eq!(config.max_connections, 10);
-/// ```
-#[deprecated(since = "0.5.0", note = "identical to `validate`; use `validate`")]
-pub fn validate_state<T: VldParse>(value: serde_json::Value) -> Result<T, VldTauriError> {
-    validate(value)
-}
-
-/// Validate a **Tauri plugin configuration** (usually from `tauri.conf.json`).
-///
-/// # Example
-///
-/// ```rust
-/// # #![allow(deprecated)]
-/// use vld_tauri::validate_plugin_config;
-///
-/// vld::schema! {
-///     #[derive(Debug)]
-///     struct MyPluginConfig {
-///         api_key: String => vld::string().min(1),
-///         timeout: i64    => vld::number().int().min(100),
-///     }
-/// }
-///
-/// let cfg = serde_json::json!({"api_key": "abc123", "timeout": 5000});
-/// let c = validate_plugin_config::<MyPluginConfig>(cfg).unwrap();
-/// assert_eq!(c.api_key, "abc123");
-/// ```
-#[deprecated(since = "0.5.0", note = "identical to `validate`; use `validate`")]
-pub fn validate_plugin_config<T: VldParse>(config: serde_json::Value) -> Result<T, VldTauriError> {
-    validate(config)
-}
-
-/// Validate an outgoing **channel message** before sending it to the
-/// frontend via `Channel::send()`.
-///
-/// Useful for ensuring the backend only emits well-formed data.
-///
-/// # Example
-///
-/// ```rust
-/// # #![allow(deprecated)]
-/// use vld_tauri::validate_channel_message;
-///
-/// vld::schema! {
-///     #[derive(Debug)]
-///     struct Progress {
-///         percent: i64  => vld::number().int().min(0).max(100),
-///         status: String => vld::string().min(1),
-///     }
-/// }
-///
-/// let msg = serde_json::json!({"percent": 42, "status": "downloading"});
-/// let p = validate_channel_message::<Progress>(msg).unwrap();
-/// assert_eq!(p.percent, 42);
-/// ```
-#[deprecated(since = "0.5.0", note = "identical to `validate`; use `validate`")]
-pub fn validate_channel_message<T: VldParse>(
-    message: serde_json::Value,
-) -> Result<T, VldTauriError> {
-    validate(message)
-}
-
-// ---------------------------------------------------------------------------
 // VldPayload<T> — auto-validating wrapper for command args
 // ---------------------------------------------------------------------------
 
@@ -493,10 +388,6 @@ fn format_vld_error_inline(e: &vld::error::VldError) -> String {
 
 /// Prelude — import everything you need.
 pub mod prelude {
-    #[allow(deprecated)]
-    pub use crate::{
-        TauriIssue, VldEvent, VldPayload, VldTauriError, validate, validate_args,
-        validate_channel_message, validate_event, validate_plugin_config, validate_state,
-    };
+    pub use crate::{TauriIssue, VldEvent, VldPayload, VldTauriError, validate, validate_args};
     pub use vld::prelude::*;
 }

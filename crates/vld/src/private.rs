@@ -198,13 +198,12 @@ fn parse_key<S: VldSchema>(
     key: &str,
     schema: &S,
 ) -> Result<S::Output, VldError> {
-    schema.parse_value(field_value(obj, key)).map_err(|e| {
-        if obj.contains_key(key) {
-            e
-        } else {
-            crate::error::absent_field_error(e)
-        }
-    })
+    match obj.get(key) {
+        Some(v) => schema.parse_value(v),
+        None => schema
+            .parse_missing()
+            .map_err(crate::error::absent_field_error),
+    }
 }
 
 /// Parse one field; on failure push its issues (prefixed with `key`) to `errors`.
@@ -551,4 +550,40 @@ pub fn tuple_schema(items: Vec<Value>) -> Value {
         "minItems": n,
         "maxItems": n,
     })
+}
+
+/// Merge the schemas of `#[serde(flatten)]` fields into the struct's object
+/// schema: their `properties` / `required` join the object's; anything else
+/// (a `$ref`, a `oneOf`) goes into `allOf`.
+#[cfg(feature = "openapi")]
+pub fn flatten_schema(mut base: Value, parts: Vec<Value>) -> Value {
+    for part in parts {
+        let mergeable = part.get("properties").is_some_and(Value::is_object)
+            && part.get("type").is_none_or(|t| t == "object")
+            && part.get("allOf").is_none()
+            && part.get("oneOf").is_none()
+            && part.get("anyOf").is_none();
+        if !mergeable {
+            match base.get_mut("allOf").and_then(Value::as_array_mut) {
+                Some(all) => all.push(part),
+                None => base["allOf"] = Value::Array(vec![part]),
+            }
+            continue;
+        }
+        if let Some(props) = part["properties"].as_object() {
+            for (k, v) in props {
+                base["properties"][k] = v.clone();
+            }
+        }
+        if let Some(req) = part.get("required").and_then(Value::as_array) {
+            let mut all = base
+                .get("required")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            all.extend(req.iter().cloned());
+            base["required"] = Value::Array(all);
+        }
+    }
+    base
 }

@@ -99,11 +99,6 @@ use vld_http_common::{
 #[derive(Debug)]
 pub struct VldActixError(VldHttpError);
 
-/// Former name of [`VldActixError`] (it is used by every extractor, not
-/// only [`VldJson`]).
-#[deprecated(since = "0.5.0", note = "renamed to `VldActixError`")]
-pub type VldJsonError = VldActixError;
-
 impl VldActixError {
     /// The underlying validation error.
     pub fn error(&self) -> &vld::error::VldError {

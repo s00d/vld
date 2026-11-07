@@ -5,15 +5,8 @@ expression: value
 {
   "properties": {
     "age": {
-      "anyOf": [
-        {
-          "minimum": 0,
-          "type": "integer"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "minimum": 0,
+      "type": "integer"
     },
     "email": {
       "format": "email",

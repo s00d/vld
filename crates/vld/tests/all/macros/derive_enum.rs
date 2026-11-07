@@ -426,3 +426,95 @@ mod schema {
         assert_eq!(create["required"], json!(["type", "name", "email"]));
     }
 }
+
+// ---------------------------------------------------------------------------
+// #[serde(flatten)]
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, vld::Validate)]
+struct Meta {
+    #[vld(vld::string().min(1))]
+    author: String,
+    #[vld(vld::number().int().min(1).optional())]
+    version: Option<i64>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, vld::Validate)]
+struct Doc {
+    #[vld(vld::string().min(1))]
+    title: String,
+    #[serde(flatten)]
+    meta: Meta,
+    #[serde(flatten)]
+    #[vld(vld::nested(Point::parse_value))]
+    at: Point,
+}
+
+#[test]
+fn flatten_matches_serde() {
+    same_as_serde::<Doc>(json!({"title": "t", "author": "a", "x": 1, "y": 2}));
+    same_as_serde::<Doc>(json!({"title": "t", "author": "a", "version": 3, "x": 1, "y": 2}));
+    let d = Doc {
+        title: "t".into(),
+        meta: Meta {
+            author: "a".into(),
+            version: None,
+        },
+        at: Point { x: 0, y: 0 },
+    };
+    assert!(Doc::is_valid(&d));
+}
+
+#[test]
+fn flatten_errors_keep_the_inner_paths() {
+    let e = Doc::parse_value(&json!({"title": "", "author": "", "x": -1, "y": 0})).unwrap_err();
+    assert_eq!(
+        issues(&e),
+        [
+            (".title".into(), "too_small".into()),
+            (".author".into(), "too_small".into()),
+            (".x".into(), "too_small".into()),
+        ]
+    );
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, vld::Validate)]
+#[serde(tag = "type")]
+enum Post {
+    Article {
+        #[vld(vld::string())]
+        body: String,
+        #[serde(flatten)]
+        meta: Meta,
+    },
+}
+
+#[test]
+fn flatten_in_struct_variant() {
+    same_as_serde::<Post>(json!({"type": "Article", "body": "b", "author": "a"}));
+    let e = Post::parse_value(&json!({"type": "Article", "body": "b"})).unwrap_err();
+    assert_eq!(issues(&e), [(".author".into(), "missing_field".into())]);
+}
+
+#[cfg(feature = "openapi")]
+#[test]
+fn flatten_merges_the_schema() {
+    let s = Doc::json_schema();
+    let props: Vec<&String> = s["properties"].as_object().unwrap().keys().collect();
+    // A flattened derived type is inlined; an opaque explicit schema
+    // (`vld::nested(..)`) cannot be, so it goes into allOf.
+    for k in ["title", "author", "version"] {
+        assert!(props.iter().any(|p| *p == k), "{k} missing in {s:#}");
+    }
+    assert_eq!(s["allOf"], json!([{"type": "object"}]));
+    let required: Vec<&str> = s["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(required, ["title", "author"]);
+    let v = jsonschema::draft202012::options().build(&s).unwrap();
+    assert!(v.is_valid(&json!({"title": "t", "author": "a", "x": 1, "y": 2})));
+    assert!(!v.is_valid(&json!({"title": "t", "x": 1, "y": 2})));
+}

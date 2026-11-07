@@ -9658,6 +9658,7 @@ name = "vld-fake"
 version = "0.5.1"
 dependencies = [
  "rand 0.10.3",
+ "regex-lite",
  "regex-syntax 0.8.11",
  "serde",
  "serde_json",
@@ -9871,7 +9872,6 @@ name = "vld-ts"
 version = "0.5.1"
 dependencies = [
  "insta",
- "regex-lite",
  "serde_json",
  "vld",
 ]

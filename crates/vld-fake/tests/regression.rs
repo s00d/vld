@@ -18,10 +18,6 @@ fn check<S: VldSchema + JsonSchema>(name: &str, schema: S) {
     }
 }
 
-fn re(s: &str) -> vld::regex_lite::Regex {
-    vld::regex_lite::Regex::new(s).unwrap()
-}
-
 #[test]
 fn string_formats() {
     check("base64url", vld::string().base64url());
@@ -46,7 +42,7 @@ fn records() {
     );
     check(
         "record_with_keys",
-        vld::record_with_keys(vld::string().regex(re("^k[0-9]$")), vld::number().int()),
+        vld::record_with_keys(vld::string().pattern("^k[0-9]$"), vld::number().int()),
     );
 }
 
@@ -61,7 +57,7 @@ fn duration_and_patterns() {
     check(
         "regex_and_prefix",
         vld::string()
-            .regex(re("^[a-z]{3}[0-9]{2}$"))
+            .pattern("^[a-z]{3}[0-9]{2}$")
             .starts_with("ab"),
     );
 }

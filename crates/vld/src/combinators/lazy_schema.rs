@@ -63,4 +63,7 @@ where
     fn parse_value(&self, value: &Value) -> Result<T::Output, VldError> {
         self.schema().parse_value(value)
     }
+    fn parse_missing(&self) -> Result<T::Output, VldError> {
+        self.schema().parse_missing()
+    }
 }

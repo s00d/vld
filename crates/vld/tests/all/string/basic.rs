@@ -127,7 +127,7 @@ fn coerce_stringifies_scalars_only() {
 #[cfg(feature = "regex")]
 #[test]
 fn regex_check() {
-    let s = vld::string().regex(vld::regex_lite::Regex::new(r"^[a-z]+\d$").unwrap());
+    let s = vld::string().pattern(r"^[a-z]+\d$");
     assert!(s.parse_value(&json!("abc1")).is_ok());
     for bad in ["abc", "ABC1", "", "é1"] {
         assert_issue!(

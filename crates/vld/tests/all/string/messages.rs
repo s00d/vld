@@ -45,8 +45,7 @@ fn msg_variants_replace_message_and_keep_code() {
 #[cfg(feature = "regex")]
 #[test]
 fn regex_msg() {
-    let re = vld::regex_lite::Regex::new("^a+$").unwrap();
-    let err = parse_err(&vld::string().regex_msg(re, "only a"), json!("b"));
+    let err = parse_err(&vld::string().pattern_msg("^a+$", "only a"), json!("b"));
     assert_eq!(err.issues[0].message, "only a");
 }
 

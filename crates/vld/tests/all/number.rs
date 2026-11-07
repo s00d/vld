@@ -16,7 +16,6 @@ fn accepts_numbers_only() {
 }
 
 /// `(schema, input, expected code key or None)` at and around every bound.
-#[allow(deprecated)] // `finite()` is a deprecated no-op
 #[test]
 fn bound_table() {
     let cases: Vec<(ZNumber, f64, Option<&str>)> = vec![
@@ -38,8 +37,6 @@ fn bound_table() {
         (vld::number().non_negative(), -1.0, Some("too_small")),
         (vld::number().non_positive(), 0.0, None),
         (vld::number().non_positive(), 1.0, Some("too_big")),
-        (vld::number().finite(), f64::MAX, None),
-        (vld::number().finite(), -1e308, None),
     ];
     for (schema, input, want) in cases {
         let got = schema.parse_value(&json!(input));

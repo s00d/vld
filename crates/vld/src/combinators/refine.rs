@@ -51,8 +51,22 @@ where
     type Output = T::Output;
 
     fn parse_value(&self, value: &Value) -> Result<T::Output, VldError> {
-        let result = self.inner.parse_value(value)?;
+        self.finish(self.inner.parse_value(value)?)
+    }
+    fn parse_missing(&self) -> Result<T::Output, VldError> {
+        self.finish(self.inner.parse_missing()?)
+    }
+    fn output_json(&self, o: &Self::Output) -> Option<Value> {
+        self.inner.output_json(o)
+    }
+}
 
+impl<T, F> ZRefine<T, F>
+where
+    T: VldSchema,
+    F: Fn(&T::Output) -> bool,
+{
+    fn finish(&self, result: T::Output) -> Result<T::Output, VldError> {
         if (self.check)(&result) {
             Ok(result)
         } else {
@@ -63,8 +77,5 @@ where
                 self.message.clone(),
             ))
         }
-    }
-    fn output_json(&self, o: &Self::Output) -> Option<Value> {
-        self.inner.output_json(o)
     }
 }

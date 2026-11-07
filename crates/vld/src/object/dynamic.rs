@@ -96,17 +96,6 @@ impl ZObject {
         })
     }
 
-    /// Same as [`field()`](Self::field), which now keeps the JSON Schema too.
-    #[cfg(feature = "openapi")]
-    #[deprecated(since = "0.5.0", note = "use `field()`: it keeps the JSON Schema now")]
-    pub fn field_schema<S: DynSchema + Send + Sync + 'static>(
-        self,
-        name: impl Into<String>,
-        schema: S,
-    ) -> Self {
-        self.field(name, schema)
-    }
-
     /// Add a field that is automatically optional (null/missing → `null`).
     ///
     /// The field won't cause a validation error if it is missing or null.
@@ -285,18 +274,6 @@ impl ZObject {
         self
     }
 
-    /// Same as [`partial()`](Self::partial): **not** recursive.
-    ///
-    /// Fields are type-erased, so nested objects cannot be reached; call
-    /// `partial()` on nested [`ZObject`]s yourself before adding them.
-    #[deprecated(
-        since = "0.5.0",
-        note = "not recursive; identical to `partial()`. Call `partial()` on nested objects explicitly."
-    )]
-    pub fn deep_partial(self) -> Self {
-        self.partial()
-    }
-
     /// Get the list of field names defined in this schema.
     pub fn keyof(&self) -> Vec<String> {
         self.fields.iter().map(|f| f.name.clone()).collect()
@@ -351,14 +328,13 @@ impl VldSchema for ZObject {
 
         // Validate defined fields
         for field in &self.fields {
-            let field_value = obj.get(&field.name).unwrap_or(&Value::Null);
-            let parsed = field.schema.dyn_parse(field_value).map_err(|e| {
-                if obj.contains_key(&field.name) {
-                    e
-                } else {
-                    crate::error::absent_field_error(e)
-                }
-            });
+            let parsed = match obj.get(&field.name) {
+                Some(v) => field.schema.dyn_parse(v),
+                None => field
+                    .schema
+                    .dyn_parse_missing()
+                    .map_err(crate::error::absent_field_error),
+            };
             match parsed {
                 Ok(v) => {
                     result.insert(field.name.clone(), v);

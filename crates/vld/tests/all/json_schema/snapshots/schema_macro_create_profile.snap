@@ -1,5 +1,5 @@
 ---
-source: tests/all/json_schema/mod.rs
+source: crates/vld/tests/all/json_schema/mod.rs
 expression: value
 ---
 {
@@ -11,17 +11,10 @@ expression: value
             "$ref": "#/components/schemas/ProfileAddress"
           },
           "age": {
-            "anyOf": [
-              {
-                "maximum": 150,
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "years"
+            "description": "years",
+            "maximum": 150,
+            "minimum": 0,
+            "type": "integer"
           },
           "bio": {
             "anyOf": [
@@ -43,15 +36,8 @@ expression: value
             "type": "boolean"
           },
           "locale": {
-            "anyOf": [
-              {
-                "minLength": 2,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "minLength": 2,
+            "type": "string"
           },
           "meta": {
             "anyOf": [
@@ -71,15 +57,8 @@ expression: value
             "type": "string"
           },
           "nickname": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "display nickname"
+            "description": "display nickname",
+            "type": "string"
           },
           "notes": {
             "anyOf": [
@@ -110,7 +89,9 @@ expression: value
           "name",
           "email",
           "tags",
-          "address"
+          "address",
+          "meta",
+          "notes"
         ],
         "type": "object"
       },
@@ -126,16 +107,9 @@ expression: value
             "type": "string"
           },
           "zip": {
-            "anyOf": [
-              {
-                "minLength": 4,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "postal code"
+            "description": "postal code",
+            "minLength": 4,
+            "type": "string"
           }
         },
         "required": [

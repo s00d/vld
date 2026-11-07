@@ -169,7 +169,7 @@ async fn empty_body_returns_422() {
 
 #[tokio::test]
 async fn validated_helper() {
-    // Test the `validated` and `try_validated` helpers
+    // Test the `validated` helper
     async fn handler_with_extract(
         req: Request<In>,
     ) -> Result<Response<http_body_util::Full<Bytes>>, Box<dyn std::error::Error + Send + Sync>>

@@ -377,14 +377,17 @@ fn roundtrip_array_schema() {
 
 #[test]
 fn roundtrip_optional_schema() {
-    let vld_schema = vld::string().email().optional();
     use vld::openapi::JsonSchema;
-    let js = vld_schema.json_schema();
-
-    let utoipa_schema = json_schema_to_schema(&js);
-    let json = serde_json::to_value(&utoipa_schema).unwrap();
-
-    // optional produces oneOf
+    // optional(): the inner schema (no null); nullish(): a union with null.
+    let json = serde_json::to_value(json_schema_to_schema(
+        &vld::string().email().optional().json_schema(),
+    ))
+    .unwrap();
+    assert_eq!(json["format"], "email");
+    let json = serde_json::to_value(json_schema_to_schema(
+        &vld::string().email().nullish().json_schema(),
+    ))
+    .unwrap();
     assert!(union(&json).is_array());
 }
 
@@ -484,12 +487,12 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
     let js = CreateTicket::json_schema();
     let via_fn = serde_json::to_value(json_schema_to_schema(&js)).unwrap();
     let via_trait = serde_json::to_value(CreateTicket::schema()).unwrap();
-    assert_eq!(utoipa_required(&js), ["title", "body"]);
-    assert_eq!(utoipa_required(&via_fn), ["title", "body"]);
+    assert_eq!(utoipa_required(&js), ["title", "body", "reporter"]);
+    assert_eq!(utoipa_required(&via_fn), ["title", "body", "reporter"]);
     assert_eq!(via_fn, via_trait);
 
     let derive = serde_json::to_value(DerivePatchTicket::schema()).unwrap();
-    assert_eq!(utoipa_required(&derive), ["title"]);
+    assert_eq!(utoipa_required(&derive), ["title", "cursor"]);
 
     // Sorted: parameter order follows the JSON object's key order.
     let mut params = json_schema_to_params(&TicketFilter::json_schema(), ParameterIn::Query);
@@ -505,7 +508,7 @@ fn openapi_required_matrix_roundtrip_schema_derive_and_params() {
         required,
         [
             ("assignee", false),
-            ("cursor", false),
+            ("cursor", true),
             ("include_closed", false),
             ("page", false),
             ("q", true),
@@ -651,7 +654,7 @@ fn transitive_nested_schemas_auto_registered() {
 
     let child_js = ScheduleDayItem::json_schema();
     assert_eq!(
-        union(&child_js["properties"]["breaks"])[0]["items"]["$ref"],
+        child_js["properties"]["breaks"]["items"]["$ref"],
         "#/components/schemas/ScheduleBreakItem"
     );
 
@@ -812,20 +815,11 @@ fn derive_impl_into_params_preserves_constraints() {
     assert_eq!(schema_json["minLength"], 16);
 }
 
-// ---- Legacy migration API (deprecated aliases) ----
+// ---- Explicit parameter location: impl_to_schema!(T, query) ----
 
-mod legacy_migration {
-    #![allow(deprecated)]
-
+mod explicit_location {
     use super::*;
-    use vld_utoipa::{impl_into_params, impl_to_schema, impl_to_schema_query};
-
-    vld::schema! {
-        #[derive(Debug)]
-        pub struct LegacyQueryParams {
-            pub q: String => vld::string().min(3).max(100),
-        }
-    }
+    use vld_utoipa::impl_to_schema;
 
     vld::schema! {
         #[derive(Debug)]
@@ -834,40 +828,13 @@ mod legacy_migration {
         }
     }
 
-    vld::schema! {
-        #[derive(Debug)]
-        pub struct LegacyIntoParamsQuery {
-            pub page: i64 => vld::number().int().gte(1),
-        }
-    }
-
-    impl_to_schema_query!(LegacyQueryParams);
     impl_to_schema!(LegacySuffixParams, query);
-    impl_into_params!(LegacyIntoParamsQuery, Query);
 
     #[test]
-    fn legacy_impl_to_schema_query_still_works() {
-        let params = LegacyQueryParams::into_params(|| None);
-        assert_eq!(params.len(), 1);
-        assert!(matches!(params[0].parameter_in, ParameterIn::Query));
-        let schema_json = serde_json::to_value(params[0].schema.as_ref().unwrap()).unwrap();
-        assert_eq!(schema_json["minLength"], 3);
-    }
-
-    #[test]
-    fn legacy_impl_to_schema_suffix_query_still_works() {
+    fn impl_to_schema_suffix_query_works() {
         let params = LegacySuffixParams::into_params(|| None);
         assert_eq!(params.len(), 1);
         assert!(matches!(params[0].parameter_in, ParameterIn::Query));
-    }
-
-    #[test]
-    fn legacy_impl_into_params_with_query_ident_still_works() {
-        let params = LegacyIntoParamsQuery::into_params(|| None);
-        assert_eq!(params.len(), 1);
-        assert!(matches!(params[0].parameter_in, ParameterIn::Query));
-        let schema_json = serde_json::to_value(params[0].schema.as_ref().unwrap()).unwrap();
-        assert_eq!(schema_json["minimum"], 1);
     }
 }
 

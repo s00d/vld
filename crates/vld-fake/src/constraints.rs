@@ -11,7 +11,7 @@ use vld::prelude::VldSchema;
 pub(crate) struct StrCheck {
     min: Option<usize>,
     max: Option<usize>,
-    regexes: Vec<vld::regex_lite::Regex>,
+    regexes: Vec<regex_lite::Regex>,
     formats: Vec<vld::primitives::ZString>,
     /// `uuid-vN` versions (string-advanced formats checked by shape here).
     uuid_versions: Vec<u8>,
@@ -24,7 +24,7 @@ impl StrCheck {
         let (min, max) = crate::len_bounds(obj);
         let regexes = all_of_values(obj, "pattern")
             .iter()
-            .filter_map(|p| vld::regex_lite::Regex::new(p).ok())
+            .filter_map(|p| regex_lite::Regex::new(p).ok())
             .collect();
         let fmts = all_of_values(obj, "format");
         let uuid_versions = fmts

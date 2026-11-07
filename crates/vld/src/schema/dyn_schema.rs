@@ -16,6 +16,9 @@ pub trait DynSchema {
     /// Parse `value` and return the output serialized back to JSON.
     fn dyn_parse(&self, value: &Value) -> Result<Value, VldError>;
 
+    /// [`VldSchema::parse_missing`] of the erased schema.
+    fn dyn_parse_missing(&self) -> Result<Value, VldError>;
+
     /// JSON Schema of the erased schema.
     #[cfg(feature = "openapi")]
     fn dyn_json_schema(&self) -> Value;
@@ -47,6 +50,10 @@ where
     fn dyn_parse(&self, value: &Value) -> Result<Value, VldError> {
         to_json_value(&self.parse_value(value)?)
     }
+
+    fn dyn_parse_missing(&self) -> Result<Value, VldError> {
+        to_json_value(&self.parse_missing()?)
+    }
 }
 
 #[cfg(feature = "openapi")]
@@ -57,6 +64,10 @@ where
 {
     fn dyn_parse(&self, value: &Value) -> Result<Value, VldError> {
         to_json_value(&self.parse_value(value)?)
+    }
+
+    fn dyn_parse_missing(&self) -> Result<Value, VldError> {
+        to_json_value(&self.parse_missing()?)
     }
 
     fn dyn_json_schema(&self) -> Value {

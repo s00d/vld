@@ -128,22 +128,48 @@ impl ZString {
         self.push(Kind::Len(len), Some(msg.into()))
     }
 
-    /// Must match the given regex (emitted as JSON Schema `pattern`).
+    /// Must match a regular expression (emitted as JSON Schema `pattern`).
     ///
-    /// Requires the `regex` feature.
+    /// Takes the source (`r"^[A-Z]{3}$"`, compiled here) or a prebuilt
+    /// [`Pattern`](crate::rules::Pattern). Requires the `regex` feature.
+    ///
+    /// # Panics
+    ///
+    /// When the source is not a valid pattern (as `Regex::new(..).unwrap()`
+    /// would); build a [`Pattern`](crate::rules::Pattern) with
+    /// [`Pattern::new`](crate::rules::Pattern::new) to handle the error.
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let sku = vld::string().pattern(r"^[A-Z]{3}-\d{4}$");
+    /// assert!(sku.parse(r#""ABC-1234""#).is_ok());
+    /// ```
     #[cfg(feature = "regex")]
     #[cfg_attr(docsrs, doc(cfg(feature = "regex")))]
-    pub fn regex(self, re: regex_lite::Regex) -> Self {
-        self.push(Kind::Regex(re), None)
+    pub fn pattern(self, pattern: impl crate::rules::IntoPattern) -> Self {
+        self.push(Kind::Pattern(pattern.into_pattern()), None)
     }
 
-    /// Must match the given regex, with custom message.
-    ///
-    /// Requires the `regex` feature.
+    /// [`pattern`](Self::pattern) with a custom message.
     #[cfg(feature = "regex")]
     #[cfg_attr(docsrs, doc(cfg(feature = "regex")))]
-    pub fn regex_msg(self, re: regex_lite::Regex, msg: impl Into<String>) -> Self {
-        self.push(Kind::Regex(re), Some(msg.into()))
+    pub fn pattern_msg(
+        self,
+        pattern: impl crate::rules::IntoPattern,
+        msg: impl Into<String>,
+    ) -> Self {
+        self.push(Kind::Pattern(pattern.into_pattern()), Some(msg.into()))
+    }
+
+    /// Check with a reusable [`Rule`](crate::rules::Rule) on the string
+    /// (keeps the `ZString` builder; see [`vld::rules`](crate::rules)).
+    pub fn rule(self, rule: impl crate::rules::Rule<str>) -> Self {
+        self.push(Kind::Rule(std::sync::Arc::new(rule)), None)
+    }
+
+    /// [`rule`](Self::rule) with a custom message.
+    pub fn rule_msg(self, rule: impl crate::rules::Rule<str>, msg: impl Into<String>) -> Self {
+        self.push(Kind::Rule(std::sync::Arc::new(rule)), Some(msg.into()))
     }
 
     /// Must start with the given prefix.
@@ -246,7 +272,11 @@ impl VldSchema for ZString {
             if let Some(code) = check.kind.failure(&s) {
                 let received = received.get_or_insert_with(|| Value::String(s.clone()));
                 let bulk = || self.messages.as_ref().and_then(|f| f(check.kind.key()));
-                let msg = check.msg.clone().or_else(bulk);
+                let msg = check
+                    .msg
+                    .clone()
+                    .or_else(bulk)
+                    .or_else(|| check.kind.rule_message());
                 errors.issues.push(
                     ValidationIssue::with_override(code, msg.as_ref()).with_received(received),
                 );
@@ -265,7 +295,7 @@ impl VldSchema for ZString {
 ///
 /// - Length bounds: the strictest `min`/`max`/`len`/`non_empty` wins.
 /// - Formats: the first goes into `format`, further ones into `allOf`.
-/// - `regex`/`starts_with`/`ends_with`/`contains` become `pattern`s
+/// - `pattern`/`starts_with`/`ends_with`/`contains` become `pattern`s
 ///   (first in `pattern`, further ones in `allOf`).
 #[cfg(feature = "openapi")]
 impl crate::openapi::JsonSchema for ZString {
@@ -274,6 +304,7 @@ impl crate::openapi::JsonSchema for ZString {
         let (mut mins, mut maxs) = (vec![], vec![]);
         let mut formats: Vec<&str> = vec![];
         let mut patterns: Vec<String> = vec![];
+        let mut extra = vec![];
         for check in &self.checks {
             match &check.kind {
                 Kind::Min(n) => mins.push(*n),
@@ -287,7 +318,8 @@ impl crate::openapi::JsonSchema for ZString {
                 Kind::EndsWith(p) => patterns.push(format!("{}$", regex_escape(p))),
                 Kind::Contains(p) => patterns.push(regex_escape(p)),
                 #[cfg(feature = "regex")]
-                Kind::Regex(re) => patterns.push(re.as_str().to_string()),
+                Kind::Pattern(p) => patterns.push(p.as_str().to_string()),
+                Kind::Rule(r) => extra.extend(r.json_schema()),
                 Kind::Format(f) => {
                     if !formats.contains(&f.schema_format()) {
                         formats.push(f.schema_format());
@@ -309,6 +341,9 @@ impl crate::openapi::JsonSchema for ZString {
         all_of.extend(patterns.map(|p| serde_json::json!({ "pattern": p })));
         if !all_of.is_empty() {
             schema["allOf"] = serde_json::Value::Array(all_of);
+        }
+        for keywords in extra {
+            crate::rules::merge_keywords(&mut schema, keywords);
         }
         schema
     }

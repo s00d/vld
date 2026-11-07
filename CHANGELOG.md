@@ -8,9 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking changes
+
+- **Regex**: `regex-lite` is no longer public. `string().regex(Regex)` / `regex_msg` and the `vld::regex_lite` re-export are removed; use `string().pattern("...")` / `pattern_msg`, or `vld::rules::Pattern::new(..)` to handle an invalid pattern.
+- **optional / nullable / nullish** now differ: `nullable()` object fields are required (absent → `missing_field`, `null` → `None`) and listed in JSON Schema `required`; `optional()` no longer adds `null` to its JSON Schema (parsing still accepts `null`, which serde writes for `None`). TypeScript output follows: `x?: T`, `x: T | null`, `x?: T | null`.
+- **Unions**: `Either` / `Either3` serialize untagged, so a union inside an object round-trips as the bare value instead of `{"Left": ...}`; unions forward `output_json` to the matching variant.
+- **Removed** everything deprecated in 0.5: the `serialize` / `deserialize` features, `ZFloat::finite`, `ZObject::field_schema` / `deep_partial`, `vld-actix::VldJsonError`, `vld-diesel` / `vld-sqlx::validate_update`, `vld-surrealdb::validate_record`, `vld-http-common::{ValidationIssueWithCode, format_issues_with_code, format_json_parse_error, format_utf8_error}`, `vld-tower` / `vld-rama::try_validated`, `vld-tauri::{validate_event, validate_state, validate_plugin_config, validate_channel_message}`, `impl_to_lapin!`, `impl_to_redis!`, `impl_to_redis_async!`, `vld-utoipa::{impl_into_params!, impl_to_schema_query!, impl_to_schema_path!}`.
+- `DynSchema` has a new required method `dyn_parse_missing` (implemented for every `VldSchema`; only hand-written impls need it).
+
+### Migration from 0.5
+
+See the [migration guide](https://s00d.github.io/vld/guides/migration).
+
 ### Added
 
-- `#[derive(Validate)]` on enums, following serde: externally tagged, `tag`, `tag` + `content`, `untagged`; unit, newtype, tuple and struct variants; variant `rename` / `alias` / `skip` / `other` / `rename_all` and enum `rename_all` / `rename_all_fields`. The output is the enum itself (typed, unlike `discriminated_union`); the JSON Schema is `oneOf` with an OpenAPI `discriminator` (`anyOf` when untagged).
+- **Custom rules** (`vld::rules`): the `Rule<T>` trait (key, check, optional message and JSON Schema keywords), `rules::from_fn`, `ZString::rule` / `rule_msg` (keeps the string builder) and `VldSchema::rule` / `rule_msg` on any schema. A failing rule reports `Custom { code: <key> }`, so it can be translated by key.
+- `#[derive(Validate)]` on enums, following serde: externally tagged, `tag`, `tag` + `content`, `untagged`; unit, newtype, tuple and struct variants; variant `rename` / `alias` / `skip` / `other` / `rename_all` and enum `rename_all` / `rename_all_fields`. The output is the enum itself; the JSON Schema is `oneOf` with an OpenAPI `discriminator` (`anyOf` when untagged).
+- `#[derive(Validate)]` supports `#[serde(flatten)]` on fields: parsed from the same object, JSON Schema properties merged.
+- `VldSchema::parse_missing`: what an absent object key parses to (wrappers forward it).
+- `vld::Schema`: `VldSchema` plus the JSON Schema traits under `openapi`, for `fn f() -> impl vld::Schema<Output = T>`.
+- `ValidationIssue::path_string()` (`.lab.fund[0].vigor`).
+- Inherent `vld_parse_value` on `#[derive(Validate)]` / `schema!` types (no `VldParse` import needed).
+- `Either::into_inner` when both sides have the same type.
 
 ### Fixed
 

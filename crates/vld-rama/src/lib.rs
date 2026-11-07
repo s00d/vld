@@ -73,8 +73,6 @@ mod layer;
 mod rejection;
 
 pub use extract::{VldCookie, VldForm, VldHeaders, VldJson, VldPath, VldQuery};
-#[allow(deprecated)]
-pub use layer::try_validated;
 pub use layer::{ValidateJsonLayer, ValidateJsonService, Validated, validated};
 pub use rejection::VldRejection;
 

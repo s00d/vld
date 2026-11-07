@@ -687,9 +687,9 @@ impl<R: Rng> FakeGen<R> {
             return Some(format!("{head}{mid}{filler}{tail}"));
         }
 
-        let regexes: Vec<vld::regex_lite::Regex> = patterns
+        let regexes: Vec<regex_lite::Regex> = patterns
             .iter()
-            .filter_map(|p| vld::regex_lite::Regex::new(p).ok())
+            .filter_map(|p| regex_lite::Regex::new(p).ok())
             .collect();
         // Generate from the non-literal patterns; literal prefixes / suffixes
         // are also tried overlaid on each candidate.

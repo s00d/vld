@@ -30,4 +30,4 @@ pub use crate::primitives::{
 ))]
 pub use crate::primitives::{ZDate, ZDateTime, ZTime};
 pub use crate::primitives::{ZDuration, ZPath, ZSocketAddr};
-pub use crate::schema::{VldInput, VldParse, VldSchema};
+pub use crate::schema::{Schema, VldInput, VldParse, VldSchema};

@@ -17,8 +17,9 @@ include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 workspace = true
 
 [dependencies]
-vld = { workspace = true, features = ["openapi", "regex"] }
+vld = { workspace = true, features = ["openapi"] }
 serde_json = { workspace = true }
+regex-lite = { workspace = true }
 rand = "0.10"
 regex-syntax = { version = "0.8", default-features = false, features = ["std", "unicode"] }
 

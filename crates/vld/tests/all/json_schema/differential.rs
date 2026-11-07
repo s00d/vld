@@ -32,6 +32,12 @@ where
 /// `(case, sample, vld accepts?, reason)`.
 const KNOWN_DIVERGENCES: &[(&str, &str, bool, &str)] = &[
     (
+        "object_strict",
+        r#"{"age":null,"name":"a"}"#,
+        true,
+        "optional() accepts `null` (serde writes `None` as `null`) but its schema has no `null` type (TypeScript `x?: T`)",
+    ),
+    (
         "iso_datetime",
         r#""2024-01-15T10:30:00""#,
         true,

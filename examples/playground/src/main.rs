@@ -688,7 +688,7 @@ fn main() {
     println!("[3] Optional String JSON Schema:");
     println!("{}", serde_json::to_string_pretty(&opt_js).unwrap());
 
-    // Object with field_schema — includes nested field schemas
+    // Object — includes nested field schemas
     let obj_js = vld::object()
         .field("email", vld::string().email().min(5))
         .field("score", vld::number().min(0.0).max(100.0))

@@ -22,6 +22,14 @@ pub struct ZMessage<T: VldSchema> {
 }
 
 impl<T: VldSchema> ZMessage<T> {
+    /// Every issue of `err` gets this schema's message.
+    fn relabel(&self, mut err: VldError) -> VldError {
+        for issue in &mut err.issues {
+            issue.message = self.msg.clone();
+        }
+        err
+    }
+
     /// Create the schema (the same as its `vld::` constructor function).
     pub fn new(inner: T, msg: impl Into<String>) -> Self {
         Self {
@@ -40,12 +48,10 @@ impl<T: VldSchema> VldSchema for ZMessage<T> {
     type Output = T::Output;
 
     fn parse_value(&self, value: &Value) -> Result<T::Output, VldError> {
-        self.inner.parse_value(value).map_err(|mut err| {
-            for issue in &mut err.issues {
-                issue.message = self.msg.clone();
-            }
-            err
-        })
+        self.inner.parse_value(value).map_err(|e| self.relabel(e))
+    }
+    fn parse_missing(&self) -> Result<T::Output, VldError> {
+        self.inner.parse_missing().map_err(|e| self.relabel(e))
     }
     fn output_json(&self, o: &Self::Output) -> Option<Value> {
         self.inner.output_json(o)

@@ -71,7 +71,6 @@ pub(super) enum Kind {
     Negative,
     NonNegative,
     NonPositive,
-    Finite,
     MultipleOf(Num),
     Safe,
 }
@@ -93,7 +92,6 @@ impl Kind {
             Kind::Negative => "not_negative",
             Kind::NonNegative => "not_non_negative",
             Kind::NonPositive => "not_non_positive",
-            Kind::Finite => "not_finite",
             Kind::MultipleOf(_) => "not_multiple_of",
             Kind::Safe => "not_safe",
         }
@@ -126,10 +124,6 @@ impl Kind {
     /// `None` when `n` passes, otherwise the issue code.
     pub(super) fn failure(self, n: Num) -> Option<IssueCode> {
         match self {
-            Kind::Finite => match n {
-                Num::F(f) if !f.is_finite() => Some(IssueCode::NotFinite),
-                _ => None,
-            },
             Kind::MultipleOf(v) => {
                 if is_multiple_of(n, v) {
                     None

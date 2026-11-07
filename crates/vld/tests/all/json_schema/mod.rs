@@ -232,7 +232,8 @@ fn dynamic_object_pipeline() {
         })
     );
     // Spot checks that matter more than the shape.
-    assert_eq!(required_keys(&base.json_schema()), ["id", "title"]);
+    // `nullable()` fields are required (the key must be present).
+    assert_eq!(required_keys(&base.json_schema()), ["id", "title", "body"]);
     assert!(required_keys(&three().partial().json_schema()).is_empty());
     assert!(vld::object().to_json_schema().get("required").is_none());
 }
@@ -276,7 +277,7 @@ fn schema_macro_document() {
     );
     assert_eq!(
         required_keys(&CreateProfile::json_schema()),
-        ["name", "email", "tags", "address"]
+        ["name", "email", "tags", "address", "meta", "notes"]
     );
     let nested: Vec<&str> = CreateProfile::__vld_nested_schemas()
         .into_iter()
@@ -284,12 +285,17 @@ fn schema_macro_document() {
         .collect();
     assert_eq!(nested, ["ProfileAddress"]);
 
-    // Runtime behaviour matches the documented contract: a missing nullable
-    // field parses as None, so `meta` is not required.
-    let base = json!({
+    // Runtime behaviour matches the schema: `nullable()` fields are required
+    // (absent → missing_field) and take `null`.
+    let mut base = json!({
         "name": "Ada", "email": "ada@example.com", "tags": ["rust"],
         "address": {"street": "1 Main", "city": "NY"}
     });
+    let e = CreateProfile::parse_value(&base).unwrap_err();
+    let missing: Vec<String> = e.issues.iter().map(|i| i.path_string()).collect();
+    assert_eq!(missing, [".meta", ".notes"]);
+    base["meta"] = json!(null);
+    base["notes"] = json!(null);
     let p = CreateProfile::parse_value(&base).unwrap();
     assert_eq!(
         (p.meta, p.notes, p.role.as_str(), p.is_current),
@@ -321,7 +327,10 @@ fn derive_document() {
         labels: Option<Vec<String>>,
     }
     snap!("derive_patch_user", PatchUser::to_openapi_document());
-    assert_eq!(required_keys(&PatchUser::json_schema()), ["name", "email"]);
+    assert_eq!(
+        required_keys(&PatchUser::json_schema()),
+        ["name", "email", "meta"]
+    );
 }
 
 #[test]
@@ -488,18 +497,6 @@ fn nested_named_registers_a_component() {
         Holder::parse(r#"{"leaf": {"id": "x"}}"#).unwrap().leaf.id,
         "x"
     );
-}
-
-#[test]
-#[allow(deprecated)]
-fn field_schema_is_field() {
-    let a = vld::object()
-        .field_schema("a", vld::string().email())
-        .json_schema();
-    let b = vld::object()
-        .field("a", vld::string().email())
-        .json_schema();
-    assert_eq!(a, b);
 }
 
 // ---- 0.5 schema types ----

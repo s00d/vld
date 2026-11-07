@@ -264,15 +264,6 @@ pub fn validated<T: Clone + Send + Sync + 'static>(req: &Request<impl Body>) -> 
     req.extensions().get::<Validated<T>>().map(|v| v.0.clone())
 }
 
-/// Try to extract the validated value from request extensions.
-#[deprecated(
-    since = "0.5.0",
-    note = "use `validated`, which now returns `Option<T>`"
-)]
-pub fn try_validated<T: Clone + Send + Sync + 'static>(req: &Request<impl Body>) -> Option<T> {
-    validated(req)
-}
-
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use crate::{ValidateJsonLayer, ValidateJsonService, Validated, ValidatedBody, validated};

@@ -12,25 +12,28 @@ crate::openapi::collect_inner_schemas! {
     impl[S] crate::modifiers::ZDefault<S>, inner = S, where [S::Output: Clone];
 }
 
+/// May be left out; `null` is not part of the schema (TypeScript `x?: T`),
+/// although parsing tolerates it (serde writes `None` as `null`).
 impl<S: VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZOptional<S> {
     fn json_schema(&self) -> Value {
-        nullable_schema(self.inner_schema().json_schema())
+        self.inner_schema().json_schema()
     }
     fn is_required(&self) -> bool {
         false
     }
 }
 
-/// Like `optional()`, a missing key parses as `None`, so it is not `required`.
+/// The key is required and `null` is allowed (TypeScript `x: T | null`).
 impl<S: VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZNullable<S> {
     fn json_schema(&self) -> Value {
         nullable_schema(self.inner_schema().json_schema())
     }
     fn is_required(&self) -> bool {
-        false
+        true
     }
 }
 
+/// May be left out or `null` (TypeScript `x?: T | null`).
 impl<S: VldSchema + JsonSchema> JsonSchema for crate::modifiers::ZNullish<S> {
     fn json_schema(&self) -> Value {
         nullable_schema(self.inner_schema().json_schema())

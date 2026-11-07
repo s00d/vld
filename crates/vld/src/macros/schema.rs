@@ -211,6 +211,14 @@ macro_rules! schema {
                 Self::__vld_parse(__vld_json, false)
             }
 
+            /// Same as [`parse_value`](Self::parse_value); callable as
+            /// `T::vld_parse_value` without importing `vld::schema::VldParse`.
+            pub fn vld_parse_value(
+                __vld_json: &$crate::serde_json::Value,
+            ) -> ::std::result::Result<$name, $crate::error::VldError> {
+                Self::__vld_parse(__vld_json, false)
+            }
+
             /// JSON key of a field: deserialize name (`ser == false`, parsing)
             /// or serialize name (`ser == true`, `validate()`).
             #[doc(hidden)]

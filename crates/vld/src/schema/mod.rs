@@ -19,6 +19,45 @@ pub use dyn_schema::DynSchema;
 pub use input::VldInput;
 pub use nested::{NestedSchema, NestedSchemaCollectFn, NestedSchemaEntry};
 
+/// A schema with everything the enabled features need: [`VldSchema`], plus
+/// [`JsonSchema`](crate::openapi::JsonSchema) and
+/// [`CollectNestedSchemas`](crate::openapi::CollectNestedSchemas) with the
+/// `openapi` feature.
+///
+/// Use it to return a schema from a function without naming its type: an
+/// `impl VldSchema` hides the JSON Schema impls, so the result could not be
+/// used in an object or `schema!` field with `openapi` on.
+///
+/// ```
+/// use vld::prelude::*;
+///
+/// fn username() -> impl vld::Schema<Output = String> {
+///     vld::string().min(3).max(20).alphanumeric()
+/// }
+///
+/// let user = vld::object().field("name", username());
+/// assert!(user.parse(r#"{"name": "ada"}"#).is_ok());
+/// ```
+#[cfg(feature = "openapi")]
+pub trait Schema:
+    VldSchema + crate::openapi::JsonSchema + crate::openapi::CollectNestedSchemas
+{
+}
+
+#[cfg(feature = "openapi")]
+impl<T> Schema for T where
+    T: VldSchema + crate::openapi::JsonSchema + crate::openapi::CollectNestedSchemas
+{
+}
+
+/// A schema with everything the enabled features need (here: [`VldSchema`];
+/// with `openapi` also the JSON Schema traits).
+#[cfg(not(feature = "openapi"))]
+pub trait Schema: VldSchema {}
+
+#[cfg(not(feature = "openapi"))]
+impl<T: VldSchema> Schema for T {}
+
 /// Core validation schema trait.
 ///
 /// Every validator in `vld` implements this trait. The associated type `Output`
@@ -46,6 +85,16 @@ pub trait VldSchema: Sized {
     #[doc(hidden)]
     fn output_json(&self, _output: &Self::Output) -> Option<Value> {
         None
+    }
+
+    /// Parse an object field whose key is **absent**.
+    ///
+    /// Default: the same as an explicit `null` (`parse_value(&Value::Null)`),
+    /// so an absent key and `null` are treated alike. `nullable()` overrides
+    /// it to require the key (`missing_field`); wrappers (`describe`,
+    /// `refine`, `transform`, `rule`, …) forward it to their inner schema.
+    fn parse_missing(&self) -> Result<Self::Output, VldError> {
+        self.parse_value(&Value::Null)
     }
 
     /// Parse from any supported input (JSON string, file path, `serde_json::Value`, etc.)
@@ -108,6 +157,30 @@ pub trait VldSchema: Sized {
         F: Fn(&Self::Output) -> bool,
     {
         ZRefine::new(self, check, message)
+    }
+
+    /// Check the output with a reusable [`Rule`](crate::rules::Rule) (output type unchanged).
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let even = vld::number().int().rule(vld::rules::from_fn("even", |n: &i64| n % 2 == 0));
+    /// assert_eq!(even.parse("3").unwrap_err().issues[0].code.key(), "even");
+    /// ```
+    fn rule<R>(self, rule: R) -> crate::rules::ZRule<Self, R>
+    where
+        Self: Sized,
+        R: crate::rules::Rule<Self::Output>,
+    {
+        crate::rules::ZRule::new(self, rule, None)
+    }
+
+    /// [`rule`](Self::rule) with a custom error message.
+    fn rule_msg<R>(self, rule: R, msg: impl Into<String>) -> crate::rules::ZRule<Self, R>
+    where
+        Self: Sized,
+        R: crate::rules::Rule<Self::Output>,
+    {
+        crate::rules::ZRule::new(self, rule, Some(msg.into()))
     }
 
     /// Transform the output value after successful parsing.

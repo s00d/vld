@@ -1,7 +1,6 @@
 //! # vld-lapin — lapin (RabbitMQ) integration for `vld`
 //!
 //! Wrap a channel: `let channel = LapinChannel::new(channel);`
-//! (`impl_to_lapin!(channel)` only did that rebinding and is deprecated).
 //!
 //! The wrapper adds:
 //!
@@ -386,25 +385,8 @@ impl From<lapin::Error> for VldLapinError {
     }
 }
 
-/// Rebind a `lapin::Channel` into a validating [`LapinChannel`].
-///
-/// Deprecated: it only shadows the variable — write
-/// `let channel = LapinChannel::new(channel);`.
-#[deprecated(
-    since = "0.5.0",
-    note = "use `let channel = LapinChannel::new(channel);`"
-)]
-#[macro_export]
-macro_rules! impl_to_lapin {
-    ($channel:ident) => {
-        let $channel = $crate::LapinChannel::new($channel);
-    };
-}
-
 /// Common imports: `LapinChannel`, `VldLapinError` and `vld::prelude`.
 pub mod prelude {
-    #[allow(deprecated)]
-    pub use crate::impl_to_lapin;
     pub use crate::{LapinChannel, VldLapinError};
     pub use vld::prelude::*;
 }

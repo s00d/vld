@@ -62,7 +62,7 @@ impl ZNumber {
     /// Override error messages in bulk by check key.
     ///
     /// The closure receives the check key (e.g. `"too_small"`, `"too_big"`,
-    /// `"not_positive"`, `"not_finite"`, `"not_multiple_of"`, `"not_safe"`)
+    /// `"not_positive"`, `"not_multiple_of"`, `"not_safe"`)
     /// and should return `Some(new_message)` to replace, or `None` to keep the original.
     ///
     /// The closure is consulted when an issue is built, so it covers checks
@@ -155,18 +155,6 @@ impl ZNumber {
     /// Must be non-positive (<= 0).
     pub fn non_positive(self) -> Self {
         self.push(Kind::NonPositive)
-    }
-
-    /// Must be finite (not NaN or infinity).
-    ///
-    /// A no-op: JSON numbers are always finite and `.coerce()` already
-    /// rejects `"NaN"` / `"inf"` strings.
-    #[deprecated(
-        since = "0.5.0",
-        note = "no-op: JSON cannot carry NaN/infinity and coerce() rejects them"
-    )]
-    pub fn finite(self) -> Self {
-        self.push(Kind::Finite)
     }
 
     /// Must be a multiple of the given value.

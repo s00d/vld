@@ -20,9 +20,6 @@ workspace = true
 default = []
 regex = ["dep:regex-lite"]
 derive = ["dep:vld-derive"]
-# Deprecated no-ops (serde is always on): kept for compatibility, removed in 0.6.
-serialize = []
-deserialize = []
 openapi = []
 diff = ["openapi"]
 chrono = ["dep:chrono"]

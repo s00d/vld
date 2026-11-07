@@ -1,6 +1,3 @@
-// The deprecated `validate_*` aliases are still covered here.
-#![allow(deprecated)]
-
 use serde::Serialize;
 use vld_tauri::prelude::*;
 
@@ -118,13 +115,13 @@ fn validate_args_invalid_data() {
 }
 
 // ===========================================================================
-// validate_event()
+// validate() — event payloads
 // ===========================================================================
 
 #[test]
 fn event_valid() {
     let payload = serde_json::json!({"id": 42, "name": "Alice"});
-    let update = validate_event::<UserUpdate>(payload).unwrap();
+    let update = validate::<UserUpdate>(payload).unwrap();
     assert_eq!(update.id, 42);
     assert_eq!(update.name, "Alice");
 }
@@ -132,37 +129,37 @@ fn event_valid() {
 #[test]
 fn event_invalid() {
     let payload = serde_json::json!({"id": 0, "name": "A"});
-    let err = validate_event::<UserUpdate>(payload).unwrap_err();
+    let err = validate::<UserUpdate>(payload).unwrap_err();
     assert_eq!(err.error, "Validation failed");
     assert!(err.issue_count() >= 2);
 }
 
 // ===========================================================================
-// validate_state()
+// validate() — app state
 // ===========================================================================
 
 #[test]
 fn state_valid() {
     let cfg = serde_json::json!({"db_url": "postgres://localhost/db", "max_conn": 10});
-    let config = validate_state::<AppConfig>(cfg).unwrap();
+    let config = validate::<AppConfig>(cfg).unwrap();
     assert_eq!(config.max_conn, 10);
 }
 
 #[test]
 fn state_invalid() {
     let cfg = serde_json::json!({"db_url": "", "max_conn": 0});
-    let err = validate_state::<AppConfig>(cfg).unwrap_err();
+    let err = validate::<AppConfig>(cfg).unwrap_err();
     assert!(err.has_issues());
 }
 
 // ===========================================================================
-// validate_plugin_config()
+// validate() — plugin config
 // ===========================================================================
 
 #[test]
 fn plugin_config_valid() {
     let cfg = serde_json::json!({"api_key": "abc123", "timeout": 5000});
-    let c = validate_plugin_config::<PluginConfig>(cfg).unwrap();
+    let c = validate::<PluginConfig>(cfg).unwrap();
     assert_eq!(c.api_key, "abc123");
     assert_eq!(c.timeout, 5000);
 }
@@ -170,18 +167,18 @@ fn plugin_config_valid() {
 #[test]
 fn plugin_config_invalid() {
     let cfg = serde_json::json!({"api_key": "", "timeout": 50});
-    let err = validate_plugin_config::<PluginConfig>(cfg).unwrap_err();
+    let err = validate::<PluginConfig>(cfg).unwrap_err();
     assert!(err.issue_count() >= 2);
 }
 
 // ===========================================================================
-// validate_channel_message()
+// validate() — channel messages
 // ===========================================================================
 
 #[test]
 fn channel_message_valid() {
     let msg = serde_json::json!({"percent": 42, "status": "downloading"});
-    let p = validate_channel_message::<Progress>(msg).unwrap();
+    let p = validate::<Progress>(msg).unwrap();
     assert_eq!(p.percent, 42);
     assert_eq!(p.status, "downloading");
 }
@@ -189,7 +186,7 @@ fn channel_message_valid() {
 #[test]
 fn channel_message_invalid() {
     let msg = serde_json::json!({"percent": 150, "status": ""});
-    let err = validate_channel_message::<Progress>(msg).unwrap_err();
+    let err = validate::<Progress>(msg).unwrap_err();
     assert!(err.has_issues());
 }
 

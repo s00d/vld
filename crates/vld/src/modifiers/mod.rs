@@ -9,11 +9,20 @@ use serde_json::Value;
 use crate::error::VldError;
 use crate::schema::VldSchema;
 
-/// `ZOptional`, `ZNullable` and `ZNullish` behave identically at the value
-/// level (`null` → `None`, otherwise `Some(inner)`); they stay distinct types
-/// only for JSON Schema / object-level semantics.
+/// `ZOptional`, `ZNullable` and `ZNullish` all parse `null` as `None` and
+/// anything else through the inner schema. They differ for object fields and
+/// in JSON Schema:
+///
+/// | | absent key | `null` | JSON Schema | TypeScript |
+/// |---|---|---|---|---|
+/// | `optional()` | `None` | `None` | not required | `x?: T` |
+/// | `nullable()` | `missing_field` | `None` | required, `T \| null` | `x: T \| null` |
+/// | `nullish()` | `None` | `None` | not required, `T \| null` | `x?: T \| null` |
+///
+/// `optional()` accepts `null` too because serde writes `None` as `null`, so
+/// `validate()` of a struct with a `None` field must pass.
 macro_rules! option_wrapper {
-    ($(#[$doc:meta])* $name:ident) => {
+    ($(#[$doc:meta])* $name:ident $(, missing = $missing:expr)?) => {
         $(#[$doc])*
         pub struct $name<T: VldSchema> {
             inner: T,
@@ -47,6 +56,12 @@ macro_rules! option_wrapper {
                     None => Some(Value::Null),
                 }
             }
+
+            $(
+                fn parse_missing(&self) -> Result<Option<T::Output>, VldError> {
+                    $missing
+                }
+            )?
         }
     };
 }
@@ -65,12 +80,9 @@ option_wrapper! {
     /// If the value is `null`, returns `Ok(None)`; otherwise delegates to the
     /// inner schema and wraps the result in `Some`.
     ///
-    /// A **missing** object field is treated like `null` (object parsing feeds
-    /// `null` for absent keys), so it also yields `Ok(None)` — at the value
-    /// level `nullable()` and [`optional()`](ZOptional) behave the same. The
-    /// difference is only in the generated JSON Schema (`nullable` emits a
-    /// `null`-able type rather than an optional property).
-    ZNullable
+    /// As an object field the key is **required**: an absent key fails with
+    /// `missing_field` (use [`nullish()`](ZNullish) to allow both).
+    ZNullable, missing = Err(VldError::from_code(crate::error::IssueCode::MissingField))
 }
 
 option_wrapper! {

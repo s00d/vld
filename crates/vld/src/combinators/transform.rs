@@ -53,7 +53,9 @@ where
     type Output = U;
 
     fn parse_value(&self, value: &Value) -> Result<U, VldError> {
-        let result = self.inner.parse_value(value)?;
-        Ok((self.transform_fn)(result))
+        Ok((self.transform_fn)(self.inner.parse_value(value)?))
+    }
+    fn parse_missing(&self) -> Result<U, VldError> {
+        Ok((self.transform_fn)(self.inner.parse_missing()?))
     }
 }

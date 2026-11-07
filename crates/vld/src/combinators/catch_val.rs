@@ -39,10 +39,16 @@ where
     type Output = T::Output;
 
     fn parse_value(&self, value: &Value) -> Result<T::Output, VldError> {
-        match self.inner.parse_value(value) {
-            Ok(v) => Ok(v),
-            Err(_) => Ok(self.fallback.clone()),
-        }
+        Ok(self
+            .inner
+            .parse_value(value)
+            .unwrap_or_else(|_| self.fallback.clone()))
+    }
+    fn parse_missing(&self) -> Result<T::Output, VldError> {
+        Ok(self
+            .inner
+            .parse_missing()
+            .unwrap_or_else(|_| self.fallback.clone()))
     }
     fn output_json(&self, o: &Self::Output) -> Option<Value> {
         self.inner.output_json(o)

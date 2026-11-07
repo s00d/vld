@@ -571,10 +571,6 @@ vld::schema! {
     }
 }
 
-/// Same as [`ValidationIssue`], which always carries `code`.
-#[deprecated(since = "0.5.0", note = "use `ValidationIssue`")]
-pub type ValidationIssueWithCode = ValidationIssue;
-
 vld::schema! {
     /// Validation error response body:
     /// `{ "error": "Validation failed", "issues": [...] }`.
@@ -631,12 +627,6 @@ pub fn format_vld_error(err: &vld::error::VldError) -> serde_json::Value {
     serde_json::to_value(body).expect("ValidationErrorBody serialization cannot fail")
 }
 
-/// Same as [`format_issues`], which always includes `code`.
-#[deprecated(since = "0.5.0", note = "use `format_issues`")]
-pub fn format_issues_with_code(err: &vld::error::VldError) -> Vec<ValidationIssue> {
-    format_issues(err)
-}
-
 /// Decode a form/query component: `+` → space, then [`percent_decode`].
 pub fn url_decode(input: &str) -> String {
     percent_decode(&input.replace('+', " "))
@@ -669,32 +659,6 @@ pub fn percent_decode(input: &str) -> String {
 // ---------------------------------------------------------------------------
 // Standard HTTP error response helpers
 // ---------------------------------------------------------------------------
-
-/// Build a JSON error body for invalid JSON parse errors.
-///
-/// Returns `{ "error": "Invalid JSON", "message": "..." }`.
-#[deprecated(
-    since = "0.5.0",
-    note = "unused: the adapters answer malformed JSON with a 422 `VldHttpError::parse` body"
-)]
-pub fn format_json_parse_error(message: &str) -> serde_json::Value {
-    serde_json::to_value(ErrorWithMessage {
-        error: "Invalid JSON".into(),
-        message: message.into(),
-    })
-    .expect("ErrorWithMessage serialization cannot fail")
-}
-
-/// Build a JSON error body for invalid UTF-8 payloads.
-///
-/// Returns `{ "error": "Invalid UTF-8" }`.
-#[deprecated(
-    since = "0.5.0",
-    note = "unused: the adapters answer invalid UTF-8 with a 422 `VldHttpError::parse` body"
-)]
-pub fn format_utf8_error() -> serde_json::Value {
-    format_generic_error("Invalid UTF-8")
-}
 
 /// Build a JSON error body for payloads that exceed the size limit.
 ///

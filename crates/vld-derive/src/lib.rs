@@ -80,7 +80,11 @@ mod enums;
 /// - field: `rename = "..."` (also `rename(serialize = "...", deserialize =
 ///   "...")`), `skip` / `skip_deserializing` (not validated, set to
 ///   `Default::default()`), `default` / `default = "path"`
-/// - `flatten` and `alias` are rejected with a compile error.
+/// - field `flatten`: parsed from the same object with `<T>::parse_value`
+///   (or the field's `#[vld(...)]` schema); its JSON Schema properties are
+///   merged in. Not with `#[vld(lenient)]`. `validate()` checks a flattened
+///   field under its deserialize names.
+/// - `alias` is rejected with a compile error.
 ///
 /// `vld_parse()` / `parse_value()` / JSON Schema read the **deserialize**
 /// names; `validate()` / `is_valid()` serialize the value and check it under
@@ -127,6 +131,9 @@ pub(crate) struct FieldInfo {
     ser_key: String,
     /// `None` = `#[serde(skip)]`: not validated, set to `Default::default()`.
     schema: Option<TokenStream2>,
+    /// `#[serde(flatten)]`: parsed from the whole object; `schema` is the
+    /// explicit `#[vld(...)]` schema, `None` means `<T>::parse_value`.
+    flatten: bool,
     /// Value used when the key is missing (`#[serde(default)]`).
     default: Option<TokenStream2>,
 }
@@ -193,8 +200,13 @@ pub(crate) fn named_field_infos<'a>(
         let key = pick(serde_field.rename.0, &rename_all.0);
         let ser_key = pick(serde_field.rename.1, &rename_all.1);
 
+        let vld_attr = field.attrs.iter().find(|a| a.path().is_ident("vld"));
         let schema = if serde_field.skip {
             None
+        } else if serde_field.flatten {
+            vld_attr
+                .map(|a| a.parse_args::<TokenStream2>())
+                .transpose()?
         } else {
             let attr = field
                 .attrs
@@ -219,6 +231,7 @@ pub(crate) fn named_field_infos<'a>(
         infos.push(FieldInfo {
             ident,
             ty: field.ty.clone(),
+            flatten: serde_field.flatten && !serde_field.skip,
             key,
             ser_key,
             schema,
@@ -244,6 +257,27 @@ pub(crate) fn schema_ref(generic: bool, schema: &TokenStream2) -> TokenStream2 {
 pub(crate) fn field_parse_lets(infos: &[FieldInfo], generic: bool) -> Vec<TokenStream2> {
     let schema_ref = |schema: &TokenStream2| schema_ref(generic, schema);
     infos.iter().map(|f| {
+        if f.flatten {
+            let ident = &f.ident;
+            let ty = &f.ty;
+            let parse = match &f.schema {
+                Some(schema) => {
+                    let s = schema_ref(schema);
+                    quote! { ::vld::schema::VldSchema::parse_value(#s, __vld_whole) }
+                }
+                None => quote! { <#ty>::parse_value(__vld_whole) },
+            };
+            return quote! {
+                #[allow(non_snake_case)]
+                let #ident: ::std::option::Option<#ty> = match #parse {
+                    ::std::result::Result::Ok(__vld_v) => ::std::option::Option::Some(__vld_v),
+                    ::std::result::Result::Err(__vld_e) => {
+                        __vld_errors.issues.extend(__vld_e.issues);
+                        ::std::option::Option::None
+                    }
+                };
+            };
+        }
         let FieldInfo {
             ident,
             ty,
@@ -281,7 +315,14 @@ pub(crate) fn field_parse_lets(infos: &[FieldInfo], generic: bool) -> Vec<TokenS
 
 /// `object_schema(...)` call for the fields' JSON Schema.
 pub(crate) fn object_schema_tokens(infos: &[FieldInfo]) -> TokenStream2 {
-    let schema_entries = infos.iter().filter_map(|f| {
+    let flattened = infos.iter().filter(|f| f.flatten).map(|f| match &f.schema {
+        Some(schema) => quote! { { #schema }.json_schema() },
+        None => {
+            let ty = &f.ty;
+            quote! { <#ty>::json_schema() }
+        }
+    });
+    let schema_entries = infos.iter().filter(|f| !f.flatten).filter_map(|f| {
         let schema = f.schema.as_ref()?;
         let key = &f.key;
         let required = if f.default.is_some() {
@@ -297,8 +338,30 @@ pub(crate) fn object_schema_tokens(infos: &[FieldInfo]) -> TokenStream2 {
         })
     });
     quote! {
-        ::vld::__private::object_schema(::std::vec![ #( #schema_entries ),* ])
+        ::vld::__private::flatten_schema(
+            ::vld::__private::object_schema(::std::vec![ #( #schema_entries ),* ]),
+            ::std::vec![ #( #flattened ),* ],
+        )
     }
+}
+
+/// `collect_nested_schemas` calls for every field, flattened ones included.
+pub(crate) fn collect_field_tokens(infos: &[FieldInfo]) -> Vec<TokenStream2> {
+    let mut out = collect_tokens(
+        infos
+            .iter()
+            .filter(|f| !f.flatten || f.schema.is_some())
+            .filter_map(|f| f.schema.as_ref()),
+    );
+    for f in infos.iter().filter(|f| f.flatten && f.schema.is_none()) {
+        let ty = &f.ty;
+        out.push(quote! {
+            if let ::std::option::Option::Some(__vld_f) = ::vld::__vld_nested_collect_fn!(#ty) {
+                __vld_f(__vld_out);
+            }
+        });
+    }
+    out
 }
 
 /// `collect_nested_schemas` calls for every field schema.
@@ -328,6 +391,12 @@ fn expand_struct(
     let schema_ref = |schema: &TokenStream2| schema_ref(generic, schema);
     let parse_lets = field_parse_lets(&infos, generic);
 
+    if let Some(f) = infos.iter().find(|f| lenient && f.flatten) {
+        return Err(syn::Error::new(
+            f.ident.span(),
+            "vld: #[serde(flatten)] is not supported with #[vld(lenient)]",
+        ));
+    }
     let lenient_tokens = if lenient {
         let result_pushes = infos.iter().filter_map(|f| {
             let schema = f.schema.as_ref()?;
@@ -416,7 +485,7 @@ fn expand_struct(
         quote! {}
     };
 
-    let collect_calls = collect_tokens(infos.iter().filter_map(|f| f.schema.as_ref()));
+    let collect_calls = collect_field_tokens(&infos);
     let object_schema = object_schema_tokens(&infos);
     let json_schema_body = if generic {
         object_schema
@@ -448,6 +517,14 @@ fn expand_struct(
                 Self::__vld_parse(__vld_json, false)
             }
 
+            /// Same as [`parse_value`](Self::parse_value); callable as
+            /// `T::vld_parse_value` without importing `vld::schema::VldParse`.
+            pub fn vld_parse_value(
+                __vld_json: &::vld::serde_json::Value,
+            ) -> ::std::result::Result<Self, ::vld::error::VldError> {
+                Self::__vld_parse(__vld_json, false)
+            }
+
             /// Parse under the deserialize (`false`) or serialize (`true`) names.
             #[doc(hidden)]
             #[allow(unused_variables)]
@@ -458,6 +535,8 @@ fn expand_struct(
                 #[allow(unused_imports)]
                 use ::vld::schema::VldSchema as _;
                 let __vld_obj = ::vld::__private::expect_object(__vld_json)?;
+                #[allow(unused_variables)]
+                let __vld_whole = __vld_json;
                 let mut __vld_errors = ::vld::error::VldError::new();
 
                 #( #parse_lets )*
@@ -584,6 +663,7 @@ struct SerdeStruct {
 pub(crate) struct SerdeField {
     rename: Names,
     skip: bool,
+    flatten: bool,
     default: Option<TokenStream2>,
 }
 
@@ -669,7 +749,9 @@ pub(crate) fn parse_serde_field_attrs(attrs: &[syn::Attribute]) -> syn::Result<S
                 } else {
                     quote! { ::std::default::Default::default() }
                 });
-            } else if p.is_ident("flatten") || p.is_ident("alias") {
+            } else if p.is_ident("flatten") {
+                out.flatten = true;
+            } else if p.is_ident("alias") {
                 return Err(meta.error(format!(
                     "vld: #[serde({})] is not supported by #[derive(Validate)]",
                     p.get_ident().map(|i| i.to_string()).unwrap_or_default()

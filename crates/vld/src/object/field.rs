@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::error::{IssueCode, VldError};
 use crate::schema::DynSchema;
 
-/// Internal wrapper that makes a DynSchema nullable (null/missing → Value::Null).
+/// Internal wrapper that makes a DynSchema optional (null/missing → Value::Null).
 ///
 /// On null/missing the inner schema still runs first so defaults and
 /// `.catch()` fallbacks apply; only if it rejects null is `Value::Null` returned.
@@ -19,9 +19,14 @@ impl DynSchema for OptionalDynSchema {
         self.0.dyn_parse(value)
     }
 
+    fn dyn_parse_missing(&self) -> Result<Value, VldError> {
+        Ok(self.0.dyn_parse_missing().unwrap_or(Value::Null))
+    }
+
+    /// Optional, like `optional()`: not required, no `null` added.
     #[cfg(feature = "openapi")]
     fn dyn_json_schema(&self) -> Value {
-        crate::openapi::nullable_schema(self.0.dyn_json_schema())
+        self.0.dyn_json_schema()
     }
 
     #[cfg(feature = "openapi")]
@@ -44,6 +49,10 @@ impl DynSchema for RequiredDynSchema {
             return Err(VldError::from_code(IssueCode::MissingField));
         }
         self.0.dyn_parse(value)
+    }
+
+    fn dyn_parse_missing(&self) -> Result<Value, VldError> {
+        Err(VldError::from_code(IssueCode::MissingField))
     }
 
     #[cfg(feature = "openapi")]

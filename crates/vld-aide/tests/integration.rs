@@ -333,7 +333,7 @@ fn aide_required(schema: &serde_json::Value) -> Vec<&str> {
 #[test]
 fn openapi_required_matrix_roundtrip_schema_and_derive() {
     let js = AideCreateTicket::json_schema();
-    assert_eq!(aide_required(&js), ["title", "body"]);
+    assert_eq!(aide_required(&js), ["title", "body", "reporter"]);
     let converted = serde_json::to_value(vld_to_schemars(&js)).unwrap();
     assert_eq!(converted, js, "vld_to_schemars keeps the document");
 
@@ -342,13 +342,16 @@ fn openapi_required_matrix_roundtrip_schema_and_derive() {
         &mut generator,
     ))
     .unwrap();
-    assert_eq!(aide_required(&generated), ["title", "body"]);
+    assert_eq!(aide_required(&generated), ["title", "body", "reporter"]);
 
     let mut generator = schemars::SchemaGenerator::default();
     let derive =
         serde_json::to_value(<AideDerivePatch as JsonSchema>::json_schema(&mut generator)).unwrap();
-    assert_eq!(aide_required(&derive), ["title"]);
-    assert_eq!(aide_required(&AideDerivePatch::json_schema()), ["title"]);
+    assert_eq!(aide_required(&derive), ["title", "cursor"]);
+    assert_eq!(
+        aide_required(&AideDerivePatch::json_schema()),
+        ["title", "cursor"]
+    );
 
     insta::with_settings!({ sort_maps => true }, {
         insta::assert_json_snapshot!(

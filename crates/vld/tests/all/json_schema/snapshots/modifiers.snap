@@ -1,5 +1,5 @@
 ---
-source: tests/all/json_schema/mod.rs
+source: crates/vld/tests/all/json_schema/mod.rs
 expression: value
 ---
 {
@@ -26,7 +26,7 @@ expression: value
     }
   },
   "nullable": {
-    "required": false,
+    "required": true,
     "schema": {
       "anyOf": [
         {
@@ -54,7 +54,7 @@ expression: value
     }
   },
   "nullable_stack": {
-    "required": false,
+    "required": true,
     "schema": {
       "anyOf": [
         {
@@ -99,31 +99,17 @@ expression: value
   "optional": {
     "required": false,
     "schema": {
-      "anyOf": [
-        {
-          "format": "email",
-          "minLength": 2,
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "format": "email",
+      "minLength": 2,
+      "type": "string"
     }
   },
   "optional_stack": {
     "required": false,
     "schema": {
-      "anyOf": [
-        {
-          "minLength": 3,
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "nickname"
+      "description": "nickname",
+      "minLength": 3,
+      "type": "string"
     }
   },
   "plain": {
@@ -144,14 +130,7 @@ expression: value
   "preprocess_optional": {
     "required": false,
     "schema": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "type": "string"
     }
   },
   "preprocess_required": {

@@ -21,29 +21,15 @@ expression: "json!({\"create_ticket\": generated, \"derive_patch\": derive})"
         "description": "ISO date"
       },
       "labels": {
-        "anyOf": [
-          {
-            "items": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "type": "array"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "items": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": "array"
       },
       "meta": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "freeform"
+        "description": "freeform",
+        "type": "string"
       },
       "priority": {
         "default": "normal",
@@ -70,7 +56,8 @@ expression: "json!({\"create_ticket\": generated, \"derive_patch\": derive})"
     },
     "required": [
       "title",
-      "body"
+      "body",
+      "reporter"
     ],
     "type": "object"
   },
@@ -87,15 +74,8 @@ expression: "json!({\"create_ticket\": generated, \"derive_patch\": derive})"
         ]
       },
       "body": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "body"
+        "description": "body",
+        "type": "string"
       },
       "cursor": {
         "anyOf": [
@@ -119,7 +99,8 @@ expression: "json!({\"create_ticket\": generated, \"derive_patch\": derive})"
       }
     },
     "required": [
-      "title"
+      "title",
+      "cursor"
     ],
     "type": "object"
   }

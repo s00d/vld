@@ -587,64 +587,31 @@ macro_rules! impl_to_schema {
         );
     };
     ($ty:ty, query) => {
-        $crate::__impl_to_schema_legacy!($ty, Query);
-    };
-    ($ty:ty, path) => {
-        $crate::__impl_to_schema_legacy!($ty, Path);
-    };
-    ($ty:ty, header) => {
-        $crate::__impl_to_schema_legacy!($ty, Header);
-    };
-    ($ty:ty, cookie) => {
-        $crate::__impl_to_schema_legacy!($ty, Cookie);
-    };
-}
-
-/// Deprecated alias for [`impl_to_schema!`].
-#[macro_export]
-#[deprecated(note = "use #[into_params(parameter_in = ...)] on the struct and impl_to_schema!(T)")]
-macro_rules! impl_into_params {
-    ($ty:ty) => {
-        $crate::impl_to_schema!($ty);
-    };
-    ($ty:ty, $name:literal) => {
-        $crate::impl_to_schema!($ty, $name);
-    };
-    ($ty:ty, $loc:ident) => {
-        $crate::__impl_to_schema_legacy!($ty, $loc);
-    };
-}
-
-/// Deprecated — use `#[into_params(parameter_in = Query)]` + [`impl_to_schema!`].
-#[macro_export]
-#[deprecated(
-    note = "use #[into_params(parameter_in = Query)] on the struct and impl_to_schema!(T)"
-)]
-macro_rules! impl_to_schema_query {
-    ($ty:ty) => {
-        $crate::__impl_to_schema_legacy!($ty, Query);
-    };
-}
-
-/// Deprecated — use `#[into_params(parameter_in = Path)]` + [`impl_to_schema!`].
-#[macro_export]
-#[deprecated(note = "use #[into_params(parameter_in = Path)] on the struct and impl_to_schema!(T)")]
-macro_rules! impl_to_schema_path {
-    ($ty:ty) => {
-        $crate::__impl_to_schema_legacy!($ty, Path);
-    };
-}
-
-/// Legacy explicit parameter location (`Query`, `Path`, `Header`, `Cookie`).
-#[doc(hidden)]
-#[macro_export]
-#[deprecated(note = "use #[into_params(parameter_in = ...)] on the struct and impl_to_schema!(T)")]
-macro_rules! __impl_to_schema_legacy {
-    ($ty:ty, $loc:ident) => {
         $crate::__impl_to_schema!(
             $ty,
             name: {},
-            param_in: Some($crate::utoipa::openapi::path::ParameterIn::$loc),
+            param_in: Some($crate::utoipa::openapi::path::ParameterIn::Query),
+        );
+    };
+    ($ty:ty, path) => {
+        $crate::__impl_to_schema!(
+            $ty,
+            name: {},
+            param_in: Some($crate::utoipa::openapi::path::ParameterIn::Path),
+        );
+    };
+    ($ty:ty, header) => {
+        $crate::__impl_to_schema!(
+            $ty,
+            name: {},
+            param_in: Some($crate::utoipa::openapi::path::ParameterIn::Header),
+        );
+    };
+    ($ty:ty, cookie) => {
+        $crate::__impl_to_schema!(
+            $ty,
+            name: {},
+            param_in: Some($crate::utoipa::openapi::path::ParameterIn::Cookie),
         );
     };
 }
@@ -660,13 +627,7 @@ impl<T: ?Sized> __VldNestedSchemasFallback for T {}
 
 /// Prelude module — import everything you need.
 pub mod prelude {
-    #[allow(deprecated)]
-    pub use crate::impl_into_params;
     pub use crate::impl_to_schema;
-    #[allow(deprecated)]
-    pub use crate::impl_to_schema_path;
-    #[allow(deprecated)]
-    pub use crate::impl_to_schema_query;
     pub use crate::json_schema_to_params;
     pub use crate::json_schema_to_schema;
     pub use vld::prelude::*;

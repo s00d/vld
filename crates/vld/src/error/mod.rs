@@ -122,6 +122,17 @@ impl ValidationIssue {
         }
     }
 
+    /// The path as text: `.lab.fund[0].vigor`; empty for the root.
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let err = vld::array(vld::string()).parse(r#"["a", 1]"#).unwrap_err();
+    /// assert_eq!(err.issues[0].path_string(), "[1]");
+    /// ```
+    pub fn path_string(&self) -> String {
+        self.path.iter().map(|p| p.to_string()).collect()
+    }
+
     /// Replace the message.
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.message = message.into();
@@ -308,8 +319,7 @@ impl fmt::Display for VldError {
                 writeln!(f)?;
             }
             if !issue.path.is_empty() {
-                let path_str: String = issue.path.iter().map(|p| p.to_string()).collect();
-                write!(f, "{}: ", path_str)?;
+                write!(f, "{}: ", issue.path_string())?;
             }
             write!(f, "{}", issue.message)?;
             // `invalid_type` messages already name the received type.

@@ -185,23 +185,7 @@ fn validate_json_missing_fields() {
     );
 }
 
-// ========================= validate_record(s) ================================
-
-#[test]
-fn validate_record_valid() {
-    let p = Person {
-        name: "Charlie".into(),
-        email: "charlie@example.com".into(),
-        age: 40,
-    };
-    #[allow(deprecated)]
-    let r = validate_record::<PersonSchema, _>(&p);
-    r.unwrap();
-    let bad = Person { age: 151, ..p };
-    #[allow(deprecated)]
-    let r = validate_record::<PersonSchema, _>(&bad);
-    assert_eq!(issues(r), pairs(&[(".age", "too_big")]));
-}
+// ========================= validate_records ==================================
 
 #[test]
 fn validate_records_all_valid() {

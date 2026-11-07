@@ -1,5 +1,5 @@
 ---
-source: tests/all/json_schema/mod.rs
+source: crates/vld/tests/all/json_schema/mod.rs
 expression: value
 ---
 {
@@ -10,14 +10,7 @@ expression: value
     },
     "properties": {
       "age": {
-        "anyOf": [
-          {
-            "type": "integer"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "type": "integer"
       },
       "email": {
         "format": "email",
@@ -38,15 +31,8 @@ expression: value
     "additionalProperties": true,
     "properties": {
       "age": {
-        "anyOf": [
-          {
-            "type": "integer"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "optional age"
+        "description": "optional age",
+        "type": "integer"
       },
       "city": {
         "minLength": 1,
@@ -66,23 +52,16 @@ expression: value
     "additionalProperties": true,
     "properties": {
       "n": {
-        "anyOf": [
-          {
-            "additionalProperties": true,
-            "properties": {
-              "x": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "x"
-            ],
-            "type": "object"
-          },
-          {
-            "type": "null"
+        "additionalProperties": true,
+        "properties": {
+          "x": {
+            "type": "string"
           }
-        ]
+        },
+        "required": [
+          "x"
+        ],
+        "type": "object"
       }
     },
     "type": "object"
@@ -101,16 +80,12 @@ expression: value
         ]
       },
       "title": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "type": "string"
       }
     },
+    "required": [
+      "body"
+    ],
     "type": "object"
   },
   "partial": {
@@ -127,24 +102,10 @@ expression: value
         ]
       },
       "id": {
-        "anyOf": [
-          {
-            "type": "integer"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "type": "integer"
       },
       "title": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "type": "string"
       }
     },
     "type": "object"
@@ -163,24 +124,10 @@ expression: value
         ]
       },
       "id": {
-        "anyOf": [
-          {
-            "type": "integer"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "type": "integer"
       },
       "title": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "type": "string"
       }
     },
     "required": [
@@ -204,16 +151,12 @@ expression: value
         ]
       },
       "title": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "type": "string"
       }
     },
+    "required": [
+      "body"
+    ],
     "type": "object"
   },
   "strict_mixed": {
@@ -232,44 +175,23 @@ expression: value
         "description": "markdown body"
       },
       "draft_note": {
-        "anyOf": [
-          {
-            "maxLength": 200,
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "maxLength": 200,
+        "type": "string"
       },
       "id": {
         "exclusiveMinimum": 0,
         "type": "integer"
       },
       "score": {
-        "anyOf": [
-          {
-            "maximum": 10.0,
-            "minimum": 0.0,
-            "type": "number"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "editor score"
+        "description": "editor score",
+        "maximum": 10.0,
+        "minimum": 0.0,
+        "type": "number"
       },
       "slug": {
-        "anyOf": [
-          {
-            "minLength": 3,
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "url slug"
+        "description": "url slug",
+        "minLength": 3,
+        "type": "string"
       },
       "status": {
         "default": "draft",
@@ -296,7 +218,8 @@ expression: value
     },
     "required": [
       "id",
-      "title"
+      "title",
+      "body"
     ],
     "type": "object"
   }

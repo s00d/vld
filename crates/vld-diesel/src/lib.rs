@@ -124,19 +124,6 @@ where
     __vld_validate::<S, T>(value).map(|_| ())
 }
 
-/// Same as [`validate_insert`].
-#[deprecated(
-    since = "0.5.0",
-    note = "identical to `validate_insert`; use it instead"
-)]
-pub fn validate_update<S, T>(value: &T) -> Result<(), VldDieselError>
-where
-    S: vld::schema::VldParse,
-    T: serde::Serialize,
-{
-    validate_insert::<S, T>(value)
-}
-
 /// Validate a row loaded from the database against schema `S`
 /// (same check as [`validate_insert`]).
 pub fn validate_row<S, T>(value: &T) -> Result<(), VldDieselError>
@@ -317,10 +304,9 @@ mod mysql_narrow {
 
 /// Common imports: the diesel wrappers plus `vld::prelude`.
 pub mod prelude {
-    #[allow(deprecated)]
     pub use crate::{
         Validated, VldBool, VldDieselError, VldFloat, VldInt, VldText, validate_insert,
-        validate_row, validate_update,
+        validate_row,
     };
     pub use vld::prelude::*;
 }

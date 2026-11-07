@@ -145,8 +145,9 @@ pub(super) enum Kind {
     EndsWith(String),
     Contains(String),
     #[cfg(feature = "regex")]
-    Regex(regex_lite::Regex),
+    Pattern(crate::rules::Pattern),
     Format(Format),
+    Rule(std::sync::Arc<dyn crate::rules::Rule<str>>),
 }
 
 #[derive(Clone)]
@@ -158,7 +159,7 @@ pub(super) struct StringCheck {
 
 impl Kind {
     /// Stable key identifying the check category (for `with_messages`).
-    pub(super) fn key(&self) -> &'static str {
+    pub(super) fn key(&self) -> &str {
         match self {
             Kind::Min(_) => "too_small",
             Kind::Max(_) => "too_big",
@@ -168,8 +169,17 @@ impl Kind {
             Kind::EndsWith(_) => "invalid_ends_with",
             Kind::Contains(_) => "invalid_contains",
             #[cfg(feature = "regex")]
-            Kind::Regex(_) => "invalid_regex",
+            Kind::Pattern(_) => "invalid_regex",
             Kind::Format(f) => f.key(),
+            Kind::Rule(r) => r.key(),
+        }
+    }
+
+    /// Default message of a [`Rule`](crate::rules::Rule) check.
+    pub(super) fn rule_message(&self) -> Option<String> {
+        match self {
+            Kind::Rule(r) => r.message(),
+            _ => None,
         }
     }
 
@@ -199,8 +209,11 @@ impl Kind {
                 substring: p.clone(),
             }),
             #[cfg(feature = "regex")]
-            Kind::Regex(re) if !re.is_match(s) => invalid(StringValidation::Regex),
+            Kind::Pattern(p) if !p.is_match(s) => invalid(StringValidation::Regex),
             Kind::Format(f) if !f.check(s) => invalid(f.validation()),
+            Kind::Rule(r) if !r.check(s) => Some(IssueCode::Custom {
+                code: r.key().to_string(),
+            }),
             _ => None,
         }
     }

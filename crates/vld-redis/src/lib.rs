@@ -7,9 +7,6 @@
 //!   feature `aio`, which needs a redis runtime feature: `aio-tokio` enables
 //!   redis' tokio runtime, or enable one on your own `redis` dependency)
 //!
-//! (`impl_to_redis!(conn)` / `impl_to_redis_async!(conn)` only did
-//! `let mut conn = RedisConn::new(conn);` and are deprecated.)
-//!
 //! The wrapper does JSON encode/validate on write and decode/validate on read for:
 //!
 //! - `set/get`
@@ -347,44 +344,10 @@ impl From<redis::RedisError> for VldRedisError {
     }
 }
 
-/// Rebind a sync Redis connection into a `vld`-aware [`RedisConn`].
-///
-/// Deprecated: it only shadows the variable — write
-/// `let mut conn = RedisConn::new(conn);`.
-#[deprecated(since = "0.5.0", note = "use `let mut conn = RedisConn::new(conn);`")]
-#[macro_export]
-macro_rules! impl_to_redis {
-    ($conn:ident) => {
-        let mut $conn = $crate::RedisConn::new($conn);
-    };
-}
-
-/// Rebind an async Redis connection into a `vld`-aware [`AsyncRedisConn`]
-/// (feature `aio`).
-///
-/// Deprecated: it only shadows the variable — write
-/// `let mut conn = AsyncRedisConn::new(conn);`.
-#[cfg(feature = "aio")]
-#[deprecated(
-    since = "0.5.0",
-    note = "use `let mut conn = AsyncRedisConn::new(conn);`"
-)]
-#[macro_export]
-macro_rules! impl_to_redis_async {
-    ($conn:ident) => {
-        let mut $conn = $crate::AsyncRedisConn::new($conn);
-    };
-}
-
 /// Common imports: the connection wrappers, `VldRedisError` and `vld::prelude`.
 pub mod prelude {
     #[cfg(feature = "aio")]
     pub use crate::AsyncRedisConn;
-    #[allow(deprecated)]
-    pub use crate::impl_to_redis;
-    #[cfg(feature = "aio")]
-    #[allow(deprecated)]
-    pub use crate::impl_to_redis_async;
     pub use crate::{RedisConn, VldRedisError};
     pub use vld::prelude::*;
 }
