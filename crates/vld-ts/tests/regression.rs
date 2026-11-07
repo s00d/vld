@@ -353,6 +353,22 @@ fn node_cases() -> Vec<Case> {
             vld::array(vld::number()).unique(),
             vec![json!([1, 2]), json!([1, 1])],
         ),
+        case(animal(), animal_samples()),
+        Case {
+            zod: <Shape as vld_ts::ToZod>::to_zod(),
+            valibot: <Shape as vld_ts::ToValibot>::to_valibot(),
+            samples: shape_samples()
+                .into_iter()
+                .map(|s| {
+                    let ok = <Shape as vld::schema::VldParse>::vld_parse_value(&s).is_ok();
+                    (s, ok)
+                })
+                .collect(),
+        },
+        case(
+            vld::array(vld::number()).len(3),
+            vec![json!([1, 2, 3]), json!([1, 2]), json!([1, 2, 3, 4])],
+        ),
         case(
             vld::record_with_keys(vld::string().min(2), vld::number())
                 .min_keys(1)
@@ -453,4 +469,163 @@ fn any_of_branches_keep_sibling_keywords() {
     // A nullable union is unchanged.
     let n = json!({"anyOf": [{"type": "string"}, {"type": "null"}], "description": "d"});
     assert_eq!(zod_of(&n), r#"z.string().nullable().describe("d")"#);
+}
+
+// ---------------------------------------------------------------------------
+// User report: discriminated unions, field order, fixed-length arrays.
+// ---------------------------------------------------------------------------
+
+fn animal() -> vld::combinators::ZDiscriminatedUnion {
+    vld::discriminated_union("type")
+        .variant_str(
+            "dog",
+            vld::object()
+                .field("type", vld::literal("dog"))
+                .field("bark", vld::boolean()),
+        )
+        .variant_str(
+            "cat",
+            vld::object()
+                .field("type", vld::literal("cat"))
+                .field("lives", vld::number().int()),
+        )
+}
+
+fn animal_samples() -> Vec<Value> {
+    vec![
+        json!({"type": "dog", "bark": true}),
+        json!({"type": "cat", "lives": 9}),
+        json!({"type": "cat", "bark": true}),
+        json!({"type": "fish"}),
+        json!({"bark": true}),
+    ]
+}
+
+#[derive(serde::Serialize, serde::Deserialize, vld::Validate)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[allow(dead_code)]
+enum Shape {
+    Empty,
+    Circle {
+        #[vld(vld::number().min(0.0))]
+        radius: f64,
+    },
+    Rect {
+        #[vld(vld::number())]
+        w: f64,
+        #[vld(vld::number())]
+        h: f64,
+    },
+}
+
+vld_ts::impl_to_zod!(Shape);
+vld_ts::impl_to_valibot!(Shape);
+
+fn shape_samples() -> Vec<Value> {
+    vec![
+        json!({"kind": "empty"}),
+        json!({"kind": "circle", "radius": 1}),
+        json!({"kind": "circle", "radius": -1}),
+        json!({"kind": "rect", "w": 1, "h": 2}),
+        json!({"kind": "rect", "w": 1}),
+        json!({"kind": "square"}),
+    ]
+}
+
+#[test]
+fn tagged_unions_are_discriminated() {
+    use vld_ts::{ToValibot, ToZod};
+    let z = Shape::to_zod();
+    assert!(
+        z.starts_with(r#"z.discriminatedUnion("kind", [z.object({"#),
+        "{z}"
+    );
+    let v = Shape::to_valibot();
+    assert!(v.starts_with(r#"v.variant("kind", [v.object({"#), "{v}");
+    // The tag comes first in each variant, the fields in declaration order.
+    assert!(
+        z.contains("kind: z.literal(\"rect\"),\n  w: z.number(),\n  h: z.number()"),
+        "{z}"
+    );
+    // vld's `discriminated_union` (a bare `anyOf`): the tag is inferred.
+    let z = vld_ts::to_zod(&animal());
+    assert!(z.starts_with(r#"z.discriminatedUnion("type", ["#), "{z}");
+    let v = vld_ts::to_valibot(&animal());
+    assert!(v.starts_with(r#"v.variant("type", ["#), "{v}");
+}
+
+#[test]
+fn unions_that_are_not_discriminated_stay_unions() {
+    let obj = |tag: Value| json!({"type": "object", "properties": {"t": tag}, "required": ["t"]});
+    let disc = json!({"propertyName": "t"});
+    // A repeated tag value.
+    let s = json!({"oneOf": [obj(json!({"const": "a"})), obj(json!({"const": "a"}))], "discriminator": disc});
+    assert!(zod_of(&s).starts_with("z.union(["), "{}", zod_of(&s));
+    // A non-object option.
+    let s =
+        json!({"oneOf": [obj(json!({"const": "a"})), {"type": "string"}], "discriminator": disc});
+    assert!(valibot_of(&s).starts_with("v.union(["));
+    // A non-literal tag.
+    let s = json!({"anyOf": [obj(json!({"const": "a"})), obj(json!({"type": "string"}))]});
+    assert!(zod_of(&s).starts_with("z.union(["));
+    // A single-value enum is a literal too; `null` stays outside.
+    let s = json!({"oneOf": [obj(json!({"enum": ["a"]})), obj(json!({"const": "b"})), {"type": "null"}]});
+    let z = zod_of(&s);
+    assert!(
+        z.starts_with(r#"z.discriminatedUnion("t", ["#) && z.ends_with(".nullable()"),
+        "{z}"
+    );
+    // A described option is a `v.pipe`, which `v.variant` does not take.
+    let mut described = obj(json!({"const": "b"}));
+    described["description"] = json!("B");
+    let s = json!({"oneOf": [obj(json!({"const": "a"})), described]});
+    assert!(zod_of(&s).starts_with("z.discriminatedUnion("));
+    assert!(valibot_of(&s).starts_with("v.union(["));
+}
+
+vld::schema! {
+    pub struct Ordered {
+        pub kind: String => vld::string(),
+        pub zeta: String => vld::string(),
+        pub alpha: f64 => vld::number(),
+    }
+}
+vld_ts::impl_to_zod!(Ordered);
+
+#[test]
+fn fields_keep_schema_order() {
+    use vld_ts::ToZod;
+    let z = Ordered::to_zod();
+    let pos = |k: &str| z.find(k).unwrap_or_else(|| panic!("{k} in {z}"));
+    assert!(
+        pos("kind") < pos("zeta") && pos("zeta") < pos("alpha"),
+        "{z}"
+    );
+    // `required` gives the order of the required fields; optional ones keep
+    // their place in the (sorted) map.
+    let s = json!({
+        "type": "object",
+        "properties": {"z": {"type": "number"}, "m": {"type": "number"}, "a": {"type": "number"}},
+        "required": ["z", "a", "gone"]
+    });
+    assert_eq!(
+        valibot_of(&s),
+        "v.object({\n  z: v.number(),\n  m: v.optional(v.number()),\n  a: v.number()\n})"
+    );
+}
+
+#[test]
+fn fixed_length_arrays() {
+    let a = vld::array(vld::number()).len(6);
+    assert_eq!(vld_ts::to_zod(&a), "z.array(z.number()).length(6)");
+    assert_eq!(
+        vld_ts::to_valibot(&a),
+        "v.pipe(v.array(v.number()), v.length(6))"
+    );
+    // Different bounds are unchanged; tuples keep their form.
+    let b = vld::array(vld::number()).min_len(1).max_len(2);
+    assert_eq!(vld_ts::to_zod(&b), "z.array(z.number()).min(1).max(2)");
+    let t = json!({"type": "array", "prefixItems": [{"type": "number"}], "items": false, "minItems": 1, "maxItems": 1});
+    assert_eq!(zod_of(&t), "z.tuple([z.number()])");
+    assert_eq!(valibot_of(&t), "v.strictTuple([v.number()])");
 }

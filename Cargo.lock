@@ -9872,6 +9872,7 @@ version = "0.5.1"
 dependencies = [
  "insta",
  "regex-lite",
+ "serde",
  "serde_json",
  "vld",
 ]
