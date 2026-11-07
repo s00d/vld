@@ -1,12 +1,15 @@
 ---
-source: tests/all/json_schema/mod.rs
+source: crates/vld/tests/all/json_schema/mod.rs
 expression: value
 ---
 {
   "discriminated_union": {
     "required": true,
     "schema": {
-      "anyOf": [
+      "discriminator": {
+        "propertyName": "type"
+      },
+      "oneOf": [
         {
           "additionalProperties": true,
           "properties": {
