@@ -53,10 +53,13 @@ publishing for the new crates and delete the secret.
 
 ## Rate limits
 
-crates.io allows a burst of 30 updates of existing crates per user, then one
-per minute, and about 5 new crate names, then one per 10 minutes. A release
-publishes six crates. If publishing stops half-way (rate limit, network),
-re-run the `release` job: release-plz skips what is already on crates.io.
+crates.io limits publishing with a token **per user, across all crates**: a
+burst of 30 updates of existing crates, then one per minute, and 5 new crate
+names, then one per 10 minutes (`src/rate_limiter.rs`, keyed by user id).
+Trusted publishing has no user, and crates.io applies no rate limit to it.
+A release publishes six crates. If publishing stops half-way (rate limit,
+network), re-run the `release` job: release-plz skips what is already on
+crates.io.
 
 ## New crates
 
@@ -68,6 +71,32 @@ an entry in `[workspace.dependencies]` if other crates use it, `readme` and
 with `version_group = "vld"` in `release-plz.toml`, a row in `MSRV.md`, a
 group in the `justfile` and the CI matrix, and a token for its first
 release (above).
+
+## Retiring the 0.7 crates (once, after 0.8.0)
+
+0.8 replaced 28 crates (`vld-axum`, `vld-sqlx`, `vld-ts`, …) with modules of
+`vld`, `vld-web`, `vld-openapi`, `vld-data` and `vld-app`. Branch
+`deprecate-0.7` (from tag `v0.7.0`) holds a 0.7.1 of each: the 0.7.0 code
+unchanged, a description starting with `DEPRECATED: moved to …`, and a notice
+with the new crate, feature, module and the migration guide at the top of the
+README and the crate docs. Publish it once 0.8.0 is on crates.io (the links
+point there), from a checkout of that branch, with a token
+(`cargo login`; trusted publishing is not set up for these crates):
+
+```sh
+git switch deprecate-0.7
+# order does not matter: their vld-* dependencies ask for ^0.7.0, already published
+for c in $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.version == "0.7.1") | .name'); do
+  cargo info --registry crates-io "${c}@0.7.1" >/dev/null 2>&1 && continue   # already published
+  cargo publish -p "${c}"
+done
+git tag deprecate-0.7.1 && git push origin deprecate-0.7.1
+```
+
+That is 28 token publishes from one user: within the burst of 30 if no other
+token publish happened in the last half hour (the 0.8.0 release with a token
+for the new crates counts: wait 30 minutes after it). If the limit hits,
+re-run the loop a minute later; it skips crates already at 0.7.1. Then delete the branch. Nothing else is published from it.
 
 ## Troubleshooting
 
