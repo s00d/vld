@@ -308,16 +308,16 @@ fn unwrap_nullable_schema(schema: &Value) -> Value {
         };
         let is_null = |v: &&Value| v.get("type").and_then(Value::as_str) == Some("null");
         let rest: Vec<&Value> = items.iter().filter(|v| !is_null(v)).collect();
-        if let [inner] = rest.as_slice() {
-            if rest.len() < items.len() {
-                let mut inner = (*inner).clone();
-                if let Some(obj) = inner.as_object_mut() {
-                    for (k, v) in map.iter().filter(|(k, _)| *k != key) {
-                        obj.entry(k.clone()).or_insert_with(|| v.clone());
-                    }
+        if let [inner] = rest.as_slice()
+            && rest.len() < items.len()
+        {
+            let mut inner = (*inner).clone();
+            if let Some(obj) = inner.as_object_mut() {
+                for (k, v) in map.iter().filter(|(k, _)| *k != key) {
+                    obj.entry(k.clone()).or_insert_with(|| v.clone());
                 }
-                return inner;
             }
+            return inner;
         }
     }
     schema.clone()

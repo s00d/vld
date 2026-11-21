@@ -418,10 +418,10 @@ fn check_case(spec: &Spec, v: &Value) -> Result<(), TestCaseError> {
                 for i in &e.issues {
                     prop_assert_eq!(i.received.as_ref(), Some(&json!("[redacted]")));
                 }
-                if let Value::String(input) = v {
-                    if input.chars().count() >= 4 {
-                        prop_assert!(!e.to_string().contains(input.as_str()), "{}", e);
-                    }
+                if let Value::String(input) = v
+                    && input.chars().count() >= 4
+                {
+                    prop_assert!(!e.to_string().contains(input.as_str()), "{}", e);
                 }
             // The transformed string is reported as received by every check.
             } else if let Ok(shown) = predict(

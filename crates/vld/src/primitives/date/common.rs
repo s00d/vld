@@ -675,10 +675,10 @@ impl<B: DateBackend> VldSchema for ZDateTime<B> {
             )
         })?;
 
-        if let Some(required) = &self.required_timezone_offset {
-            if offset != Some(required.seconds) {
-                return Err(required.error(value));
-            }
+        if let Some(required) = &self.required_timezone_offset
+            && offset != Some(required.seconds)
+        {
+            return Err(required.error(value));
         }
 
         let errors = self.bounds.check(&dt, B::now, DateKind::DateTime, value);

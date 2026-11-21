@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Database and message-queue integrations for the vld validation library: sqlx, diesel, SeaORM, SurrealDB, MongoDB (bson), tokio-postgres, ClickHouse, redis, lapin, MQTT, NATS, Centrifugo, CSV import"
+description = "Database and message-queue integrations for the vld validation library: sqlx, diesel, SeaORM, SurrealDB, MongoDB (bson), tokio-postgres, ClickHouse, redis, lapin, MQTT, NATS, Centrifugo, Socket.IO, CSV import"
 documentation = "https://docs.rs/vld-data"
 keywords = ["validation", "database", "sqlx", "diesel", "vld"]
 categories = ["database", "web-programming"]
@@ -51,6 +51,7 @@ rumqttc = ["dep:rumqttc"]
 nats = ["dep:async-nats", "dep:bytes"]
 clickhouse = ["dep:clickhouse"]
 centrifuge = ["dep:centrifuge"]
+socketio = ["dep:socketio-next", "dep:tracing"]
 csv = ["dep:csv"]
 
 [dependencies]
@@ -76,6 +77,8 @@ async-nats = { version = "0.53", default-features = false, optional = true }
 clickhouse = { version = "0.15", default-features = false, optional = true }
 centrifuge = { package = "centrifuge-client", version = "0.1", default-features = false, features = ["ring"], optional = true }
 csv = { version = "1.3", optional = true }
+socketio-next = { version = "0.1", default-features = false, optional = true }
+tracing = { version = "0.1", default-features = false, optional = true }
 
 # Test drivers: in-memory SQLite, SeaORM's MockDatabase, a redis runtime.
 # Tests of an integration compile only with its feature.
@@ -95,7 +98,8 @@ bytes = { workspace = true }
 flume = { version = "0.11", default-features = false, features = ["async"] }
 clickhouse = { version = "0.15", default-features = false, features = ["test-util"] }
 async-nats = { version = "0.53", default-features = false }
-futures-util = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 
 [[example]]
 name = "sqlx_basic"

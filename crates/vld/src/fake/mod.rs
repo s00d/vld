@@ -391,17 +391,17 @@ impl<R: Rng> FakeGen<R> {
             return Value::String(self.gen_formatted(obj, &formats, &patterns));
         }
 
-        if !patterns.is_empty() {
-            if let Some(s) = self.gen_patterned(&patterns, min, max) {
-                return Value::String(s);
-            }
+        if !patterns.is_empty()
+            && let Some(s) = self.gen_patterned(&patterns, min, max)
+        {
+            return Value::String(s);
         }
 
         // 2) Heuristic: infer content from field name
-        if let Some(h) = hint {
-            if let Some(v) = self.gen_string_by_hint(h, obj) {
-                return v;
-            }
+        if let Some(h) = hint
+            && let Some(v) = self.gen_string_by_hint(h, obj)
+        {
+            return v;
         }
 
         // 3) Fallback: readable word-based text
@@ -451,10 +451,10 @@ impl<R: Rng> FakeGen<R> {
                     }
                 }
             }
-            if !free.is_empty() {
-                if let Some(s) = self.gen_patterned(patterns, min, max) {
-                    bases.push(s);
-                }
+            if !free.is_empty()
+                && let Some(s) = self.gen_patterned(patterns, min, max)
+            {
+                bases.push(s);
             }
             for b in bases {
                 for c in self.overlays(&b, &head, &tail, &mids) {
@@ -596,7 +596,7 @@ impl<R: Rng> FakeGen<R> {
             "phone" | "phone-e164" if (9..=16).contains(&n) => {
                 format!("+1{}", self.gen_chars(b"0123456789", n - 2))
             }
-            "byte" if n >= 4 && n % 4 == 0 => {
+            "byte" if n >= 4 && n.is_multiple_of(4) => {
                 let bytes: Vec<u8> = (0..n / 4 * 3).map(|_| self.rng.generator()).collect();
                 base64_encode(&bytes)
             }
@@ -1707,10 +1707,12 @@ impl<R: Rng> FakeGen<R> {
         if let Some(h) = hint {
             let has_min = obj.contains_key("minimum") || obj.contains_key("exclusiveMinimum");
             let has_max = obj.contains_key("maximum") || obj.contains_key("exclusiveMaximum");
-            if !has_min && !has_max && !obj.contains_key("multipleOf") {
-                if let Some(val) = self.gen_number_by_hint(h) {
-                    return json!(val);
-                }
+            if !has_min
+                && !has_max
+                && !obj.contains_key("multipleOf")
+                && let Some(val) = self.gen_number_by_hint(h)
+            {
+                return json!(val);
             }
         }
 
@@ -1866,11 +1868,11 @@ impl<R: Rng> FakeGen<R> {
         // Tuple-style (prefixItems)
         if let Some(prefix) = obj.get("prefixItems").and_then(Value::as_array) {
             let mut arr: Vec<Value> = prefix.iter().map(|s| self.value(s)).collect();
-            if count > arr.len() {
-                if let Some(items) = obj.get("items").filter(|i| i.is_object()) {
-                    for _ in arr.len()..count {
-                        arr.push(self.value(items));
-                    }
+            if count > arr.len()
+                && let Some(items) = obj.get("items").filter(|i| i.is_object())
+            {
+                for _ in arr.len()..count {
+                    arr.push(self.value(items));
                 }
             }
             return Value::Array(arr);
@@ -1962,10 +1964,10 @@ impl<R: Rng> FakeGen<R> {
             }
         }
         // vld's GeoJSON linear rings end where they start.
-        if obj.get("x-closedRing").and_then(Value::as_bool) == Some(true) {
-            if let (Some(first), Some(last)) = (arr.first().cloned(), arr.last_mut()) {
-                *last = first;
-            }
+        if obj.get("x-closedRing").and_then(Value::as_bool) == Some(true)
+            && let (Some(first), Some(last)) = (arr.first().cloned(), arr.last_mut())
+        {
+            *last = first;
         }
         Value::Array(arr)
     }
@@ -1992,12 +1994,13 @@ impl<R: Rng> FakeGen<R> {
             && ["propertyNames", "minProperties", "maxProperties"]
                 .iter()
                 .all(|k| !obj.contains_key(*k));
-        if !has_properties && !has_required && free_form {
-            if let Some(h) = hint {
-                if let Some(tmpl) = self.gen_object_template(h) {
-                    return tmpl;
-                }
-            }
+        if !has_properties
+            && !has_required
+            && free_form
+            && let Some(h) = hint
+            && let Some(tmpl) = self.gen_object_template(h)
+        {
+            return tmpl;
         }
 
         let mut result = Map::new();
@@ -2027,48 +2030,47 @@ impl<R: Rng> FakeGen<R> {
             .get("x-rangeOrder")
             .and_then(Value::as_array)
             .map(Vec::as_slice)
+            && let (Some(a), Some(b)) = (a.as_str(), b.as_str())
         {
-            if let (Some(a), Some(b)) = (a.as_str(), b.as_str()) {
-                let after = match (result.get(a), result.get(b)) {
-                    (Some(Value::Number(x)), Some(Value::Number(y))) => x.as_f64() > y.as_f64(),
-                    (Some(Value::String(x)), Some(Value::String(y))) => x > y,
-                    _ => false,
-                };
-                if after {
-                    let (x, y) = (result.remove(a), result.remove(b));
-                    result.extend([
-                        (a.to_string(), y.unwrap_or_default()),
-                        (b.to_string(), x.unwrap_or_default()),
-                    ]);
-                }
+            let after = match (result.get(a), result.get(b)) {
+                (Some(Value::Number(x)), Some(Value::Number(y))) => x.as_f64() > y.as_f64(),
+                (Some(Value::String(x)), Some(Value::String(y))) => x > y,
+                _ => false,
+            };
+            if after {
+                let (x, y) = (result.remove(a), result.remove(b));
+                result.extend([
+                    (a.to_string(), y.unwrap_or_default()),
+                    (b.to_string(), x.unwrap_or_default()),
+                ]);
             }
         }
 
         // additionalProperties with a schema
         // within minProperties / maxProperties, keys from `propertyNames`.
-        if let Some(additional) = obj.get("additionalProperties") {
-            if additional.is_object() {
-                let count = |k: &str| obj.get(k).and_then(Value::as_u64).map(|v| v as usize);
-                let lo = count("minProperties")
-                    .unwrap_or(0)
-                    .saturating_sub(result.len());
-                let hi = count("maxProperties")
-                    .map_or(lo.max(2), |m| m.saturating_sub(result.len()))
-                    .max(lo);
-                let extra_count = self.rng.gen_range(lo..=hi);
-                let names = obj.get("propertyNames");
-                let mut attempts = 0;
-                let target = result.len() + extra_count;
-                while result.len() < target && attempts < extra_count * 20 + 20 {
-                    attempts += 1;
-                    let key = match names.map(|n| self.value(n)) {
-                        Some(Value::String(k)) => k,
-                        _ => format!("{}_{}", self.pick(WORDS), self.next_id()),
-                    };
-                    if !result.contains_key(&key) {
-                        let v = self.value(additional);
-                        result.insert(key, v);
-                    }
+        if let Some(additional) = obj.get("additionalProperties")
+            && additional.is_object()
+        {
+            let count = |k: &str| obj.get(k).and_then(Value::as_u64).map(|v| v as usize);
+            let lo = count("minProperties")
+                .unwrap_or(0)
+                .saturating_sub(result.len());
+            let hi = count("maxProperties")
+                .map_or(lo.max(2), |m| m.saturating_sub(result.len()))
+                .max(lo);
+            let extra_count = self.rng.gen_range(lo..=hi);
+            let names = obj.get("propertyNames");
+            let mut attempts = 0;
+            let target = result.len() + extra_count;
+            while result.len() < target && attempts < extra_count * 20 + 20 {
+                attempts += 1;
+                let key = match names.map(|n| self.value(n)) {
+                    Some(Value::String(k)) => k,
+                    _ => format!("{}_{}", self.pick(WORDS), self.next_id()),
+                };
+                if !result.contains_key(&key) {
+                    let v = self.value(additional);
+                    result.insert(key, v);
                 }
             }
         }
@@ -2480,10 +2482,10 @@ fn fit_len(mut s: String, min: usize, max: Option<usize>, pad: char) -> String {
     if n < min {
         s.extend(std::iter::repeat_n(pad, min - n));
     }
-    if let Some(mx) = max {
-        if let Some((idx, _)) = s.char_indices().nth(mx) {
-            s.truncate(idx);
-        }
+    if let Some(mx) = max
+        && let Some((idx, _)) = s.char_indices().nth(mx)
+    {
+        s.truncate(idx);
     }
     s
 }
@@ -2642,14 +2644,14 @@ pub fn with_nested_defs(
     mut schema: Value,
     nested: Vec<crate::openapi::NestedSchemaEntry>,
 ) -> Value {
-    if let Some(obj) = schema.as_object_mut() {
-        if !nested.is_empty() {
-            let defs = nested
-                .into_iter()
-                .map(|(name, f)| (name.to_string(), f()))
-                .collect();
-            obj.insert("$defs".into(), Value::Object(defs));
-        }
+    if let Some(obj) = schema.as_object_mut()
+        && !nested.is_empty()
+    {
+        let defs = nested
+            .into_iter()
+            .map(|(name, f)| (name.to_string(), f()))
+            .collect();
+        obj.insert("$defs".into(), Value::Object(defs));
     }
     schema
 }

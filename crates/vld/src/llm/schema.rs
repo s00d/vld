@@ -161,10 +161,8 @@ impl Cx<'_> {
             };
             out.insert(key.to_string(), val);
         }
-        if llm {
-            if let Some(c) = out.remove("const") {
-                out.entry("enum").or_insert_with(|| json!([c]));
-            }
+        if llm && let Some(c) = out.remove("const") {
+            out.entry("enum").or_insert_with(|| json!([c]));
         }
         collapse_nullable(&mut out);
         if llm {
@@ -285,10 +283,10 @@ fn add_null(o: &mut Map<String, Value>) {
         Some(Value::Array(ts)) if !ts.iter().any(|t| t == "null") => ts.push("null".into()),
         _ => {}
     }
-    if let Some(Value::Array(e)) = o.get_mut("enum") {
-        if !e.contains(&Value::Null) {
-            e.push(Value::Null);
-        }
+    if let Some(Value::Array(e)) = o.get_mut("enum")
+        && !e.contains(&Value::Null)
+    {
+        e.push(Value::Null);
     }
 }
 
@@ -509,10 +507,10 @@ fn cycle<'a>(
         if stack.contains(&r) {
             return Some(r.strip_prefix("#/$defs/").unwrap_or(r).to_string());
         }
-        if !done.contains(r) {
-            if let Some(c) = cycle(root, r, stack, done) {
-                return Some(c);
-            }
+        if !done.contains(r)
+            && let Some(c) = cycle(root, r, stack, done)
+        {
+            return Some(c);
         }
     }
     stack.pop();

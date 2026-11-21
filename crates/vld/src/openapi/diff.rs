@@ -311,10 +311,10 @@ fn diff_subschema(
     changes: &mut Vec<SchemaChange>,
 ) {
     let (o, n) = (old.get(key), new.get(key));
-    if !added_removed(path, key, o, n, changes) {
-        if let (Some(o), Some(n)) = (o, n) {
-            diff_value(o, n, &join_path(path, key), changes);
-        }
+    if !added_removed(path, key, o, n, changes)
+        && let (Some(o), Some(n)) = (o, n)
+    {
+        diff_value(o, n, &join_path(path, key), changes);
     }
 }
 

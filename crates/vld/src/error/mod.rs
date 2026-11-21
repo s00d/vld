@@ -1,11 +1,12 @@
 //! Validation errors: [`VldError`], [`ValidationIssue`], [`IssueCode`].
 //!
 //! Every issue carries a machine-readable [`IssueCode`] and a `message`. The
-//! default message is rendered from the English template table
-//! ([`i18n::english()`]) using [`IssueCode::message_keys()`] and
+//! default message is rendered from the English catalog (`locales/en.json`,
+//! also [`i18n::english()`]) using [`IssueCode::message_keys()`] and
 //! [`IssueCode::params()`]; per-check overrides (`*_msg` builders,
 //! `.message()`, `type_error()`) replace it. [`i18n::translate_error`]
-//! re-renders messages with another table.
+//! re-renders messages with another resolver (feature `i18n`: the embedded
+//! catalogs of every shipped language, [`i18n::translator`]).
 //!
 //! # Issue codes
 //!
@@ -69,8 +70,8 @@
 //! `type.date` → "date string (YYYY-MM-DD)", plain words render as
 //! themselves).
 //!
-//! Size templates have plural variants (`too_small.string_one`, Russian
-//! `invalid_length.string_few`, …); see [`i18n::translate_issue`].
+//! Size templates have plural forms (`"=0 … | one | other"` in the catalogs,
+//! `too_small.string_one` for a [`i18n::MapResolver`]); see [`i18n::translate_issue`].
 
 use std::fmt;
 
@@ -79,7 +80,6 @@ mod code;
 /// Error formatting: flat, tree and pretty output.
 pub mod format;
 pub mod i18n;
-mod i18n_langs;
 
 pub use crate::object::{FieldResult, ParseResult};
 pub use builder::IssueBuilder;

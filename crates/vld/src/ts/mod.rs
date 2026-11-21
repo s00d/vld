@@ -1437,10 +1437,10 @@ fn constraint_acts(t: Target, ty: &str, schema: &Value, format_in_base: bool) ->
             if let Some(n) = u64_of("maxLength") {
                 acts.push(t.act("max", "maxLength", n));
             }
-            if let Some(fmt) = schema.get("format").and_then(Value::as_str) {
-                if !format_in_base {
-                    acts.extend(format_acts(t, fmt));
-                }
+            if let Some(fmt) = schema.get("format").and_then(Value::as_str)
+                && !format_in_base
+            {
+                acts.extend(format_acts(t, fmt));
             }
             if let Some(p) = schema.get("pattern").and_then(Value::as_str) {
                 acts.push(pattern_act(p));

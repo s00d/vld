@@ -3892,6 +3892,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "i18n-next"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "040143243d9b99611ca6c9a51b8c9796d4c64831a02adeed3ec5e1623ce6e286"
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7657,6 +7663,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d902046e6a28a1e4c3cab97258a0ce11e994903f01c2d97a9447a0b3df85f4f6"
 
 [[package]]
+name = "reqwest"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
+dependencies = [
+ "base64 0.23.1",
+ "bytes",
+ "futures-core",
+ "http 1.5.0",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "js-sys",
+ "log",
+ "percent-encoding",
+ "pin-project-lite",
+ "sync_wrapper",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "resolv-conf"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8953,6 +8988,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "socketio-next"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26802bc6d44e3778023143981ef82216ef32b9d9327fbee9fe5cd4ad76dc77c9"
+dependencies = [
+ "base64 0.23.1",
+ "bytes",
+ "futures-util",
+ "http 1.5.0",
+ "hyper-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10023,6 +10079,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "tower-http"
+version = "0.6.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
+dependencies = [
+ "bitflags 2.13.2",
+ "bytes",
+ "futures-util",
+ "http 1.5.0",
+ "http-body",
+ "pin-project-lite",
+ "tower",
+ "tower-layer",
+ "tower-service",
+ "url",
+]
+
+[[package]]
 name = "tower-layer"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10451,6 +10525,7 @@ dependencies = [
  "blake2",
  "chrono",
  "criterion",
+ "i18n-next",
  "image",
  "infer",
  "insta",
@@ -10521,10 +10596,13 @@ dependencies = [
  "sea-orm 2.0.4",
  "serde",
  "serde_json",
+ "socketio-next",
  "sqlx 0.8.6",
  "sqlx 0.9.0",
  "time",
  "tokio",
+ "tokio-tungstenite 0.30.0",
+ "tracing",
  "vld",
 ]
 

@@ -19,6 +19,7 @@ mod surrealdb;
     feature = "rumqttc",
     feature = "nats",
     feature = "centrifuge",
+    feature = "socketio",
     feature = "csv"
 ))]
 mod issues;
@@ -39,6 +40,8 @@ mod nats;
 mod postgres_types;
 #[cfg(feature = "rumqttc")]
 mod rumqttc;
+#[cfg(feature = "socketio")]
+mod socketio;
 
 #[cfg(all(feature = "diesel", feature = "sqlite"))]
 mod diesel;

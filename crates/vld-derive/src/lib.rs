@@ -933,10 +933,10 @@ fn get_into_params_parameter_in(attrs: &[syn::Attribute]) -> Option<String> {
         let _ = attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("parameter_in") {
                 let expr: syn::Expr = meta.value()?.parse()?;
-                if let syn::Expr::Path(path) = expr {
-                    if let Some(ident) = path.path.get_ident() {
-                        found = Some(ident.to_string().to_ascii_lowercase());
-                    }
+                if let syn::Expr::Path(path) = expr
+                    && let Some(ident) = path.path.get_ident()
+                {
+                    found = Some(ident.to_string().to_ascii_lowercase());
                 }
             } else {
                 skip_meta(&meta)?;

@@ -16,7 +16,7 @@ fn b64_value(b: u8) -> Option<u8> {
 
 pub(crate) fn decode_base64(s: &str) -> Option<Vec<u8>> {
     let bytes = s.as_bytes();
-    if bytes.is_empty() || bytes.len() % 4 != 0 {
+    if bytes.is_empty() || !bytes.len().is_multiple_of(4) {
         return None;
     }
 
@@ -73,7 +73,8 @@ pub(crate) fn decode_base64_url(s: &str) -> Option<Vec<u8>> {
 
 fn decode_hex(s: &str) -> Option<Vec<u8>> {
     let raw = s.strip_prefix("0x").unwrap_or(s);
-    if raw.is_empty() || raw.len() % 2 != 0 || !raw.bytes().all(|b| b.is_ascii_hexdigit()) {
+    if raw.is_empty() || !raw.len().is_multiple_of(2) || !raw.bytes().all(|b| b.is_ascii_hexdigit())
+    {
         return None;
     }
     let mut out = Vec::with_capacity(raw.len() / 2);
@@ -244,40 +245,40 @@ impl VldSchema for ZBytes {
         };
 
         let mut errors = VldError::new();
-        if let Some(min) = self.min_len {
-            if bytes.len() < min {
-                errors.push_code_with_value(
-                    IssueCode::TooSmall {
-                        origin: SizeOrigin::Bytes,
-                        minimum: min.into(),
-                        inclusive: true,
-                    },
-                    value,
-                );
-            }
+        if let Some(min) = self.min_len
+            && bytes.len() < min
+        {
+            errors.push_code_with_value(
+                IssueCode::TooSmall {
+                    origin: SizeOrigin::Bytes,
+                    minimum: min.into(),
+                    inclusive: true,
+                },
+                value,
+            );
         }
-        if let Some(max) = self.max_len {
-            if bytes.len() > max {
-                errors.push_code_with_value(
-                    IssueCode::TooBig {
-                        origin: SizeOrigin::Bytes,
-                        maximum: max.into(),
-                        inclusive: true,
-                    },
-                    value,
-                );
-            }
+        if let Some(max) = self.max_len
+            && bytes.len() > max
+        {
+            errors.push_code_with_value(
+                IssueCode::TooBig {
+                    origin: SizeOrigin::Bytes,
+                    maximum: max.into(),
+                    inclusive: true,
+                },
+                value,
+            );
         }
-        if let Some(exact) = self.exact_len {
-            if bytes.len() != exact {
-                errors.push_code_with_value(
-                    IssueCode::InvalidLength {
-                        origin: SizeOrigin::Bytes,
-                        expected: exact,
-                    },
-                    value,
-                );
-            }
+        if let Some(exact) = self.exact_len
+            && bytes.len() != exact
+        {
+            errors.push_code_with_value(
+                IssueCode::InvalidLength {
+                    origin: SizeOrigin::Bytes,
+                    expected: exact,
+                },
+                value,
+            );
         }
 
         if errors.is_empty() {

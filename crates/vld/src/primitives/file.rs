@@ -578,14 +578,13 @@ impl VldSchema for ZFile {
                 ));
             }
         }
-        if let Some(mt) = media_type.as_deref() {
-            if self
+        if let Some(mt) = media_type.as_deref()
+            && self
                 .denied_media_types
                 .iter()
                 .any(|deny| media_matches(mt, deny))
-            {
-                return Err(denied(FileTypeKind::MediaType, mt, value));
-            }
+        {
+            return Err(denied(FileTypeKind::MediaType, mt, value));
         }
         if !self.allowed_magic_types.is_empty() {
             let kind = magic_type.as_deref().ok_or_else(|| {
@@ -605,23 +604,23 @@ impl VldSchema for ZFile {
                 ));
             }
         }
-        if let Some(kind) = magic_type.as_deref() {
-            if self.denied_magic_types.iter().any(|d| d == kind) {
-                return Err(denied(FileTypeKind::MagicType, kind, value));
-            }
+        if let Some(kind) = magic_type.as_deref()
+            && self.denied_magic_types.iter().any(|d| d == kind)
+        {
+            return Err(denied(FileTypeKind::MagicType, kind, value));
         }
 
         #[cfg(feature = "file-advanced")]
         if let (true, Some(bytes)) = (self.needs_content_checks(), loaded_bytes.as_deref()) {
-            if let Some(expected) = &self.sha256_hex {
-                if &digest_to_hex(Sha256::digest(bytes)) != expected {
-                    return Err(checksum_mismatch("SHA-256", value));
-                }
+            if let Some(expected) = &self.sha256_hex
+                && &digest_to_hex(Sha256::digest(bytes)) != expected
+            {
+                return Err(checksum_mismatch("SHA-256", value));
             }
-            if let Some(expected) = &self.md5_hex {
-                if &digest_to_hex(Md5::digest(bytes)) != expected {
-                    return Err(checksum_mismatch("MD5", value));
-                }
+            if let Some(expected) = &self.md5_hex
+                && &digest_to_hex(Md5::digest(bytes)) != expected
+            {
+                return Err(checksum_mismatch("MD5", value));
             }
             if self.needs_dimensions() {
                 self.check_dimensions(bytes, value)?;

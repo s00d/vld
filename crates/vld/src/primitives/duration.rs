@@ -249,29 +249,29 @@ impl VldSchema for ZDuration {
         }
         .ok_or_else(|| crate::primitives::type_error(&self.custom_type_error, "duration", value))?;
 
-        if let Some(min) = self.min {
-            if d < min {
-                return Err(VldError::from_code_with_value(
-                    IssueCode::TooSmall {
-                        origin: SizeOrigin::Duration,
-                        minimum: min.as_secs_f64().into(),
-                        inclusive: true,
-                    },
-                    value,
-                ));
-            }
+        if let Some(min) = self.min
+            && d < min
+        {
+            return Err(VldError::from_code_with_value(
+                IssueCode::TooSmall {
+                    origin: SizeOrigin::Duration,
+                    minimum: min.as_secs_f64().into(),
+                    inclusive: true,
+                },
+                value,
+            ));
         }
-        if let Some(max) = self.max {
-            if d > max {
-                return Err(VldError::from_code_with_value(
-                    IssueCode::TooBig {
-                        origin: SizeOrigin::Duration,
-                        maximum: max.as_secs_f64().into(),
-                        inclusive: true,
-                    },
-                    value,
-                ));
-            }
+        if let Some(max) = self.max
+            && d > max
+        {
+            return Err(VldError::from_code_with_value(
+                IssueCode::TooBig {
+                    origin: SizeOrigin::Duration,
+                    maximum: max.as_secs_f64().into(),
+                    inclusive: true,
+                },
+                value,
+            ));
         }
         Ok(d)
     }

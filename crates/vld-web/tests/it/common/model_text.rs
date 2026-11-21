@@ -40,22 +40,22 @@ fn model_coerce(raw: &str) -> Value {
         "false" => return Value::Bool(false),
         _ => {}
     }
-    if let Ok(i) = raw.parse::<i64>() {
-        if i.to_string() == raw {
-            return i.into();
-        }
+    if let Ok(i) = raw.parse::<i64>()
+        && i.to_string() == raw
+    {
+        return i.into();
     }
-    if let Ok(u) = raw.parse::<u64>() {
-        if u.to_string() == raw {
-            return u.into();
-        }
+    if let Ok(u) = raw.parse::<u64>()
+        && u.to_string() == raw
+    {
+        return u.into();
     }
-    if raw.contains('.') {
-        if let Ok(f) = raw.parse::<f64>() {
-            if f.is_finite() && f.to_string() == raw {
-                return f.into();
-            }
-        }
+    if raw.contains('.')
+        && let Ok(f) = raw.parse::<f64>()
+        && f.is_finite()
+        && f.to_string() == raw
+    {
+        return f.into();
     }
     Value::String(raw.to_string())
 }

@@ -72,41 +72,40 @@ pub(crate) fn validate_value_against_schema(
     }
 
     // enum
-    if let Some(enum_values) = schema_obj.get("enum").and_then(|e| e.as_array()) {
-        if !enum_values
+    if let Some(enum_values) = schema_obj.get("enum").and_then(|e| e.as_array())
+        && !enum_values
             .iter()
             .any(|e| vld::__private::json_eq(e, value))
-        {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::Custom {
-                    code: "enum".into(),
-                },
-                format!(
-                    "Value must be one of: {}",
-                    enum_values
-                        .iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                Some(value),
-            ));
-        }
+    {
+        errors.issues.push(make_issue(
+            path,
+            IssueCode::Custom {
+                code: "enum".into(),
+            },
+            format!(
+                "Value must be one of: {}",
+                enum_values
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Some(value),
+        ));
     }
 
     // const
-    if let Some(const_val) = schema_obj.get("const") {
-        if !vld::__private::json_eq(value, const_val) {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::Custom {
-                    code: "const".into(),
-                },
-                format!("Value must be {}", const_val),
-                Some(value),
-            ));
-        }
+    if let Some(const_val) = schema_obj.get("const")
+        && !vld::__private::json_eq(value, const_val)
+    {
+        errors.issues.push(make_issue(
+            path,
+            IssueCode::Custom {
+                code: "const".into(),
+            },
+            format!("Value must be {}", const_val),
+            Some(value),
+        ));
     }
 
     // type checking
@@ -205,15 +204,15 @@ pub(crate) fn validate_value_against_schema(
     }
 
     // not
-    if let Some(not_schema) = schema_obj.get("not") {
-        if validate_value_against_schema(not_schema, value, path, cx).is_ok() {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::Custom { code: "not".into() },
-                "Value must NOT match the schema",
-                Some(value),
-            ));
-        }
+    if let Some(not_schema) = schema_obj.get("not")
+        && validate_value_against_schema(not_schema, value, path, cx).is_ok()
+    {
+        errors.issues.push(make_issue(
+            path,
+            IssueCode::Custom { code: "not".into() },
+            "Value must NOT match the schema",
+            Some(value),
+        ));
     }
 
     if errors.is_empty() {
@@ -235,34 +234,34 @@ fn validate_string(
     };
 
     let len = s.chars().count() as u64;
-    if let Some(min) = schema.get("minLength").and_then(|v| v.as_u64()) {
-        if len < min {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooSmall {
-                    origin: vld::error::SizeOrigin::String,
-                    minimum: (min as f64).into(),
-                    inclusive: true,
-                },
-                format!("String must be at least {} characters", min),
-                Some(value),
-            ));
-        }
+    if let Some(min) = schema.get("minLength").and_then(|v| v.as_u64())
+        && len < min
+    {
+        errors.issues.push(make_issue(
+            path,
+            IssueCode::TooSmall {
+                origin: vld::error::SizeOrigin::String,
+                minimum: (min as f64).into(),
+                inclusive: true,
+            },
+            format!("String must be at least {} characters", min),
+            Some(value),
+        ));
     }
 
-    if let Some(max) = schema.get("maxLength").and_then(|v| v.as_u64()) {
-        if len > max {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooBig {
-                    origin: vld::error::SizeOrigin::String,
-                    maximum: (max as f64).into(),
-                    inclusive: true,
-                },
-                format!("String must be at most {} characters", max),
-                Some(value),
-            ));
-        }
+    if let Some(max) = schema.get("maxLength").and_then(|v| v.as_u64())
+        && len > max
+    {
+        errors.issues.push(make_issue(
+            path,
+            IssueCode::TooBig {
+                origin: vld::error::SizeOrigin::String,
+                maximum: (max as f64).into(),
+                inclusive: true,
+            },
+            format!("String must be at most {} characters", max),
+            Some(value),
+        ));
     }
 
     if let Some(pattern) = schema.get("pattern").and_then(|v| v.as_str()) {
@@ -524,34 +523,34 @@ fn validate_array(
     errors: &mut VldError,
     cx: Ctx,
 ) {
-    if let Some(min) = schema.get("minItems").and_then(|v| v.as_u64()) {
-        if (arr.len() as u64) < min {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooSmall {
-                    origin: vld::error::SizeOrigin::Array,
-                    minimum: (min as f64).into(),
-                    inclusive: true,
-                },
-                format!("Array must have at least {} items", min),
-                Some(&Value::Number(serde_json::Number::from(arr.len()))),
-            ));
-        }
+    if let Some(min) = schema.get("minItems").and_then(|v| v.as_u64())
+        && (arr.len() as u64) < min
+    {
+        errors.issues.push(make_issue(
+            path,
+            IssueCode::TooSmall {
+                origin: vld::error::SizeOrigin::Array,
+                minimum: (min as f64).into(),
+                inclusive: true,
+            },
+            format!("Array must have at least {} items", min),
+            Some(&Value::Number(serde_json::Number::from(arr.len()))),
+        ));
     }
 
-    if let Some(max) = schema.get("maxItems").and_then(|v| v.as_u64()) {
-        if (arr.len() as u64) > max {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooBig {
-                    origin: vld::error::SizeOrigin::Array,
-                    maximum: (max as f64).into(),
-                    inclusive: true,
-                },
-                format!("Array must have at most {} items", max),
-                Some(&Value::Number(serde_json::Number::from(arr.len()))),
-            ));
-        }
+    if let Some(max) = schema.get("maxItems").and_then(|v| v.as_u64())
+        && (arr.len() as u64) > max
+    {
+        errors.issues.push(make_issue(
+            path,
+            IssueCode::TooBig {
+                origin: vld::error::SizeOrigin::Array,
+                maximum: (max as f64).into(),
+                inclusive: true,
+            },
+            format!("Array must have at most {} items", max),
+            Some(&Value::Number(serde_json::Number::from(arr.len()))),
+        ));
     }
 
     // Tuple items: `prefixItems` (2020-12) or array-form `items` (draft-07).
@@ -633,17 +632,17 @@ fn validate_object(
     // required
     if let Some(required) = schema.get("required").and_then(|v| v.as_array()) {
         for req in required {
-            if let Some(field_name) = req.as_str() {
-                if !obj.contains_key(field_name) {
-                    let mut field_path = path.to_vec();
-                    field_path.push(PathSegment::Field(field_name.to_string()));
-                    errors.issues.push(make_issue(
-                        &field_path,
-                        IssueCode::MissingField,
-                        format!("Required field '{}' is missing", field_name),
-                        None,
-                    ));
-                }
+            if let Some(field_name) = req.as_str()
+                && !obj.contains_key(field_name)
+            {
+                let mut field_path = path.to_vec();
+                field_path.push(PathSegment::Field(field_name.to_string()));
+                errors.issues.push(make_issue(
+                    &field_path,
+                    IssueCode::MissingField,
+                    format!("Required field '{}' is missing", field_name),
+                    None,
+                ));
             }
         }
     }
@@ -714,34 +713,34 @@ fn validate_object(
     }
 
     // minProperties / maxProperties
-    if let Some(min) = schema.get("minProperties").and_then(|v| v.as_u64()) {
-        if (obj.len() as u64) < min {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooSmall {
-                    origin: vld::error::SizeOrigin::Object,
-                    minimum: (min as f64).into(),
-                    inclusive: true,
-                },
-                format!("Object must have at least {} properties", min),
-                None,
-            ));
-        }
+    if let Some(min) = schema.get("minProperties").and_then(|v| v.as_u64())
+        && (obj.len() as u64) < min
+    {
+        errors.issues.push(make_issue(
+            path,
+            IssueCode::TooSmall {
+                origin: vld::error::SizeOrigin::Object,
+                minimum: (min as f64).into(),
+                inclusive: true,
+            },
+            format!("Object must have at least {} properties", min),
+            None,
+        ));
     }
 
-    if let Some(max) = schema.get("maxProperties").and_then(|v| v.as_u64()) {
-        if (obj.len() as u64) > max {
-            errors.issues.push(make_issue(
-                path,
-                IssueCode::TooBig {
-                    origin: vld::error::SizeOrigin::Object,
-                    maximum: (max as f64).into(),
-                    inclusive: true,
-                },
-                format!("Object must have at most {} properties", max),
-                None,
-            ));
-        }
+    if let Some(max) = schema.get("maxProperties").and_then(|v| v.as_u64())
+        && (obj.len() as u64) > max
+    {
+        errors.issues.push(make_issue(
+            path,
+            IssueCode::TooBig {
+                origin: vld::error::SizeOrigin::Object,
+                maximum: (max as f64).into(),
+                inclusive: true,
+            },
+            format!("Object must have at most {} properties", max),
+            None,
+        ));
     }
 }
 

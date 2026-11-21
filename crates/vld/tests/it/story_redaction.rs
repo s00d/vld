@@ -21,13 +21,17 @@ fn password() -> impl vld::Schema<Output = String> {
 
 /// No error surface carries the secret.
 fn assert_secret_free(err: &VldError) {
-    for text in [
+    #[cfg_attr(not(feature = "i18n"), allow(unused_mut))]
+    let mut texts = vec![
         err.to_string(),
         format!("{err:?}"),
         serde_json::to_string(err).unwrap(),
         vld::format::prettify_error(err),
-        vld::i18n::translate_error(err, &vld::i18n::russian()).to_string(),
-    ] {
+        vld::i18n::translate_error(err, &vld::i18n::english()).to_string(),
+    ];
+    #[cfg(feature = "i18n")]
+    texts.push(vld::i18n::translate_error(err, &vld::i18n::translator("ru")).to_string());
+    for text in texts {
         assert!(!text.contains(SECRET), "{text}");
     }
 }

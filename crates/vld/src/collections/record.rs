@@ -134,24 +134,24 @@ where
         // An inner `Err` may carry no issues: track failure, not issue count.
         let mut failed = false;
 
-        if let Some(min) = self.min_keys {
-            if obj.len() < min {
-                errors.push_code(IssueCode::TooSmall {
-                    origin: SizeOrigin::Record,
-                    minimum: min.into(),
-                    inclusive: true,
-                });
-            }
+        if let Some(min) = self.min_keys
+            && obj.len() < min
+        {
+            errors.push_code(IssueCode::TooSmall {
+                origin: SizeOrigin::Record,
+                minimum: min.into(),
+                inclusive: true,
+            });
         }
 
-        if let Some(max) = self.max_keys {
-            if obj.len() > max {
-                errors.push_code(IssueCode::TooBig {
-                    origin: SizeOrigin::Record,
-                    maximum: max.into(),
-                    inclusive: true,
-                });
-            }
+        if let Some(max) = self.max_keys
+            && obj.len() > max
+        {
+            errors.push_code(IssueCode::TooBig {
+                origin: SizeOrigin::Record,
+                maximum: max.into(),
+                inclusive: true,
+            });
         }
 
         let mut result = M::default();

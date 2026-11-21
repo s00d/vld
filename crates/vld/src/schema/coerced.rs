@@ -53,10 +53,11 @@ pub fn coerce_text(raw: &str) -> Value {
         } else if let Ok(f) = raw.parse::<f64>() {
             // `f64` Display is the shortest round-trip form: `1.50` → `1.5`,
             // `0.1000000000000000001` → `0.1`; both stay strings.
-            if f.is_finite() && f.to_string() == raw {
-                if let Some(n) = serde_json::Number::from_f64(f) {
-                    return Value::Number(n);
-                }
+            if f.is_finite()
+                && f.to_string() == raw
+                && let Some(n) = serde_json::Number::from_f64(f)
+            {
+                return Value::Number(n);
             }
         }
     }

@@ -289,16 +289,16 @@ impl ZNumber {
                     .push(ValidationIssue::with_override(code, msg.as_ref()).with_received(value));
             }
         }
-        if let Some(options) = &self.one_of {
-            if !options.iter().any(|o| n.cmp(*o) == Some(Ordering::Equal)) {
-                let code = IssueCode::InvalidEnumValue {
-                    options: options.iter().map(ToString::to_string).collect(),
-                };
-                let msg = self.messages.as_ref().and_then(|f| f("invalid_enum_value"));
-                errors
-                    .issues
-                    .push(ValidationIssue::with_override(code, msg.as_ref()).with_received(value));
-            }
+        if let Some(options) = &self.one_of
+            && !options.iter().any(|o| n.cmp(*o) == Some(Ordering::Equal))
+        {
+            let code = IssueCode::InvalidEnumValue {
+                options: options.iter().map(ToString::to_string).collect(),
+            };
+            let msg = self.messages.as_ref().and_then(|f| f("invalid_enum_value"));
+            errors
+                .issues
+                .push(ValidationIssue::with_override(code, msg.as_ref()).with_received(value));
         }
         if errors.is_empty() {
             Ok(())

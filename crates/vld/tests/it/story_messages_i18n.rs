@@ -16,9 +16,10 @@ use vld::error::{
     DateKind, FileTypeKind, FormatKind, IssueCode, PathSegment, SizeOrigin, StringValidation,
     ValidationIssue, VldError,
 };
+#[cfg(feature = "i18n")]
+use vld::i18n::translator;
 use vld::i18n::{
-    FnResolver, MapResolver, MessageResolver, english, german, russian, spanish, translate_error,
-    translate_issue,
+    FnResolver, MapResolver, MessageResolver, english, translate_error, translate_issue,
 };
 use vld::prelude::*;
 use vld::rules::{Rule, from_fn};
@@ -364,16 +365,17 @@ fn translating_errors_with_own_resolvers() {
     );
 }
 
-/// Given an error translated into each shipped language (Russian, German, Spanish)
+/// Given an error translated into each shipped language (the embedded catalogs, feature `i18n`)
 /// When the user reads it
 /// Then the text differs from English but keeps the params, type names are translated,
 /// Russian uses its plural forms, custom messages stay, a union's `[variant N]` prefix is
 /// translated, and object issues (`unrecognized_field`, `missing_field`) are translated too.
+#[cfg(feature = "i18n")]
 #[test]
 fn shipped_languages() {
     let err = vld::number().min(10.0).parse("5").unwrap_err();
     let en = translate_error(&err, &english()).issues[0].message.clone();
-    for lang in [russian(), german(), spanish()] {
+    for lang in vld::i18n::locales().filter(|l| *l != "en").map(translator) {
         let msg = translate_error(&err, &lang).issues[0].message.clone();
         assert!(msg.contains("10"), "{msg}");
         assert_ne!(msg, en);
@@ -383,7 +385,7 @@ fn shipped_languages() {
     }
 
     let ru = |s: &ZString, v: serde_json::Value| {
-        translate_error(&s.parse_value(&v).unwrap_err(), &russian()).issues[0]
+        translate_error(&s.parse_value(&v).unwrap_err(), &translator("ru")).issues[0]
             .message
             .clone()
     };
@@ -414,15 +416,15 @@ fn shipped_languages() {
     );
     let err = vld::duration().parse_value(&json!(true)).unwrap_err();
     assert_eq!(
-        translate_error(&err, &russian()).issues[0].message,
-        "Ожидался тип «длительность (секунды или строка)», получен «логическое значение»"
+        translate_error(&err, &translator("ru")).issues[0].message,
+        "Ожидался тип «длительность в секундах или строкой (`PT15S`, `1.5s`, `250ms`)», получен «логическое значение»"
     );
 
     // Union prefix: translated in Russian, kept with a translated message in German.
     let err = vld::union(vld::string(), vld::number())
         .parse_value(&json!(true))
         .unwrap_err();
-    let tr = translate_error(&err, &russian());
+    let tr = translate_error(&err, &translator("ru"));
     assert!(
         tr.issues
             .iter()
@@ -432,14 +434,18 @@ fn shipped_languages() {
     );
     assert!(!tr.issues.iter().any(|i| i.message.contains("[variant")));
     let u = vld::union(vld::string().min(3), vld::number());
-    let tr = translate_error(&u.parse_value(&json!("ab")).unwrap_err(), &german());
+    let tr = translate_error(&u.parse_value(&json!("ab")).unwrap_err(), &translator("de"));
     assert_eq!(
         tr.issues[1].message,
         "[Variante 1] Zeichenkette muss mindestens 3 Zeichen lang sein"
     );
 
     // German keeps custom and bulk messages, translates defaults.
-    let de = |e: &VldError| translate_error(e, &german()).issues[0].message.clone();
+    let de = |e: &VldError| {
+        translate_error(e, &translator("de")).issues[0]
+            .message
+            .clone()
+    };
     assert_eq!(
         de(&vld::string()
             .min_msg(3, "my custom")
@@ -520,6 +526,11 @@ fn sample_codes() -> Vec<IssueCode> {
         MissingContains,
         DuplicateKey,
         InvalidMapEntry,
+        RingNotClosed,
+        RangeOrder {
+            start: "from".into(),
+            end: "to".into(),
+        },
         MissingField,
         UnrecognizedField,
         PathOutsideBase { base: "/b".into() },
@@ -540,6 +551,10 @@ fn sample_codes() -> Vec<IssueCode> {
         },
         FileTypeUnknown {
             kind: FileTypeKind::MagicType,
+        },
+        InvalidCryptoAddress {
+            network: "bitcoin".into(),
+            reason: vld::error::CryptoAddressReason::Checksum,
         },
         ChecksumMismatch {
             algorithm: "MD5".into(),
@@ -563,6 +578,7 @@ fn placeholders(s: &str) -> BTreeSet<String> {
 
 /// Every template key a code family can ask for: `<base>.<sub>` for every sub-kind, with and
 /// without the `_one` plural form, plus the type labels.
+#[cfg(feature = "i18n")]
 fn candidate_keys() -> Vec<String> {
     use StringValidation::*;
     let origins = [
@@ -584,6 +600,8 @@ fn candidate_keys() -> Vec<String> {
         SizeOrigin::ImageHeight,
         SizeOrigin::Port,
         SizeOrigin::Contains,
+        SizeOrigin::Scale,
+        SizeOrigin::Precision,
     ];
     let validations = [
         Email,
@@ -634,6 +652,24 @@ fn candidate_keys() -> Vec<String> {
         Ulid,
         Nanoid,
         Emoji,
+        Country,
+        CountryAlpha3,
+        Iban,
+        Bic,
+        Isbn,
+        Ean,
+        Vin,
+        Timezone,
+        Mime,
+        ObjectId,
+        RegexSyntax,
+        SingleScript,
+        PasswordLowercase,
+        PasswordUppercase,
+        PasswordDigit,
+        PasswordSymbol,
+        PasswordRepeat { max_repeat: 2 },
+        PasswordStrength { min_score: 3 },
     ];
     let formats = [
         FormatKind::Decimal,
@@ -646,12 +682,22 @@ fn candidate_keys() -> Vec<String> {
         FormatKind::Hex,
         FormatKind::Image,
         FormatKind::FromStr,
+        FormatKind::DurationCalendarUnit,
     ];
     let mut keys: Vec<String> = sample_codes()
         .iter()
         .flat_map(|c| c.message_keys())
         .collect();
-    keys.extend(["too_small_exclusive", "too_big_exclusive", "custom"].map(String::from));
+    keys.extend(
+        [
+            "too_small",
+            "too_big",
+            "too_small_exclusive",
+            "too_big_exclusive",
+            "custom",
+        ]
+        .map(String::from),
+    );
     for base in [
         "too_small",
         "too_big",
@@ -679,6 +725,15 @@ fn candidate_keys() -> Vec<String> {
     let ones: Vec<String> = keys.iter().map(|k| format!("{k}_one")).collect();
     keys.extend(ones);
     for t in [
+        "string",
+        "number",
+        "integer",
+        "boolean",
+        "array",
+        "object",
+        "null",
+        "never",
+        "geo_point",
         "date",
         "datetime",
         "time",
@@ -764,25 +819,26 @@ fn every_code_has_a_template_in_every_language() {
         }
     }
 
-    let keys = candidate_keys();
-    for (name, lang) in [
-        ("russian", russian()),
-        ("german", german()),
-        ("spanish", spanish()),
-    ] {
-        for key in &keys {
-            let Some(t_en) = en.resolve(key) else {
-                continue;
-            };
-            let t = lang
-                .resolve(key)
-                .unwrap_or_else(|| panic!("{name}: missing `{key}`"));
-            assert_eq!(placeholders(&t), placeholders(&t_en), "{name}: `{key}`");
+    #[cfg(feature = "i18n")]
+    {
+        // Every language answers every English key, with English's placeholders.
+        let keys = candidate_keys();
+        for locale in vld::i18n::locales() {
+            let lang = translator(locale);
+            let own = catalog_keys(locale);
+            for key in &keys {
+                let Some(t_en) = en.resolve(key).filter(|_| !key.ends_with("_one")) else {
+                    continue;
+                };
+                assert!(
+                    own.contains(&format!("vld.{key}")),
+                    "{locale}: missing `{key}`"
+                );
+                let t = lang.resolve(key).unwrap();
+                assert_eq!(placeholders(&t), placeholders(&t_en), "{locale}: `{key}`");
+            }
+            assert!(own.contains("vld.union_variant"), "{locale}: union_variant");
         }
-        assert!(
-            lang.resolve("union_variant").is_some(),
-            "{name}: union_variant"
-        );
     }
 }
 
@@ -1467,23 +1523,26 @@ fn units_and_ranges_speak_plainly() {
             first_msg(&vld::decimal().max_precision(3), json!("1234")),
             "Decimal must have at most 3 digits"
         );
-        let ru = |s: &ZDecimal, v: &str| {
-            translate_error(&s.parse_value(&json!(v)).unwrap_err(), &russian()).issues[0]
-                .message
-                .clone()
-        };
-        assert_eq!(
-            ru(&s1, "1.25"),
-            "Десятичное число должно иметь не более 1 знака после запятой"
-        );
-        assert_eq!(
-            ru(&vld::decimal().scale(2), "1"),
-            "Десятичное число должно иметь ровно 2 знака после запятой"
-        );
-        assert_eq!(
-            ru(&vld::decimal().scale(5), "1"),
-            "Десятичное число должно иметь ровно 5 знаков после запятой"
-        );
+        #[cfg(feature = "i18n")]
+        {
+            let ru = |s: &ZDecimal, v: &str| {
+                translate_error(&s.parse_value(&json!(v)).unwrap_err(), &translator("ru")).issues[0]
+                    .message
+                    .clone()
+            };
+            assert_eq!(
+                ru(&s1, "1.25"),
+                "Десятичное число должно иметь не более 1 знака после запятой"
+            );
+            assert_eq!(
+                ru(&vld::decimal().scale(2), "1"),
+                "Десятичное число должно иметь ровно 2 знака после запятой"
+            );
+            assert_eq!(
+                ru(&vld::decimal().scale(5), "1"),
+                "Десятичное число должно иметь ровно 5 знаков после запятой"
+            );
+        }
         let custom = vld::decimal()
             .max_scale(2)
             .max_precision(4)
@@ -1497,7 +1556,12 @@ fn units_and_ranges_speak_plainly() {
         assert_eq!(first_msg(&custom, json!("12345")), "too long");
         assert_eq!(first_msg(&custom, json!("abc")), "not a number");
         let err = custom.parse_value(&json!("1.255")).unwrap_err();
-        assert_eq!(messages(&translate_error(&err, &russian())), ["cents only"]);
+        assert_eq!(messages(&translate_error(&err, &english())), ["cents only"]);
+        #[cfg(feature = "i18n")]
+        assert_eq!(
+            messages(&translate_error(&err, &translator("ru"))),
+            ["cents only"]
+        );
 
         let wallet = vld::money().with_messages(|k| match k {
             "currency" => Some("pick a real currency".into()),
@@ -1521,9 +1585,10 @@ fn units_and_ranges_speak_plainly() {
     let r = vld::range(vld::number()).keys("from", "to");
     let err = r.parse_value(&json!({"from": 2, "to": 1})).unwrap_err();
     assert_eq!(messages(&err), ["`to` must not be before `from`"]);
+    #[cfg(feature = "i18n")]
     assert_eq!(
-        messages(&translate_error(&err, &russian())),
-        ["«to» не может быть раньше «from»"]
+        messages(&translate_error(&err, &translator("ru"))),
+        ["`to` не может быть раньше `from`"]
     );
     let r = r.with_messages(|k| (k == "range_order").then(|| "end before start".into()));
     assert_eq!(
@@ -1547,4 +1612,208 @@ fn units_and_ranges_speak_plainly() {
             "Expected geo point ({lat, lng} or [lng, lat]), received string"
         );
     }
+}
+
+/// The keys of one embedded catalog, as written in its JSON file.
+#[cfg(feature = "i18n")]
+fn catalog_keys(locale: &str) -> BTreeSet<String> {
+    let json: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(vld::i18n::catalog(locale).unwrap()).unwrap();
+    json.keys().cloned().collect()
+}
+
+/// The embedded catalogs as an app would load them, English as the reference.
+#[cfg(feature = "i18n")]
+fn all_catalogs() -> vld::i18n::i18n_next::I18n {
+    vld::i18n::i18n_next::I18n::builder()
+        .locale("en")
+        .fallback("en")
+        .files(vld::i18n::files())
+        .build()
+        .unwrap()
+}
+
+/// Given the JSON catalogs vld ships (the files a frontend loads too)
+/// When they are checked against the key list derived from the issue codes and against English
+/// Then `en.json` holds exactly the keys vld renders (every code family, sub-kind and type label,
+/// nothing stale), every language has exactly English's keys, and i18n-next's own `check()` finds
+/// no missing key, no placeholder that differs from English's and no plural message whose forms do
+/// not fit the locale's CLDR categories (`ru` one/few/many, `ar` one/two/few/many/other, `ja` a
+/// single form, …).
+#[cfg(feature = "i18n")]
+#[test]
+fn shipped_catalogs_are_complete_and_cldr_plural() {
+    let candidates: BTreeSet<String> = candidate_keys()
+        .into_iter()
+        .chain(["union_variant".to_string()])
+        .map(|k| format!("vld.{k}"))
+        .collect();
+    let en = catalog_keys("en");
+    let stale: Vec<_> = en.difference(&candidates).collect();
+    assert!(stale.is_empty(), "keys no code renders: {stale:?}");
+    for code in sample_codes() {
+        let generic = code.message_keys().pop().unwrap();
+        let generic = if generic == "mine" {
+            "custom".into()
+        } else {
+            generic
+        };
+        assert!(en.contains(&format!("vld.{generic}")), "{generic}");
+    }
+
+    let locales: Vec<&str> = vld::i18n::locales().collect();
+    assert_eq!(locales.len(), 29);
+    for locale in &locales {
+        assert_eq!(catalog_keys(locale), en, "{locale}");
+    }
+    let report = all_catalogs().check();
+    assert!(report.is_clean(), "{report}");
+}
+
+/// Given an error translated with `translator(locale)` for languages with different plural rules
+/// When the user reads a size message
+/// Then the form follows the locale's CLDR category: Russian one / few / many (1, 3, 5, 11, 21,
+/// 22), Polish and Ukrainian likewise, Arabic one / two / few / many / other (1, 2, 3, 11, 100),
+/// Hebrew two, Japanese one form for every count, French singular for 0 and 1; a region or script
+/// tag falls back to the language (`pt-BR` → `pt`, `zh_Hans_CN` → `zh`), an unknown locale reads
+/// English, and English through the catalog equals the default message.
+#[cfg(feature = "i18n")]
+#[test]
+fn translator_picks_cldr_plural_forms_and_falls_back() {
+    let len = |locale: &str, n: usize| {
+        let err = vld::string().len(n).parse_value(&json!("")).unwrap_err();
+        translate_error(&err, &translator(locale)).issues[0]
+            .message
+            .clone()
+    };
+    for (n, word) in [
+        (1, "символ"),
+        (3, "символа"),
+        (5, "символов"),
+        (11, "символов"),
+        (21, "символ"),
+        (22, "символа"),
+    ] {
+        assert_eq!(
+            len("ru", n),
+            format!("Строка должна содержать ровно {n} {word}")
+        );
+    }
+    assert!(len("pl", 2).ends_with("2 znaki"), "{}", len("pl", 2));
+    assert!(len("pl", 5).ends_with("5 znaków"), "{}", len("pl", 5));
+    assert!(len("pl", 22).ends_with("22 znaki"), "{}", len("pl", 22));
+    assert!(len("uk", 21).ends_with("21 символ"), "{}", len("uk", 21));
+    for (n, word) in [
+        (1, "حرف"),
+        (2, "حرفين"),
+        (3, "أحرف"),
+        (11, "حرفًا"),
+        (100, "حرف"),
+    ] {
+        assert_eq!(
+            len("ar", n),
+            format!("يجب أن يحتوي النص على {n} {word} بالضبط")
+        );
+    }
+    assert_eq!(len("he", 2), "המחרוזת חייבת להכיל בדיוק 2 תווים");
+    assert_eq!(len("he", 1), "המחרוזת חייבת להכיל בדיוק 1 תו");
+    for n in [1, 2, 5] {
+        assert_eq!(
+            len("ja", n),
+            format!("文字列はちょうど {n} 文字である必要があります")
+        );
+    }
+    let min = |locale: &str, n: usize| {
+        let err = vld::string().min(n).parse_value(&json!("")).unwrap_err();
+        translate_error(&err, &translator(locale)).issues[0]
+            .message
+            .clone()
+    };
+    assert!(min("fr", 1).ends_with("1 caractère"), "{}", min("fr", 1));
+    assert!(min("fr", 2).ends_with("2 caractères"), "{}", min("fr", 2));
+
+    // Fallback chain: region / script dropped, unknown → English.
+    assert_eq!(len("pt-BR", 2), len("pt", 2));
+    assert_eq!(len("zh_Hans_CN", 2), len("zh", 2));
+    assert_eq!(len("RU", 3), len("ru", 3));
+    assert_eq!(vld::i18n::supported_locale("no"), Some("nb"));
+    assert_eq!(vld::i18n::supported_locale("xx-YY"), None);
+    for n in [0, 1, 2] {
+        let err = vld::string().len(n).parse_value(&json!("abc")).unwrap_err();
+        assert_eq!(
+            translate_error(&err, &translator("xx")).issues[0].message,
+            err.issues[0].message
+        );
+        assert_eq!(
+            translate_error(&err, &translator("en")).issues[0].message,
+            err.issues[0].message
+        );
+    }
+}
+
+/// Given an app with its own i18n-next catalog built over vld's files (`extend`) that overrides
+/// one vld key in Russian, adds Esperanto with a few `vld.*` keys, and translates its own custom
+/// code `vld.no_spaces`
+/// When errors are translated with `Translator::new(view)`
+/// Then the app's override wins (with its own plural forms), every other key keeps vld's Russian,
+/// Esperanto shows the app's keys and English (the app's fallback) for the rest, the custom code
+/// is translated, a custom message is still kept, and an app catalog without vld's files falls
+/// back to the embedded catalog of its locale.
+#[cfg(feature = "i18n")]
+#[test]
+fn app_catalog_overrides_keys_and_adds_languages() {
+    use vld::i18n::{Translator, i18n_next::I18n};
+    let app = I18n::builder()
+        .locale("en")
+        .fallback("en")
+        .extend(vld::i18n::files())
+        .messages(
+            "ru",
+            None,
+            r#"{"vld.too_small.string": "=0 Мало | Нужен хотя бы {minimum} знак | Нужно хотя бы {minimum} знака | Нужно хотя бы {minimum} знаков",
+                "title": "Регистрация"}"#,
+        )
+        .messages(
+            "eo",
+            None,
+            r#"{"vld.invalid_type": "Atendis {expected}, ricevis {received}", "vld.type.string": "teksto",
+                "vld.no_spaces": "Spacoj ne estas permesataj"}"#,
+        )
+        .build()
+        .unwrap();
+    let ru = Translator::new(app.with_locale("ru"));
+    let tr = |e: &VldError, r: &Translator| translate_error(e, r).issues[0].message.clone();
+    let short = |n| vld::string().min(n).parse_value(&json!("")).unwrap_err();
+    assert_eq!(tr(&short(1), &ru), "Нужен хотя бы 1 знак");
+    assert_eq!(tr(&short(3), &ru), "Нужно хотя бы 3 знака");
+    assert_eq!(tr(&short(5), &ru), "Нужно хотя бы 5 знаков");
+    let email = vld::string().email().parse_value(&json!("x")).unwrap_err();
+    assert_eq!(tr(&email, &ru), "Некорректный адрес электронной почты");
+
+    let eo = Translator::new(app.with_locale("eo"));
+    let wrong = vld::string().parse_value(&json!(1)).unwrap_err();
+    assert_eq!(tr(&wrong, &eo), "Atendis teksto, ricevis number");
+    assert_eq!(tr(&email, &eo), "Invalid email address");
+    let spaces = vld::string()
+        .rule(from_fn("no_spaces", |s: &str| !s.contains(' ')))
+        .parse_value(&json!("a b"))
+        .unwrap_err();
+    assert_eq!(tr(&spaces, &eo), "Spacoj ne estas permesataj");
+    let custom = vld::string()
+        .min_msg(3, "mine")
+        .parse_value(&json!(""))
+        .unwrap_err();
+    assert_eq!(tr(&custom, &eo), "mine");
+
+    // Without `extend`: the app's keys first, then vld's catalog of the app's locale.
+    let bare = I18n::builder()
+        .locale("de")
+        .messages("de", None, r#"{"vld.missing_field": "Bitte ausfüllen"}"#)
+        .build()
+        .unwrap();
+    let de = Translator::new(bare.with_locale("de"));
+    let req = vld::object().field("a", vld::string());
+    let err = req.parse_value(&json!({})).unwrap_err();
+    assert_eq!(tr(&err, &de), "Bitte ausfüllen");
+    assert_eq!(tr(&email, &de), tr(&email, &translator("de")));
 }

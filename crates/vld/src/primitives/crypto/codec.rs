@@ -414,7 +414,7 @@ pub(super) fn monero_encode(data: &[u8]) -> String {
 // ─────────────────────────── hex / base64 ───────────────────────────
 
 pub(super) fn hex_decode(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
     s.as_bytes()
@@ -458,7 +458,7 @@ pub(super) fn base64_decode(s: &str, url: bool) -> Option<Vec<u8>> {
         crate::primitives::bytes::decode_base64_url(s)?
     } else {
         let mut padded = s.to_string();
-        while padded.len() % 4 != 0 {
+        while !padded.len().is_multiple_of(4) {
             padded.push('=');
         }
         crate::primitives::bytes::decode_base64(&padded)?

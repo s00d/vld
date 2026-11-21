@@ -14,10 +14,10 @@ groups := "core web openapi data app"
 app_all := "config-rs,figment,clap,env,dotenv"
 vld_all := "regex,derive,openapi,diff,llm,chrono,jiff,time,decimal,geo,net,file,file-advanced,string-advanced,crypto,ts,fake,unicode,password-strength"
 # vld-data for semver-checks: every feature but lapin-2 (see `semver`)
-data_semver := "sqlx-0_8,sqlx-0_9,diesel,postgres,mysql,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio,redis-aio-tokio,lapin-3,lapin-4,bson-2,bson-3,tokio-postgres,rumqttc,nats,clickhouse,centrifuge,csv"
+data_semver := "sqlx-0_8,sqlx-0_9,diesel,postgres,mysql,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio,redis-aio-tokio,lapin-3,lapin-4,bson-2,bson-3,tokio-postgres,rumqttc,nats,clickhouse,centrifuge,socketio,csv"
 # vld-data without the postgres / mysql backends (diesel links libpq / libmysqlclient,
 # which only the Linux CI image has): what `test-group data` runs on macOS / Windows.
-data_portable := "sqlx-0_8,sqlx-0_9,diesel,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3,lapin-4,bson-2,bson-3,tokio-postgres,rumqttc,nats,clickhouse,centrifuge,csv"
+data_portable := "sqlx-0_8,sqlx-0_9,diesel,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3,lapin-4,bson-2,bson-3,tokio-postgres,rumqttc,nats,clickhouse,centrifuge,socketio,csv"
 
 [private]
 default:

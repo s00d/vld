@@ -26,7 +26,7 @@ pub(crate) fn is_valid_credit_card(s: &str) -> bool {
             (false, _) => d,
         })
         .sum();
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 pub(crate) fn is_valid_phone(s: &str) -> bool {
