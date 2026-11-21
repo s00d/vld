@@ -1,9 +1,10 @@
 name: CI
 
 # Every step is a `just` recipe (see justfile), so CI and local runs are the same commands.
-# Push / PR: one job per crate group plus `misc`. Before a release, by hand (Actions -> CI ->
-# Run workflow): the slow or rarely-breaking checks (MSRV toolchains, Windows/macOS, minimal
-# versions, wasm, vld feature pairs, latest stable clippy).
+# Push / PR: clippy per crate group (Linux), tests per crate group on Linux, macOS and
+# Windows, and the `misc` checks. On `main`, once all of them pass, `release` publishes
+# what a merged release PR bumped (release-plz; PUBLISHING.md). By hand (Actions -> CI ->
+# Run workflow): MSRV toolchains, minimal versions, vld feature pairs, latest stable clippy.
 
 on:
   push:
@@ -17,19 +18,21 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  # Never cancel a `main` run: its `release` job may be publishing.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
   # Pinned so new clippy lints / rustdoc checks cannot break CI unannounced; the
-  # pre-release latest-stable step warns about them early. Bump deliberately.
+  # extended job's latest-stable clippy warns about them early. Bump deliberately.
   RUST_TOOLCHAIN: "1.99.1"
 
 jobs:
-  # One job per crate group (ARCHITECTURE.md), in parallel, each with its own cache.
-  group:
-    name: ${{ matrix.group }}
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+  # clippy with all features and each feature alone, one job per crate group
+  # (ARCHITECTURE.md). Linux only: the code has no OS-specific branches to lint.
+  lint:
+    name: lint ${{ matrix.group }}
+    if: github.event_name != 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -40,12 +43,45 @@ jobs:
       # diesel postgres / mysql backends link libpq / libmysqlclient.
       - if: matrix.group == 'data'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
-      # vld::ts cross-checks generated Zod 3 / Zod 4 / Valibot code under node.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+          targets: ${{ matrix.group == 'core' && 'wasm32-unknown-unknown' || '' }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-hack
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: lint-${{ matrix.group }}
+      - run: just lint-group ${{ matrix.group }}
       - if: matrix.group == 'core'
+        run: just wasm
+
+  # Tests per crate group on every OS (paths, files, line endings and sockets differ).
+  # Off Linux, vld-data runs without the postgres / mysql backends (justfile `data_portable`).
+  test:
+    name: test ${{ matrix.group }} (${{ matrix.os }})
+    if: github.event_name != 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [core, web, openapi, data, app]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - if: matrix.group == 'data' && runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
+      # vld::ts cross-checks generated Zod 3 / Zod 4 / Valibot code under node.
+      - if: matrix.group == 'core' && runner.os == 'Linux'
         uses: actions/setup-node@v5
         with:
           node-version: 22
-      - if: matrix.group == 'core'
+      - if: matrix.group == 'core' && runner.os == 'Linux'
         run: |
           dir="$RUNNER_TEMP/ts-check"
           mkdir -p "$dir" && cd "$dir" && echo '{"private":true}' > package.json
@@ -54,20 +90,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: clippy
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,cargo-hack
+          tool: just
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.group }}
-      - run: just lint-group ${{ matrix.group }}
-      - if: ${{ !cancelled() }}
-        run: just test-group ${{ matrix.group }}
+          key: test-${{ matrix.group }}
+      - run: just test-group ${{ matrix.group }}
 
   misc:
     name: fmt, docs, deny, package, fuzz, playground
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -96,6 +129,65 @@ jobs:
       - if: ${{ !cancelled() }}
         run: just playground
 
+  # Publish after a green `main` run: release-plz publishes the crates whose version is not
+  # on crates.io yet (that is, after a release PR was merged) and tags `vX.Y.Z`; the GitHub
+  # release body is that version's CHANGELOG.md section. Otherwise it does nothing.
+  release:
+    name: release
+    needs: [lint, test, misc]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    environment: crates-io
+    permissions:
+      # push the tag, create the GitHub release
+      contents: write
+      # crates.io trusted publishing (OIDC)
+      id-token: write
+      pull-requests: read
+    env:
+      # A crates.io token is only needed for a crate's first version (trusted publishing
+      # cannot create crates); without the secret release-plz uses trusted publishing.
+      HAS_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - id: token
+        if: env.HAS_TOKEN == 'true'
+        name: release (crates.io token)
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - id: trusted
+        if: env.HAS_TOKEN != 'true'
+        name: release (trusted publishing)
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: GitHub release from CHANGELOG.md
+        env:
+          RELEASES: ${{ steps.token.outputs.releases || steps.trusted.outputs.releases }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(echo "${RELEASES:-[]}" | jq -r '.[] | select(.package_name == "vld") | .version')"
+          if [[ -z "${version}" ]]; then echo "nothing released"; exit 0; fi
+          just release-notes "${version}" > "$RUNNER_TEMP/notes.md"
+          gh release create "v${version}" --title "v${version}" --latest --notes-file "$RUNNER_TEMP/notes.md"
+          gh release view "v${version}" --json body --jq .body | head -5
+
+  # Slow or rarely-breaking checks, by hand before a release.
   extended:
     name: Extended
     if: github.event_name == 'workflow_dispatch'
@@ -106,7 +198,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-          targets: wasm32-unknown-unknown
       - run: |
           for tc in 1.85 1.88 1.94 1.96 1.97; do rustup toolchain install "${tc}" --profile minimal; done
           rustup toolchain install nightly --profile minimal
@@ -117,8 +208,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: just msrv
       - if: ${{ !cancelled() }}
-        run: just wasm
-      - if: ${{ !cancelled() }}
         run: just powerset
       - name: just minimal (non-blocking)
         if: ${{ !cancelled() }}
@@ -127,21 +216,4 @@ jobs:
       - name: clippy on latest stable (non-blocking)
         if: ${{ !cancelled() }}
         continue-on-error: true
-        run: cargo +stable clippy --workspace --all-targets --profile ci --locked -- -D warnings
-
-  # Path / file containment (ZPath::within, ZFile::within) is OS-sensitive.
-  os:
-    name: vld on ${{ matrix.os }}
-    if: github.event_name == 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p vld --features file,file-advanced,string-advanced --locked
+        run: cargo +stable clippy --workspace --all-features --all-targets --profile ci --locked -- -D warnings

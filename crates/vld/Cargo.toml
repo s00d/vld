@@ -81,6 +81,3 @@ required-features = ["fake"]
 # Every additive feature (all three date backends can be enabled together).
 features = ["derive", "regex", "openapi", "diff", "chrono", "jiff", "time", "decimal", "net", "file", "file-advanced", "string-advanced", "ts", "fake"]
 rustdoc-args = ["--cfg", "docsrs"]
-
-[package.metadata.release]
-pre-release-hook = ["just", "release-hook", "{{version}}"]

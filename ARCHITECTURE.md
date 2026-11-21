@@ -135,19 +135,15 @@ crates/vld-web/tests/it/ntex/          shared ntex tests, compiled by ntex3.rs /
 ```
 
 `cargo test -p <group> --all-features` builds the group once and runs every
-integration and every major. `cargo hack check -p <group> --each-feature
---no-dev-deps` proves each feature compiles on its own.
+integration and every major. `cargo hack clippy -p <group> --each-feature
+--lib` proves each feature compiles on its own.
 
 ## CI and release
 
-- CI runs one job per crate group (`core` = vld + vld-derive, `web`,
-  `openapi`, `data`, `app`) in parallel, each with its own cache, plus a small
-  job for fmt / docs / deny / package / fuzz / playground. Each group job runs
-  `just group <name>`: clippy and tests with all features, the `--each-feature`
-  check, and (core only) clippy per feature and tests without default
-  features. Feature pairs, MSRV toolchains, other OSes and minimal versions
-  stay in the manual `extended` job.
-- Releases: `cargo release minor --workspace` publishes the six crates in
-  dependency order (PUBLISHING.md). The release hook only rewrites the
-  changelog; it requires a green CI run on the release commit instead of
-  re-running the checks locally.
+- CI: clippy per crate group on Linux, tests per crate group on Linux, macOS and
+  Windows, all in parallel with their own caches, plus a `misc` job (fmt, docs,
+  deny, package, fuzz, playground). `just lint-group <name>` / `just
+  test-group <name>` are what each job runs. Feature pairs, MSRV toolchains and
+  minimal versions stay in the manual `extended` job.
+- Releases: release-plz keeps a release PR open; merging it publishes the six
+  crates from CI once `main` is green (PUBLISHING.md).

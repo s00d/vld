@@ -12,12 +12,15 @@ ci_flags := "--profile ci --locked"
 # CI runs one job per group. vld-data's diesel postgres/mysql need libpq / libmysqlclient.
 groups := "core web openapi data app"
 vld_all := "chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced,ts,fake"
+# vld-data without the postgres / mysql backends (diesel links libpq / libmysqlclient,
+# which only the Linux CI image has): what `test-group data` runs on macOS / Windows.
+data_portable := "sqlx-0_8,sqlx-0_9,diesel,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3,lapin-4"
 
 [private]
 default:
     @just --list
 
-# Everything CI runs (there split into one job per group plus `misc`)
+# Everything CI runs on Linux (there split into lint / test jobs per group plus `misc`)
 ci: misc lint test trim
 
 # The checks outside the crate groups
@@ -53,7 +56,8 @@ lint-group name:
       *) echo "unknown group '{{ name }}' (groups: {{ groups }})"; exit 1 ;;
     esac
 
-# Unit, integration and doc tests with all features (core: also without default features)
+# Unit, integration and doc tests with all features (core: also without default
+# features; data off Linux: without postgres / mysql)
 test-group name:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -61,7 +65,10 @@ test-group name:
       core)
         cargo test -p vld -p vld-derive --all-features {{ ci_flags }}
         cargo test -p vld --no-default-features {{ ci_flags }} ;;
-      web|openapi|data|app)
+      data)
+        if [[ "$(uname -s)" == Linux ]]; then features=(--all-features); else features=(--features "{{ data_portable }}"); fi
+        cargo test -p vld-data "${features[@]}" {{ ci_flags }} ;;
+      web|openapi|app)
         cargo test -p vld-{{ name }} --all-features {{ ci_flags }} ;;
       *) echo "unknown group '{{ name }}' (groups: {{ groups }})"; exit 1 ;;
     esac
@@ -183,31 +190,25 @@ clean:
     cargo clean
     rm -rf fuzz/target
 
-# cargo-release pre-release hook (runs after the version bump). The checks ran in CI:
-# the release commit's parent must have a green CI run. Then semver-checks against
-# crates.io, [Unreleased] -> [version] in CHANGELOG.md, and fuzz/Cargo.lock (fuzz/ is
-# outside the workspace) pointed at the new version.
-[private]
-release-hook version:
-    just _ci-green semver
-    just package --allow-dirty
-    @if [[ "${DRY_RUN:-false}" == "true" ]]; then echo "dry run: CHANGELOG.md unchanged"; else just _changelog {{ version }}; fi
-    cargo update --manifest-path fuzz/Cargo.toml --workspace --offline
+# fuzz/ is outside the workspace; run by the release-plz workflow on the release PR.
+# Release PR: [Unreleased] -> [version] in CHANGELOG.md, fuzz/Cargo.lock at the new version
+release-prep version: (changelog version)
+    cargo update --manifest-path fuzz/Cargo.toml --workspace
 
-# The CI workflow succeeded on HEAD (needs `gh`, pushed HEAD)
-[private]
-_ci-green:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    sha="$(git rev-parse HEAD)"
-    status="$(gh run list --workflow CI --commit "${sha}" --event push --json conclusion --jq '.[0].conclusion // "none"')"
-    if [[ "${status}" != "success" ]]; then
-      echo "CI on ${sha} is '${status}', not 'success': push, wait for green CI, then release"; exit 1
-    fi
-    echo "CI green on ${sha}"
+# The CHANGELOG.md section of a released version (the GitHub release body)
+release-notes version:
+    #!/usr/bin/env python3
+    import re, sys
+    from pathlib import Path
+    text, version = Path("CHANGELOG.md").read_text(), "{{ version }}"
+    m = re.search(rf"^## \[{re.escape(version)}\][^\n]*\n", text, re.M)
+    if not m:
+        sys.exit(f"CHANGELOG.md has no section for {version}")
+    nxt = re.search(r"^## \[", text[m.end():], re.M)
+    print(text[m.end(): m.end() + nxt.start() if nxt else None].strip())
 
 [private]
-_changelog version:
+changelog version:
     #!/usr/bin/env python3
     import datetime, re, sys
     from pathlib import Path
