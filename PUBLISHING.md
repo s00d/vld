@@ -12,7 +12,8 @@ published from a laptop and no crates.io token is stored anywhere.
 2. Wait for green CI on `main`.
 3. Actions -> **CI** -> **Run workflow** -> `release`: the version (e.g.
    `0.8.0`, no `v`) -> Run. The `release` job:
-   - stops unless CI succeeded on `main` HEAD;
+   - stops unless CI is green on `main` HEAD, or on an earlier commit with only
+     docs, `*.md` files or the justfile changed since (those need no new CI run);
    - `just release-prep X.Y.Z`: sets every crate's version, updates the
      lockfiles, renames `[Unreleased]` to `[X.Y.Z] - date` (stops when it is
      empty);

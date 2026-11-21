@@ -167,7 +167,8 @@ jobs:
         run: cargo +stable clippy --workspace --all-features --all-targets --profile ci --locked -- -D warnings
 
   # Release X.Y.Z (Run workflow with a version):
-  # 1. checks that CI succeeded on `main` HEAD;
+  # 1. checks CI: green on `main` HEAD, or on an earlier commit with only docs / *.md /
+  #    justfile changed since;
   # 2. `just release-prep X.Y.Z`: every crate's version, the lockfiles, [Unreleased] ->
   #    [X.Y.Z] in CHANGELOG.md (fails when [Unreleased] is empty); `just semver`;
   # 3. commits `chore: release vX.Y.Z` to `main`, tags `vX.Y.Z`;
@@ -204,9 +205,20 @@ jobs:
             echo "resume=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          sha="$(git rev-parse HEAD)"
-          status="$(gh run list --workflow CI --commit "${sha}" --event push --json conclusion --jq '.[0].conclusion // "none"')"
-          [[ "${status}" == success ]] || { echo "::error::CI on main ${sha} is '${status}': wait for green CI"; exit 1; }
+          # The newest `main` commit with a green CI run; after it only docs, *.md and the
+          # justfile may have changed (the release runs the recipes it needs itself).
+          green=""
+          for c in $(git rev-list --first-parent -n 50 HEAD); do
+            status="$(gh run list --workflow CI --commit "${c}" --event push --json conclusion --jq '.[0].conclusion // "none"')"
+            if [[ "${status}" == success ]]; then green="${c}"; break; fi
+          done
+          [[ -n "${green}" ]] || { echo "::error::no green CI run among the last 50 main commits"; exit 1; }
+          code="$(git diff --name-only "${green}" HEAD | grep -vE '^(docs/|justfile$|LICENSE$)|\.md$' || true)"
+          if [[ -n "${code}" ]]; then
+            echo "::error::CI is not green for these changes since ${green:0:7}: ${code//$'\n'/ }; wait for CI on main"
+            exit 1
+          fi
+          echo "CI green on ${green:0:7}; changed since: $(git diff --name-only "${green}" HEAD | tr '\n' ' ')"
           echo "resume=false" >> "$GITHUB_OUTPUT"
       # diesel postgres / mysql (vld-data rustdoc for semver-checks) link libpq / libmysqlclient.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
