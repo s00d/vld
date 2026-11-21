@@ -172,7 +172,8 @@ semver:
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'rm -rf target/semver-checks || true' EXIT
-    for c in vld vld-derive vld-web vld-openapi vld-data vld-app; do
+    # vld-derive is a proc-macro: no library API for semver-checks to compare.
+    for c in vld vld-web vld-openapi vld-data vld-app; do
       if cargo info --registry crates-io "${c}" >/dev/null 2>&1; then
         cargo semver-checks -p "${c}" --all-features
       else
