@@ -2034,7 +2034,13 @@ impl<R: Rng> FakeGen<R> {
         {
             let after = match (result.get(a), result.get(b)) {
                 (Some(Value::Number(x)), Some(Value::Number(y))) => x.as_f64() > y.as_f64(),
-                (Some(Value::String(x)), Some(Value::String(y))) => x > y,
+                // decimals are strings: compare them as numbers, dates (ISO 8601) as text
+                (Some(Value::String(x)), Some(Value::String(y))) => {
+                    match (x.parse::<f64>(), y.parse::<f64>()) {
+                        (Ok(x), Ok(y)) => x > y,
+                        _ => x > y,
+                    }
+                }
                 _ => false,
             };
             if after {

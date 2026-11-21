@@ -137,7 +137,8 @@ impl ZDecimal {
 
     /// At most `p` significant digits in total, as written: the digits of
     /// the unscaled value, and at least the scale (`"123.45"` → 5,
-    /// `"0.012"` → 3, `"1.230"` → 4, `"0"` → 1). Fails with `too_big`
+    /// `"0.012"` → 3, `"1.230"` → 4, `"0"` → 1); an exponent form counts
+    /// the digits of its expanded value (`"1e5"` → 6). Fails with `too_big`
     /// (origin `precision`).
     ///
     /// # Panics

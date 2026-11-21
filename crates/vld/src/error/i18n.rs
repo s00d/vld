@@ -396,11 +396,15 @@ pub fn supported_locale(tag: &str) -> Option<&'static str> {
         if let Some(code) = locales().find(|c| c.eq_ignore_ascii_case(candidate)) {
             return Some(code);
         }
-        if candidate.eq_ignore_ascii_case("no") {
-            return Some("nb");
-        }
-        if candidate.eq_ignore_ascii_case("iw") {
-            return Some("he");
+        let alias = if candidate.eq_ignore_ascii_case("no") {
+            Some("nb")
+        } else if candidate.eq_ignore_ascii_case("iw") {
+            Some("he")
+        } else {
+            None
+        };
+        if let Some(code) = alias.and_then(|a| locales().find(|c| *c == a)) {
+            return Some(code);
         }
         candidate = candidate.rsplit_once('-')?.0;
     }

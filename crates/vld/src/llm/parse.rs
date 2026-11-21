@@ -61,9 +61,11 @@ impl From<VldError> for LlmParseError {
     }
 }
 
-/// The JSON object or array in a model reply: the first one in a fenced
-/// block (```` ```json ````), else the first balanced `{…}` / `[…]` that
-/// parses, so leading and trailing prose is skipped.
+/// The JSON object or array in a model reply: from the first fenced block
+/// (```` ```json ````) holding one, else from the whole text; of the
+/// balanced `{…}` / `[…]` values found left to right (not nested in each
+/// other), the first object, else the first array, so prose around it and
+/// bracketed asides like `[1]` are skipped.
 ///
 /// ```
 /// let v = vld::llm::extract_json("Here you go:\n{\"a\": [1, \"}\"]}\nAnything else?").unwrap();
@@ -86,15 +88,27 @@ pub fn extract_json(text: &str) -> Option<Value> {
     first_value(text)
 }
 
-// ponytail: rescans from each `{` / `[` (quadratic on long prose full of
-// brackets); a single pass with a candidate stack if replies get that large.
+// ponytail: rescans from each unmatched `{` / `[` (quadratic on long prose
+// full of brackets); a single pass with a candidate stack if replies get that large.
 fn first_value(s: &str) -> Option<Value> {
-    s.char_indices()
-        .filter(|(_, c)| *c == '{' || *c == '[')
-        .find_map(|(i, _)| {
-            let end = balanced_end(&s[i..])?;
-            serde_json::from_str(&s[i..i + end]).ok()
-        })
+    let mut first_array = None;
+    let mut i = 0;
+    while let Some(off) = s[i..].find(['{', '[']) {
+        let start = i + off;
+        let parsed = balanced_end(&s[start..]).and_then(|end| {
+            let v: Value = serde_json::from_str(&s[start..start + end]).ok()?;
+            Some((v, end))
+        });
+        match parsed {
+            Some((v @ Value::Object(_), _)) => return Some(v),
+            Some((v, end)) => {
+                first_array.get_or_insert(v);
+                i = start + end;
+            }
+            None => i = start + 1,
+        }
+    }
+    first_array
 }
 
 /// Byte length of the bracketed value at the start of `s` (strings skipped).

@@ -1799,9 +1799,14 @@ fn translator_picks_cldr_plural_forms_and_falls_back() {
         assert_eq!(len("zh_Hans_CN", 2), len("zh", 2));
     }
     assert_eq!(len("RU", 3), len("ru", 3));
-    if embedded("nb") {
-        assert_eq!(vld::i18n::supported_locale("no"), Some("nb"));
-    }
+    // an alias resolves only to a compiled-in catalog
+    let nb = embedded("nb").then_some("nb");
+    assert_eq!(vld::i18n::supported_locale("no"), nb);
+    assert_eq!(vld::i18n::supported_locale("no-NO"), nb);
+    assert_eq!(
+        vld::i18n::supported_locale("iw"),
+        embedded("he").then_some("he")
+    );
     assert_eq!(vld::i18n::supported_locale("xx-YY"), None);
     for n in [0, 1, 2] {
         let err = vld::string().len(n).parse_value(&json!("abc")).unwrap_err();

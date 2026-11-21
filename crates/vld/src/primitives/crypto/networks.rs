@@ -437,6 +437,14 @@ pub(super) fn sample_ss58(prefix: u16, rnd: Rnd<'_>) -> String {
 /// `<workchain>:<64 hex>`.
 fn ton(s: &str) -> Result<Decoded, R> {
     if let Some((wc, hex)) = s.split_once(':') {
+        // canonical decimal only (no `+0`, `00`, `-0`), as the schema pattern says
+        let digits = wc.strip_prefix('-').unwrap_or(wc);
+        if digits.is_empty()
+            || !digits.bytes().all(|b| b.is_ascii_digit())
+            || (digits.starts_with('0') && wc != "0")
+        {
+            return Err(R::Prefix);
+        }
         let wc: i8 = wc.parse().map_err(|_| R::Prefix)?;
         if hex.len() != 64 {
             return Err(R::Length);

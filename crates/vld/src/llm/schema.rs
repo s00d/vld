@@ -114,6 +114,14 @@ impl Cx<'_> {
             return Ok(v.clone());
         };
         let llm = self.provider != Provider::Generic;
+        // `oneOf` becomes `anyOf` for the providers: with an `anyOf` already there it
+        // would turn into description text and constrain nothing.
+        if llm && obj.contains_key("oneOf") && obj.contains_key("anyOf") {
+            return Err(E::Unsupported {
+                path: path.to_string(),
+                keyword: "oneOf".into(),
+            });
+        }
         let mut out = Map::new();
         for (k, val) in obj {
             let at = |seg: &str| format!("{path}/{k}{seg}");
@@ -154,11 +162,7 @@ impl Cx<'_> {
                 },
                 _ => val.clone(),
             };
-            let key = if llm && k == "oneOf" && !obj.contains_key("anyOf") {
-                "anyOf"
-            } else {
-                k
-            };
+            let key = if llm && k == "oneOf" { "anyOf" } else { k };
             out.insert(key.to_string(), val);
         }
         if llm && let Some(c) = out.remove("const") {
@@ -273,7 +277,7 @@ fn is_null_schema(v: &Value) -> bool {
         .is_some_and(|o| o.len() == 1 && o.get("type").is_some_and(|t| t == "null"))
 }
 
-/// Add `null` to a typed schema's `type` (and `enum`).
+/// Add `null` to a typed schema's `type` (and `enum`; a `const` becomes an `enum`).
 fn add_null(o: &mut Map<String, Value>) {
     match o.get_mut("type") {
         Some(Value::String(t)) if t != "null" => {
@@ -282,6 +286,9 @@ fn add_null(o: &mut Map<String, Value>) {
         }
         Some(Value::Array(ts)) if !ts.iter().any(|t| t == "null") => ts.push("null".into()),
         _ => {}
+    }
+    if let Some(c) = o.remove("const") {
+        o.entry("enum").or_insert_with(|| json!([c]));
     }
     if let Some(Value::Array(e)) = o.get_mut("enum")
         && !e.contains(&Value::Null)

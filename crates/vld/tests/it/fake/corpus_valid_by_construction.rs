@@ -259,6 +259,7 @@ fn units_ranges_and_timestamps() {
         "ratio" => vld::ratio();
         "range_int" => vld::range(vld::i32());
         "range_number" => vld::range(vld::number().min(-5.0).max(5.0));
+        "range_decimal" => vld::range(vld::decimal());
         "range_date" => vld::range(vld::chrono::date()).keys("from", "to");
         "range_datetime" => vld::range(vld::chrono::datetime().with_timezone_only());
         "range_unix" => vld::range(vld::chrono::datetime().unix_millis());

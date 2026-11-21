@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use vld::Validate;
 use vld::llm::{
     LlmFeedbackOptions, LlmParseError, LlmSchema, LlmSchemaError, LlmSchemaExt, Provider,
-    llm_schema, parse_llm, parse_llm_with,
+    extract_json, llm_schema, parse_llm, parse_llm_with,
 };
 use vld::prelude::*;
 
@@ -244,6 +244,33 @@ fn limits_and_unsupported_shapes() {
         })
     );
     assert!(llm_schema(&not, Provider::Generic).is_ok());
+    let both = json!({"anyOf": [{"type": "string"}, {"type": "integer"}], "oneOf": [{"minLength": 1}, {"minimum": 0}]});
+    assert_eq!(
+        llm_schema(&both, Provider::OpenAiStrict),
+        Err(LlmSchemaError::Unsupported {
+            path: "#".into(),
+            keyword: "oneOf".into()
+        })
+    );
+    // a nullable `const` keeps accepting null
+    let nullable_const = json!({
+        "type": "object",
+        "properties": {"x": {"anyOf": [{"type": "string", "const": "a"}, {"type": "null"}]}},
+        "required": ["x"],
+        "additionalProperties": false
+    });
+    for p in [
+        Provider::Generic,
+        Provider::OpenAiStrict,
+        Provider::Anthropic,
+        Provider::Gemini,
+    ] {
+        let out = llm_schema(&nullable_const, p).unwrap();
+        let v = validator(&out);
+        assert!(v.is_valid(&json!({"x": "a"})), "{p:?}: {out}");
+        assert!(v.is_valid(&json!({"x": null})), "{p:?}: {out}");
+        assert!(!v.is_valid(&json!({"x": "b"})), "{p:?}: {out}");
+    }
     assert_eq!(
         llm_schema(
             &json!({"$ref": "#/components/schemas/X"}),
@@ -275,9 +302,13 @@ fn reply_is_parsed_and_issues_become_feedback() {
         order.clone(),
         format!("Sure, here it is:\n```json\n{order}\n```\nAnything else?"),
         format!("Result {order} -- done {{not json}}"),
+        format!("See [1] and [2, 3]. {order}"),
     ] {
         assert_eq!(parse_llm::<Order>(&reply).unwrap(), full_order(), "{reply}");
     }
+    // an object wins over a bracketed aside; an array alone, or holding the object, stays whole
+    assert_eq!(extract_json("[1] then [2]"), Some(json!([1])));
+    assert_eq!(extract_json("x [{\"a\": 1}] y"), Some(json!([{"a": 1}])));
     let err = parse_llm::<Order>("I cannot help with that.").unwrap_err();
     assert!(matches!(err, LlmParseError::NoJson));
     assert_eq!(err.llm_feedback(), "no JSON object or array found");

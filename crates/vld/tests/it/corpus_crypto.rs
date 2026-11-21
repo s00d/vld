@@ -509,6 +509,27 @@ fn rows() -> Vec<Row> {
             "0:ca6e321c7cce9ecedf0a8ca2492ec8592494aa5fb5ce0387dff96ef6af982a3",
             Err(R::Length),
         ),
+        (
+            n(N::Ton),
+            "-1:ca6e321c7cce9ecedf0a8ca2492ec8592494aa5fb5ce0387dff96ef6af982a3e",
+            ok(K::Raw),
+        ),
+        // the workchain in canonical decimal only, as the schema pattern
+        (
+            n(N::Ton),
+            "+0:ca6e321c7cce9ecedf0a8ca2492ec8592494aa5fb5ce0387dff96ef6af982a3e",
+            Err(R::Prefix),
+        ),
+        (
+            n(N::Ton),
+            "00:ca6e321c7cce9ecedf0a8ca2492ec8592494aa5fb5ce0387dff96ef6af982a3e",
+            Err(R::Prefix),
+        ),
+        (
+            n(N::Ton),
+            "-0:ca6e321c7cce9ecedf0a8ca2492ec8592494aa5fb5ce0387dff96ef6af982a3e",
+            Err(R::Prefix),
+        ),
         // ── Monero: the general fund address ──
         (
             n(N::Monero),
