@@ -1,0 +1,55 @@
+[package]
+name = "vld-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Application-edge integrations for the vld validation library: config files (config-rs, figment), clap arguments, Tauri IPC"
+documentation = "https://docs.rs/vld-app"
+keywords = ["validation", "config", "clap", "tauri", "vld"]
+categories = ["config", "command-line-interface", "gui"]
+include = ["/src/**", "/LICENSE", "/Cargo.toml"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+config-rs = ["dep:config"]
+figment = ["dep:figment"]
+# `vld/derive`: clap structs carry their rules with `#[derive(Validate)]`.
+clap = ["dep:clap", "vld/derive"]
+
+[dependencies]
+vld = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+config = { version = ">=0.14, <0.16", optional = true, default-features = false, features = ["toml", "json"] }
+figment = { version = "0.10.10", optional = true, features = ["toml", "json", "env"] }
+clap = { version = "4", default-features = false, features = ["std"], optional = true }
+
+# Library test features; tests of a module compile only with its feature.
+[dev-dependencies]
+vld = { workspace = true, features = ["derive"] }
+config = { version = ">=0.14, <0.16", features = ["toml", "json", "yaml"] }
+figment = { version = "0.10", features = ["toml", "json", "env", "test"] }
+clap = { version = "4", features = ["derive"] }
+tempfile = "3"
+proptest = "1"
+
+[[example]]
+name = "config_basic"
+required-features = ["config-rs"]
+
+[[example]]
+name = "figment_basic"
+required-features = ["figment"]
+
+[[example]]
+name = "clap_basic"
+required-features = ["clap"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

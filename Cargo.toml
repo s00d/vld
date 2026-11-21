@@ -3,17 +3,9 @@ members = [
     "crates/vld",
     "crates/vld-derive",
     "crates/vld-web",
-    "crates/vld-integration-common",
-    "crates/vld-diesel",
     "crates/vld-openapi",
-    "crates/vld-config",
-    "crates/vld-sea",
-    "crates/vld-clap",
-    "crates/vld-tauri",
-    "crates/vld-sqlx",
-    "crates/vld-surrealdb",
-    "crates/vld-redis",
-    "crates/vld-lapin",
+    "crates/vld-data",
+    "crates/vld-app",
     "examples/playground",
 ]
 exclude = ["fuzz"]
@@ -33,7 +25,6 @@ repository = "https://github.com/s00d/vld"
 # Internal crates
 vld = { path = "crates/vld", version = "0.7.0" }
 vld-derive = { path = "crates/vld-derive", version = "0.7.0" }
-vld-integration-common = { path = "crates/vld-integration-common", version = "0.7.0" }
 vld-openapi = { path = "crates/vld-openapi", version = "0.7.0" }
 
 # Shared external
