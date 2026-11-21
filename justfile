@@ -204,7 +204,7 @@ release-prep version: (changelog version)
     text, n = re.subn(r'^(vld[a-z-]* = \{ path = "crates/[^"]+", version = )"[^"]+"', rf'\g<1>"{version}"', text, flags=re.M)
     assert n > 0, "no internal dependencies found in [workspace.dependencies]"
     p.write_text(text)
-    subprocess.run(["cargo", "update", "--workspace", "--offline"], check=True)
+    subprocess.run(["cargo", "update", "--workspace"], check=True)
     subprocess.run(["cargo", "update", "--manifest-path", "fuzz/Cargo.toml", "--workspace"], check=True)
     print(f"version {version}: Cargo.toml, Cargo.lock, fuzz/Cargo.lock")
 
