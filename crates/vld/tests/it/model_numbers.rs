@@ -753,3 +753,32 @@ fn number_json_schema_agrees() {
         })
         .unwrap();
 }
+
+proptest! {
+    /// Given the presets `percent()` (`0..=100`) and `ratio()` (`0..=1`)
+    /// When a number around and beyond both ends (quarter steps) is parsed
+    /// Then it is returned inside the range, `too_small` (minimum 0) below and `too_big` (maximum
+    /// 100 / 1) above; the JSON Schema is `number` with `minimum` / `maximum`.
+    #[test]
+    fn percent_and_ratio_presets(q in -8i32..=420, ratio in any::<bool>()) {
+        let (schema, top) = if ratio { (vld::ratio(), 1.0) } else { (vld::percent(), 100.0) };
+        let v = f64::from(q) / if ratio { 400.0 } else { 4.0 };
+        let want = if v < 0.0 {
+            Some("too_small")
+        } else if v > top {
+            Some("too_big")
+        } else {
+            None
+        };
+        match (schema.parse_value(&json!(v)), want) {
+            (Ok(out), None) => prop_assert_eq!(out, v),
+            (Err(err), Some(code)) => prop_assert_eq!(issues(&err), vec![(String::new(), code.to_string())]),
+            (got, want) => prop_assert!(false, "{v}: got {got:?}, want {want:?}"),
+        }
+        #[cfg(feature = "openapi")]
+        {
+            use vld::openapi::JsonSchema;
+            prop_assert_eq!(schema.json_schema(), json!({"type": "number", "minimum": 0.0, "maximum": top}));
+        }
+    }
+}

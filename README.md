@@ -53,6 +53,7 @@ fn main() {
 - **Typed structs** with `vld::schema!` or `#[derive(Validate)]` (feature `derive`), serde renames, lenient parsing.
 - **Errors you can use**: typed `IssueCode`s with stable keys, paths, received values, custom messages, `flatten` / `treeify` / `prettify`, bundled English, Russian, German and Spanish messages.
 - **JSON Schema and OpenAPI 3.1** from the same schemas (feature `openapi`), plus breaking-change detection (feature `diff`).
+- **LLM structured outputs and tools** (feature `llm`): schemas for OpenAI / Anthropic / Gemini with provider limits checked, JSON extracted from model replies, validation errors as retry feedback; MCP (`rmcp`) and rig tool adapters in `vld-web`.
 - **Small core**: only `serde` and `serde_json` by default; heavier validators are opt-in features.
 - **Integrations** for 10 web frameworks, OpenAPI tools, databases, queues, config, CLI and UI in four crates, one module per library behind a feature, with one error format and safe defaults (2 MiB body limits, 415 / 422 handling).
 
@@ -62,11 +63,11 @@ Released together with one version. No feature is on by default; any set of feat
 
 | Crate | Modules (features) | Docs |
 |---|---|---|
-| [`vld`](https://crates.io/crates/vld) | core schemas, macros, errors, i18n, JSON Schema; `form` (server functions, Leptos / Dioxus), `ts` (`ts`: Zod / Valibot / TypeScript), `fake` (`fake`: test data) | [guide](https://s00d.github.io/vld/getting-started/introduction) · [api](https://docs.rs/vld) |
+| [`vld`](https://crates.io/crates/vld) | core schemas, macros, errors, i18n, JSON Schema; `form` (server functions, Leptos / Dioxus), `ts` (`ts`: Zod / Valibot / TypeScript), `fake` (`fake`: test data), `llm` (`llm`: LLM schemas, reply parsing, feedback) | [guide](https://s00d.github.io/vld/getting-started/introduction) · [api](https://docs.rs/vld) |
 | [`vld-derive`](https://crates.io/crates/vld-derive) | `#[derive(Validate)]`, used through `vld`'s `derive` feature | [guide](https://s00d.github.io/vld/structs/derive) · [api](https://docs.rs/vld-derive) |
-| [`vld-web`](https://crates.io/crates/vld-web) | `axum`, `actix`, `ntex3` / `ntex4` (`ntex-3` / `ntex-4`), `poem`, `rocket`, `salvo`, `warp`, `rama`, `tower`, `tonic`; `common` | [guide](https://s00d.github.io/vld/integrations/web/overview) · [api](https://docs.rs/vld-web) |
-| [`vld-openapi`](https://crates.io/crates/vld-openapi) | `utoipa5` / `utoipa6` (`utoipa-5` / `utoipa-6`), `schemars0` / `schemars1` (`schemars-0` / `schemars-1`, also aide), `validator` | [guide](https://s00d.github.io/vld/integrations/openapi/utoipa) · [api](https://docs.rs/vld-openapi) |
-| [`vld-data`](https://crates.io/crates/vld-data) | `sqlx08` / `sqlx09` (`sqlx-0_8` / `sqlx-0_9`), `diesel`, `sea1` / `sea2` (`sea-orm-1` / `sea-orm-2`), `surrealdb`, `redis0` / `redis1` (`redis-0` / `redis-1`), `lapin2` / `lapin3` / `lapin4` (`lapin-2` / `-3` / `-4`) | [guide](https://s00d.github.io/vld/integrations/database/sqlx) · [api](https://docs.rs/vld-data) |
+| [`vld-web`](https://crates.io/crates/vld-web) | `axum`, `actix`, `ntex3` / `ntex4` (`ntex-3` / `ntex-4`), `poem`, `rocket`, `salvo`, `warp`, `rama`, `tower`, `tonic`, `async_graphql`, `tungstenite`, `axum::ws` (`axum-ws`), `lambda`, `rmcp`, `rig`; `common` | [guide](https://s00d.github.io/vld/integrations/web/overview) · [api](https://docs.rs/vld-web) |
+| [`vld-openapi`](https://crates.io/crates/vld-openapi) | `utoipa5` / `utoipa6` (`utoipa-5` / `utoipa-6`), `schemars0` / `schemars1` (`schemars-0` / `schemars-1`, also aide), `poem_openapi` (`poem-openapi`), `validator` | [guide](https://s00d.github.io/vld/integrations/openapi/utoipa) · [api](https://docs.rs/vld-openapi) |
+| [`vld-data`](https://crates.io/crates/vld-data) | `sqlx08` / `sqlx09` (`sqlx-0_8` / `sqlx-0_9`), `diesel`, `sea1` / `sea2` (`sea-orm-1` / `sea-orm-2`), `surrealdb`, `redis0` / `redis1` (`redis-0` / `redis-1`), `lapin2` / `lapin3` / `lapin4` (`lapin-2` / `-3` / `-4`), `bson2` / `bson3` (`bson-2` / `bson-3`), `postgres_types` (`tokio-postgres`), `clickhouse`, `rumqttc`, `nats`, `centrifuge`, `csv` | [guide](https://s00d.github.io/vld/integrations/database/sqlx) · [api](https://docs.rs/vld-data) |
 | [`vld-app`](https://crates.io/crates/vld-app) | `config` (`config-rs`, `figment`), `clap` (`clap`), `tauri` | [guide](https://s00d.github.io/vld/integrations/config-cli/config) · [api](https://docs.rs/vld-app) |
 
 ```toml

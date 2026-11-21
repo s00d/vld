@@ -1,0 +1,132 @@
+---
+source: crates/vld/tests/it/story_llm.rs
+expression: value
+---
+{
+  "$defs": {
+    "Address": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "max length 80; min length 2",
+          "type": "string"
+        },
+        "zip": {
+          "pattern": "^[0-9]{5}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "city"
+      ],
+      "type": "object"
+    },
+    "Contact": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "address": {
+              "format": "email",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "email"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "address"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "phone"
+              ],
+              "type": "string"
+            },
+            "number": {
+              "description": "min length 7",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "number"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "bill_to": {
+      "$ref": "#/$defs/Address"
+    },
+    "cc": {
+      "format": "email",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "contact": {
+      "$ref": "#/$defs/Contact"
+    },
+    "customer": {
+      "description": "max length 40; min length 3",
+      "type": "string"
+    },
+    "note": {
+      "description": "max length 500",
+      "type": "string"
+    },
+    "price": {
+      "description": "minimum 0.0; multiple of 0.01",
+      "type": "number"
+    },
+    "priority": {
+      "enum": [
+        "low",
+        "normal",
+        "high"
+      ],
+      "type": "string"
+    },
+    "quantity": {
+      "description": "maximum 100; minimum 1",
+      "type": "integer"
+    },
+    "ship_to": {
+      "$ref": "#/$defs/Address"
+    },
+    "tags": {
+      "description": "max items 5",
+      "items": {
+        "description": "min length 1",
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "customer",
+    "quantity",
+    "price",
+    "priority",
+    "cc",
+    "ship_to",
+    "contact",
+    "tags"
+  ],
+  "type": "object"
+}

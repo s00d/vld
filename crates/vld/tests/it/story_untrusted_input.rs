@@ -206,3 +206,45 @@ fn issue_less_failures_are_never_swallowed() {
     assert_eq!(swallowed, Vec::<&str>::new());
     assert!(SilentFail.catch(()).parse("1").is_ok());
 }
+
+/// Given a username field that normalizes to NFKC and rejects mixed scripts
+/// When look-alike spellings arrive (decomposed accents, full-width letters,
+/// a Cyrillic `а` inside a Latin name)
+/// Then equal-looking names normalize to one stored form, and the
+/// script-mixing spoof is one `single_script` issue.
+#[cfg(feature = "unicode")]
+#[test]
+fn usernames_are_normalized_and_spoofs_rejected() {
+    use vld::error::{IssueCode, StringValidation};
+    let nfc = vld::string().normalize_nfc();
+    assert_eq!(nfc.parse_value(&json!("Cafe\u{301}")).unwrap(), "Caf\u{e9}");
+    // NFC keeps compatibility forms; NFKC folds them.
+    assert_eq!(nfc.parse_value(&json!("ｆｉ")).unwrap(), "ｆｉ");
+    let username = vld::string()
+        .normalize_nfkc()
+        .to_lowercase()
+        .min(3)
+        .max(4)
+        .single_script();
+    for spelling in ["ｃａｆｅ\u{301}", "CAFÉ", "cafe\u{301}", "ca\u{fb01}"] {
+        let got = username.parse_value(&json!(spelling));
+        match spelling {
+            "ca\u{fb01}" => assert_eq!(got.unwrap(), "cafi"),
+            _ => assert_eq!(got.unwrap(), "caf\u{e9}", "{spelling:?}"),
+        }
+    }
+    // NFC also makes `max` count what the user sees (5 code points, 4 chars).
+    assert!(
+        vld::string()
+            .max(4)
+            .parse_value(&json!("cafe\u{301}"))
+            .is_err()
+    );
+    let err = username.parse_value(&json!("p\u{430}yp")).unwrap_err();
+    assert_eq!(
+        err.issues.iter().map(|i| &i.code).collect::<Vec<_>>(),
+        [&IssueCode::InvalidString {
+            validation: StringValidation::SingleScript
+        }]
+    );
+}

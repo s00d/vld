@@ -22,9 +22,11 @@ pub fn user(name: &str, email: &str) -> UserSchema {
     }
 }
 
-/// How a valid user is stored: the validated JSON value (keys sorted).
+/// How a valid user is stored: the validated JSON value. Its key order is
+/// serde_json's map order (sorted, or field order when a dependency such as
+/// bson 2 enables serde_json's `preserve_order`), so it is built the same way.
 pub fn stored(u: &UserSchema) -> Vec<u8> {
-    format!(r#"{{"email":"{}","name":"{}"}}"#, u.email, u.name).into_bytes()
+    serde_json::to_vec(&serde_json::json!({"name": u.name, "email": u.email})).unwrap()
 }
 
 #[derive(Debug, Clone)]

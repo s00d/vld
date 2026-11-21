@@ -15,7 +15,7 @@
 //! | `TooSmall` | `too_small` | `too_small.<origin>`, `too_small` (exclusive: `too_small_exclusive[.<origin>]`) | `origin`, `minimum`, `inclusive` |
 //! | `TooBig` | `too_big` | `too_big.<origin>`, `too_big` (exclusive: `too_big_exclusive[.<origin>]`) | `origin`, `maximum`, `inclusive` |
 //! | `InvalidLength` | `invalid_length` | `invalid_length.<origin>` | `origin`, `expected` |
-//! | `InvalidString` | `invalid_string` | `invalid_string.<validation>` | `validation` (+ `prefix` / `suffix` / `substring`) |
+//! | `InvalidString` | `invalid_string` | `invalid_string.<validation>` | `validation` (+ `prefix` / `suffix` / `substring` / `max_repeat` / `min_score`) |
 //! | `InvalidFormat` | `invalid_format` | `invalid_format.<format>` | `format` |
 //! | `InvalidDate` | `invalid_date` | `invalid_date.<kind>` | `kind` |
 //! | `InvalidTimezoneOffset` | `invalid_timezone_offset` | — | `expected` |
@@ -33,6 +33,8 @@
 //! | `MissingContains` | `missing_contains` | — | — |
 //! | `DuplicateKey` | `duplicate_key` | — | — |
 //! | `InvalidMapEntry` | `invalid_map_entry` | — | — |
+//! | `RingNotClosed` | `ring_not_closed` | — | — |
+//! | `RangeOrder` | `range_order` | — | `start`, `end` |
 //! | `MissingField` | `missing_field` | — | — |
 //! | `UnrecognizedField` | `unrecognized_field` | — | — |
 //! | `PathOutsideBase` | `path_outside_base` | — | `base` |
@@ -45,6 +47,7 @@
 //! | `FileTypeNotAllowed` | `file_type_not_allowed` | — | `kind`, `actual`, `allowed` |
 //! | `FileTypeDenied` | `file_type_denied` | — | `kind`, `actual` |
 //! | `FileTypeUnknown` | `file_type_unknown` | — | `kind` |
+//! | `InvalidCryptoAddress` | `invalid_crypto_address` | — | `network`, `reason` |
 //! | `ChecksumMismatch` | `checksum_mismatch` | — | `algorithm` |
 //! | `MissingExif` | `missing_exif` | — | — |
 //! | `SerializeError` | `serialize_error` | — | `detail` |
@@ -54,12 +57,14 @@
 //!
 //! Origins ([`SizeOrigin::key`]): `string`, `number`, `decimal`, `array`,
 //! `tuple`, `set`, `record`, `object`, `bytes`, `date`, `datetime`, `time`,
-//! `duration`, `file`, `image_width`, `image_height`, `port`, `contains`.
+//! `duration`, `file`, `image_width`, `image_height`, `port`, `contains`,
+//! `scale`, `precision`.
 //!
 //! `invalid_type`'s `expected` / `received` are stable type keys
 //! (`string`, `number`, `integer`, `boolean`, `array`, `object`, `null`,
 //! `never`, `date`, `datetime`, `time`, `duration`, `decimal`, `path`,
-//! `file`, `socket_addr`, `ip_network`, `bytes`, `bytes_or_string`, `byte`);
+//! `file`, `socket_addr`, `ip_network`, `bytes`, `bytes_or_string`, `byte`,
+//! `geo_point`);
 //! messages render them through the `type.<key>` templates (English:
 //! `type.date` → "date string (YYYY-MM-DD)", plain words render as
 //! themselves).
@@ -78,7 +83,14 @@ mod i18n_langs;
 
 pub use crate::object::{FieldResult, ParseResult};
 pub use builder::IssueBuilder;
-pub use code::{DateKind, FileTypeKind, FormatKind, IssueCode, SizeOrigin, StringValidation};
+pub use code::{
+    CryptoAddressReason, DateKind, FileTypeKind, FormatKind, IssueCode, SizeOrigin,
+    StringValidation,
+};
+
+/// The `received` value of every issue of a
+/// [`redact()`](crate::schema::VldSchema::redact)ed schema.
+pub const REDACTED: &str = "[redacted]";
 
 /// A segment in a validation error path.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

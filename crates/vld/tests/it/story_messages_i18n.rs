@@ -1438,3 +1438,113 @@ fn showing_errors_on_a_form() {
     );
     assert_eq!(rec((vld::string(),).parse("1").unwrap_err()), one);
 }
+
+/// Given decimals with scale / precision checks, `money()`, `range()` and ISO durations
+/// When each fails, then its English message is read, translated to Russian, and overridden
+/// with `with_messages`
+/// Then scale and precision use the singular for 1 (`digit`, Russian `знака`) and the plural
+/// otherwise (exact scale: `знак` / `знака` / `знаков`); `range_order` names both fields; a
+/// calendar unit explains why years and months are refused; `with_messages` keys (`max_scale`,
+/// `scale`, `max_precision`, `currency`, `range_order`) replace the text and survive translation.
+#[test]
+fn units_and_ranges_speak_plainly() {
+    #[cfg(feature = "decimal")]
+    {
+        let s1 = vld::decimal().max_scale(1);
+        assert_eq!(
+            first_msg(&s1, json!("1.25")),
+            "Decimal must have at most 1 digit after the point"
+        );
+        assert_eq!(
+            first_msg(&vld::decimal().max_scale(2), json!("1.255")),
+            "Decimal must have at most 2 digits after the point"
+        );
+        assert_eq!(
+            first_msg(&vld::decimal().scale(2), json!("1.5")),
+            "Decimal must have exactly 2 digits after the point"
+        );
+        assert_eq!(
+            first_msg(&vld::decimal().max_precision(3), json!("1234")),
+            "Decimal must have at most 3 digits"
+        );
+        let ru = |s: &ZDecimal, v: &str| {
+            translate_error(&s.parse_value(&json!(v)).unwrap_err(), &russian()).issues[0]
+                .message
+                .clone()
+        };
+        assert_eq!(
+            ru(&s1, "1.25"),
+            "Десятичное число должно иметь не более 1 знака после запятой"
+        );
+        assert_eq!(
+            ru(&vld::decimal().scale(2), "1"),
+            "Десятичное число должно иметь ровно 2 знака после запятой"
+        );
+        assert_eq!(
+            ru(&vld::decimal().scale(5), "1"),
+            "Десятичное число должно иметь ровно 5 знаков после запятой"
+        );
+        let custom = vld::decimal()
+            .max_scale(2)
+            .max_precision(4)
+            .with_messages(|k| match k {
+                "max_scale" => Some("cents only".into()),
+                "max_precision" => Some("too long".into()),
+                "invalid_format" => Some("not a number".into()),
+                _ => None,
+            });
+        assert_eq!(first_msg(&custom, json!("1.255")), "cents only");
+        assert_eq!(first_msg(&custom, json!("12345")), "too long");
+        assert_eq!(first_msg(&custom, json!("abc")), "not a number");
+        let err = custom.parse_value(&json!("1.255")).unwrap_err();
+        assert_eq!(messages(&translate_error(&err, &russian())), ["cents only"]);
+
+        let wallet = vld::money().with_messages(|k| match k {
+            "currency" => Some("pick a real currency".into()),
+            "max_scale" => Some("too many decimals for this currency".into()),
+            _ => None,
+        });
+        let err = wallet
+            .parse_value(&json!({"amount": "1.5", "currency": "JPY"}))
+            .unwrap_err();
+        assert_eq!(messages(&err), ["too many decimals for this currency"]);
+        let err = wallet
+            .parse_value(&json!({"amount": "1", "currency": "ABC"}))
+            .unwrap_err();
+        assert_eq!(messages(&err), ["pick a real currency"]);
+        assert_eq!(
+            first_msg(&vld::money(), json!({"amount": "1.5", "currency": "JPY"})),
+            "Decimal must have at most 0 digits after the point"
+        );
+    }
+
+    let r = vld::range(vld::number()).keys("from", "to");
+    let err = r.parse_value(&json!({"from": 2, "to": 1})).unwrap_err();
+    assert_eq!(messages(&err), ["`to` must not be before `from`"]);
+    assert_eq!(
+        messages(&translate_error(&err, &russian())),
+        ["«to» не может быть раньше «from»"]
+    );
+    let r = r.with_messages(|k| (k == "range_order").then(|| "end before start".into()));
+    assert_eq!(
+        first_msg(&r, json!({"from": 2, "to": 1})),
+        "end before start"
+    );
+
+    assert_eq!(
+        first_msg(&vld::duration(), json!("P1Y")),
+        "Years and months are not a fixed length: use weeks, days, hours, minutes or seconds"
+    );
+    #[cfg(feature = "geo")]
+    {
+        let ring = json!({"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1]]]});
+        assert_eq!(
+            first_msg(&vld::geojson(), ring),
+            "Polygon ring must end with its first position"
+        );
+        assert_eq!(
+            first_msg(&vld::geo_point(), json!("x")),
+            "Expected geo point ({lat, lng} or [lng, lat]), received string"
+        );
+    }
+}

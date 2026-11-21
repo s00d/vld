@@ -313,6 +313,8 @@ impl<R: Rng> FakeGen<R> {
             if concrete.iter().any(|v| !is_bare_string(v)) {
                 concrete.retain(|v| !is_bare_string(v));
             }
+            // A union branch is the same value, not a level of nesting: it
+            // does not count against the depth limit.
             if !concrete.is_empty() {
                 let idx = self.rng.gen_range(0..concrete.len());
                 // Sibling keywords (`type`, `formatMinimum`, `x-past`, … next to
@@ -322,14 +324,14 @@ impl<R: Rng> FakeGen<R> {
                     rest.remove(k);
                 }
                 if rest.is_empty() {
-                    return self.value_with_hint(concrete[idx], hint);
+                    return self.dispatch(concrete[idx], hint);
                 }
                 let merged = constraints::merge(&[Value::Object(rest), concrete[idx].clone()]);
-                return self.value_with_hint(&Value::Object(merged), hint);
+                return self.dispatch(&Value::Object(merged), hint);
             }
             if !variants.is_empty() {
                 let idx = self.rng.gen_range(0..variants.len());
-                return self.value_with_hint(&variants[idx], hint);
+                return self.dispatch(&variants[idx], hint);
             }
             return Value::Null;
         }
@@ -549,6 +551,7 @@ impl<R: Rng> FakeGen<R> {
                     .collect::<Vec<_>>()
                     .join(".")
             }
+            "password" if n >= 4 => self.gen_password_len(n),
             "slug" if n >= 1 => {
                 let mut s = letters(self, n);
                 if n >= 3 {
@@ -943,6 +946,15 @@ impl<R: Rng> FakeGen<R> {
     fn gen_string_format(&mut self, fmt: &str, obj: &Map<String, Value>) -> String {
         let (min, max) = len_bounds(obj);
 
+        // Valid wallet addresses for the `x-network` vld writes.
+        #[cfg(feature = "crypto")]
+        if fmt == "crypto-address" {
+            let rng = &mut self.rng;
+            if let Some(s) = crate::crypto::fake_address(obj, &mut || rng.generator()) {
+                return s;
+            }
+        }
+
         // Free-length character-class formats: build exactly `n` chars.
         let charset: Option<&[u8]> = match fmt {
             "hex" => Some(HEX),
@@ -1017,6 +1029,11 @@ impl<R: Rng> FakeGen<R> {
             }
             let bytes: Vec<u8> = (0..n * 3 / 4).map(|_| self.rng.generator()).collect();
             return base64url(&bytes);
+        }
+
+        if fmt == "password" {
+            let n = self.pick_len(min, max, 12, 24);
+            return self.gen_password_len(n);
         }
 
         // Structured formats: regenerate until the length fits.
@@ -1106,6 +1123,36 @@ impl<R: Rng> FakeGen<R> {
                 format!("+1{area}{exchange}{line}")
             }
             "credit-card" => self.gen_credit_card(),
+            "iso3166-alpha2" => self.pick(&crate::primitives::COUNTRIES_ALPHA2).to_string(),
+            "iso3166-alpha3" => self.pick(&crate::primitives::COUNTRIES_ALPHA3).to_string(),
+            "iban" => self.gen_iban(),
+            "bic" => {
+                let bank = self.gen_chars(UPPER_ALPHA, 4);
+                let country = self.pick(&crate::primitives::COUNTRIES_ALPHA2);
+                let location = self.gen_chars(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 2);
+                if self.rng.gen_bool(0.5) {
+                    format!("{bank}{country}{location}")
+                } else {
+                    format!("{bank}{country}{location}XXX")
+                }
+            }
+            "isbn" => self.gen_isbn(),
+            "ean" => self.gen_ean(),
+            "vin" => self.gen_vin(),
+            "timezone" => self.pick(TIMEZONES).to_string(),
+            "mime" => self.pick(MIME_TYPES).to_string(),
+            "objectid" => self.gen_chars(HEX, 24),
+            "regex" => self
+                .pick(&[
+                    "^[a-z]+$",
+                    "\\d{3}-\\d{4}",
+                    "(foo|bar)+",
+                    "^[A-Z][a-z]*$",
+                    "[0-9a-f]{8}",
+                ])
+                .to_string(),
+            "single-script" => self.pick(WORDS).to_string(),
+            "password" => self.gen_password(),
             "mac-address" | "mac" => self.gen_mac_address(),
             "color" | "hex-color" => self.gen_hex_color(),
             "semver" => self.gen_semver(),
@@ -1118,7 +1165,10 @@ impl<R: Rng> FakeGen<R> {
                 }
             }
             "slug" => self.gen_slug(),
-            "currency-code" => self.pick(CURRENCIES).to_string(),
+            "currency-code" => self
+                .pick(crate::primitives::iso4217::CURRENCIES)
+                .0
+                .to_string(),
             "country-code" => self.pick(LOCALES)[3..].to_string(),
             "locale" => {
                 let l = self.pick(LOCALES);
@@ -1180,7 +1230,9 @@ impl<R: Rng> FakeGen<R> {
         format!("{major}.{minor}.{patch}")
     }
 
-    /// Decimal string honouring vld's `x-minDecimal` / `x-maxDecimal`.
+    /// Decimal string honouring vld's `x-minDecimal` / `x-maxDecimal` (and
+    /// the exclusive forms), `x-scale` / `x-maxScale` (fraction digits, as
+    /// written) and `x-maxPrecision` (total digits).
     fn gen_decimal(&mut self, obj: &Map<String, Value>) -> String {
         let bound = |k: &str| {
             obj.get(k).and_then(|v| {
@@ -1189,20 +1241,54 @@ impl<R: Rng> FakeGen<R> {
                     .or(v.as_f64())
             })
         };
-        let lo = bound("x-minDecimal");
-        let hi = bound("x-maxDecimal");
-        let (lo, hi) = match (lo, hi) {
+        let digits = |k: &str| obj.get(k).and_then(Value::as_u64).map(|d| d.min(18) as i32);
+        let exact = digits("x-scale");
+        let precision = digits("x-maxPrecision");
+        let mut scale = exact.unwrap_or_else(|| digits("x-maxScale").map_or(2, |m| m.min(2)));
+        if exact.is_none() {
+            scale = scale.min(precision.unwrap_or(scale));
+        }
+        let (ex_lo, ex_hi) = (
+            bound("x-exclusiveMinDecimal"),
+            bound("x-exclusiveMaxDecimal"),
+        );
+        let lo = bound("x-minDecimal").or(ex_lo);
+        let hi = bound("x-maxDecimal").or(ex_hi);
+        let (mut lo, mut hi) = match (lo, hi) {
             (Some(l), Some(h)) => (l, h.max(l)),
             (Some(l), None) => (l, l + 1000.0),
             (None, Some(h)) => (h - 1000.0, h),
             (None, None) => (0.0, 1000.0),
         };
-        let v = lo + self.rng.generator::<f64>() * (hi - lo);
-        let s = format!("{v:.2}");
-        if s.parse::<f64>().is_ok_and(|r| (lo..=hi).contains(&r)) {
-            s
+        if let Some(p) = precision {
+            // At most `p - scale` integer digits.
+            let lim = 10f64.powi(p - scale) - 10f64.powi(-scale);
+            (lo, hi) = (lo.max(-lim), hi.min(lim));
+        }
+        // An integer number of steps of 10^-scale inside the bounds.
+        let step = 10f64.powi(scale);
+        let mut k_lo = (lo * step).ceil() as i128;
+        let mut k_hi = (hi * step).floor() as i128;
+        if ex_lo.is_some_and(|e| k_lo as f64 / step <= e) {
+            k_lo += 1;
+        }
+        if ex_hi.is_some_and(|e| k_hi as f64 / step >= e) {
+            k_hi -= 1;
+        }
+        let k = if k_lo <= k_hi {
+            self.rng.gen_range(k_lo..=k_hi)
         } else {
-            v.to_string()
+            k_lo // unsatisfiable: best effort
+        };
+        let unit = 10i128.pow(scale as u32);
+        let sign = if k < 0 { "-" } else { "" };
+        let (int, frac) = (
+            k.unsigned_abs() / unit as u128,
+            k.unsigned_abs() % unit as u128,
+        );
+        match scale {
+            0 => format!("{sign}{int}"),
+            _ => format!("{sign}{int}.{frac:0width$}", width = scale as usize),
         }
     }
 
@@ -1427,16 +1513,80 @@ impl<R: Rng> FakeGen<R> {
 
     fn gen_password(&mut self) -> String {
         let len = self.rng.gen_range(10..18);
-        let mut bytes: Vec<u8> = (0..len)
-            .map(|_| PASSWORD_ALPHA[self.rng.gen_range(0..PASSWORD_ALPHA.len())])
-            .collect();
-        // Guarantee at least one of each class.
-        bytes[0] = b'A' + self.rng.gen_range(0..26);
-        bytes[1] = b'a' + self.rng.gen_range(0..26);
-        bytes[2] = b'0' + self.rng.gen_range(0..10);
+        self.gen_password_len(len)
+    }
+
+    /// `n` characters (at least 4) with an uppercase letter, a lowercase
+    /// letter, a digit and a symbol, and no character twice in a row: passes
+    /// every vld password rule except `password_strength`.
+    fn gen_password_len(&mut self, n: usize) -> String {
         let specials = b"!@#$%&*";
-        bytes[3] = specials[self.rng.gen_range(0..specials.len())];
+        let mut bytes = vec![
+            b'A' + self.rng.gen_range(0..26),
+            b'a' + self.rng.gen_range(0..26),
+            b'0' + self.rng.gen_range(0..10),
+            specials[self.rng.gen_range(0..specials.len())],
+        ];
+        while bytes.len() < n {
+            let c = PASSWORD_ALPHA[self.rng.gen_range(0..PASSWORD_ALPHA.len())];
+            if bytes.last() != Some(&c) {
+                bytes.push(c);
+            }
+        }
         bytes.into_iter().map(char::from).collect()
+    }
+
+    /// IBAN of a registry country: digits-only BBAN of the registry length
+    /// and the mod-97 check digits.
+    fn gen_iban(&mut self) -> String {
+        let (country, len) = *self.pick(&crate::primitives::IBAN_LENGTHS);
+        let bban: String = (0..len as usize - 4)
+            .map(|_| char::from(b'0' + self.rng.gen_range(0..10u8)))
+            .collect();
+        let mut rem = 0u32;
+        for b in format!("{bban}{country}00").bytes() {
+            rem = if b.is_ascii_digit() {
+                (rem * 10 + u32::from(b - b'0')) % 97
+            } else {
+                (rem * 100 + u32::from(b - b'A' + 10)) % 97
+            };
+        }
+        format!("{country}{:02}{bban}", 98 - rem)
+    }
+
+    /// EAN-13 or EAN-8 with its GS1 check digit.
+    fn gen_ean(&mut self) -> String {
+        let n = if self.rng.gen_bool(0.8) { 12 } else { 7 };
+        let mut digits: Vec<u8> = (0..n).map(|_| self.rng.gen_range(0..10)).collect();
+        let sum: u32 = digits
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(i, &d)| u32::from(d) * if i % 2 == 0 { 3 } else { 1 })
+            .sum();
+        digits.push(((10 - sum % 10) % 10) as u8);
+        digits.iter().map(|d| char::from(b'0' + d)).collect()
+    }
+
+    /// VIN with the North American check digit in position 9.
+    fn gen_vin(&mut self) -> String {
+        const CHARS: &[u8] = b"0123456789ABCDEFGHJKLMNPRSTUVWXYZ";
+        const WEIGHTS: [u32; 17] = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+        let value = |c: u8| {
+            b"0123456789.ABCDEFGH..JKLMN.P.R..STUVWXYZ"
+                .iter()
+                .position(|&x| x == c)
+                .map_or(0, |i| i as u32 % 10)
+        };
+        let mut vin: Vec<u8> = (0..17)
+            .map(|_| CHARS[self.rng.gen_range(0..CHARS.len())])
+            .collect();
+        let sum: u32 = vin.iter().zip(WEIGHTS).map(|(&c, w)| value(c) * w).sum();
+        vin[8] = match sum % 11 {
+            10 => b'X',
+            r => b'0' + r as u8,
+        };
+        vin.into_iter().map(char::from).collect()
     }
 
     fn gen_street_address(&mut self) -> String {
@@ -1482,8 +1632,28 @@ impl<R: Rng> FakeGen<R> {
                 })
         };
         // Smallest / largest integer satisfying the (exclusive) bounds.
-        let lo = int("minimum", true).or_else(|| int("exclusiveMinimum", false).map(|v| v + 1));
-        let hi = int("maximum", false).or_else(|| int("exclusiveMaximum", true).map(|v| v - 1));
+        let mut lo = int("minimum", true).or_else(|| int("exclusiveMinimum", false).map(|v| v + 1));
+        let mut hi = int("maximum", false).or_else(|| int("exclusiveMaximum", true).map(|v| v - 1));
+        // vld's Unix-timestamp datetimes: `x-past` / `x-future` with a
+        // two-day margin around "now", as for date strings.
+        let unit = match obj.get("format").and_then(Value::as_str) {
+            Some("unix-time") => Some(1),
+            Some("unix-time-ms") => Some(1000),
+            _ => None,
+        };
+        if let Some(u) = unit {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| i128::from(d.as_secs()))
+                * u;
+            let margin = 2 * i128::from(constraints::DAY) * u;
+            if obj.get("x-past").and_then(Value::as_bool) == Some(true) {
+                hi = Some(hi.map_or(now - margin, |h| h.min(now - margin)));
+            }
+            if obj.get("x-future").and_then(Value::as_bool) == Some(true) {
+                lo = Some(lo.map_or(now + margin, |l| l.max(now + margin)));
+            }
+        }
 
         // A realistic range for known field names, when the schema leaves
         // one side open and the two ranges overlap.
@@ -1791,6 +1961,12 @@ impl<R: Rng> FakeGen<R> {
                 arr.swap(i, j);
             }
         }
+        // vld's GeoJSON linear rings end where they start.
+        if obj.get("x-closedRing").and_then(Value::as_bool) == Some(true) {
+            if let (Some(first), Some(last)) = (arr.first().cloned(), arr.last_mut()) {
+                *last = first;
+            }
+        }
         Value::Array(arr)
     }
 
@@ -1843,6 +2019,29 @@ impl<R: Rng> FakeGen<R> {
                     result.insert(key.clone(), self.value_with_hint(prop_schema, Some(key)));
                 }
             }
+            #[cfg(feature = "decimal")]
+            self.fit_money(obj, props, &mut result);
+        }
+        // vld's `range()`: the end must not be before the start.
+        if let Some([a, b]) = obj
+            .get("x-rangeOrder")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+        {
+            if let (Some(a), Some(b)) = (a.as_str(), b.as_str()) {
+                let after = match (result.get(a), result.get(b)) {
+                    (Some(Value::Number(x)), Some(Value::Number(y))) => x.as_f64() > y.as_f64(),
+                    (Some(Value::String(x)), Some(Value::String(y))) => x > y,
+                    _ => false,
+                };
+                if after {
+                    let (x, y) = (result.remove(a), result.remove(b));
+                    result.extend([
+                        (a.to_string(), y.unwrap_or_default()),
+                        (b.to_string(), x.unwrap_or_default()),
+                    ]);
+                }
+            }
         }
 
         // additionalProperties with a schema
@@ -1875,6 +2074,34 @@ impl<R: Rng> FakeGen<R> {
         }
 
         Value::Object(result)
+    }
+
+    /// vld's `money()` (`x-money`): regenerate the amount with at most the
+    /// currency's minor units after the point.
+    #[cfg(feature = "decimal")]
+    fn fit_money(
+        &mut self,
+        obj: &Map<String, Value>,
+        props: &Map<String, Value>,
+        result: &mut Map<String, Value>,
+    ) {
+        if obj.get("x-money").and_then(Value::as_bool) != Some(true) {
+            return;
+        }
+        let units = result
+            .get("currency")
+            .and_then(Value::as_str)
+            .and_then(crate::primitives::minor_units);
+        if let (Some(units), Some(Value::Object(amount))) = (units, props.get("amount")) {
+            let mut amount = amount.clone();
+            let max = amount
+                .get("x-maxScale")
+                .and_then(Value::as_u64)
+                .unwrap_or(u64::MAX);
+            amount.insert("x-maxScale".into(), u64::from(units).min(max).into());
+            let v = self.value(&Value::Object(amount));
+            result.insert("amount".into(), v);
+        }
     }
 
     /// Generate a pre-built object based on a field-name hint when the schema

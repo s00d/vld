@@ -31,6 +31,15 @@ ignore = [
     # h2 0.3 is pinned by actix-http 3 (vld-web `actix`); vld does not use h2
     # directly. Drop once actix-web moves to h2 0.4.
     { id = "RUSTSEC-2026-0258", reason = "h2 0.3 pinned by actix-http 3; fix only in h2 0.4" },
+    # quick-xml 0.36: quadratic duplicate-attribute check (0194) and unbounded
+    # NsReader namespace allocation (0195); fixed in quick-xml >= 0.41.
+    # Path: vld-openapi `poem-openapi` -> poem-openapi 5.1.16 (non-optional
+    # quick-xml ^0.36, and it turns on poem's `xml` feature, quick-xml ^0.36,
+    # poem 3.1.12 is the latest). Only poem's `Xml<T>` payloads parse XML;
+    # vld-openapi and vld-web only read JSON. Drop once poem / poem-openapi
+    # release with quick-xml >= 0.41.
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.36 pinned by poem-openapi 5 / poem 3; reached only via poem Xml payloads, not by vld" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.36 pinned by poem-openapi 5 / poem 3; reached only via poem Xml payloads, not by vld" },
 ]
 
 [licenses]

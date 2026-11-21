@@ -558,6 +558,54 @@ const CALENDAR_FN: &str = "(s) => { const d = new Date(s.slice(0, 10) + \"T00:00
 
 const LUHN_FN: &str = "(s) => { if (!/^[\\d -]*$/.test(s)) return false; const d = s.replace(/\\D/g, \"\"); if (d.length < 12 || d.length > 19) return false; let sum = 0; for (let i = 0; i < d.length; i++) { let n = +d[d.length - 1 - i]; if (i % 2) { n *= 2; if (n > 9) n -= 9; } sum += n; } return sum % 10 === 0; }";
 
+/// vld's `cron()` grammar (see `is_valid_cron`).
+const CRON_FN: &str = "(s) => { if (s.startsWith(\"@\")) return [\"@yearly\", \"@annually\", \"@monthly\", \"@weekly\", \"@daily\", \"@midnight\", \"@hourly\"].includes(s); const f = s.trim().split(/\\s+/); const M = [\"JAN\", \"FEB\", \"MAR\", \"APR\", \"MAY\", \"JUN\", \"JUL\", \"AUG\", \"SEP\", \"OCT\", \"NOV\", \"DEC\"], D = [\"SUN\", \"MON\", \"TUE\", \"WED\", \"THU\", \"FRI\", \"SAT\"]; let spec = [[0, 59, [], 0], [0, 59, [], 0], [0, 23, [], 0], [1, 31, [], 1], [1, 12, M, 0], [0, 7, D, 1]]; if (f.length === 5) spec = spec.slice(1); else if (f.length !== 6) return false; return f.every((x, i) => { const [lo, hi, names, q] = spec[i]; const val = (v) => { if (/^\\d+$/.test(v)) { const n = +v; return n >= lo && n <= hi ? n : null; } const k = names.indexOf(v.toUpperCase()); return k >= 0 ? lo + k : null; }; if (q && x === \"?\") return true; return x.split(\",\").every((it) => { const [b, st, extra] = it.split(\"/\"); if (extra !== undefined) return false; if (st !== undefined && !(/^\\d+$/.test(st) && +st >= 1 && +st <= Math.max(hi, 1))) return false; if (b === \"*\") return true; const r = b.split(\"-\"); if (r.length === 2) { const a = val(r[0]), c = val(r[1]); return a !== null && c !== null && a <= c; } return r.length === 1 && val(b) !== null; }); }); }";
+
+/// ISBN-10 (mod 11) or ISBN-13 (978/979 + GS1), single `-` / space separators.
+const ISBN_FN: &str = "(s) => { if (/^[- ]|[- ]$|[- ]{2}/.test(s)) return false; const d = s.replace(/[- ]/g, \"\"); if (/^\\d{9}[\\dX]$/.test(d)) { let sum = 0; for (let i = 0; i < 10; i++) sum += (10 - i) * (d[i] === \"X\" ? 10 : +d[i]); return sum % 11 === 0; } if (!/^97[89]\\d{10}$/.test(d)) return false; let sum = 0; for (let i = 0; i < 13; i++) sum += +d[12 - i] * (i % 2 ? 3 : 1); return sum % 10 === 0; }";
+
+/// EAN-8 / UPC-A / EAN-13 / GTIN-14 with the GS1 check digit.
+const EAN_FN: &str = "(s) => { if (!/^(\\d{8}|\\d{12,14})$/.test(s)) return false; let sum = 0; for (let i = 0; i < s.length; i++) sum += +s[s.length - 1 - i] * (i % 2 ? 3 : 1); return sum % 10 === 0; }";
+
+/// VIN with the North American check digit in position 9.
+const VIN_FN: &str = "(s) => { if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(s)) return false; const w = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2]; let sum = 0; for (let i = 0; i < 17; i++) sum += (\"0123456789.ABCDEFGH..JKLMN.P.R..STUVWXYZ\".indexOf(s[i]) % 10) * w[i]; const r = sum % 11; return s[8] === (r === 10 ? \"X\" : String(r)); }";
+
+const REGEX_FN: &str =
+    "(s) => { try { new RegExp(s, \"u\"); return true; } catch { return false; } }";
+
+/// `A[DEF]|B[AG]`: an alternation of sorted equal-length codes, grouped by
+/// all but their last character.
+fn code_alternation(codes: &[&str]) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < codes.len() {
+        let head = &codes[i][..codes[i].len() - 1];
+        let mut last = String::new();
+        while i < codes.len() && codes[i].len() == head.len() + 1 && codes[i].starts_with(head) {
+            last.push_str(&codes[i][head.len()..]);
+            i += 1;
+        }
+        out.push(if last.len() == 1 {
+            format!("{head}{last}")
+        } else {
+            format!("{head}[{last}]")
+        });
+    }
+    out.join("|")
+}
+
+/// IBAN: registry length per country and mod-97 (vld's `iban()`).
+fn iban_fn() -> String {
+    let lengths: Vec<String> = crate::primitives::IBAN_LENGTHS
+        .iter()
+        .map(|(c, n)| format!("{c}: {n}"))
+        .collect();
+    format!(
+        "(s) => {{ if (/^ | $| {{2}}/.test(s)) return false; const t = s.replace(/ /g, \"\"); if (!/^[A-Z]{{2}}\\d{{2}}[A-Z0-9]+$/.test(t)) return false; const L = {{ {} }}; if (L[t.slice(0, 2)] !== t.length) return false; let r = 0; for (const c of t.slice(4) + t.slice(0, 4)) {{ const v = parseInt(c, 36); r = (v > 9 ? r * 100 + v : r * 10 + v) % 97; }} return r === 1; }}",
+        lengths.join(", ")
+    )
+}
+
 const JSON_FN: &str = "(s) => { try { JSON.parse(s); return true; } catch { return false; } }";
 
 /// Hostname labels: 1-63 alphanumerics/`-`, no leading/trailing `-`.
@@ -654,10 +702,14 @@ fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
         "uppercase" => vec![check("(s) => s === s.toUpperCase()", "Must be uppercase")],
         "locale" => vec![re("/^[a-z]{2}(-[A-Z]{2})?$/".to_string())],
         "country-code" => vec![re("/^[A-Z]{2}$/".to_string())],
-        "currency-code" => vec![re("/^[A-Z]{3}$/".to_string())],
-        "cron" => vec![re(
-            "/^\\s*[\\d*\\/,?-]+(\\s+[\\d*\\/,?-]+){4,5}\\s*$/".to_string(),
-        )],
+        "currency-code" => {
+            let codes: Vec<&str> = crate::primitives::iso4217::CURRENCIES
+                .iter()
+                .map(|(c, _)| *c)
+                .collect();
+            vec![re(format!("/^(?:{})$/", code_alternation(&codes)))]
+        }
+        "cron" => vec![check(CRON_FN, "Invalid cron expression")],
         "credit-card" => vec![check(LUHN_FN, "Invalid credit card")],
         "phone" => vec![re(
             "/^\\+(?=(?:\\D*\\d){8,15}\\D*$)[\\d ()-]*$/".to_string(),
@@ -682,9 +734,46 @@ fn format_acts(t: Target, fmt: &str) -> Vec<Act> {
                 .to_string(),
         )],
         "json" => vec![check(JSON_FN, "Invalid JSON")],
+        // The `pattern` vld writes next to it checks the shape.
+        "crypto-address" => vec![Act::Note(
+            "crypto address: shape only, checksum not checked".to_string(),
+        )],
         "cuid2" => vec![re("/^[a-z][a-z0-9]{1,31}$/".to_string())],
         "ulid" => vec![re("/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i".to_string())],
         "nanoid" => vec![re("/^[A-Za-z0-9_-]+$/".to_string())],
+        "iso3166-alpha2" => vec![re(format!(
+            "/^(?:{})$/",
+            code_alternation(&crate::primitives::COUNTRIES_ALPHA2)
+        ))],
+        "iso3166-alpha3" => vec![re(format!(
+            "/^(?:{})$/",
+            code_alternation(&crate::primitives::COUNTRIES_ALPHA3)
+        ))],
+        "iban" => vec![check(&iban_fn(), "Invalid IBAN")],
+        "bic" => vec![re(format!(
+            "/^[A-Z]{{4}}(?:{}|XK)[A-Z0-9]{{2}}(?:[A-Z0-9]{{3}})?$/",
+            code_alternation(&crate::primitives::COUNTRIES_ALPHA2)
+        ))],
+        "isbn" => vec![check(ISBN_FN, "Invalid ISBN")],
+        "ean" => vec![check(EAN_FN, "Invalid EAN")],
+        "vin" => vec![check(VIN_FN, "Invalid VIN")],
+        // Shape only (vld with `jiff` also looks the name up).
+        "timezone" => vec![re(
+            "/^(?=.{1,255}$)[A-Z][A-Za-z0-9_+-]*(?:\\/[A-Z][A-Za-z0-9_+-]*){0,2}$/".to_string(),
+        )],
+        "mime" => {
+            let name = "[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}";
+            vec![re(format!(
+                "/^{0}\\/{0}(?:;[ \\t]*{0}=(?:[!#$%&'*+.^_`|~0-9A-Za-z-]+|\"(?:[^\"\\\\\\x00-\\x1f\\x7f-\\x9f]|\\\\[^\\x00-\\x1f\\x7f-\\x9f])*\"))*$/",
+                name
+            ))]
+        }
+        "objectid" => vec![re("/^[0-9a-fA-F]{24}$/".to_string())],
+        // ECMA-262 syntax; vld checks regex-lite syntax (close, not equal).
+        "regex" => vec![check(REGEX_FN, "Invalid regular expression")],
+        "single-script" => vec![Act::Note(
+            "single-script (Unicode TS #39) not checked".to_string(),
+        )],
         "emoji" => vec![re(
             "/^[\\u{1F600}-\\u{1F64F}\\u{1F300}-\\u{1F5FF}\\u{1F680}-\\u{1F6FF}\\u{1F1E0}-\\u{1F1FF}\\u{2702}-\\u{27B0}\\u{2600}-\\u{26FF}\\u{FE00}-\\u{FE0F}\\u{1F900}-\\u{1F9FF}\\u{1FA00}-\\u{1FAFF}\\u{231A}-\\u{231B}\\u{23E9}-\\u{23F3}\\u{23F8}-\\u{23FA}\\u{E0020}-\\u{E007F}\\u{20E3}\\u{200D}\\u{2B50}]+$/u"
                 .to_string(),
@@ -1294,6 +1383,46 @@ fn js_eq(c: &Value) -> String {
 /// Distinct-item count of array `a` (JSON identity).
 const DISTINCT: &str = "new Set(a.map((x) => JSON.stringify(x))).size";
 
+/// Checks for vld's `x-password` rules.
+fn password_acts(rules: &serde_json::Map<String, Value>) -> Vec<Act> {
+    let flag = |k: &str| rules.get(k).and_then(Value::as_bool) == Some(true);
+    let mut acts = Vec::new();
+    for (key, re, msg) in [
+        (
+            "lowercase",
+            "/\\p{Lowercase}/u",
+            "Must contain a lowercase letter",
+        ),
+        (
+            "uppercase",
+            "/\\p{Uppercase}/u",
+            "Must contain an uppercase letter",
+        ),
+        ("digit", "/[0-9]/", "Must contain a digit"),
+        (
+            "symbol",
+            "/[^\\p{Alphabetic}\\p{N}\\s]/u",
+            "Must contain a symbol",
+        ),
+    ] {
+        if flag(key) {
+            acts.push(check(&format!("(s) => {re}.test(s)"), msg));
+        }
+    }
+    if let Some(n) = rules.get("maxRepeat").and_then(Value::as_u64) {
+        acts.push(check(
+            &format!("(s) => !/(.)\\1{{{n}}}/su.test(s)"),
+            &format!("Must not repeat a character more than {n} times in a row"),
+        ));
+    }
+    if let Some(n) = rules.get("minScore").and_then(Value::as_u64) {
+        acts.push(Act::Note(format!(
+            "password strength (zxcvbn score >= {n}) not checked"
+        )));
+    }
+    acts
+}
+
 /// Constraint keywords of a `ty`-typed schema (or an `allOf` fragment of one).
 ///
 /// `format_in_base`: the base already is the Zod 4 format schema.
@@ -1331,6 +1460,9 @@ fn constraint_acts(t: Target, ty: &str, schema: &Value, format_in_base: bool) ->
                         ),
                     });
                 }
+            }
+            if let Some(Value::Object(rules)) = schema.get("x-password") {
+                acts.extend(password_acts(rules));
             }
             for (key, op, word) in [("x-past", "<", "past"), ("x-future", ">", "future")] {
                 if schema.get(key).and_then(Value::as_bool) == Some(true) {

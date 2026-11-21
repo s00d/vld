@@ -11,12 +11,12 @@ ci_flags := "--profile ci --locked"
 # Crate groups (ARCHITECTURE.md): `core` = vld + vld-derive, the others = vld-<group>.
 # CI runs one job per group. vld-data's diesel postgres/mysql need libpq / libmysqlclient.
 groups := "core web openapi data app"
-vld_all := "chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced,ts,fake"
+vld_all := "chrono,jiff,time,derive,regex,openapi,diff,llm,decimal,net,file,string-advanced,file-advanced,ts,fake"
 # vld-data for semver-checks: every feature but lapin-2 (see `semver`)
-data_semver := "sqlx-0_8,sqlx-0_9,diesel,postgres,mysql,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio,redis-aio-tokio,lapin-3,lapin-4"
+data_semver := "sqlx-0_8,sqlx-0_9,diesel,postgres,mysql,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio,redis-aio-tokio,lapin-3,lapin-4,bson-2,bson-3,tokio-postgres,rumqttc,nats,clickhouse,centrifuge,csv"
 # vld-data without the postgres / mysql backends (diesel links libpq / libmysqlclient,
 # which only the Linux CI image has): what `test-group data` runs on macOS / Windows.
-data_portable := "sqlx-0_8,sqlx-0_9,diesel,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3,lapin-4"
+data_portable := "sqlx-0_8,sqlx-0_9,diesel,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3,lapin-4,bson-2,bson-3,tokio-postgres,rumqttc,nats,clickhouse,centrifuge,csv"
 
 [private]
 default:
@@ -128,15 +128,19 @@ msrv:
     probe 1.85 vld-derive
     probe 1.85 vld-web axum,actix,poem,rocket,warp,tower,tonic
     probe 1.88 vld-web ntex-3
+    probe 1.88 vld-web rmcp
     probe 1.94 vld-web salvo
     probe 1.96 vld-web rama
     probe 1.97 vld-web ntex-4,ntex-compress
+    probe 1.97.1 vld-web rig
     probe 1.85 vld-openapi utoipa-5,schemars-0,schemars-1
     probe 1.88 vld-openapi utoipa-6
     probe 1.85 vld-data "sqlx-0_8,diesel,sqlite,sea-orm-1,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3"
     probe 1.94 vld-data "sqlx-0_9,postgres,mysql,sqlite"
     probe 1.94 vld-data "sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array"
     probe 1.88 vld-data lapin-4
+    probe 1.85 vld-data bson-2,bson-3,tokio-postgres,rumqttc,centrifuge
+    probe 1.89 vld-data nats,clickhouse
     probe 1.85 vld-app config-rs,figment,clap
 
 # Lowest allowed versions of direct dependencies compile (nightly; crates with wide version ranges)

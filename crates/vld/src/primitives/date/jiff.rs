@@ -51,6 +51,14 @@ impl DateBackend for Jiff {
     fn format_datetime(dt: &Self::DateTime) -> String {
         dt.to_string()
     }
+
+    fn from_unix_nanos(nanos: i128) -> Option<Self::DateTime> {
+        ::jiff::Timestamp::from_nanosecond(nanos).ok()
+    }
+
+    fn unix_nanos(dt: &Self::DateTime) -> i128 {
+        dt.as_nanosecond()
+    }
 }
 
 /// Date schema producing `jiff::civil::Date`.

@@ -36,7 +36,7 @@ let app: Router = Router::new().route("/users", post(create));
 
 | Module | Feature | Framework |
 |---|---|---|
-| `axum` | `axum` | axum 0.8 |
+| `axum` | `axum` | axum 0.8 (also loco-rs controllers: [guide](https://s00d.github.io/vld/integrations/web/loco)) |
 | `actix` | `actix` | actix-web 4 |
 | `ntex3` / `ntex4` | `ntex-3` / `ntex-4` (+ `ntex-compress`) | ntex 3 / 4 |
 | `poem` | `poem` | poem 3 |
@@ -46,6 +46,12 @@ let app: Router = Router::new().route("/users", post(create));
 | `rama` | `rama` | rama 0.4 |
 | `tower` | `tower` | any Tower service |
 | `tonic` | `tonic` | tonic 0.12 – 0.14 |
+| `async_graphql` | `async-graphql` | async-graphql 7 |
+| `tungstenite` | `tungstenite` | tungstenite 0.26 – 0.30 WebSocket messages (tokio-/async-tungstenite) |
+| `axum::ws` | `axum-ws` | axum WebSocket messages |
+| `lambda` | `lambda` | AWS Lambda (`lambda_http` 1, raw `lambda_runtime` events) |
+| `rmcp` | `rmcp` | MCP tools (rmcp 3): vld-validated arguments, `isError` results with model feedback |
+| `rig` | `rig` | rig 0.47 tools: vld-validated arguments, schema per LLM provider |
 | `common` | — | framework-agnostic helpers for custom adapters |
 
 No feature is on by default; any set can be enabled together.

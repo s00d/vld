@@ -13,8 +13,8 @@ Six published crates, released together with one version:
 | `vld` | schemas, errors, JSON Schema, `schema!` / `impl_rules!`, form-style field errors; optional TypeScript / Zod / Valibot codegen (`ts`) and fake data (`fake`) | serde, serde_json, optional backends |
 | `vld-derive` | `#[derive(Validate)]` (a proc-macro must be its own crate) | syn, quote |
 | `vld-web` | HTTP extractors and error responses for every web framework, plus the shared HTTP logic | `vld`, the frameworks (optional) |
-| `vld-openapi` | utoipa and schemars (aide) bridges, the JSON Schema validator | `vld/openapi`, utoipa / schemars (optional) |
-| `vld-data` | databases and message queues: sqlx, diesel, sea-orm, surrealdb, redis, lapin | `vld`, the drivers (optional) |
+| `vld-openapi` | utoipa, schemars (aide) and poem-openapi bridges, the JSON Schema validator | `vld/openapi`, utoipa / schemars (optional) |
+| `vld-data` | databases and message queues: sqlx, diesel, sea-orm, surrealdb, bson (MongoDB), tokio-postgres, clickhouse, redis, lapin, rumqttc (MQTT), async-nats, centrifuge-client, CSV import (csv) | `vld`, the drivers (optional) |
 | `vld-app` | application edges: config files (config-rs, figment), clap, tauri | `vld`, the libraries (optional) |
 
 `vld` depends on no framework, so a user's build compiles it in parallel with

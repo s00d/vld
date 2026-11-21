@@ -335,6 +335,51 @@ pub(super) const RUSSIAN: &[(&str, &str)] = &[
         "invalid_string.emoji",
         "Строка должна содержать только эмодзи",
     ),
+    ("invalid_string.country", "Некорректный код страны"),
+    (
+        "invalid_string.country_alpha3",
+        "Некорректный трёхбуквенный код страны",
+    ),
+    ("invalid_string.iban", "Некорректный IBAN"),
+    ("invalid_string.bic", "Некорректный BIC"),
+    ("invalid_string.isbn", "Некорректный ISBN"),
+    ("invalid_string.ean", "Некорректный EAN"),
+    ("invalid_string.vin", "Некорректный VIN"),
+    ("invalid_string.timezone", "Некорректный часовой пояс"),
+    ("invalid_string.mime", "Некорректный тип содержимого"),
+    ("invalid_string.object_id", "Некорректный ObjectId"),
+    (
+        "invalid_string.regex_syntax",
+        "Некорректное регулярное выражение",
+    ),
+    (
+        "invalid_string.single_script",
+        "Строка не должна смешивать письменности",
+    ),
+    (
+        "invalid_string.password_lowercase",
+        "Пароль должен содержать строчную букву",
+    ),
+    (
+        "invalid_string.password_uppercase",
+        "Пароль должен содержать заглавную букву",
+    ),
+    (
+        "invalid_string.password_digit",
+        "Пароль должен содержать цифру",
+    ),
+    (
+        "invalid_string.password_symbol",
+        "Пароль должен содержать символ",
+    ),
+    (
+        "invalid_string.password_repeat",
+        "Пароль не должен повторять символ более {max_repeat} раз подряд",
+    ),
+    (
+        "invalid_string.password_strength",
+        "Слишком слабый пароль (надёжность ниже {min_score} из 4)",
+    ),
     ("invalid_format", "Некорректный формат ({format})"),
     ("invalid_format.decimal", "Некорректное десятичное число"),
     ("invalid_format.ip_network", "Некорректная IP-сеть/CIDR"),
@@ -444,6 +489,10 @@ pub(super) const RUSSIAN: &[(&str, &str)] = &[
         "Контрольная сумма {algorithm} не совпадает",
     ),
     (
+        "invalid_crypto_address",
+        "Некорректный адрес {network} ({reason})",
+    ),
+    (
         "missing_exif",
         "Изображение должно содержать метаданные EXIF",
     ),
@@ -451,6 +500,45 @@ pub(super) const RUSSIAN: &[(&str, &str)] = &[
     ("io_error", "Ошибка ввода-вывода"),
     ("parse_error", "Ошибка разбора входных данных"),
     ("custom", "Ошибка валидации: {code}"),
+    // Decimals, geo, ranges, ISO durations
+    ("type.geo_point", "геоточка ({lat, lng} или [lng, lat])"),
+    (
+        "too_big.scale",
+        "Десятичное число должно иметь не более {maximum} знаков после запятой",
+    ),
+    (
+        "too_big.scale_one",
+        "Десятичное число должно иметь не более {maximum} знака после запятой",
+    ),
+    (
+        "too_big.precision",
+        "Десятичное число должно иметь не более {maximum} цифр",
+    ),
+    (
+        "too_big.precision_one",
+        "Десятичное число должно иметь не более {maximum} цифры",
+    ),
+    (
+        "invalid_length.scale",
+        "Десятичное число должно иметь ровно {expected} знаков после запятой",
+    ),
+    (
+        "invalid_length.scale_one",
+        "Десятичное число должно иметь ровно {expected} знак после запятой",
+    ),
+    (
+        "invalid_length.scale_few",
+        "Десятичное число должно иметь ровно {expected} знака после запятой",
+    ),
+    (
+        "invalid_format.duration_calendar_unit",
+        "Годы и месяцы не имеют фиксированной длины: используйте недели, дни, часы, минуты или секунды",
+    ),
+    (
+        "ring_not_closed",
+        "Кольцо полигона должно заканчиваться своей первой точкой",
+    ),
+    ("range_order", "«{end}» не может быть раньше «{start}»"),
 ];
 
 pub(super) const GERMAN: &[(&str, &str)] = &[
@@ -759,6 +847,51 @@ pub(super) const GERMAN: &[(&str, &str)] = &[
         "invalid_string.emoji",
         "Zeichenkette darf nur Emojis enthalten",
     ),
+    ("invalid_string.country", "Ungültiger Ländercode"),
+    (
+        "invalid_string.country_alpha3",
+        "Ungültiger dreistelliger Ländercode",
+    ),
+    ("invalid_string.iban", "Ungültige IBAN"),
+    ("invalid_string.bic", "Ungültiger BIC"),
+    ("invalid_string.isbn", "Ungültige ISBN"),
+    ("invalid_string.ean", "Ungültige EAN"),
+    ("invalid_string.vin", "Ungültige FIN"),
+    ("invalid_string.timezone", "Ungültige Zeitzone"),
+    ("invalid_string.mime", "Ungültiger Medientyp"),
+    ("invalid_string.object_id", "Ungültige ObjectId"),
+    (
+        "invalid_string.regex_syntax",
+        "Ungültiger regulärer Ausdruck",
+    ),
+    (
+        "invalid_string.single_script",
+        "Zeichenkette darf keine Schriften mischen",
+    ),
+    (
+        "invalid_string.password_lowercase",
+        "Passwort muss einen Kleinbuchstaben enthalten",
+    ),
+    (
+        "invalid_string.password_uppercase",
+        "Passwort muss einen Großbuchstaben enthalten",
+    ),
+    (
+        "invalid_string.password_digit",
+        "Passwort muss eine Ziffer enthalten",
+    ),
+    (
+        "invalid_string.password_symbol",
+        "Passwort muss ein Sonderzeichen enthalten",
+    ),
+    (
+        "invalid_string.password_repeat",
+        "Passwort darf ein Zeichen höchstens {max_repeat}-mal hintereinander wiederholen",
+    ),
+    (
+        "invalid_string.password_strength",
+        "Passwort ist zu schwach (Stärke unter {min_score} von 4)",
+    ),
     ("invalid_format", "Ungültiges Format ({format})"),
     ("invalid_format.decimal", "Ungültiger Dezimalwert"),
     ("invalid_format.ip_network", "Ungültiges IP-Netz/CIDR"),
@@ -861,11 +994,50 @@ pub(super) const GERMAN: &[(&str, &str)] = &[
         "checksum_mismatch",
         "{algorithm}-Prüfsumme stimmt nicht überein",
     ),
+    (
+        "invalid_crypto_address",
+        "Ungültige {network}-Adresse ({reason})",
+    ),
     ("missing_exif", "Bild muss EXIF-Metadaten enthalten"),
     ("serialize_error", "Serialisierungsfehler: {detail}"),
     ("io_error", "E/A-Fehler"),
     ("parse_error", "Eingabe konnte nicht verarbeitet werden"),
     ("custom", "Validierungsfehler: {code}"),
+    // Decimals, geo, ranges, ISO durations
+    ("type.geo_point", "Geopunkt ({lat, lng} oder [lng, lat])"),
+    (
+        "too_big.scale",
+        "Dezimalzahl darf höchstens {maximum} Nachkommastellen haben",
+    ),
+    (
+        "too_big.scale_one",
+        "Dezimalzahl darf höchstens {maximum} Nachkommastelle haben",
+    ),
+    (
+        "too_big.precision",
+        "Dezimalzahl darf höchstens {maximum} Ziffern haben",
+    ),
+    (
+        "too_big.precision_one",
+        "Dezimalzahl darf höchstens {maximum} Ziffer haben",
+    ),
+    (
+        "invalid_length.scale",
+        "Dezimalzahl muss genau {expected} Nachkommastellen haben",
+    ),
+    (
+        "invalid_length.scale_one",
+        "Dezimalzahl muss genau {expected} Nachkommastelle haben",
+    ),
+    (
+        "invalid_format.duration_calendar_unit",
+        "Jahre und Monate haben keine feste Länge: Wochen, Tage, Stunden, Minuten oder Sekunden verwenden",
+    ),
+    (
+        "ring_not_closed",
+        "Polygonring muss mit seiner ersten Position enden",
+    ),
+    ("range_order", "`{end}` darf nicht vor `{start}` liegen"),
 ];
 
 pub(super) const SPANISH: &[(&str, &str)] = &[
@@ -1198,6 +1370,48 @@ pub(super) const SPANISH: &[(&str, &str)] = &[
         "invalid_string.emoji",
         "La cadena solo debe contener emojis",
     ),
+    ("invalid_string.country", "Código de país inválido"),
+    (
+        "invalid_string.country_alpha3",
+        "Código de país alfa-3 inválido",
+    ),
+    ("invalid_string.iban", "IBAN inválido"),
+    ("invalid_string.bic", "BIC inválido"),
+    ("invalid_string.isbn", "ISBN inválido"),
+    ("invalid_string.ean", "EAN inválido"),
+    ("invalid_string.vin", "VIN inválido"),
+    ("invalid_string.timezone", "Zona horaria inválida"),
+    ("invalid_string.mime", "Tipo de medio inválido"),
+    ("invalid_string.object_id", "ObjectId inválido"),
+    ("invalid_string.regex_syntax", "Expresión regular inválida"),
+    (
+        "invalid_string.single_script",
+        "La cadena no debe mezclar escrituras",
+    ),
+    (
+        "invalid_string.password_lowercase",
+        "La contraseña debe contener una minúscula",
+    ),
+    (
+        "invalid_string.password_uppercase",
+        "La contraseña debe contener una mayúscula",
+    ),
+    (
+        "invalid_string.password_digit",
+        "La contraseña debe contener un dígito",
+    ),
+    (
+        "invalid_string.password_symbol",
+        "La contraseña debe contener un símbolo",
+    ),
+    (
+        "invalid_string.password_repeat",
+        "La contraseña no debe repetir un carácter más de {max_repeat} veces seguidas",
+    ),
+    (
+        "invalid_string.password_strength",
+        "La contraseña es demasiado débil (fuerza inferior a {min_score} de 4)",
+    ),
     ("invalid_format", "Formato inválido ({format})"),
     ("invalid_format.decimal", "Valor decimal inválido"),
     ("invalid_format.ip_network", "Red IP/CIDR inválida"),
@@ -1306,9 +1520,51 @@ pub(super) const SPANISH: &[(&str, &str)] = &[
         "checksum_mismatch",
         "La suma de verificación {algorithm} no coincide",
     ),
+    (
+        "invalid_crypto_address",
+        "Dirección de {network} inválida ({reason})",
+    ),
     ("missing_exif", "La imagen debe contener metadatos EXIF"),
     ("serialize_error", "Error de serialización: {detail}"),
     ("io_error", "Error de E/S"),
     ("parse_error", "Error al procesar la entrada"),
     ("custom", "Error de validación: {code}"),
+    // Decimals, geo, ranges, ISO durations
+    (
+        "type.geo_point",
+        "punto geográfico ({lat, lng} o [lng, lat])",
+    ),
+    (
+        "too_big.scale",
+        "El decimal debe tener como máximo {maximum} decimales",
+    ),
+    (
+        "too_big.scale_one",
+        "El decimal debe tener como máximo {maximum} decimal",
+    ),
+    (
+        "too_big.precision",
+        "El decimal debe tener como máximo {maximum} dígitos",
+    ),
+    (
+        "too_big.precision_one",
+        "El decimal debe tener como máximo {maximum} dígito",
+    ),
+    (
+        "invalid_length.scale",
+        "El decimal debe tener exactamente {expected} decimales",
+    ),
+    (
+        "invalid_length.scale_one",
+        "El decimal debe tener exactamente {expected} decimal",
+    ),
+    (
+        "invalid_format.duration_calendar_unit",
+        "Los años y meses no tienen una duración fija: usa semanas, días, horas, minutos o segundos",
+    ),
+    (
+        "ring_not_closed",
+        "El anillo del polígono debe terminar en su primera posición",
+    ),
+    ("range_order", "`{end}` no puede ser anterior a `{start}`"),
 ];

@@ -764,6 +764,18 @@ fn expand_struct(
                     #parameter_in_expr
                 }
             }
+
+            ::vld::__vld_if_llm! {
+                impl #impl_generics ::vld::llm::LlmSchema for #name #ty_generics #where_clause {
+                    fn __vld_llm_parts() -> (
+                        &'static str,
+                        ::vld::serde_json::Value,
+                        ::std::vec::Vec<::vld::openapi::NestedSchemaEntry>,
+                    ) {
+                        (stringify!(#name), Self::json_schema(), Self::__vld_nested_schemas())
+                    }
+                }
+            }
         }
     })
 }

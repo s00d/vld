@@ -1,0 +1,24 @@
+---
+source: crates/vld/tests/it/story_llm.rs
+expression: value
+---
+{
+  "additionalProperties": false,
+  "properties": {
+    "children": {
+      "items": {
+        "$ref": "#"
+      },
+      "type": "array"
+    },
+    "name": {
+      "description": "min length 1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "children",
+    "name"
+  ],
+  "type": "object"
+}

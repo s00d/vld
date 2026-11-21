@@ -6,6 +6,81 @@ use serde_json::Value;
 use crate::error::{IssueCode, PathSegment, VldError};
 use crate::schema::VldParse;
 
+/// Coerce a raw text value (query string, form field, path param, header,
+/// cookie, environment variable) into JSON, for [`parse_coerced`].
+///
+/// Coercion never loses information: a value is only converted when the
+/// conversion round-trips to exactly the same text.
+///
+/// - `"true"` / `"false"` (lowercase only) → `Bool`
+/// - canonical integers (`0`, `42`, `-7`; no `+`, no leading zeros) that fit
+///   `i64`/`u64` → `Number`
+/// - canonical decimals (`3.14`, `-0.5`; no exponent, no trailing zeros, no
+///   precision loss in `f64`) → `Number`
+/// - everything else — including `""`, `"null"`, `"01234"`, `"+1555"`,
+///   `"1e3"`, `"TRUE"` and ids beyond `u64` — stays a `String`
+///
+/// Use `vld::string().coerce()` / `vld::number().coerce()` in schemas when a
+/// field must accept both forms (e.g. a string field that may look numeric).
+/// [`parse_coerced`] turns a coerced number / boolean back into its text
+/// where the schema expects a string, so the two together follow the schema.
+///
+/// # Example
+/// ```
+/// use serde_json::json;
+/// use vld::schema::coerce_text;
+///
+/// assert_eq!(coerce_text("42"), json!(42));
+/// assert_eq!(coerce_text("-0.5"), json!(-0.5));
+/// assert_eq!(coerce_text("true"), json!(true));
+/// assert_eq!(coerce_text("01234"), json!("01234"));
+/// assert_eq!(coerce_text("null"), json!("null"));
+/// ```
+pub fn coerce_text(raw: &str) -> Value {
+    match raw {
+        "true" => return Value::Bool(true),
+        "false" => return Value::Bool(false),
+        _ => {}
+    }
+    if is_canonical_number(raw) {
+        if !raw.contains('.') {
+            if let Ok(n) = raw.parse::<i64>() {
+                return Value::Number(n.into());
+            }
+            if let Ok(n) = raw.parse::<u64>() {
+                return Value::Number(n.into());
+            }
+        } else if let Ok(f) = raw.parse::<f64>() {
+            // `f64` Display is the shortest round-trip form: `1.50` → `1.5`,
+            // `0.1000000000000000001` → `0.1`; both stay strings.
+            if f.is_finite() && f.to_string() == raw {
+                if let Some(n) = serde_json::Number::from_f64(f) {
+                    return Value::Number(n);
+                }
+            }
+        }
+    }
+    Value::String(raw.to_string())
+}
+
+/// `-?(0|[1-9][0-9]*)(\.[0-9]+)?`, excluding `-0`.
+fn is_canonical_number(s: &str) -> bool {
+    let negative = s.starts_with('-');
+    let digits = s.strip_prefix('-').unwrap_or(s);
+    let (int, frac) = match digits.split_once('.') {
+        Some((i, f)) => (i, Some(f)),
+        None => (digits, None),
+    };
+    let all_digits = |p: &str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
+    if !all_digits(int) || (int.len() > 1 && int.starts_with('0')) {
+        return false;
+    }
+    if frac.is_some_and(|f| !all_digits(f)) {
+        return false;
+    }
+    !(negative && frac.is_none() && int == "0")
+}
+
 /// Parse a value whose leaves were coerced from text (`"42"` → `42`,
 /// `"true"` → `true`), undoing the coercion where the schema disagrees.
 ///
@@ -20,7 +95,7 @@ use crate::schema::VldParse;
 /// more can be repaired.
 ///
 /// Text is recovered from the coerced value itself, so the coercion must be
-/// lossless (as `vld_http_common::coerce_value` is). For lossy sources (e.g.
+/// lossless (as [`coerce_text`] is). For lossy sources (e.g.
 /// config-rs `try_parsing`, where `"01234"` becomes `1234`) the recovered
 /// text is the canonical form of the number.
 ///

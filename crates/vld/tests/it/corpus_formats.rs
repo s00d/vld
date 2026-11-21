@@ -393,8 +393,11 @@ fn rows() -> Vec<Row> {
         (
             s().currency_code(),
             V::Currency,
-            &["USD", "EUR"],
-            &["", "usd", "US", "USDT", "ÜSD"],
+            &["USD", "EUR", "JPY", "CLF", "XCG", "ZWG"],
+            // unassigned, withdrawn (HRK, ZWL), metals / test codes (no minor units)
+            &[
+                "", "usd", "US", "USDT", "ÜSD", "ABC", "HRK", "ZWL", "XAU", "XTS",
+            ],
         ),
         (
             s().country_code(),
@@ -411,8 +414,211 @@ fn rows() -> Vec<Row> {
         (
             s().cron(),
             V::Cron,
-            &["*/5 * * * *", "0 0 * * * *"],
-            &["", "* * *", "hello", "* * * * * * * *"],
+            &[
+                "*/5 * * * *",
+                "0 0 * * * *",
+                "0 9-17 * * MON-FRI",
+                "30 2 1,15 * ?",
+                "0 0 1 jan *",
+                "0 0 * * 7",
+                "0-30/10 * * * *",
+                "59 23 31 12 6",
+                "@daily",
+                "@hourly",
+            ],
+            &[
+                "",
+                "* * *",
+                "hello",
+                "* * * * * * * *",
+                "60 * * * *",
+                "* 24 * * *",
+                "* * 0 * *",
+                "* * * 13 *",
+                "* * * * 8",
+                "*/0 * * * *",
+                "*/60 * * * *",
+                "5-1 * * * *",
+                "? * * * *",
+                "1,,2 * * * *",
+                "1/2/3 * * * *",
+                "+5 * * * *",
+                "0 0 L * *",
+                "0 0 * * MON#2",
+                "@reboot",
+                "* * * FOO *",
+            ],
+        ),
+        (
+            s().country(),
+            V::Country,
+            &["US", "DE", "GB", "AX", "ZW"],
+            &["", "us", "UK", "XX", "ZZ", "USA", "U", "ÜS"],
+        ),
+        (
+            s().country_alpha3(),
+            V::CountryAlpha3,
+            &["USA", "DEU", "GBR", "ALA", "ZWE"],
+            &["", "usa", "UK", "GB", "XXX", "UKR1"],
+        ),
+        (
+            s().iban(),
+            V::Iban,
+            &[
+                "DE89370400440532013000",
+                "DE89 3704 0044 0532 0130 00",
+                "GB82WEST12345698765432",
+                "FR1420041010050500013M02606",
+                "NL91ABNA0417164300",
+                "NO9386011117947",
+                "BE68539007547034",
+            ],
+            &[
+                "",
+                // checksum off by one digit
+                "DE89370400440532013001",
+                "GB82WEST12345698765433",
+                // wrong length for the country
+                "DE8937040044053201300",
+                "DE893704004405320130000",
+                "de89370400440532013000",
+                "DE89  3704 0044 0532 0130 00",
+                " DE89370400440532013000",
+                "XX89370400440532013000",
+                "DE8X370400440532013000",
+                "DE89-3704-0044-0532-0130-00",
+            ],
+        ),
+        (
+            s().bic(),
+            V::Bic,
+            &["DEUTDEFF", "DEUTDEFF500", "NEDSZAJJXXX", "BKPRXKPR"],
+            &[
+                "",
+                "DEUTDEF",
+                "DEUTDEFF50",
+                "DEUT1EFF",
+                "DEUTZZFF",
+                "deutdeff",
+                "DEUTDEFF5000",
+            ],
+        ),
+        (
+            s().isbn(),
+            V::Isbn,
+            &[
+                "978-3-16-148410-0",
+                "9783161484100",
+                "0-306-40615-2",
+                "0306406152",
+                "080442957X",
+                "0 306 40615 2",
+                "979-10-90636-07-1",
+            ],
+            &[
+                "",
+                "978-3-16-148410-1",
+                "0-306-40615-3",
+                "080442957x",
+                "9773161484100",
+                "-0306406152",
+                "0306406152-",
+                "0--306406152",
+                "030640615",
+                "97831614841000",
+            ],
+        ),
+        (
+            s().ean(),
+            V::Ean,
+            &[
+                "4006381333931",
+                "73513537",
+                "036000291452",
+                "10012345678902",
+            ],
+            &[
+                "",
+                "4006381333932",
+                "73513536",
+                "036000291453",
+                "400638133393",
+                "4006-381333931",
+                "40063813339a1",
+                "123456789",
+            ],
+        ),
+        (
+            s().vin(),
+            V::Vin,
+            &[
+                "1M8GDM9AXKP042788",
+                "11111111111111111",
+                "1HGCM82633A004352",
+            ],
+            &[
+                "",
+                "1M8GDM9A1KP042788",
+                "1M8GDM9AXKP042789",
+                "1M8GDM9AXKP04278",
+                "1M8GDM9AXKP0427880",
+                "IM8GDM9AXKP042788",
+                "1m8gdm9axkp042788",
+            ],
+        ),
+        (
+            s().mime(),
+            V::Mime,
+            &[
+                "application/json",
+                "text/html; charset=utf-8",
+                "text/html;charset=UTF-8",
+                "application/vnd.api+json",
+                "image/svg+xml",
+                "multipart/form-data; boundary=\"a b\\\"c\"",
+            ],
+            &[
+                "",
+                "json",
+                "text/",
+                "/html",
+                "text/html;",
+                "text/html; charset",
+                "text/html; charset=",
+                "text html",
+                "text/html/x",
+                "text/html; charset=\"open",
+                "text/html; charset=a b",
+            ],
+        ),
+        (
+            s().object_id(),
+            V::ObjectId,
+            &["507f1f77bcf86cd799439011", "507F1F77BCF86CD799439011"],
+            &[
+                "",
+                "507f1f77bcf86cd79943901",
+                "507f1f77bcf86cd7994390111",
+                "507f1f77bcf86cd79943901g",
+            ],
+        ),
+        (
+            s().timezone(),
+            V::Timezone,
+            &[
+                "UTC",
+                "Europe/Berlin",
+                "America/Argentina/Buenos_Aires",
+                "Etc/GMT+5",
+            ],
+            &[
+                "",
+                "europe/berlin",
+                "Europe//Berlin",
+                "Europe/Berlin/",
+                "A/B/C/D",
+                "Europe/Ber lin",
+            ],
         ),
         (
             s().cuid2(),
@@ -466,6 +672,29 @@ fn rows() -> Vec<Row> {
             ],
         ),
     ];
+    #[cfg(feature = "regex")]
+    rows.push((
+        s().regex_syntax(),
+        V::RegexSyntax,
+        &["^[a-z]+$", r"\d{3}-\d{4}", "(a|b)*", ""][..],
+        &["(", "[a-", "a{2,1}", "*a", r"\"][..],
+    ));
+    #[cfg(feature = "unicode")]
+    rows.push((
+        s().single_script(),
+        V::SingleScript,
+        &["paypal", "привет", "日本語のテキスト", "abc 123!"][..],
+        // Latin `p`, `y`, `l` with a Cyrillic `а`; mixed words.
+        &["p\u{430}ypal", "abc абв", "Ωmega"][..],
+    ));
+    // With `jiff` the name must exist in the time zone database.
+    #[cfg(feature = "jiff")]
+    rows.push((
+        s().timezone(),
+        V::Timezone,
+        &["Asia/Kolkata", "America/Indiana/Indianapolis"][..],
+        &["Mars/Olympus_Mons", "Europe/Atlantis", "EUROPE/BERLIN"][..],
+    ));
     #[cfg(feature = "string-advanced")]
     rows.extend([
         (

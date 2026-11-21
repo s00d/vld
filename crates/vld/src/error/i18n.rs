@@ -271,6 +271,7 @@ const ENGLISH: &[(&str, &str)] = &[
     ("type.bytes", "bytes array"),
     ("type.bytes_or_string", "bytes array or encoded string"),
     ("type.byte", "byte (integer 0..=255)"),
+    ("type.geo_point", "geo point ({lat, lng} or [lng, lat])"),
     // Lower bounds
     ("too_small", "Value must be at least {minimum}"),
     (
@@ -406,6 +407,22 @@ const ENGLISH: &[(&str, &str)] = &[
         "too_big.contains",
         "Array must contain required value at most {maximum} time(s)",
     ),
+    (
+        "too_big.scale",
+        "Decimal must have at most {maximum} digits after the point",
+    ),
+    (
+        "too_big.scale_one",
+        "Decimal must have at most {maximum} digit after the point",
+    ),
+    (
+        "too_big.precision",
+        "Decimal must have at most {maximum} digits",
+    ),
+    (
+        "too_big.precision_one",
+        "Decimal must have at most {maximum} digit",
+    ),
     ("too_big_exclusive", "Value must be less than {maximum}"),
     (
         "too_big_exclusive.number",
@@ -444,6 +461,14 @@ const ENGLISH: &[(&str, &str)] = &[
     (
         "invalid_length.bytes",
         "Bytes length must be exactly {expected}",
+    ),
+    (
+        "invalid_length.scale",
+        "Decimal must have exactly {expected} digits after the point",
+    ),
+    (
+        "invalid_length.scale_one",
+        "Decimal must have exactly {expected} digit after the point",
     ),
     // Strings
     ("invalid_string", "Invalid string ({validation})"),
@@ -514,6 +539,48 @@ const ENGLISH: &[(&str, &str)] = &[
     ("invalid_string.ulid", "Invalid ULID"),
     ("invalid_string.nanoid", "Invalid Nano ID"),
     ("invalid_string.emoji", "String must contain only emoji"),
+    ("invalid_string.country", "Invalid country code"),
+    (
+        "invalid_string.country_alpha3",
+        "Invalid alpha-3 country code",
+    ),
+    ("invalid_string.iban", "Invalid IBAN"),
+    ("invalid_string.bic", "Invalid BIC"),
+    ("invalid_string.isbn", "Invalid ISBN"),
+    ("invalid_string.ean", "Invalid EAN"),
+    ("invalid_string.vin", "Invalid VIN"),
+    ("invalid_string.timezone", "Invalid time zone"),
+    ("invalid_string.mime", "Invalid media type"),
+    ("invalid_string.object_id", "Invalid ObjectId"),
+    ("invalid_string.regex_syntax", "Invalid regular expression"),
+    (
+        "invalid_string.single_script",
+        "String must not mix scripts",
+    ),
+    (
+        "invalid_string.password_lowercase",
+        "Password must contain a lowercase letter",
+    ),
+    (
+        "invalid_string.password_uppercase",
+        "Password must contain an uppercase letter",
+    ),
+    (
+        "invalid_string.password_digit",
+        "Password must contain a digit",
+    ),
+    (
+        "invalid_string.password_symbol",
+        "Password must contain a symbol",
+    ),
+    (
+        "invalid_string.password_repeat",
+        "Password must not repeat a character more than {max_repeat} times in a row",
+    ),
+    (
+        "invalid_string.password_strength",
+        "Password is too weak (strength below {min_score} of 4)",
+    ),
     // Other formats
     ("invalid_format", "Invalid {format}"),
     ("invalid_format.decimal", "Invalid decimal value"),
@@ -529,6 +596,10 @@ const ENGLISH: &[(&str, &str)] = &[
     ("invalid_format.hex", "Invalid hex byte string"),
     ("invalid_format.image", "Unable to decode image"),
     ("invalid_format.from_str", "Invalid value"),
+    (
+        "invalid_format.duration_calendar_unit",
+        "Years and months are not a fixed length: use weeks, days, hours, minutes or seconds",
+    ),
     // Dates
     ("invalid_date", "Invalid {kind}"),
     (
@@ -578,6 +649,11 @@ const ENGLISH: &[(&str, &str)] = &[
     ("missing_contains", "Array must contain required value"),
     ("duplicate_key", "Duplicate map key"),
     (
+        "ring_not_closed",
+        "Polygon ring must end with its first position",
+    ),
+    ("range_order", "`{end}` must not be before `{start}`"),
+    (
         "invalid_map_entry",
         "Each Map entry must be a [key, value] array of length 2",
     ),
@@ -601,6 +677,10 @@ const ENGLISH: &[(&str, &str)] = &[
     ("file_type_denied", "File {kind} `{actual}` is denied"),
     ("file_type_unknown", "Unable to detect file {kind}"),
     ("checksum_mismatch", "{algorithm} checksum mismatch"),
+    (
+        "invalid_crypto_address",
+        "Invalid {network} address ({reason})",
+    ),
     ("missing_exif", "Image must contain EXIF metadata"),
     // Plumbing
     ("serialize_error", "Serialization error: {detail}"),

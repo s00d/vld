@@ -4,7 +4,9 @@
 //! validation, received type), fractional and `f32`-precision bounds, float
 //! `multiple_of`, integers beyond `f64` precision, `usize` / `isize`,
 //! `i16::MIN`, non-ASCII digits and non-finite text under `coerce`, string
-//! formats mixed with length checks. Integer bounds, sign checks, type ranges,
+//! formats mixed with length checks; text coercion (`coerce_text`) of
+//! number-, boolean- and null-like text and its round trip through
+//! `parse_coerced`. Integer bounds, sign checks, type ranges,
 //! clamp, coerce and custom messages are `model_numbers`; transforms, length,
 //! substring and character-class checks are `model_strings`.
 
@@ -470,4 +472,99 @@ fn string_payloads() {
         }
     }
     run(rows);
+}
+
+/// `coerce_text`: only text that prints back to itself becomes a number /
+/// boolean; through `parse_coerced` every value follows its field's schema.
+#[test]
+fn text_coercion() {
+    use vld::schema::{coerce_text, parse_coerced};
+    let rows: &[(&str, Value)] = &[
+        ("true", json!(true)),
+        ("false", json!(false)),
+        ("0", json!(0)),
+        ("42", json!(42)),
+        ("-7", json!(-7)),
+        ("9223372036854775807", json!(i64::MAX)),
+        ("18446744073709551615", json!(u64::MAX)),
+        ("2.75", json!(2.75)),
+        ("-0.5", json!(-0.5)),
+        // Everything below stays text.
+        ("18446744073709551616", json!("18446744073709551616")),
+        ("", json!("")),
+        ("null", json!("null")),
+        ("TRUE", json!("TRUE")),
+        ("True", json!("True")),
+        ("01234", json!("01234")),
+        ("+1555", json!("+1555")),
+        ("-0", json!("-0")),
+        ("1e3", json!("1e3")),
+        ("1.50", json!("1.50")),
+        ("1.", json!("1.")),
+        (".5", json!(".5")),
+        ("0.1000000000000000001", json!("0.1000000000000000001")),
+        (" 1", json!(" 1")),
+        ("NaN", json!("NaN")),
+        ("inf", json!("inf")),
+        ("١٢", json!("١٢")),
+    ];
+    for (raw, want) in rows {
+        assert_eq!(&coerce_text(raw), want, "{raw:?}");
+    }
+
+    vld::schema! {
+        #[derive(Debug)]
+        struct Env {
+            name: String => vld::string(),
+            port: i64 => vld::number().int().min(1),
+            ratio: f64 => vld::number(),
+            debug: bool => vld::boolean(),
+            zip: String => vld::string(),
+            tags: Vec<String> => vld::array(vld::string()),
+        }
+    }
+    let text = [
+        ("name", "007"),
+        ("port", "8080"),
+        ("ratio", "0.25"),
+        ("debug", "false"),
+        ("zip", "12345"),
+        ("tags", "true"),
+    ];
+    let value = Value::Object(
+        text.iter()
+            .map(|(k, v)| (k.to_string(), coerce_text(v)))
+            .collect(),
+    );
+    let env: Env = parse_coerced(&value).unwrap();
+    assert_eq!(
+        (env.name.as_str(), env.port, env.ratio, env.debug),
+        ("007", 8080, 0.25, false)
+    );
+    assert_eq!(
+        (env.zip.as_str(), env.tags),
+        ("12345", vec!["true".to_string()])
+    );
+
+    let value = json!({"name": coerce_text("x"), "port": coerce_text("0"), "ratio": coerce_text("1.0"),
+        "debug": coerce_text("yes"), "zip": coerce_text("1"), "tags": []});
+    let err = parse_coerced::<Env>(&value).unwrap_err();
+    let got: Vec<_> = err
+        .issues
+        .iter()
+        .map(|i| {
+            (
+                i.path.iter().map(ToString::to_string).collect::<String>(),
+                i.code.key(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        got,
+        [
+            (".port".to_string(), "too_small"),
+            (".ratio".into(), "invalid_type"),
+            (".debug".into(), "invalid_type")
+        ]
+    );
 }

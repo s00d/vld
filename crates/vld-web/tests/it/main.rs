@@ -11,8 +11,12 @@ mod common;
 
 #[cfg(feature = "actix")]
 mod actix;
+#[cfg(feature = "async-graphql")]
+mod async_graphql;
 #[cfg(feature = "axum")]
 mod axum;
+#[cfg(feature = "lambda")]
+mod lambda;
 #[cfg(feature = "ntex-3")]
 mod ntex3;
 #[cfg(feature = "ntex-4")]
@@ -21,6 +25,10 @@ mod ntex4;
 mod poem;
 #[cfg(feature = "rama")]
 mod rama;
+#[cfg(feature = "rig")]
+mod rig;
+#[cfg(feature = "rmcp")]
+mod rmcp;
 #[cfg(feature = "rocket")]
 mod rocket;
 #[cfg(feature = "salvo")]
@@ -29,5 +37,7 @@ mod salvo;
 mod tonic;
 #[cfg(feature = "tower")]
 mod tower;
+#[cfg(feature = "tungstenite")]
+mod tungstenite;
 #[cfg(feature = "warp")]
 mod warp;

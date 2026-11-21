@@ -7,7 +7,7 @@
 
 # vld-app
 
-Validate what an application reads at its edges (config files, CLI arguments, Tauri IPC) with [vld](https://crates.io/crates/vld) schemas.
+Validate what an application reads at its edges (config files, environment variables, CLI arguments, Tauri IPC) with [vld](https://crates.io/crates/vld) schemas.
 
 ```toml
 [dependencies]
@@ -34,6 +34,7 @@ let settings: Settings = vld_app::config::from_config(&cfg)?; // every bad key r
 | Module | Feature | Library |
 |---|---|---|
 | `config` | `config-rs` and / or `figment` | config-rs 0.14 – 0.15, figment 0.10 |
+| `env` | `env` and / or `dotenv` | environment variables (std), `.env` files (dotenvy 0.15) |
 | `clap` | `clap` (turns on `vld/derive`) | clap 4 |
 | `tauri` | — | Tauri IPC payloads (no `tauri` dependency) |
 

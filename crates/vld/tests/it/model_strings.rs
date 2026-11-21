@@ -3,9 +3,10 @@
 //! proptest picks transforms (`trim`, `to_lowercase`, `to_uppercase`, in
 //! order), checks (`min`, `max`, `len`, `non_empty`, `starts_with`,
 //! `ends_with`, `contains`, the `ascii` / `alpha` / `alphanumeric` /
-//! `lowercase` / `uppercase` formats, a closure rule, a pattern), per-check
-//! `*_msg` messages, `with_messages`, `type_error`, `coerce` /
-//! `coerce_bools`, and an input mixing ASCII, case-changing letters (`ß`,
+//! `lowercase` / `uppercase` formats, the password rules `require_lowercase` /
+//! `require_uppercase` / `require_digit` / `require_symbol` / `max_repeat`, a
+//! closure rule, a pattern), per-check `*_msg` messages, `with_messages`,
+//! `type_error`, `coerce` / `coerce_bools`, `redact()`, and an input mixing ASCII, case-changing letters (`ß`,
 //! `İ`), non-ASCII whitespace, numbers, booleans and `null`. The model
 //! predicts the output, or every issue code in order with the message a custom
 //! message gives it.
@@ -43,6 +44,11 @@ enum Check {
     Uppercase,
     /// `rules::from_fn("no_digits", ..)`, with or without its own message.
     NoDigits(bool),
+    ReqLower,
+    ReqUpper,
+    ReqDigit,
+    ReqSymbol,
+    MaxRepeat(usize),
     #[cfg(feature = "regex")]
     /// `pattern("^[a-z]")`.
     StartsLower,
@@ -64,6 +70,11 @@ impl Check {
             Check::Lowercase => "invalid_lowercase",
             Check::Uppercase => "invalid_uppercase",
             Check::NoDigits(_) => "no_digits",
+            Check::ReqLower => "invalid_password_lowercase",
+            Check::ReqUpper => "invalid_password_uppercase",
+            Check::ReqDigit => "invalid_password_digit",
+            Check::ReqSymbol => "invalid_password_symbol",
+            Check::MaxRepeat(_) => "invalid_password_repeat",
             #[cfg(feature = "regex")]
             Check::StartsLower => "invalid_regex",
         }
@@ -97,6 +108,22 @@ impl Check {
             Check::Lowercase => s == s.to_lowercase(),
             Check::Uppercase => s == s.to_uppercase(),
             Check::NoDigits(_) => !s.chars().any(|c| c.is_ascii_digit()),
+            Check::ReqLower => s.chars().any(char::is_lowercase),
+            Check::ReqUpper => s.chars().any(char::is_uppercase),
+            Check::ReqDigit => s.chars().any(|c| c.is_ascii_digit()),
+            Check::ReqSymbol => s
+                .chars()
+                .any(|c| !c.is_alphanumeric() && !c.is_whitespace()),
+            // The longest run of one character.
+            Check::MaxRepeat(m) => {
+                let chars: Vec<char> = s.chars().collect();
+                chars
+                    .chunk_by(|a, b| a == b)
+                    .map(<[char]>::len)
+                    .max()
+                    .unwrap_or(0)
+                    <= *m
+            }
             #[cfg(feature = "regex")]
             Check::StartsLower => s.chars().next().is_some_and(|c| c.is_ascii_lowercase()),
         }
@@ -113,6 +140,11 @@ impl Check {
                 | Check::Lowercase
                 | Check::Uppercase
                 | Check::NoDigits(_)
+                | Check::ReqLower
+                | Check::ReqUpper
+                | Check::ReqDigit
+                | Check::ReqSymbol
+                | Check::MaxRepeat(_)
                 | Check::MinBytes(_)
                 | Check::MaxBytes(_)
         )
@@ -128,6 +160,8 @@ struct Spec {
     type_error: bool,
     /// `None`, `coerce()`, or `coerce_bools("1", "0")`.
     coerce: Option<bool>,
+    /// Wrapped in `.redact()`.
+    redact: bool,
 }
 
 fn custom(what: &str) -> String {
@@ -158,13 +192,18 @@ fn check() -> impl Strategy<Value = Check> {
         Just(Check::Lowercase).boxed(),
         Just(Check::Uppercase).boxed(),
         any::<bool>().prop_map(Check::NoDigits).boxed(),
+        Just(Check::ReqLower).boxed(),
+        Just(Check::ReqUpper).boxed(),
+        Just(Check::ReqDigit).boxed(),
+        Just(Check::ReqSymbol).boxed(),
+        (1usize..3).prop_map(Check::MaxRepeat).boxed(),
     ];
     #[cfg(feature = "regex")]
     options.push(Just(Check::StartsLower).boxed());
     proptest::strategy::Union::new(options)
 }
 
-const MESSAGE_KEYS: [&str; 8] = [
+const MESSAGE_KEYS: [&str; 10] = [
     "too_small",
     "too_big",
     "invalid_length",
@@ -173,6 +212,8 @@ const MESSAGE_KEYS: [&str; 8] = [
     "invalid_ascii",
     "no_digits",
     "invalid_regex",
+    "invalid_password_symbol",
+    "invalid_password_repeat",
 ];
 
 fn spec() -> impl Strategy<Value = Spec> {
@@ -188,20 +229,24 @@ fn spec() -> impl Strategy<Value = Spec> {
         proptest::sample::subsequence(&MESSAGE_KEYS[..], 0..=3),
         any::<bool>(),
         proptest::option::of(any::<bool>()),
+        any::<bool>(),
     )
-        .prop_map(|(transforms, checks, messages, type_error, coerce)| Spec {
-            transforms,
-            checks,
-            messages,
-            type_error,
-            coerce,
-        })
+        .prop_map(
+            |(transforms, checks, messages, type_error, coerce, redact)| Spec {
+                transforms,
+                checks,
+                messages,
+                type_error,
+                coerce,
+                redact,
+            },
+        )
 }
 
 fn input() -> impl Strategy<Value = Value> {
     let piece = proptest::sample::select(
         &[
-            "a", "b", "A", "Z", "é", "É", "ß", "İ", " ", "\u{3000}", "1", "x", "_", "😀",
+            "a", "b", "A", "Z", "é", "É", "ß", "İ", " ", "\u{3000}", "1", "x", "_", "😀", "aa", "€",
         ][..],
     );
     prop_oneof![
@@ -270,6 +315,16 @@ fn build(spec: &Spec) -> Erased {
                     s.rule(r)
                 }
             }
+            (Check::ReqLower, false) => s.require_lowercase(),
+            (Check::ReqLower, true) => s.require_lowercase_msg(msg),
+            (Check::ReqUpper, false) => s.require_uppercase(),
+            (Check::ReqUpper, true) => s.require_uppercase_msg(msg),
+            (Check::ReqDigit, false) => s.require_digit(),
+            (Check::ReqDigit, true) => s.require_digit_msg(msg),
+            (Check::ReqSymbol, false) => s.require_symbol(),
+            (Check::ReqSymbol, true) => s.require_symbol_msg(msg),
+            (Check::MaxRepeat(n), false) => s.max_repeat(n),
+            (Check::MaxRepeat(n), true) => s.max_repeat_msg(n, msg),
             #[cfg(feature = "regex")]
             (Check::StartsLower, false) => s.pattern("^[a-z]"),
             #[cfg(feature = "regex")]
@@ -286,7 +341,11 @@ fn build(spec: &Spec) -> Erased {
         Some(false) => s.coerce(),
         Some(true) => s.coerce_bools("1", "0"),
     };
-    Erased::new(s)
+    if spec.redact {
+        Erased::new(s.redact())
+    } else {
+        Erased::new(s)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -354,8 +413,18 @@ fn check_case(spec: &Spec, v: &Value) -> Result<(), TestCaseError> {
                     prop_assert_eq!(&i.message, msg, "{:?} on {}", spec, v);
                 }
             }
+            // A redacted schema reports the marker as received by every issue.
+            if spec.redact {
+                for i in &e.issues {
+                    prop_assert_eq!(i.received.as_ref(), Some(&json!("[redacted]")));
+                }
+                if let Value::String(input) = v {
+                    if input.chars().count() >= 4 {
+                        prop_assert!(!e.to_string().contains(input.as_str()), "{}", e);
+                    }
+                }
             // The transformed string is reported as received by every check.
-            if let Ok(shown) = predict(
+            } else if let Ok(shown) = predict(
                 &Spec {
                     checks: vec![],
                     ..spec.clone()

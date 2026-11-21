@@ -87,8 +87,9 @@ pub(crate) fn is_valid_color(s: &str) -> bool {
     false
 }
 
+/// An active ISO 4217 code (the table `money()` uses).
 pub(crate) fn is_valid_currency_code(s: &str) -> bool {
-    s.len() == 3 && s.bytes().all(|b| b.is_ascii_uppercase())
+    crate::primitives::iso4217::is_currency(s)
 }
 
 pub(crate) fn is_valid_country_code(s: &str) -> bool {
@@ -108,13 +109,160 @@ pub(crate) fn is_valid_locale(s: &str) -> bool {
     }
 }
 
+/// Cron: 5 fields (`min hour dom month dow`) or 6 (seconds first), or one
+/// of the `@yearly` / `@annually` / `@monthly` / `@weekly` / `@daily` /
+/// `@midnight` / `@hourly` macros. A field is a `,` list of `*`, a value or
+/// a range `a-b`, each with an optional `/step`; months and weekdays take
+/// names (`JAN`, `mon`); `?` is allowed in the day fields; weekday `7` is
+/// Sunday. Quartz extras (`L`, `W`, `#`) are rejected.
 pub(crate) fn is_valid_cron(s: &str) -> bool {
+    const MONTHS: [&str; 12] = [
+        "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    ];
+    const DAYS: [&str; 7] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    if s.starts_with('@') {
+        return matches!(
+            s,
+            "@yearly" | "@annually" | "@monthly" | "@weekly" | "@daily" | "@midnight" | "@hourly"
+        );
+    }
     let fields: Vec<&str> = s.split_whitespace().collect();
-    (fields.len() == 5 || fields.len() == 6)
-        && fields.iter().all(|f| {
-            f.bytes()
-                .all(|b| b.is_ascii_digit() || matches!(b, b'*' | b'/' | b',' | b'-' | b'?'))
+    // (min, max, names (first = min), `?` allowed)
+    let spec = [
+        (0, 59, &[][..], false),
+        (0, 59, &[][..], false),
+        (0, 23, &[][..], false),
+        (1, 31, &[][..], true),
+        (1, 12, &MONTHS[..], false),
+        (0, 7, &DAYS[..], true),
+    ];
+    let spec = match fields.len() {
+        5 => &spec[1..],
+        6 => &spec[..],
+        _ => return false,
+    };
+    fields
+        .iter()
+        .zip(spec)
+        .all(|(field, &(lo, hi, names, question))| {
+            let value = |v: &str| -> Option<u32> {
+                if !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit()) {
+                    return v.parse().ok().filter(|n| (lo..=hi).contains(n));
+                }
+                names
+                    .iter()
+                    .position(|n| n.eq_ignore_ascii_case(v))
+                    .map(|i| lo + i as u32)
+            };
+            (question && *field == "?")
+                || field.split(',').all(|item| {
+                    let (base, step) = match item.split_once('/') {
+                        Some((b, st)) => (b, Some(st)),
+                        None => (item, None),
+                    };
+                    let step_ok = step.is_none_or(|st| {
+                        !st.is_empty()
+                            && st.bytes().all(|b| b.is_ascii_digit())
+                            && st
+                                .parse::<u32>()
+                                .is_ok_and(|n| (1..=hi.max(1)).contains(&n))
+                    });
+                    let base_ok = base == "*"
+                        || match base.split_once('-') {
+                            Some((a, b)) => {
+                                matches!((value(a), value(b)), (Some(a), Some(b)) if a <= b)
+                            }
+                            None => value(base).is_some(),
+                        };
+                    step_ok && base_ok
+                })
         })
+}
+
+/// RFC 6838 restricted name: 1-127 chars, alphanumeric first, then
+/// alphanumerics and `!#$&-^_.+`.
+fn is_mime_name(s: &str) -> bool {
+    (1..=127).contains(&s.len())
+        && s.as_bytes()[0].is_ascii_alphanumeric()
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"!#$&-^_.+".contains(&b))
+}
+
+/// Media type: `type/subtype[+suffix]` (RFC 6838 names) followed by
+/// `; name=value` parameters (value: an RFC 9110 token or a quoted string).
+pub(crate) fn is_valid_mime(s: &str) -> bool {
+    let mut parts = s.split(';');
+    let essence = parts.next().unwrap_or("");
+    let Some((ty, sub)) = essence.split_once('/') else {
+        return false;
+    };
+    let tchar = |b: u8| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b);
+    let quoted = |v: &str| {
+        let Some(inner) = v.strip_prefix('"').and_then(|v| v.strip_suffix('"')) else {
+            return false;
+        };
+        let mut escaped = false;
+        inner.chars().all(|c| {
+            let ok = escaped || c != '"';
+            escaped = !escaped && c == '\\';
+            ok && !c.is_control()
+        }) && !escaped
+    };
+    is_mime_name(ty)
+        && is_mime_name(sub)
+        && parts.all(|p| {
+            let Some((name, value)) = p.trim_start_matches([' ', '\t']).split_once('=') else {
+                return false;
+            };
+            is_mime_name(name) && (quoted(value) || (!value.is_empty() && value.bytes().all(tchar)))
+        })
+}
+
+/// IANA time zone name. With the `jiff` feature: present in jiff's time
+/// zone database, spelled as there (`Europe/Berlin`, not `europe/berlin`).
+/// Without it: the shape of a name (`UTC`, `Etc/GMT+5`,
+/// `America/Argentina/Buenos_Aires`): 1-3 `/`-separated parts, each starting
+/// with an uppercase ASCII letter, then letters, digits, `_`, `-`, `+`.
+pub(crate) fn is_valid_timezone(s: &str) -> bool {
+    #[cfg(feature = "jiff")]
+    {
+        // jiff's lookup ignores ASCII case: the name must also be spelled
+        // as in the database.
+        is_timezone_shape(s)
+            && jiff::tz::db()
+                .get(s)
+                .is_ok_and(|tz| tz.iana_name() == Some(s))
+    }
+    #[cfg(not(feature = "jiff"))]
+    {
+        is_timezone_shape(s)
+    }
+}
+
+fn is_timezone_shape(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('/').collect();
+    s.len() <= 255
+        && (1..=3).contains(&parts.len())
+        && parts.iter().all(|p| {
+            p.as_bytes().first().is_some_and(u8::is_ascii_uppercase)
+                && p.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'+'))
+        })
+}
+
+/// The value compiles as a regular expression (regex-lite syntax).
+#[cfg(feature = "regex")]
+pub(crate) fn is_valid_regex(s: &str) -> bool {
+    regex_lite::Regex::new(s).is_ok()
+}
+
+/// Every character belongs to one script (Unicode TS #39 "single script",
+/// with `Common` / `Inherited` characters and Han + Kana / Hangul mixes
+/// allowed).
+#[cfg(feature = "unicode")]
+pub(crate) fn is_single_script(s: &str) -> bool {
+    use unicode_security::MixedScript;
+    s.is_single_script()
 }
 
 pub(crate) fn is_emoji_char(c: char) -> bool {

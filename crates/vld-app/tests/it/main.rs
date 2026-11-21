@@ -5,4 +5,6 @@
 mod clap;
 #[cfg(any(feature = "config-rs", feature = "figment"))]
 mod config;
+#[cfg(feature = "env")]
+mod env;
 mod tauri;

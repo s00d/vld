@@ -57,6 +57,33 @@ pub trait DateBackend: Sealed {
     fn format_time(t: &Self::Time) -> String {
         t.to_string()
     }
+    /// The instant `nanos` nanoseconds after the Unix epoch (within the
+    /// common range).
+    fn from_unix_nanos(nanos: i128) -> Option<Self::DateTime>;
+    /// Nanoseconds since the Unix epoch.
+    fn unix_nanos(dt: &Self::DateTime) -> i128;
+}
+
+/// `0000-01-01T00:00:00Z` in Unix nanoseconds.
+const MIN_UNIX_NANOS: i128 = -62_167_219_200 * 1_000_000_000;
+/// `9999-12-30T22:00:00.999999999Z` in Unix nanoseconds.
+const MAX_UNIX_NANOS: i128 = 253_402_207_200 * 1_000_000_000 + 999_999_999;
+
+/// Unit of a Unix-timestamp datetime ([`ZDateTime::unix_seconds`] /
+/// [`ZDateTime::unix_millis`]).
+#[derive(Clone, Copy, PartialEq)]
+enum UnixUnit {
+    Seconds,
+    Millis,
+}
+
+impl UnixUnit {
+    fn nanos(self) -> i128 {
+        match self {
+            UnixUnit::Seconds => 1_000_000_000,
+            UnixUnit::Millis => 1_000_000,
+        }
+    }
 }
 
 fn parse_date<B: DateBackend>(s: &str) -> Option<B::Date> {
@@ -391,6 +418,8 @@ pub struct ZDateTime<B: DateBackend> {
     allow_naive: bool,
     naive_offset: i32,
     required_timezone_offset: Option<RequiredOffset>,
+    unix: Option<UnixUnit>,
+    coerce: bool,
     custom_type_error: Option<String>,
     _backend: PhantomData<fn() -> B>,
 }
@@ -403,6 +432,8 @@ impl<B: DateBackend> ZDateTime<B> {
             allow_naive: true,
             naive_offset: 0,
             required_timezone_offset: None,
+            unix: None,
+            coerce: false,
             custom_type_error: None,
             _backend: PhantomData,
         }
@@ -412,6 +443,82 @@ impl<B: DateBackend> ZDateTime<B> {
     pub fn type_error(mut self, msg: impl Into<String>) -> Self {
         self.custom_type_error = Some(msg.into());
         self
+    }
+
+    /// Read a Unix timestamp in **seconds** (a JSON integer) instead of an
+    /// RFC 3339 string.
+    ///
+    /// The value must land in the common range
+    /// (`-62167219200..=253402207200`, i.e. `0000-01-01T00:00:00Z ..=
+    /// 9999-12-30T22:00:00Z`), else `invalid_date`; a fraction is `not_int`;
+    /// a string is `invalid_type` (`integer`) unless [`coerce`](Self::coerce)
+    /// is on. `min` / `max` / `past` / `future` apply as usual; the offset
+    /// options do not. JSON Schema: `{"type": "integer", "format":
+    /// "unix-time", "minimum": .., "maximum": ..}`.
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    ///
+    /// let at = vld::jiff::datetime().unix_seconds().min("2000-01-01T00:00:00Z");
+    /// assert_eq!(at.parse("1700000000").unwrap().to_string(), "2023-11-14T22:13:20Z");
+    /// assert!(at.parse("0").is_err()); // 1970: before `min`
+    /// assert!(at.parse(r#""1700000000""#).is_err()); // a string: needs `.coerce()`
+    /// ```
+    pub fn unix_seconds(mut self) -> Self {
+        self.unix = Some(UnixUnit::Seconds);
+        self
+    }
+
+    /// Like [`unix_seconds`](Self::unix_seconds), in **milliseconds**
+    /// (range `-62167219200000..=253402207200999`, format `unix-time-ms`).
+    pub fn unix_millis(mut self) -> Self {
+        self.unix = Some(UnixUnit::Millis);
+        self
+    }
+
+    /// With [`unix_seconds`](Self::unix_seconds) / [`unix_millis`](Self::unix_millis):
+    /// also accept the timestamp as a string of digits with an optional
+    /// leading `-` (`"1700000000"`, from query strings and forms).
+    pub fn coerce(mut self) -> Self {
+        self.coerce = true;
+        self
+    }
+
+    /// The instant of a Unix timestamp input.
+    fn parse_unix(&self, unit: UnixUnit, value: &Value) -> Result<B::DateTime, VldError> {
+        let type_error =
+            || crate::primitives::type_error(&self.custom_type_error, "integer", value);
+        let n: i128 = match value {
+            Value::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
+                (Some(i), _, _) => i.into(),
+                (_, Some(u), _) => u.into(),
+                (_, _, Some(f)) if f.fract() != 0.0 => {
+                    return Err(VldError::from_code_with_value(IssueCode::NotInt, value));
+                }
+                // Saturating: out of range either way.
+                (_, _, Some(f)) => f as i128,
+                _ => return Err(type_error()),
+            },
+            Value::String(s) if self.coerce => {
+                let digits = s.strip_prefix('-').unwrap_or(s);
+                if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+                    return Err(type_error());
+                }
+                s.parse::<i128>().unwrap_or(i128::MAX)
+            }
+            _ => return Err(type_error()),
+        };
+        n.checked_mul(unit.nanos())
+            .filter(|t| (MIN_UNIX_NANOS..=MAX_UNIX_NANOS).contains(t))
+            .and_then(B::from_unix_nanos)
+            .ok_or_else(|| {
+                VldError::from_code_with_value(
+                    IssueCode::InvalidDate {
+                        kind: DateKind::DateTime,
+                    },
+                    value,
+                )
+            })
     }
 
     fn literal(dt: &str) -> B::DateTime {
@@ -528,10 +635,25 @@ impl<B: DateBackend> VldSchema for ZDateTime<B> {
     type Output = B::DateTime;
 
     fn output_json(&self, o: &B::DateTime) -> Option<Value> {
-        Some(Value::String(B::format_datetime(o)))
+        Some(match self.unix {
+            Some(unit) => {
+                let n = B::unix_nanos(o).div_euclid(unit.nanos());
+                i64::try_from(n).map_or(Value::Null, Value::from)
+            }
+            None => Value::String(B::format_datetime(o)),
+        })
     }
 
     fn parse_value(&self, value: &Value) -> Result<B::DateTime, VldError> {
+        if let Some(unit) = self.unix {
+            let dt = self.parse_unix(unit, value)?;
+            let errors = self.bounds.check(&dt, B::now, DateKind::DateTime, value);
+            return if errors.is_empty() {
+                Ok(dt)
+            } else {
+                Err(errors)
+            };
+        }
         let s = value.as_str().ok_or_else(|| {
             crate::primitives::type_error(&self.custom_type_error, "datetime", value)
         })?;
@@ -578,6 +700,9 @@ impl<B: DateBackend> VldSchema for ZDateTime<B> {
 #[cfg(feature = "openapi")]
 impl<B: DateBackend> crate::openapi::JsonSchema for ZDateTime<B> {
     fn json_schema(&self) -> Value {
+        if let Some(unit) = self.unix {
+            return self.unix_json_schema(unit);
+        }
         let base = if self.allow_naive && self.required_timezone_offset.is_none() {
             serde_json::json!({
                 "type": "string",
@@ -590,6 +715,42 @@ impl<B: DateBackend> crate::openapi::JsonSchema for ZDateTime<B> {
             serde_json::json!({"type": "string", "format": "date-time"})
         };
         self.bounds.json_schema(base)
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl<B: DateBackend> ZDateTime<B> {
+    /// `{"type": "integer", "format": "unix-time" | "unix-time-ms",
+    /// "minimum": .., "maximum": ..}` (the common range intersected with
+    /// `min` / `max`) plus `x-past` / `x-future`.
+    fn unix_json_schema(&self, unit: UnixUnit) -> Value {
+        let u = unit.nanos();
+        let ceil = |n: i128| -(-n).div_euclid(u);
+        let lo = self.bounds.min.as_ref().map_or(MIN_UNIX_NANOS, |b| {
+            B::unix_nanos(&b.value).max(MIN_UNIX_NANOS)
+        });
+        let hi = self.bounds.max.as_ref().map_or(MAX_UNIX_NANOS, |b| {
+            B::unix_nanos(&b.value).min(MAX_UNIX_NANOS)
+        });
+        let (format, what) = match unit {
+            UnixUnit::Seconds => ("unix-time", "seconds"),
+            UnixUnit::Millis => ("unix-time-ms", "milliseconds"),
+        };
+        let int = |n: i128| i64::try_from(n).map_or(Value::Null, Value::from);
+        let mut schema = serde_json::json!({
+            "type": "integer",
+            "format": format,
+            "description": format!("Unix timestamp in {}", what),
+            "minimum": int(ceil(lo)),
+            "maximum": int(hi.div_euclid(u)),
+        });
+        if self.bounds.past.is_some() {
+            schema["x-past"] = Value::Bool(true);
+        }
+        if self.bounds.future.is_some() {
+            schema["x-future"] = Value::Bool(true);
+        }
+        schema
     }
 }
 

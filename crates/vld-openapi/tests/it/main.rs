@@ -9,6 +9,8 @@ mod common;
 
 mod validator;
 
+#[cfg(feature = "poem-openapi")]
+mod poem_openapi;
 #[cfg(feature = "schemars-0")]
 mod schemars0;
 #[cfg(feature = "schemars-1")]

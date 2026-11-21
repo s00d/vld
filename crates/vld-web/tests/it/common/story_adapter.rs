@@ -523,3 +523,35 @@ mod conformance_adapter {
         }
     }
 }
+
+vld::schema! {
+    #[derive(Debug)]
+    pub struct Login {
+        pub user: String => vld::string().min(2),
+        pub password: String => vld::string().min(12).require_digit().redact(),
+    }
+}
+
+/// Given a login body whose password field is `redact()`ed,
+/// when an adapter rejects a weak password,
+/// then the 422 body names the field and the failed rules, and neither the
+/// body nor the error's `Display` / `Debug` (what a server logs) contains
+/// the password.
+#[test]
+fn redacted_password_stays_out_of_responses_and_logs() {
+    let secret = "letmeinplease";
+    let body = json!({"user": "ada", "password": secret}).to_string();
+    let value = parse_json_body(body.as_bytes()).unwrap();
+    let err: VldHttpError = Login::parse_value(&value).unwrap_err().into();
+    assert_eq!(err.status(), 422);
+    let resp = err.body();
+    assert_eq!(issues(&resp), pairs(&[(".password", "invalid_string")]));
+    assert_eq!(
+        resp["issues"][0]["message"],
+        "Password must contain a digit"
+    );
+    for text in [resp.to_string(), err.to_string(), format!("{err:?}")] {
+        assert!(!text.contains(secret), "{text}");
+    }
+    assert!(err.to_string().contains("[redacted]"));
+}

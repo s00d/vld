@@ -27,15 +27,18 @@ names the dependency and its `rust-version` when your compiler is older.
 |---|---|---|
 | `vld` | every feature | 1.85 |
 | `vld-derive` | — | 1.85 |
-| `vld-web` | `axum`, `actix`, `poem`, `rocket`, `warp`, `tower`, `tonic` | 1.85 |
-| `vld-web` | `ntex-3` | **1.88** |
+| `vld-web` | `axum`, `axum-ws`, `actix`, `poem`, `rocket`, `warp`, `tower`, `tonic`, `tungstenite`, `lambda` | 1.85 |
+| `vld-web` | `async-graphql` | **1.89** |
+| `vld-web` | `ntex-3`, `rmcp` | **1.88** |
 | `vld-web` | `salvo` | **1.94** |
 | `vld-web` | `rama` | **1.96** |
 | `vld-web` | `ntex-4` | **1.97** |
-| `vld-openapi` | `utoipa-5`, `schemars-0`, `schemars-1` | 1.85 |
+| `vld-web` | `rig` | **1.97.1** |
+| `vld-openapi` | `utoipa-5`, `schemars-0`, `schemars-1`, `poem-openapi` | 1.85 |
 | `vld-openapi` | `utoipa-6` | **1.88** |
-| `vld-data` | `sqlx-0_8`, `diesel`, `sea-orm-1` (+ `with-*`), `redis-0`, `redis-1`, `redis-aio*`, `lapin-2`, `lapin-3`, `postgres` / `mysql` / `sqlite` | 1.85 |
+| `vld-data` | `sqlx-0_8`, `diesel`, `sea-orm-1` (+ `with-*`), `redis-0`, `redis-1`, `redis-aio*`, `lapin-2`, `lapin-3`, `bson-2`, `bson-3`, `tokio-postgres`, `rumqttc`, `centrifuge`, `csv`, `postgres` / `mysql` / `sqlite` | 1.85 |
 | `vld-data` | `lapin-4` | **1.88** |
+| `vld-data` | `nats`, `clickhouse` | **1.89** |
 | `vld-data` | `sqlx-0_9`, `sea-orm-2` | **1.94** |
 | `vld-app` | every feature | 1.85 |
 

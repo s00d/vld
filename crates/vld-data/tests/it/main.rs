@@ -11,6 +11,35 @@
 mod story_db;
 mod surrealdb;
 
+#[cfg(any(
+    feature = "bson-2",
+    feature = "bson-3",
+    feature = "tokio-postgres",
+    feature = "clickhouse",
+    feature = "rumqttc",
+    feature = "nats",
+    feature = "centrifuge",
+    feature = "csv"
+))]
+mod issues;
+
+#[cfg(feature = "bson-2")]
+mod bson2;
+#[cfg(feature = "bson-3")]
+mod bson3;
+#[cfg(feature = "centrifuge")]
+mod centrifuge;
+#[cfg(feature = "clickhouse")]
+mod clickhouse;
+#[cfg(feature = "csv")]
+mod csv;
+#[cfg(feature = "nats")]
+mod nats;
+#[cfg(feature = "tokio-postgres")]
+mod postgres_types;
+#[cfg(feature = "rumqttc")]
+mod rumqttc;
+
 #[cfg(all(feature = "diesel", feature = "sqlite"))]
 mod diesel;
 #[cfg(feature = "lapin-2")]

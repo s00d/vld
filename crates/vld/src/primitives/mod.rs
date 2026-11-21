@@ -3,6 +3,9 @@ mod any;
 mod boolean;
 mod bytes;
 mod character;
+#[cfg(feature = "crypto")]
+#[cfg_attr(docsrs, doc(cfg(feature = "crypto")))]
+pub mod crypto;
 #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 #[cfg_attr(
     docsrs,
@@ -15,13 +18,21 @@ mod duration;
 mod enumeration;
 #[cfg(feature = "file")]
 mod file;
+#[cfg(feature = "geo")]
+mod geo;
 #[cfg(feature = "net")]
 mod ip_network;
 mod iso;
+pub(crate) mod iso4217;
+#[cfg(feature = "decimal")]
+pub(crate) use iso4217::minor_units;
 mod json_value;
 mod literal;
+#[cfg(feature = "decimal")]
+mod money;
 mod number;
 mod path;
+mod range;
 mod socket_addr;
 mod string;
 
@@ -45,15 +56,27 @@ pub use enumeration::ZEnum;
 #[cfg(feature = "file")]
 #[cfg_attr(docsrs, doc(cfg(feature = "file")))]
 pub use file::{FileStorage, ValidatedFile, ZFile};
+#[cfg(feature = "geo")]
+#[cfg_attr(docsrs, doc(cfg(feature = "geo")))]
+pub use geo::{GeoPoint, ZGeoJson, ZGeoPoint};
 #[cfg(feature = "net")]
 #[cfg_attr(docsrs, doc(cfg(feature = "net")))]
 pub use ip_network::ZIpNetwork;
 pub use json_value::ZJsonValue;
 pub use literal::{IntoLiteral, ZLiteral};
+#[cfg(feature = "decimal")]
+#[cfg_attr(docsrs, doc(cfg(feature = "decimal")))]
+pub use money::{Money, ZMoney};
 pub use number::{IntType, ZF32, ZInt, ZInteger, ZNumber};
 pub use path::ZPath;
+pub use range::ZRange;
 pub use socket_addr::ZSocketAddr;
 pub use string::ZString;
+#[cfg(any(feature = "ts", feature = "fake"))]
+pub(crate) use string::{COUNTRIES_ALPHA2, COUNTRIES_ALPHA3, IBAN_LENGTHS};
+#[cfg(feature = "string-advanced")]
+#[cfg_attr(docsrs, doc(cfg(feature = "string-advanced")))]
+pub use string::{ZParsedString, ZUrl, ZUuid};
 
 use serde_json::Value;
 

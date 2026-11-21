@@ -304,3 +304,76 @@ fn third_party_types_via_from_str() {
             .is_err()
     );
 }
+
+/// Given an API type with `uuid::Uuid` and `url::Url` fields
+/// When ids and links are parsed through `vld::uuid()` / `vld::url()` and
+/// through the types' inferred schemas
+/// Then the outputs are typed values, bad input is the same issue as the
+/// string format's, and the JSON Schema is `format: uuid` / `uri`.
+#[cfg(feature = "string-advanced")]
+#[test]
+fn typed_uuid_and_url() {
+    use vld::error::StringValidation;
+    use vld::schema::VldType;
+    let id = vld::uuid();
+    let v = id
+        .parse_value(&json!("550e8400-e29b-41d4-a716-446655440000"))
+        .unwrap();
+    assert_eq!(
+        v,
+        uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap()
+    );
+    assert_eq!(
+        code(id.parse_value(&json!("550e8400"))),
+        IssueCode::InvalidString {
+            validation: StringValidation::Uuid
+        }
+    );
+    // Narrowed with string checks: only v7, case-folded first.
+    let v7 = vld::uuid().checks(|s| s.to_lowercase().uuid_v7());
+    assert!(
+        v7.parse_value(&json!("01890F57-5A7B-7F8B-BFD3-63F8E7C6F4B8"))
+            .is_ok()
+    );
+    assert_eq!(
+        code(v7.parse_value(&json!("550e8400-e29b-41d4-a716-446655440000"))),
+        IssueCode::InvalidString {
+            validation: StringValidation::UuidV7
+        }
+    );
+
+    let link = vld::url();
+    let u = link
+        .parse_value(&json!("https://example.com/a?b=1"))
+        .unwrap();
+    assert_eq!((u.scheme(), u.path()), ("https", "/a"));
+    assert!(link.parse_value(&json!("mailto:a@b.c")).is_ok());
+    assert_eq!(
+        code(link.parse_value(&json!("/relative"))),
+        IssueCode::InvalidString {
+            validation: StringValidation::Uri
+        }
+    );
+    let https = vld::url().checks(|s| s.url());
+    assert!(https.parse_value(&json!("mailto:a@b.c")).is_err());
+
+    // Inferred schemas (what `#[derive(Validate)]` uses for such fields).
+    assert!(
+        <uuid::Uuid>::vld_schema()
+            .parse_value(&json!("00000000-0000-0000-0000-000000000000"))
+            .is_ok()
+    );
+    let opt = <Option<url::Url>>::vld_schema();
+    assert_eq!(opt.parse_value(&json!(null)).unwrap(), None);
+    #[cfg(feature = "openapi")]
+    {
+        assert_eq!(
+            id.json_schema(),
+            json!({"type": "string", "format": "uuid"})
+        );
+        assert_eq!(
+            link.json_schema(),
+            json!({"type": "string", "format": "uri"})
+        );
+    }
+}

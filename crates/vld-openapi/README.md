@@ -35,11 +35,12 @@ struct ApiDoc; // properties carry minLength, maxLength, format: email
 |---|---|---|
 | `utoipa5` / `utoipa6` | `utoipa-5` / `utoipa-6` | `impl_to_schema!`: utoipa `ToSchema` / `IntoParams` from a vld type |
 | `schemars0` / `schemars1` | `schemars-0` / `schemars-1` | `impl_json_schema!` (vld → `schemars::JsonSchema`, also for aide 0.15 / 0.16) and `impl_vld_parse!` (schemars type → vld validation) |
+| `poem_openapi` | `poem-openapi` | `impl_type!`: poem-openapi `Type` / `ParseFromJSON` from a vld type; `VldJson<T>` body answering 422 with every issue |
 | `validator` | always | validate JSON against a JSON Schema, inspect and combine schemas, `to_openapi3` |
 
 No feature is on by default; any set can be enabled together.
 
-- Guide: <https://s00d.github.io/vld/integrations/openapi/utoipa>, <https://s00d.github.io/vld/integrations/openapi/schemars>
+- Guide: <https://s00d.github.io/vld/integrations/openapi/utoipa>, <https://s00d.github.io/vld/integrations/openapi/schemars>, <https://s00d.github.io/vld/integrations/openapi/poem-openapi>
 - API: <https://docs.rs/vld-openapi>
 
 ## Support
