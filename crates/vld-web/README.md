@@ -1,7 +1,11 @@
-# vld-web
+[![Crates.io](https://img.shields.io/crates/v/vld-web?style=for-the-badge)](https://crates.io/crates/vld-web)
+[![Downloads](https://img.shields.io/crates/d/vld-web?style=for-the-badge)](https://crates.io/crates/vld-web)
+[![docs.rs](https://img.shields.io/badge/docs-docs.rs-blue?style=for-the-badge)](https://docs.rs/vld-web)
+[![Guide](https://img.shields.io/badge/guide-s00d.github.io-blue?style=for-the-badge)](https://s00d.github.io/vld/integrations/web/overview)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
+[![Donate](https://img.shields.io/badge/Donate-Donationalerts-ff4081?style=for-the-badge)](https://www.donationalerts.com/r/s00d88)
 
-[![crates.io](https://img.shields.io/crates/v/vld-web.svg)](https://crates.io/crates/vld-web)
-[![docs.rs](https://img.shields.io/docsrs/vld-web)](https://docs.rs/vld-web)
+# vld-web
 
 Request extractors and JSON error responses that validate with [vld](https://crates.io/crates/vld) schemas, one module per web framework.
 
@@ -48,6 +52,11 @@ No feature is on by default; any set can be enabled together.
 
 - Guide: <https://s00d.github.io/vld/integrations/web/overview>
 - API: <https://docs.rs/vld-web>
+
+## Support
+
+If vld helps you, you can support it via [DonationAlerts](https://www.donationalerts.com/r/s00d88).
+Bugs and ideas: [issues](https://github.com/s00d/vld/issues).
 
 ## License
 

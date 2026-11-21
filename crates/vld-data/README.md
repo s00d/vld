@@ -1,7 +1,11 @@
-# vld-data
+[![Crates.io](https://img.shields.io/crates/v/vld-data?style=for-the-badge)](https://crates.io/crates/vld-data)
+[![Downloads](https://img.shields.io/crates/d/vld-data?style=for-the-badge)](https://crates.io/crates/vld-data)
+[![docs.rs](https://img.shields.io/badge/docs-docs.rs-blue?style=for-the-badge)](https://docs.rs/vld-data)
+[![Guide](https://img.shields.io/badge/guide-s00d.github.io-blue?style=for-the-badge)](https://s00d.github.io/vld/integrations/database/sqlx)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
+[![Donate](https://img.shields.io/badge/Donate-Donationalerts-ff4081?style=for-the-badge)](https://www.donationalerts.com/r/s00d88)
 
-[![crates.io](https://img.shields.io/crates/v/vld-data.svg)](https://crates.io/crates/vld-data)
-[![docs.rs](https://img.shields.io/docsrs/vld-data)](https://docs.rs/vld-data)
+# vld-data
 
 Validate values with [vld](https://crates.io/crates/vld) schemas before they are written to a database or a queue and after they are read back.
 
@@ -42,6 +46,11 @@ No feature is on by default; any set can be enabled together.
 
 - Guide: <https://s00d.github.io/vld/integrations/database/sqlx>
 - API: <https://docs.rs/vld-data>
+
+## Support
+
+If vld helps you, you can support it via [DonationAlerts](https://www.donationalerts.com/r/s00d88).
+Bugs and ideas: [issues](https://github.com/s00d/vld/issues).
 
 ## License
 

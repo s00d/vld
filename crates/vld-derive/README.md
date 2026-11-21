@@ -1,7 +1,11 @@
-# vld-derive
+[![Crates.io](https://img.shields.io/crates/v/vld-derive?style=for-the-badge)](https://crates.io/crates/vld-derive)
+[![Downloads](https://img.shields.io/crates/d/vld-derive?style=for-the-badge)](https://crates.io/crates/vld-derive)
+[![docs.rs](https://img.shields.io/badge/docs-docs.rs-blue?style=for-the-badge)](https://docs.rs/vld-derive)
+[![Guide](https://img.shields.io/badge/guide-s00d.github.io-blue?style=for-the-badge)](https://s00d.github.io/vld/structs/derive)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
+[![Donate](https://img.shields.io/badge/Donate-Donationalerts-ff4081?style=for-the-badge)](https://www.donationalerts.com/r/s00d88)
 
-[![crates.io](https://img.shields.io/crates/v/vld-derive.svg)](https://crates.io/crates/vld-derive)
-[![docs.rs](https://img.shields.io/docsrs/vld-derive)](https://docs.rs/vld-derive)
+# vld-derive
 
 `#[derive(Validate)]` for the [vld](https://crates.io/crates/vld) validation library.
 
@@ -43,6 +47,11 @@ A field without `#[vld(...)]` gets its type's default schema (`String`, `bool`, 
 
 - Guide: <https://s00d.github.io/vld/structs/derive>
 - API: <https://docs.rs/vld-derive>
+
+## Support
+
+If vld helps you, you can support it via [DonationAlerts](https://www.donationalerts.com/r/s00d88).
+Bugs and ideas: [issues](https://github.com/s00d/vld/issues).
 
 ## License
 

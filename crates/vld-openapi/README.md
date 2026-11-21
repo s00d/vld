@@ -1,7 +1,11 @@
-# vld-openapi
+[![Crates.io](https://img.shields.io/crates/v/vld-openapi?style=for-the-badge)](https://crates.io/crates/vld-openapi)
+[![Downloads](https://img.shields.io/crates/d/vld-openapi?style=for-the-badge)](https://crates.io/crates/vld-openapi)
+[![docs.rs](https://img.shields.io/badge/docs-docs.rs-blue?style=for-the-badge)](https://docs.rs/vld-openapi)
+[![Guide](https://img.shields.io/badge/guide-s00d.github.io-blue?style=for-the-badge)](https://s00d.github.io/vld/integrations/openapi/utoipa)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
+[![Donate](https://img.shields.io/badge/Donate-Donationalerts-ff4081?style=for-the-badge)](https://www.donationalerts.com/r/s00d88)
 
-[![crates.io](https://img.shields.io/crates/v/vld-openapi.svg)](https://crates.io/crates/vld-openapi)
-[![docs.rs](https://img.shields.io/docsrs/vld-openapi)](https://docs.rs/vld-openapi)
+# vld-openapi
 
 Use [vld](https://crates.io/crates/vld) schemas in utoipa, schemars and aide, so validation rules and OpenAPI docs come from one definition.
 
@@ -37,6 +41,11 @@ No feature is on by default; any set can be enabled together.
 
 - Guide: <https://s00d.github.io/vld/integrations/openapi/utoipa>, <https://s00d.github.io/vld/integrations/openapi/schemars>
 - API: <https://docs.rs/vld-openapi>
+
+## Support
+
+If vld helps you, you can support it via [DonationAlerts](https://www.donationalerts.com/r/s00d88).
+Bugs and ideas: [issues](https://github.com/s00d/vld/issues).
 
 ## License
 

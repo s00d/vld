@@ -1,10 +1,14 @@
-# vld
+[![Crates.io](https://img.shields.io/crates/v/vld?style=for-the-badge)](https://crates.io/crates/vld)
+[![Downloads](https://img.shields.io/crates/d/vld?style=for-the-badge)](https://crates.io/crates/vld)
+[![docs.rs](https://img.shields.io/badge/docs-docs.rs-blue?style=for-the-badge)](https://docs.rs/vld)
+[![Guide](https://img.shields.io/badge/guide-s00d.github.io-blue?style=for-the-badge)](https://s00d.github.io/vld/)
+[![CI](https://img.shields.io/github/actions/workflow/status/s00d/vld/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/s00d/vld/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://github.com/s00d/vld/blob/main/LICENSE)
+[![GitHub issues](https://img.shields.io/github/issues/s00d/vld?style=for-the-badge)](https://github.com/s00d/vld/issues)
+[![GitHub stars](https://img.shields.io/github/stars/s00d/vld?style=for-the-badge)](https://github.com/s00d/vld/stargazers)
+[![Donate](https://img.shields.io/badge/Donate-Donationalerts-ff4081?style=for-the-badge)](https://www.donationalerts.com/r/s00d88)
 
-[![crates.io](https://img.shields.io/crates/v/vld.svg)](https://crates.io/crates/vld)
-[![docs.rs](https://img.shields.io/docsrs/vld)](https://docs.rs/vld)
-[![CI](https://github.com/s00d/vld/actions/workflows/ci.yml/badge.svg)](https://github.com/s00d/vld/actions/workflows/ci.yml)
-[![docs](https://img.shields.io/badge/docs-s00d.github.io%2Fvld-orange)](https://s00d.github.io/vld/)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/s00d/vld/blob/main/LICENSE)
+# vld
 
 **Type-safe runtime validation for Rust, inspired by [Zod](https://zod.dev).**
 
@@ -83,6 +87,11 @@ Moved in 0.8: the former per-integration crates (`vld-axum`, `vld-sqlx`, `vld-ts
 ## Contributing
 
 See the [contributing guide](https://github.com/s00d/vld/blob/main/CONTRIBUTING.md) and the [changelog](https://github.com/s00d/vld/blob/main/CHANGELOG.md). Upgrading: [migration guide](https://s00d.github.io/vld/guides/migration).
+
+## Support
+
+If vld helps you, you can support it via [DonationAlerts](https://www.donationalerts.com/r/s00d88).
+Bugs and ideas: [issues](https://github.com/s00d/vld/issues).
 
 ## License
 
