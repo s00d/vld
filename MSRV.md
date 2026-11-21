@@ -16,9 +16,8 @@ CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback cargo update
 With newest-version resolution some dependencies need a newer compiler
 (for example `image` 0.25.10 needs 1.88, `uuid` 1.29 needs 1.89).
 
-`just msrv` (run before each release) checks every crate on its `rust-version` and
-runs the core test suite with every feature on 1.85; each check resolves a
-lockfile for that crate alone, as a downstream project would.
+`just msrv` (before each release) builds each crate on its `rust-version`, and the
+features below on theirs, in a project that depends on that crate alone.
 
 ## Core
 

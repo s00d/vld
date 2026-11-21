@@ -101,7 +101,7 @@ The core crate needs Rust **1.85** with every feature. Some integration features
 
 ## Contributing
 
-See the [contributing guide](https://s00d.github.io/vld/guides/contributing) and the [changelog](https://github.com/s00d/vld/blob/main/CHANGELOG.md). Upgrading from 0.4: [migration guide](https://s00d.github.io/vld/guides/migration).
+See the [contributing guide](https://github.com/s00d/vld/blob/main/CONTRIBUTING.md) and the [changelog](https://github.com/s00d/vld/blob/main/CHANGELOG.md). Upgrading from 0.4: [migration guide](https://s00d.github.io/vld/guides/migration).
 
 ## License
 
