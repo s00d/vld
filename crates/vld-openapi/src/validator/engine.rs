@@ -73,7 +73,10 @@ pub(crate) fn validate_value_against_schema(
 
     // enum
     if let Some(enum_values) = schema_obj.get("enum").and_then(|e| e.as_array()) {
-        if !enum_values.contains(value) {
+        if !enum_values
+            .iter()
+            .any(|e| vld::__private::json_eq(e, value))
+        {
             errors.issues.push(make_issue(
                 path,
                 IssueCode::Custom {
@@ -94,7 +97,7 @@ pub(crate) fn validate_value_against_schema(
 
     // const
     if let Some(const_val) = schema_obj.get("const") {
-        if value != const_val {
+        if !vld::__private::json_eq(value, const_val) {
             errors.issues.push(make_issue(
                 path,
                 IssueCode::Custom {
@@ -570,9 +573,9 @@ fn validate_array(
     }
 
     if let Some(true) = schema.get("uniqueItems").and_then(|v| v.as_bool()) {
-        let mut seen = Vec::new();
+        let mut seen: Vec<&Value> = Vec::new();
         for (i, item) in arr.iter().enumerate() {
-            if seen.contains(&item) {
+            if seen.iter().any(|s| vld::__private::json_eq(s, item)) {
                 let mut item_path = path.to_vec();
                 item_path.push(PathSegment::Index(i));
                 errors.issues.push(make_issue(

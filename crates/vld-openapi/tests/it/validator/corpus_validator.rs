@@ -671,6 +671,24 @@ fn rows() -> Vec<Row> {
             &[("[2]", "uniqueItems")],
         ),
         (json!({"uniqueItems": false}), json!([1, 1]), OK),
+        // numbers compare by value: 2 and 2.0 are the same item
+        (
+            json!({"uniqueItems": true}),
+            json!([2, 2.0]),
+            &[("[1]", "uniqueItems")],
+        ),
+        (
+            json!({"uniqueItems": true}),
+            json!([9007199254740993_u64, 9007199254740992.0]),
+            OK,
+        ),
+        (json!({"enum": [1.0, "a"]}), json!(1), OK),
+        (json!({"const": 2}), json!(2.0), OK),
+        (
+            json!({"const": 9007199254740993_u64}),
+            json!(9007199254740992.0),
+            &[("", "const")],
+        ),
         (contains.clone(), json!([3, 3]), OK),
         (contains.clone(), json!([3, 3, 3, 1]), OK),
         (contains.clone(), json!([3]), &[("", "contains")]),

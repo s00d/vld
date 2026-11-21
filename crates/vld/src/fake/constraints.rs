@@ -274,21 +274,7 @@ fn time_of_day(s: &str) -> Option<Instant> {
 
 // ─────────────────────────────── values ──────────────────────────────────
 
-/// JSON equality with numbers compared by value (`1 == 1.0`), like vld.
-pub(crate) fn json_eq(a: &Value, b: &Value) -> bool {
-    match (a, b) {
-        (Value::Number(x), Value::Number(y)) => x == y || x.as_f64() == y.as_f64(),
-        (Value::Array(x), Value::Array(y)) => {
-            x.len() == y.len() && x.iter().zip(y).all(|(a, b)| json_eq(a, b))
-        }
-        (Value::Object(x), Value::Object(y)) => {
-            x.len() == y.len()
-                && x.iter()
-                    .all(|(k, v)| y.get(k).is_some_and(|w| json_eq(v, w)))
-        }
-        _ => a == b,
-    }
-}
+pub(crate) use crate::primitives::json_eq;
 
 // ─────────────────────────────── allOf ───────────────────────────────────
 

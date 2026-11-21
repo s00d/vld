@@ -74,16 +74,17 @@ pub(crate) fn type_error(custom: &Option<String>, expected: &str, value: &Value)
     )
 }
 
-/// JSON equality where numbers compare by numeric value (`1 == 1.0`).
+/// JSON equality where numbers compare by exact numeric value, as JSON Schema's
+/// `const` / `enum` / `uniqueItems` require: `1 == 1.0`, but
+/// `9007199254740993 != 9007199254740992.0` (an `f64` comparison would say equal).
 pub(crate) fn json_eq(a: &Value, b: &Value) -> bool {
     match (a, b) {
-        (Value::Number(x), Value::Number(y)) => {
-            if x.is_f64() || y.is_f64() {
-                x.as_f64() == y.as_f64()
-            } else {
-                x.as_i64() == y.as_i64() && x.as_u64() == y.as_u64()
-            }
-        }
+        (Value::Number(x), Value::Number(y)) => match (exact_int(x), exact_int(y)) {
+            (Some(i), Some(j)) => i == j,
+            // At most one side is integral: a whole number never equals a fraction.
+            (Some(_), None) | (None, Some(_)) => false,
+            (None, None) => x.as_f64() == y.as_f64(),
+        },
         (Value::Array(x), Value::Array(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| json_eq(a, b))
         }
@@ -94,6 +95,19 @@ pub(crate) fn json_eq(a: &Value, b: &Value) -> bool {
         }
         _ => a == b,
     }
+}
+
+/// The exact integer a JSON number denotes: integers, and whole floats below
+/// 2^127 (exactly convertible).
+fn exact_int(n: &serde_json::Number) -> Option<i128> {
+    if let Some(i) = n.as_i64() {
+        return Some(i.into());
+    }
+    if let Some(u) = n.as_u64() {
+        return Some(u.into());
+    }
+    let f = n.as_f64()?;
+    (f.fract() == 0.0 && f.abs() < 2f64.powi(127)).then_some(f as i128)
 }
 
 /// Write `min*`/`max*` length keywords; when several bounds apply the

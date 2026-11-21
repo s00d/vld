@@ -656,3 +656,9 @@ pub fn deny_additional(mut schema: Value) -> Value {
     }
     schema
 }
+
+/// JSON equality with numbers compared by exact value (`1 == 1.0`), shared with
+/// vld-openapi's JSON Schema validator (`const`, `enum`, `uniqueItems`).
+pub fn json_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+    crate::primitives::json_eq(a, b)
+}
