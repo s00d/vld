@@ -12,6 +12,8 @@ ci_flags := "--profile ci --locked"
 # CI runs one job per group. vld-data's diesel postgres/mysql need libpq / libmysqlclient.
 groups := "core web openapi data app"
 vld_all := "chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced,ts,fake"
+# vld-data for semver-checks: every feature but lapin-2 (see `semver`)
+data_semver := "sqlx-0_8,sqlx-0_9,diesel,postgres,mysql,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio,redis-aio-tokio,lapin-3,lapin-4"
 # vld-data without the postgres / mysql backends (diesel links libpq / libmysqlclient,
 # which only the Linux CI image has): what `test-group data` runs on macOS / Windows.
 data_portable := "sqlx-0_8,sqlx-0_9,diesel,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3,lapin-4"
@@ -175,7 +177,11 @@ semver:
     # vld-derive is a proc-macro: no library API for semver-checks to compare.
     for c in vld vld-web vld-openapi vld-data vld-app; do
       if cargo info --registry crates-io "${c}" >/dev/null 2>&1; then
-        cargo semver-checks -p "${c}" --all-features
+        features=(--all-features)
+        # lapin 2 -> async-io 1 -> rustix 0.37, which reads the RUSTC_BOOTSTRAP that
+        # semver-checks sets as "nightly" and fails to build: vld_data::lapin2 is not checked.
+        [[ "${c}" == vld-data ]] && features=(--features "{{ data_semver }}")
+        cargo semver-checks -p "${c}" "${features[@]}"
       else
         echo "semver: ${c} is not on crates.io yet, skipped"
       fi
