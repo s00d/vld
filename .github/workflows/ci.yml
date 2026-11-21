@@ -2,24 +2,32 @@ name: CI
 
 # Every step is a `just` recipe (see justfile), so CI and local runs are the same commands.
 # Push / PR: clippy and tests per crate group on Linux, all tests on macOS and on
-# Windows (one job each), and the `misc` checks. On `main`, once all of them pass, `release` publishes
-# what a merged release PR bumped (release-plz; PUBLISHING.md). By hand (Actions -> CI ->
-# Run workflow): MSRV toolchains, minimal versions, vld feature pairs, latest stable clippy.
+# Windows (one job each), and the `misc` checks. By hand (Actions -> CI -> Run workflow):
+# with an empty version, MSRV toolchains, minimal versions, vld feature pairs, latest
+# stable clippy; with a version, the release (bump, tag, crates.io, GitHub release).
 
 on:
   push:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+  # Run workflow: empty `release` runs the extended checks; a version (e.g. 0.8.0)
+  # releases it (the `release` job; PUBLISHING.md).
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Version to release, e.g. 0.8.0 (no leading v). Empty: extended checks."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
-  # Never cancel a `main` run: its `release` job may be publishing.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # A manual run may be a release: never cancel it.
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -127,68 +135,10 @@ jobs:
       - if: ${{ !cancelled() }}
         run: just playground
 
-  # Publish after a green `main` run: release-plz publishes the crates whose version is not
-  # on crates.io yet (that is, after a release PR was merged) and tags `vX.Y.Z`; the GitHub
-  # release body is that version's CHANGELOG.md section. Otherwise it does nothing.
-  release:
-    name: release
-    needs: [linux, os, misc]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    runs-on: ubuntu-latest
-    environment: crates-io
-    permissions:
-      # push the tag, create the GitHub release
-      contents: write
-      # crates.io trusted publishing (OIDC)
-      id-token: write
-      pull-requests: read
-    env:
-      # A crates.io token is only needed for a crate's first version (trusted publishing
-      # cannot create crates); without the secret release-plz uses trusted publishing.
-      HAS_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just
-      - id: token
-        if: env.HAS_TOKEN == 'true'
-        name: release (crates.io token)
-        uses: release-plz/action@v0.5
-        with:
-          command: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      - id: trusted
-        if: env.HAS_TOKEN != 'true'
-        name: release (trusted publishing)
-        uses: release-plz/action@v0.5
-        with:
-          command: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: GitHub release from CHANGELOG.md
-        env:
-          RELEASES: ${{ steps.token.outputs.releases || steps.trusted.outputs.releases }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          version="$(echo "${RELEASES:-[]}" | jq -r '.[] | select(.package_name == "vld") | .version')"
-          if [[ -z "${version}" ]]; then echo "nothing released"; exit 0; fi
-          just release-notes "${version}" > "$RUNNER_TEMP/notes.md"
-          gh release create "v${version}" --title "v${version}" --latest --notes-file "$RUNNER_TEMP/notes.md"
-          gh release view "v${version}" --json body --jq .body | head -5
-
   # Slow or rarely-breaking checks, by hand before a release.
   extended:
     name: Extended
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.release == ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -215,3 +165,91 @@ jobs:
         if: ${{ !cancelled() }}
         continue-on-error: true
         run: cargo +stable clippy --workspace --all-features --all-targets --profile ci --locked -- -D warnings
+
+  # Release X.Y.Z (Run workflow with a version):
+  # 1. checks that CI succeeded on `main` HEAD;
+  # 2. `just release-prep X.Y.Z`: every crate's version, the lockfiles, [Unreleased] ->
+  #    [X.Y.Z] in CHANGELOG.md (fails when [Unreleased] is empty); `just semver`;
+  # 3. commits `chore: release vX.Y.Z` to `main`, tags `vX.Y.Z`;
+  # 4. publishes the crates with crates.io trusted publishing (no stored token);
+  # 5. creates the GitHub release from the CHANGELOG.md section.
+  # Re-running with the same version resumes once the tag exists: it publishes only what
+  # is not on crates.io yet and creates the GitHub release if missing.
+  release:
+    name: release v${{ inputs.release }}
+    if: github.event_name == 'workflow_dispatch' && inputs.release != ''
+    runs-on: ubuntu-latest
+    # crates.io trusted publishers are configured for workflow `ci.yml`,
+    # environment `crates-io`.
+    environment: crates-io
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      VERSION: ${{ inputs.release }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Version and state
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::'${VERSION}' is not a version like 0.8.0"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "tag v${VERSION} exists: resuming (publish + GitHub release only)"
+            git checkout -q "v${VERSION}"
+            echo "resume=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sha="$(git rev-parse HEAD)"
+          status="$(gh run list --workflow CI --commit "${sha}" --event push --json conclusion --jq '.[0].conclusion // "none"')"
+          [[ "${status}" == success ]] || { echo "::error::CI on main ${sha} is '${status}': wait for green CI"; exit 1; }
+          echo "resume=false" >> "$GITHUB_OUTPUT"
+      # diesel postgres / mysql (vld-data rustdoc for semver-checks) link libpq / libmysqlclient.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-semver-checks
+      - uses: Swatinem/rust-cache@v2
+      - name: Bump, changelog, semver
+        if: steps.state.outputs.resume != 'true'
+        run: |
+          just release-prep "${VERSION}"
+          just semver
+          just package --allow-dirty
+      - name: Commit and tag
+        if: steps.state.outputs.resume != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: release v${VERSION}"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          git push origin HEAD:main "v${VERSION}"
+      - id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          # dependency order; a crate already at this version is skipped (resume)
+          for c in vld-derive vld vld-openapi vld-web vld-data vld-app; do
+            if cargo info --registry crates-io "${c}@${VERSION}" >/dev/null 2>&1; then
+              echo "${c} ${VERSION} already on crates.io"
+            else
+              cargo publish -p "${c}" --locked
+            fi
+          done
+      - name: GitHub release from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then echo "GitHub release v${VERSION} exists"; exit 0; fi
+          just release-notes "${VERSION}" > "$RUNNER_TEMP/notes.md"
+          gh release create "v${VERSION}" --title "v${VERSION}" --latest --notes-file "$RUNNER_TEMP/notes.md"
+          gh release view "v${VERSION}" --json body --jq .body | head -5

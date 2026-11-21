@@ -571,7 +571,7 @@ fn grow(v: &Value) -> Value {
 /// JSON equality with numbers compared by value.
 fn model_eq(a: &Value, b: &Value) -> bool {
     match (a, b) {
-        (Value::Number(x), Value::Number(y)) => x.as_f64() == y.as_f64(),
+        (Value::Number(x), Value::Number(y)) => model_num(x) == model_num(y),
         (Value::Array(x), Value::Array(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| model_eq(a, b))
         }
@@ -581,6 +581,29 @@ fn model_eq(a: &Value, b: &Value) -> bool {
                     .all(|(k, v)| y.get(k).is_some_and(|w| model_eq(v, w)))
         }
         _ => a == b,
+    }
+}
+
+/// A JSON number as its exact value: an integer, or a float that is not a
+/// whole number below 2^127 (those are integers too).
+#[derive(PartialEq)]
+enum ModelNum {
+    Int(i128),
+    Frac(f64),
+}
+
+fn model_num(n: &serde_json::Number) -> ModelNum {
+    if let Some(i) = n.as_i64() {
+        return ModelNum::Int(i.into());
+    }
+    if let Some(u) = n.as_u64() {
+        return ModelNum::Int(u.into());
+    }
+    let f = n.as_f64().unwrap();
+    if f.fract() == 0.0 && f.abs() < 2f64.powi(127) {
+        ModelNum::Int(f as i128)
+    } else {
+        ModelNum::Frac(f)
     }
 }
 
@@ -603,6 +626,30 @@ fn json_pair() -> impl Strategy<Value = (Value, Value)> {
         };
         (a, needle)
     })
+}
+
+/// Given `contains` and `literal` with integers beyond 2^53
+/// When the nearest `f64` spelling of a neighbouring integer arrives
+/// Then it is a different value (an `f64` comparison would call them equal),
+/// while the same integer written as a whole float matches.
+#[test]
+fn numbers_compare_exactly_beyond_f64_precision() {
+    let big = json!(9_007_199_254_740_993_u64); // 2^53 + 1
+    let near = json!(9_007_199_254_740_992.0_f64); // 2^53, its nearest f64
+    let contains = vld::array(vld::any()).contains(big.clone());
+    assert!(contains.parse_value(&json!([near])).is_err());
+    assert!(contains.parse_value(&json!([big.clone()])).is_ok());
+    assert!(
+        vld::array(vld::any())
+            .contains(json!(4_611_686_018_427_387_904_u64)) // 2^62
+            .parse_value(&json!([4_611_686_018_427_387_904.0_f64]))
+            .is_ok()
+    );
+    assert!(
+        vld::literal(9_007_199_254_740_993_i64)
+            .parse_value(&near)
+            .is_err()
+    );
 }
 
 #[derive(Debug, Clone, Copy)]

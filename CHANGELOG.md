@@ -60,6 +60,8 @@ Using both SQLx majors in one process: each maps SQLite `":memory:"` to the same
 - vld-sea `with-time`: time fractions are written in 3, 6 or 9 digits like chrono (`12:30:05.500`, was `12:30:05.5`), so `time` and chrono columns give the same text.
 - `number().multiple_of(..)` is exact for whole numbers beyond `i128` too.
 - `array().unique()` compares whole floats with integers by exact value at any magnitude (`9.3e18` and `9300000000000000000` are duplicates; floats at or above `9.2e18` were never equal to an integer).
+- Numbers in `contains`, `literal` and discriminators compare by exact value: `9007199254740993` no longer equals `9007199254740992.0` (they were compared as `f64`).
+- vld-openapi validator: `const`, `enum` and `uniqueItems` compare numbers by value as JSON Schema requires (`2` equals `2.0`; it compared them as different).
 - `schema!`: a serde `rename` containing escapes (`rename = "a\"b"`) now gives the key serde uses (`a"b`); the escape text was kept verbatim.
 - A `union` with a branch that accepts a missing key (`optional()`, `with_default`, …) is no longer listed in the object's JSON Schema `required`.
 - vld-schemars `to_openapi3`: a null-only schema (`{"type": ["null"]}`, an `anyOf` of null branches) became `{"nullable": true}`, which allows any value; it now stays null-only.
