@@ -28,9 +28,10 @@ gh auth login          # for the GitHub release
 
    cargo-release bumps every `Cargo.toml` (internal dependencies use
    `workspace = true`, so `[workspace.dependencies]` is the one place with
-   versions), then runs the pre-release hook once (`just release-hook`):
-   `just fmt lint test docs semver package` (`semver` fails when the API
-   changed more than the bump allows, e.g. a breaking change in a patch), renames `[Unreleased]` to
+   versions), then runs the pre-release hook once (`just release-hook`): it
+   checks that CI succeeded on HEAD (the checks are not re-run locally), runs
+   `just semver package` (`semver` fails when the API changed more than the
+   bump allows, e.g. a breaking change in a patch), renames `[Unreleased]` to
    `[X.Y.Z] - date` in `CHANGELOG.md` and updates `fuzz/Cargo.lock`.
 
    It then commits `chore: release vX.Y.Z`, publishes every crate **in
@@ -46,23 +47,23 @@ gh auth login          # for the GitHub release
 ## New crates
 
 crates.io allows only a few **new** crate names in a short burst (about 5,
-then roughly one per 10 minutes). A release that adds more than that will fail
-part-way: wait, then rerun `cargo release publish --workspace --execute`; it
-skips what is already published. 0.5.0 adds one new crate,
-`vld-integration-common`, which is published before its dependents.
+then roughly one per 10 minutes); updates of existing crates allow 30 in a
+burst, then one per minute. 0.8.0 publishes four new names (`vld-web`,
+`vld-openapi`, `vld-data`, `vld-app`); later releases publish six updates.
 
 A new crate also needs: a `crates/<name>` member in the root `Cargo.toml`, an
 entry in `[workspace.dependencies]` if other crates use it,
 `include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]` (the leading
 `/` anchors the pattern: without it `README.md` also matches every README in
-`docs/node_modules`), a row in `MSRV.md`, and an entry in `feature_crates` in
-the `justfile` if it has optional features, and `[lints] workspace = true`.
+`docs/node_modules`), a row in `MSRV.md`, a group in the `justfile` and the
+CI matrix, and `[lints] workspace = true`. Prefer a module in an existing
+group crate (ARCHITECTURE.md) over a new crate.
 
 ## Troubleshooting
 
 - **`[Unreleased]` is missing or empty**: add the heading and the notes, commit, rerun.
-- **Hook checks fail**: fix on `main`, rerun the release (nothing was
-  published yet; cargo-release has not committed).
+- **Hook fails** (CI not green on HEAD, semver-checks): fix on `main`, push,
+  wait for green CI, rerun the release (nothing was published yet).
 - **Publish stopped half-way** (rate limit, network, index lag): rerun
   `cargo release publish --workspace --execute`, then
   `cargo release tag --workspace --execute` and

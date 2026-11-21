@@ -1,9 +1,9 @@
 name: CI
 
 # Every step is a `just` recipe (see justfile), so CI and local runs are the same commands.
-# Push / PR: one job. Before a release, by hand (Actions -> CI -> Run workflow): the slow or
-# rarely-breaking checks (MSRV toolchains, Windows/macOS, minimal versions, wasm, vld
-# feature pairs, latest stable clippy).
+# Push / PR: one job per crate group plus `misc`. Before a release, by hand (Actions -> CI ->
+# Run workflow): the slow or rarely-breaking checks (MSRV toolchains, Windows/macOS, minimal
+# versions, wasm, vld feature pairs, latest stable clippy).
 
 on:
   push:
@@ -26,37 +26,65 @@ env:
   RUST_TOOLCHAIN: "1.99.1"
 
 jobs:
-  check:
-    name: Check
+  # One job per crate group (ARCHITECTURE.md), in parallel, each with its own cache.
+  group:
+    name: ${{ matrix.group }}
     if: github.event_name == 'push' || github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [core, web, openapi, data, app]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       # diesel postgres / mysql backends link libpq / libmysqlclient.
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
-      # vld::ts (feature `ts`) cross-checks generated Zod/Valibot code against vld under node.
-      - uses: actions/setup-node@v5
+      - if: matrix.group == 'data'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
+      # vld::ts cross-checks generated Zod 3 / Zod 4 / Valibot code under node.
+      - if: matrix.group == 'core'
+        uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: |
+      - if: matrix.group == 'core'
+        run: |
           dir="$RUNNER_TEMP/ts-check"
           mkdir -p "$dir" && cd "$dir" && echo '{"private":true}' > package.json
-          npm install --no-audit --no-fund zod@3 valibot@1
+          npm install --no-audit --no-fund zod@4 valibot@1
           echo "VLD_TS_NODE_DIR=$dir" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: clippy, rustfmt
+          components: clippy
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,cargo-hack,cargo-deny,cargo-shear
+          tool: just,cargo-hack
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.group }}
+      - run: just lint-group ${{ matrix.group }}
+      - if: ${{ !cancelled() }}
+        run: just test-group ${{ matrix.group }}
+
+  misc:
+    name: fmt, docs, deny, package, fuzz, playground
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # rustdoc builds vld-data with every feature: diesel links libpq / libmysqlclient.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-deny,cargo-shear
       - uses: Swatinem/rust-cache@v2
       # Later steps run even if an earlier one failed, so one run shows every failure.
       - run: just fmt
       - if: ${{ !cancelled() }}
-        run: just lint
-      - if: ${{ !cancelled() }}
-        run: just test
+        run: cargo shear
       - if: ${{ !cancelled() }}
         run: just docs
       - if: ${{ !cancelled() }}

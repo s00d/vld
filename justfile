@@ -8,58 +8,67 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 ci_flags := "--profile ci --locked"
 
-# Crates with optional features, run over feature pairs: `crate:majors`. The majors
-# (one feature per supported major of the dependency, `compile_error!` unless exactly
-# one is on) never combine. vld-diesel postgres/mysql need libpq / libmysqlclient.
-feature_crates := ""
-# vld-sea's column-type features are tested together, not one by one.
-sea_types := "with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array"
+# Crate groups (ARCHITECTURE.md): `core` = vld + vld-derive, the others = vld-<group>.
+# CI runs one job per group. vld-data's diesel postgres/mysql need libpq / libmysqlclient.
+groups := "core web openapi data app"
 vld_all := "chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced,ts,fake"
 
 [private]
 default:
     @just --list
 
-# Everything the push/PR CI job runs
-ci: fmt lint test docs deny package fuzz playground trim
+# Everything CI runs (there split into one job per group plus `misc`)
+ci: misc lint test trim
+
+# The checks outside the crate groups
+misc: fmt docs deny package fuzz playground
+    cargo shear
 
 # rustfmt check
 fmt:
     cargo fmt --all --check
 
-# Unused or misplaced dependencies, then clippy -D warnings: workspace, every vld feature
-# alone and together, feature pairs of integration crates
+# clippy -D warnings for every group
 lint:
-    cargo shear
-    cargo clippy --workspace --all-targets {{ ci_flags }} -- -D warnings
-    cargo hack clippy -p vld --each-feature --all-targets {{ ci_flags }} -- -D warnings
-    cargo clippy -p vld --features {{ vld_all }} --all-targets {{ ci_flags }} -- -D warnings
-    just _majors clippy --all-targets -- -D warnings
+    for g in {{ groups }}; do just lint-group "${g}"; done
 
-# Tests: workspace + doctests, vld per feature and with all features, feature pairs of integration crates
+# Tests for every group
 test:
-    cargo test --workspace --all-targets {{ ci_flags }}
-    cargo test --workspace --doc {{ ci_flags }}
-    cargo hack test -p vld --each-feature {{ ci_flags }}
-    cargo test -p vld --features {{ vld_all }} {{ ci_flags }}
-    just _majors test
+    for g in {{ groups }}; do just test-group "${g}"; done
 
-# `cargo hack <cmd>` over feature pairs of each crate in feature_crates
-[private]
-_majors cmd *args:
+# Lint and test one group: what one CI job runs
+group name: (lint-group name) (test-group name)
+
+# clippy for one group: all features, then each feature alone (core with its tests)
+lint-group name:
     #!/usr/bin/env bash
     set -euo pipefail
-    for entry in {{ feature_crates }}; do
-      crate="${entry%%:*}" majors="${entry#*:}"
-      flags=()
-      [[ -n "${majors}" ]] && flags+=(--exclude-features default --mutually-exclusive-features "${majors}" --at-least-one-of "${majors}")
-      [[ "${crate}" == vld-sea ]] && flags+=(--group-features "{{ sea_types }}")
-      cargo hack {{ cmd }} -p "${crate}" --feature-powerset --depth 2 "${flags[@]}" {{ ci_flags }} {{ args }}
-    done
+    case "{{ name }}" in
+      core)
+        cargo clippy -p vld -p vld-derive -p playground --all-features --all-targets {{ ci_flags }} -- -D warnings
+        cargo hack clippy -p vld --each-feature --all-targets {{ ci_flags }} -- -D warnings ;;
+      web|openapi|data|app)
+        cargo clippy -p vld-{{ name }} --all-features --all-targets {{ ci_flags }} -- -D warnings
+        cargo hack clippy -p vld-{{ name }} --each-feature --lib {{ ci_flags }} -- -D warnings ;;
+      *) echo "unknown group '{{ name }}' (groups: {{ groups }})"; exit 1 ;;
+    esac
 
-# rustdoc with warnings denied
+# Unit, integration and doc tests with all features (core: also without default features)
+test-group name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{ name }}" in
+      core)
+        cargo test -p vld -p vld-derive --all-features {{ ci_flags }}
+        cargo test -p vld --no-default-features {{ ci_flags }} ;;
+      web|openapi|data|app)
+        cargo test -p vld-{{ name }} --all-features {{ ci_flags }} ;;
+      *) echo "unknown group '{{ name }}' (groups: {{ groups }})"; exit 1 ;;
+    esac
+
+# rustdoc with warnings denied, every feature (what docs.rs builds)
 docs:
-    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps {{ ci_flags }}
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps {{ ci_flags }}
 
 # Advisories, licenses, duplicate and banned crates (deny.toml)
 deny:
@@ -90,35 +99,36 @@ msrv:
     #!/usr/bin/env bash
     set -euo pipefail
     target="${CARGO_TARGET_DIR:-$PWD/target}/msrv"
-    # probe <toolchain> <crate> [features] [no-default]: a throwaway project that depends
+    # probe <toolchain> <crate> [features]: a throwaway project that depends
     # only on <crate>; edition 2024 (resolver 3) resolves its lockfile for its
     # rust-version (resolving the whole workspace would pull versions other members
     # need, e.g. rama pins time =0.3.47 / Rust 1.88).
     probe() {
-      local tc="$1" crate="$2" features="${3:-}" nodefault="${4:-}" dir dep path="$PWD/crates/$2"
+      local tc="$1" crate="$2" features="${3:-}" dir dep path="$PWD/crates/$2"
       echo "==> MSRV ${tc}: ${crate}${features:+ [${features}]}"
       dir="$(mktemp -d)"; mkdir "${dir}/src"; echo 'fn main() {}' > "${dir}/src/main.rs"
       dep="path = \"${path}\""
       [[ -n "${features}" ]] && dep+=", features = [\"${features//,/\", \"}\"]"
-      [[ -n "${nodefault}" ]] && dep+=", default-features = false"
       printf '[package]\nname = "msrv-probe"\nversion = "0.0.0"\nedition = "2024"\nrust-version = "%s"\npublish = false\n[dependencies]\n%s = { %s }\n[workspace]\n' \
         "${tc}" "${crate}" "${dep}" > "${dir}/Cargo.toml"
-      # --ignore-rust-version: vld-ntex declares 1.97 (ntex 4) but ntex-3 is probed on 1.88.
       (cd "${dir}" && cargo generate-lockfile -q \
-        && CARGO_TARGET_DIR="${target}-${tc}" cargo "+${tc}" check -q --locked --ignore-rust-version)
+        && CARGO_TARGET_DIR="${target}-${tc}" cargo "+${tc}" check -q --locked)
       rm -rf "${dir}"
     }
     probe 1.85 vld "{{ vld_all }}"
-    cargo metadata --no-deps --format-version 1 --locked | python3 -c '
-    import json, sys
-    for p in json.load(sys.stdin)["packages"]:
-        if p["publish"] != [] and p["name"] != "vld":
-            print(p["name"], p["rust_version"])' | while read -r crate tc; do probe "${tc}" "${crate}"; done
-    probe 1.88 vld-utoipa utoipa-6 no-default
-    probe 1.88 vld-lapin lapin-4 no-default
-    probe 1.88 vld-ntex ntex-3 no-default
-    probe 1.94 vld-sea "sea-orm-2,{{ sea_types }}" no-default
-    probe 1.94 vld-sqlx "sqlx-0_9,postgres,mysql,sqlite" no-default
+    probe 1.85 vld-derive
+    probe 1.85 vld-web axum,actix,poem,rocket,warp,tower,tonic
+    probe 1.88 vld-web ntex-3
+    probe 1.94 vld-web salvo
+    probe 1.96 vld-web rama
+    probe 1.97 vld-web ntex-4,ntex-compress
+    probe 1.85 vld-openapi utoipa-5,schemars-0,schemars-1
+    probe 1.88 vld-openapi utoipa-6
+    probe 1.85 vld-data "sqlx-0_8,diesel,sqlite,sea-orm-1,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3"
+    probe 1.94 vld-data "sqlx-0_9,postgres,mysql,sqlite"
+    probe 1.94 vld-data "sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array"
+    probe 1.88 vld-data lapin-4
+    probe 1.85 vld-app config-rs,figment,clap
 
 # Lowest allowed versions of direct dependencies compile (nightly; crates with wide version ranges)
 minimal:
@@ -126,7 +136,7 @@ minimal:
     set -euo pipefail
     # A scratch workspace with just these crates and no dev-dependencies: the whole
     # workspace can't resolve at minimal versions (rama pins time =0.3.47).
-    members=(crates/vld crates/vld-derive crates/vld-http-common crates/vld-warp crates/vld-tonic crates/vld-config crates/vld-redis crates/vld-schemars crates/vld-aide)
+    members=(crates/vld crates/vld-derive crates/vld-web crates/vld-openapi crates/vld-data crates/vld-app)
     scratch="$(mktemp -d)"; trap 'rm -rf "${scratch}"' EXIT
     git ls-files -z | grep -zv '^fuzz/\|^docs/' | xargs -0 tar -cf - | tar -xf - -C "${scratch}"
     list="$(printf '"%s", ' "${members[@]}")"
@@ -144,21 +154,26 @@ minimal:
     m="${scratch}/Cargo.toml"
     export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target}/minimal"
     cargo +nightly update -Z direct-minimal-versions --manifest-path "$m"
-    cargo +nightly check --locked --manifest-path "$m" -p vld-warp -p vld-tonic -p vld-schemars -p vld-aide
-    cargo +nightly check --locked --manifest-path "$m" -p vld-config --features figment
-    cargo +nightly check --locked --manifest-path "$m" -p vld-redis --features aio-tokio
+    cargo +nightly check --locked --manifest-path "$m" -p vld-web --features warp,tonic
+    cargo +nightly check --locked --manifest-path "$m" -p vld-openapi --features schemars-0,schemars-1
+    cargo +nightly check --locked --manifest-path "$m" -p vld-app --features config-rs,figment
+    cargo +nightly check --locked --manifest-path "$m" -p vld-data --features redis-0,redis-1,redis-aio-tokio
 
-# Default features: the semver-checks heuristic would enable two dependency majors at once.
-# Its rustdoc builds of the baselines (~15G) are removed afterwards, pass or fail.
-# Public API changes vs the latest release on crates.io match the version bump
+# Crates not on crates.io yet are skipped; the baselines' rustdoc builds are removed.
+# Public API changes vs crates.io match the version bump (all features)
 semver:
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'rm -rf target/semver-checks || true' EXIT
-    cargo semver-checks -p vld --only-explicit-features --features {{ vld_all }}
-    cargo semver-checks --workspace --exclude vld --exclude playground --default-features
+    for c in vld vld-derive vld-web vld-openapi vld-data vld-app; do
+      if cargo info --registry crates-io "${c}" >/dev/null 2>&1; then
+        cargo semver-checks -p "${c}" --all-features
+      else
+        echo "semver: ${c} is not on crates.io yet, skipped"
+      fi
+    done
 
-# The feature matrix leaves one build per feature set behind; needs cargo-sweep.
+# Per-feature builds leave one artifact set per feature behind; needs cargo-sweep.
 # Cap target/ at 10G, oldest artifacts first
 trim:
     @if command -v cargo-sweep >/dev/null; then cargo sweep --maxsize 10GB .; else echo "cargo-sweep not installed: target/ not trimmed"; fi
@@ -168,16 +183,28 @@ clean:
     cargo clean
     rm -rf fuzz/target
 
-# cargo-release pre-release hook (runs after the version bump): checks (semver-checks
-# compares the API with crates.io for the new version), then
-# [Unreleased] -> [version] in CHANGELOG.md, and fuzz/Cargo.lock (fuzz/ is outside
-# the workspace) pointed at the new version.
+# cargo-release pre-release hook (runs after the version bump). The checks ran in CI:
+# the release commit's parent must have a green CI run. Then semver-checks against
+# crates.io, [Unreleased] -> [version] in CHANGELOG.md, and fuzz/Cargo.lock (fuzz/ is
+# outside the workspace) pointed at the new version.
 [private]
 release-hook version:
-    just fmt lint test docs semver trim
+    just _ci-green semver
     just package --allow-dirty
     @if [[ "${DRY_RUN:-false}" == "true" ]]; then echo "dry run: CHANGELOG.md unchanged"; else just _changelog {{ version }}; fi
     cargo update --manifest-path fuzz/Cargo.toml --workspace --offline
+
+# The CI workflow succeeded on HEAD (needs `gh`, pushed HEAD)
+[private]
+_ci-green:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    sha="$(git rev-parse HEAD)"
+    status="$(gh run list --workflow CI --commit "${sha}" --event push --json conclusion --jq '.[0].conclusion // "none"')"
+    if [[ "${status}" != "success" ]]; then
+      echo "CI on ${sha} is '${status}', not 'success': push, wait for green CI, then release"; exit 1
+    fi
+    echo "CI green on ${sha}"
 
 [private]
 _changelog version:

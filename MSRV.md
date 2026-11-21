@@ -19,38 +19,25 @@ With newest-version resolution some dependencies need a newer compiler
 `just msrv` (before each release) builds each crate on its `rust-version`, and the
 features below on theirs, in a project that depends on that crate alone.
 
-## Core
+Every crate declares `rust-version = "1.85"`, the Rust its default (empty)
+feature set needs. A feature whose dependency needs more is listed here; Cargo
+names the dependency and its `rust-version` when your compiler is older.
 
 | crate | features | Rust |
 |---|---|---|
-| `vld` | default and every feature (`derive`, `regex`, `openapi`, `diff`, `chrono`, `jiff`, `time`, `decimal`, `net`, `file`, `file-advanced`, `string-advanced`) | 1.85 |
-| `vld-derive`, `vld-http-common`, `vld-integration-common` | all | 1.85 |
-
-## Integrations
-
-| crate | features | Rust |
-|---|---|---|
-| `vld-actix`, `vld-axum`, `vld-poem`, `vld-rocket`, `vld-tower`, `vld-warp` | all | 1.85 |
-| `vld-salvo` | all (Salvo 1.x) | **1.94** |
-| `vld-rama` | all (Rama 0.4) | **1.96** |
-| `vld-ntex` | `ntex-4` (default) | **1.97** |
-| `vld-ntex` | `ntex-3` | 1.88 ¹ |
-| `vld-tonic`, `vld-clap`, `vld-config`, `vld-ts`, `vld-fake`, `vld-tauri`, `vld-leptos`, `vld-dioxus`, `vld-surrealdb` | all | 1.85 |
-| `vld-diesel` | `sqlite` (default), `postgres`, `mysql` | 1.85 |
-| `vld-sqlx` | `sqlx-0_8` (default) + any backend | 1.85 |
-| `vld-sqlx` | `sqlx-0_9` | **1.94** |
-| `vld-sea` | `sea-orm-1` (default) + any `with-*` | 1.85 |
-| `vld-sea` | `sea-orm-2` | **1.94** |
-| `vld-utoipa` | `utoipa-5` (default) | 1.85 |
-| `vld-utoipa` | `utoipa-6` | **1.88** |
-| `vld-schemars`, `vld-aide` | `schemars-0` (default), `schemars-1` | 1.85 |
-| `vld-redis` | `redis-0` (default), `redis-1`, `aio` | 1.85 |
-| `vld-lapin` | `lapin-2` (default), `lapin-3` | 1.85 |
-| `vld-lapin` | `lapin-4` | **1.88** |
-
-¹ The crate declares 1.97 (its default, ntex 4), so Cargo refuses older
-compilers; with `default-features = false, features = ["ntex-3"]` it builds
-on 1.88 when you pass `--ignore-rust-version`.
+| `vld` | every feature | 1.85 |
+| `vld-derive` | — | 1.85 |
+| `vld-web` | `axum`, `actix`, `poem`, `rocket`, `warp`, `tower`, `tonic` | 1.85 |
+| `vld-web` | `ntex-3` | **1.88** |
+| `vld-web` | `salvo` | **1.94** |
+| `vld-web` | `rama` | **1.96** |
+| `vld-web` | `ntex-4` | **1.97** |
+| `vld-openapi` | `utoipa-5`, `schemars-0`, `schemars-1` | 1.85 |
+| `vld-openapi` | `utoipa-6` | **1.88** |
+| `vld-data` | `sqlx-0_8`, `diesel`, `sea-orm-1` (+ `with-*`), `redis-0`, `redis-1`, `redis-aio*`, `lapin-2`, `lapin-3`, `postgres` / `mysql` / `sqlite` | 1.85 |
+| `vld-data` | `lapin-4` | **1.88** |
+| `vld-data` | `sqlx-0_9`, `sea-orm-2` | **1.94** |
+| `vld-app` | every feature | 1.85 |
 
 The workspace floor is 1.85 (edition 2021 crates, tested in CI); several
 crates' own dependency trees would go lower, but that is not tested.
