@@ -191,10 +191,22 @@ clean:
     cargo clean
     rm -rf fuzz/target
 
-# fuzz/ is outside the workspace; run by the release-plz workflow on the release PR.
-# Release PR: [Unreleased] -> [version] in CHANGELOG.md, fuzz/Cargo.lock at the new version
+# Prepare release X.Y.Z (run by the CI `release` job): every crate's version, the
+# lockfiles (fuzz/ is outside the workspace), [Unreleased] -> [X.Y.Z] in CHANGELOG.md
 release-prep version: (changelog version)
-    cargo update --manifest-path fuzz/Cargo.toml --workspace
+    #!/usr/bin/env python3
+    import re, subprocess
+    from pathlib import Path
+    version = "{{ version }}"
+    p = Path("Cargo.toml")
+    text = p.read_text()
+    text = re.sub(r'(\[workspace\.package\][^\[]*?\nversion = )"[^"]+"', rf'\g<1>"{version}"', text, count=1, flags=re.S)
+    text, n = re.subn(r'^(vld[a-z-]* = \{ path = "crates/[^"]+", version = )"[^"]+"', rf'\g<1>"{version}"', text, flags=re.M)
+    assert n > 0, "no internal dependencies found in [workspace.dependencies]"
+    p.write_text(text)
+    subprocess.run(["cargo", "update", "--workspace", "--offline"], check=True)
+    subprocess.run(["cargo", "update", "--manifest-path", "fuzz/Cargo.toml", "--workspace"], check=True)
+    print(f"version {version}: Cargo.toml, Cargo.lock, fuzz/Cargo.lock")
 
 # The CHANGELOG.md section of a released version (the GitHub release body)
 release-notes version:

@@ -145,5 +145,6 @@ integration and every major. `cargo hack clippy -p <group> --each-feature
   Windows running every group's tests (`just test`), and a `misc` job (fmt,
   docs, deny, package, fuzz, playground). Feature pairs, MSRV toolchains and
   minimal versions stay in the manual `extended` job.
-- Releases: release-plz keeps a release PR open; merging it publishes the six
-  crates from CI once `main` is green (PUBLISHING.md).
+- Releases: Actions -> CI -> Run workflow with a version bumps every crate,
+  tags, and publishes the six crates from CI with crates.io trusted publishing
+  (PUBLISHING.md).
