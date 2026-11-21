@@ -1618,17 +1618,50 @@ fn units_and_ranges_speak_plainly() {
 #[cfg(feature = "i18n")]
 fn catalog_keys(locale: &str) -> BTreeSet<String> {
     let json: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_str(vld::i18n::catalog(locale).unwrap()).unwrap();
+        serde_json::from_str(&shipped_catalog(locale)).unwrap();
     json.keys().cloned().collect()
+}
+
+/// Every catalog file vld ships, read from `locales/` (not only the ones this build embeds:
+/// the `i18n-<lang>` features pick those).
+#[cfg(feature = "i18n")]
+fn shipped_locales() -> Vec<String> {
+    let mut codes: Vec<String> = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/locales"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .map(|p| p.file_stem().unwrap().to_str().unwrap().to_string())
+        .collect();
+    codes.sort();
+    codes
+}
+
+#[cfg(feature = "i18n")]
+fn shipped_catalog(locale: &str) -> String {
+    std::fs::read_to_string(format!(
+        "{}/locales/{locale}.json",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
+}
+
+/// Whether this build embeds `locale` (its `i18n-<lang>` feature, or the `i18n` set).
+#[cfg(feature = "i18n")]
+fn embedded(locale: &str) -> bool {
+    vld::i18n::catalog(locale).is_some()
 }
 
 /// The embedded catalogs as an app would load them, English as the reference.
 #[cfg(feature = "i18n")]
 fn all_catalogs() -> vld::i18n::i18n_next::I18n {
+    let files: Vec<(String, Vec<u8>)> = shipped_locales()
+        .into_iter()
+        .map(|l| (format!("{l}.json"), shipped_catalog(&l).into_bytes()))
+        .collect();
     vld::i18n::i18n_next::I18n::builder()
         .locale("en")
         .fallback("en")
-        .files(vld::i18n::files())
+        .files(files)
         .build()
         .unwrap()
 }
@@ -1661,10 +1694,24 @@ fn shipped_catalogs_are_complete_and_cldr_plural() {
         assert!(en.contains(&format!("vld.{generic}")), "{generic}");
     }
 
-    let locales: Vec<&str> = vld::i18n::locales().collect();
+    let locales = shipped_locales();
     assert_eq!(locales.len(), 29);
     for locale in &locales {
         assert_eq!(catalog_keys(locale), en, "{locale}");
+    }
+    // `i18n` embeds the pre-0.8 set; each `i18n-<lang>` feature adds its catalog.
+    let embedded: Vec<&str> = vld::i18n::locales().collect();
+    for base in ["de", "en", "es", "ru"] {
+        assert!(embedded.contains(&base), "{base}");
+    }
+    #[cfg(feature = "i18n-all")]
+    assert_eq!(embedded, locales);
+    for locale in &embedded {
+        assert_eq!(
+            vld::i18n::catalog(locale).unwrap(),
+            shipped_catalog(locale),
+            "{locale}"
+        );
     }
     let report = all_catalogs().check();
     assert!(report.is_clean(), "{report}");
@@ -1699,29 +1746,40 @@ fn translator_picks_cldr_plural_forms_and_falls_back() {
             format!("Строка должна содержать ровно {n} {word}")
         );
     }
-    assert!(len("pl", 2).ends_with("2 znaki"), "{}", len("pl", 2));
-    assert!(len("pl", 5).ends_with("5 znaków"), "{}", len("pl", 5));
-    assert!(len("pl", 22).ends_with("22 znaki"), "{}", len("pl", 22));
-    assert!(len("uk", 21).ends_with("21 символ"), "{}", len("uk", 21));
-    for (n, word) in [
-        (1, "حرف"),
-        (2, "حرفين"),
-        (3, "أحرف"),
-        (11, "حرفًا"),
-        (100, "حرف"),
-    ] {
-        assert_eq!(
-            len("ar", n),
-            format!("يجب أن يحتوي النص على {n} {word} بالضبط")
-        );
+    // Languages outside the `i18n` set run when their feature embeds them (`i18n-all` in CI).
+    if embedded("pl") {
+        assert!(len("pl", 2).ends_with("2 znaki"), "{}", len("pl", 2));
+        assert!(len("pl", 5).ends_with("5 znaków"), "{}", len("pl", 5));
+        assert!(len("pl", 22).ends_with("22 znaki"), "{}", len("pl", 22));
     }
-    assert_eq!(len("he", 2), "המחרוזת חייבת להכיל בדיוק 2 תווים");
-    assert_eq!(len("he", 1), "המחרוזת חייבת להכיל בדיוק 1 תו");
-    for n in [1, 2, 5] {
-        assert_eq!(
-            len("ja", n),
-            format!("文字列はちょうど {n} 文字である必要があります")
-        );
+    if embedded("uk") {
+        assert!(len("uk", 21).ends_with("21 символ"), "{}", len("uk", 21));
+    }
+    if embedded("ar") {
+        for (n, word) in [
+            (1, "حرف"),
+            (2, "حرفين"),
+            (3, "أحرف"),
+            (11, "حرفًا"),
+            (100, "حرف"),
+        ] {
+            assert_eq!(
+                len("ar", n),
+                format!("يجب أن يحتوي النص على {n} {word} بالضبط")
+            );
+        }
+    }
+    if embedded("he") {
+        assert_eq!(len("he", 2), "המחרוזת חייבת להכיל בדיוק 2 תווים");
+        assert_eq!(len("he", 1), "המחרוזת חייבת להכיל בדיוק 1 תו");
+    }
+    if embedded("ja") {
+        for n in [1, 2, 5] {
+            assert_eq!(
+                len("ja", n),
+                format!("文字列はちょうど {n} 文字である必要があります")
+            );
+        }
     }
     let min = |locale: &str, n: usize| {
         let err = vld::string().min(n).parse_value(&json!("")).unwrap_err();
@@ -1729,14 +1787,21 @@ fn translator_picks_cldr_plural_forms_and_falls_back() {
             .message
             .clone()
     };
-    assert!(min("fr", 1).ends_with("1 caractère"), "{}", min("fr", 1));
-    assert!(min("fr", 2).ends_with("2 caractères"), "{}", min("fr", 2));
+    if embedded("fr") {
+        assert!(min("fr", 1).ends_with("1 caractère"), "{}", min("fr", 1));
+        assert!(min("fr", 2).ends_with("2 caractères"), "{}", min("fr", 2));
+    }
 
     // Fallback chain: region / script dropped, unknown → English.
-    assert_eq!(len("pt-BR", 2), len("pt", 2));
-    assert_eq!(len("zh_Hans_CN", 2), len("zh", 2));
+    assert_eq!(len("es-MX", 2), len("es", 2));
+    if embedded("pt") && embedded("zh") {
+        assert_eq!(len("pt-BR", 2), len("pt", 2));
+        assert_eq!(len("zh_Hans_CN", 2), len("zh", 2));
+    }
     assert_eq!(len("RU", 3), len("ru", 3));
-    assert_eq!(vld::i18n::supported_locale("no"), Some("nb"));
+    if embedded("nb") {
+        assert_eq!(vld::i18n::supported_locale("no"), Some("nb"));
+    }
     assert_eq!(vld::i18n::supported_locale("xx-YY"), None);
     for n in [0, 1, 2] {
         let err = vld::string().len(n).parse_value(&json!("abc")).unwrap_err();

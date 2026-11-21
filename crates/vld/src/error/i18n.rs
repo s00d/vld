@@ -350,41 +350,14 @@ pub fn english() -> MapResolver {
 #[cfg(feature = "i18n")]
 pub use i18n_next;
 
-/// Every shipped catalog: `(locale, JSON)`.
+/// The embedded catalogs: `(locale, JSON)`, sorted by locale. Which ones are
+/// compiled in is chosen by features: `i18n` embeds `en`, `ru`, `de`, `es`;
+/// `i18n-<lang>` adds a language; `i18n-all` embeds all of them.
 #[cfg(feature = "i18n")]
-const CATALOGS: &[(&str, &str)] = &[
-    ("ar", include_str!("../../locales/ar.json")),
-    ("bg", include_str!("../../locales/bg.json")),
-    ("cs", include_str!("../../locales/cs.json")),
-    ("da", include_str!("../../locales/da.json")),
-    ("de", include_str!("../../locales/de.json")),
-    ("el", include_str!("../../locales/el.json")),
-    ("en", EN_JSON),
-    ("es", include_str!("../../locales/es.json")),
-    ("fi", include_str!("../../locales/fi.json")),
-    ("fr", include_str!("../../locales/fr.json")),
-    ("he", include_str!("../../locales/he.json")),
-    ("hi", include_str!("../../locales/hi.json")),
-    ("hu", include_str!("../../locales/hu.json")),
-    ("id", include_str!("../../locales/id.json")),
-    ("it", include_str!("../../locales/it.json")),
-    ("ja", include_str!("../../locales/ja.json")),
-    ("ko", include_str!("../../locales/ko.json")),
-    ("nb", include_str!("../../locales/nb.json")),
-    ("nl", include_str!("../../locales/nl.json")),
-    ("pl", include_str!("../../locales/pl.json")),
-    ("pt", include_str!("../../locales/pt.json")),
-    ("ro", include_str!("../../locales/ro.json")),
-    ("ru", include_str!("../../locales/ru.json")),
-    ("sv", include_str!("../../locales/sv.json")),
-    ("th", include_str!("../../locales/th.json")),
-    ("tr", include_str!("../../locales/tr.json")),
-    ("uk", include_str!("../../locales/uk.json")),
-    ("vi", include_str!("../../locales/vi.json")),
-    ("zh", include_str!("../../locales/zh.json")),
-];
+const CATALOGS: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/vld_catalogs.rs"));
 
-/// The locale codes of the embedded catalogs (`"ar"`, `"bg"`, …, `"zh"`).
+/// The locale codes of the embedded catalogs (with plain `i18n`: `"de"`, `"en"`,
+/// `"es"`, `"ru"`; more with the `i18n-<lang>` features).
 #[cfg(feature = "i18n")]
 pub fn locales() -> impl Iterator<Item = &'static str> {
     CATALOGS.iter().map(|(code, _)| *code)
