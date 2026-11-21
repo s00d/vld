@@ -140,10 +140,10 @@ integration and every major. `cargo hack clippy -p <group> --each-feature
 
 ## CI and release
 
-- CI: clippy per crate group on Linux, tests per crate group on Linux, macOS and
-  Windows, all in parallel with their own caches, plus a `misc` job (fmt, docs,
-  deny, package, fuzz, playground). `just lint-group <name>` / `just
-  test-group <name>` are what each job runs. Feature pairs, MSRV toolchains and
+- CI: one Linux job per crate group (clippy with all features and each feature
+  alone, then tests; openapi and app share a job), one job each on macOS and
+  Windows running every group's tests (`just test`), and a `misc` job (fmt,
+  docs, deny, package, fuzz, playground). Feature pairs, MSRV toolchains and
   minimal versions stay in the manual `extended` job.
 - Releases: release-plz keeps a release PR open; merging it publishes the six
   crates from CI once `main` is green (PUBLISHING.md).

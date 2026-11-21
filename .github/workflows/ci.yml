@@ -1,8 +1,8 @@
 name: CI
 
 # Every step is a `just` recipe (see justfile), so CI and local runs are the same commands.
-# Push / PR: clippy per crate group (Linux), tests per crate group on Linux, macOS and
-# Windows, and the `misc` checks. On `main`, once all of them pass, `release` publishes
+# Push / PR: clippy and tests per crate group on Linux, all tests on macOS and on
+# Windows (one job each), and the `misc` checks. On `main`, once all of them pass, `release` publishes
 # what a merged release PR bumped (release-plz; PUBLISHING.md). By hand (Actions -> CI ->
 # Run workflow): MSRV toolchains, minimal versions, vld feature pairs, latest stable clippy.
 
@@ -28,60 +28,27 @@ env:
   RUST_TOOLCHAIN: "1.99.1"
 
 jobs:
-  # clippy with all features and each feature alone, one job per crate group
-  # (ARCHITECTURE.md). Linux only: the code has no OS-specific branches to lint.
-  lint:
-    name: lint ${{ matrix.group }}
+  # Linux: clippy (all features, each feature alone) and tests per crate group
+  # (ARCHITECTURE.md). openapi and app are small and share a job.
+  linux:
+    name: ${{ matrix.groups }}
     if: github.event_name != 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
-        group: [core, web, openapi, data, app]
+        groups: [core, web, data, openapi app]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       # diesel postgres / mysql backends link libpq / libmysqlclient.
-      - if: matrix.group == 'data'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: clippy
-          targets: ${{ matrix.group == 'core' && 'wasm32-unknown-unknown' || '' }}
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just,cargo-hack
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: lint-${{ matrix.group }}
-      - run: just lint-group ${{ matrix.group }}
-      - if: matrix.group == 'core'
-        run: just wasm
-
-  # Tests per crate group on every OS (paths, files, line endings and sockets differ).
-  # Off Linux, vld-data runs without the postgres / mysql backends (justfile `data_portable`).
-  test:
-    name: test ${{ matrix.group }} (${{ matrix.os }})
-    if: github.event_name != 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        group: [core, web, openapi, data, app]
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v5
-      - if: matrix.group == 'data' && runner.os == 'Linux'
+      - if: matrix.groups == 'data'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
       # vld::ts cross-checks generated Zod 3 / Zod 4 / Valibot code under node.
-      - if: matrix.group == 'core' && runner.os == 'Linux'
+      - if: matrix.groups == 'core'
         uses: actions/setup-node@v5
         with:
           node-version: 22
-      - if: matrix.group == 'core' && runner.os == 'Linux'
+      - if: matrix.groups == 'core'
         run: |
           dir="$RUNNER_TEMP/ts-check"
           mkdir -p "$dir" && cd "$dir" && echo '{"private":true}' > package.json
@@ -90,13 +57,44 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+          targets: ${{ matrix.groups == 'core' && 'wasm32-unknown-unknown' || '' }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-hack
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.groups }}
+      - run: for g in ${{ matrix.groups }}; do just lint-group "$g"; done
+      - if: ${{ !cancelled() }}
+        run: for g in ${{ matrix.groups }}; do just test-group "$g"; done
+      - if: matrix.groups == 'core' && !cancelled()
+        run: just wasm
+
+  # Every group's tests on macOS and Windows, one job per OS (paths, files, line
+  # endings, sockets differ). vld-data runs without postgres / mysql there (justfile
+  # `data_portable`).
+  os:
+    name: tests on ${{ matrix.os }}
+    if: github.event_name != 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: taiki-e/install-action@v2
         with:
           tool: just
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: test-${{ matrix.group }}
-      - run: just test-group ${{ matrix.group }}
+      - run: just test
 
   misc:
     name: fmt, docs, deny, package, fuzz, playground
@@ -134,7 +132,7 @@ jobs:
   # release body is that version's CHANGELOG.md section. Otherwise it does nothing.
   release:
     name: release
-    needs: [lint, test, misc]
+    needs: [linux, os, misc]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     environment: crates-io
