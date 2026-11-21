@@ -2,34 +2,10 @@
 members = [
     "crates/vld",
     "crates/vld-derive",
-    "crates/vld-integration-common",
-    "crates/vld-axum",
-    "crates/vld-actix",
-    "crates/vld-ts",
-    "crates/vld-diesel",
-    "crates/vld-utoipa",
-    "crates/vld-config",
-    "crates/vld-tower",
-    "crates/vld-rocket",
-    "crates/vld-poem",
-    "crates/vld-warp",
-    "crates/vld-sea",
-    "crates/vld-clap",
-    "crates/vld-salvo",
-    "crates/vld-tauri",
-    "crates/vld-fake",
-    "crates/vld-http-common",
-    "crates/vld-tonic",
-    "crates/vld-leptos",
-    "crates/vld-sqlx",
-    "crates/vld-dioxus",
-    "crates/vld-ntex",
-    "crates/vld-aide",
-    "crates/vld-surrealdb",
-    "crates/vld-schemars",
-    "crates/vld-redis",
-    "crates/vld-lapin",
-    "crates/vld-rama",
+    "crates/vld-web",
+    "crates/vld-openapi",
+    "crates/vld-data",
+    "crates/vld-app",
     "examples/playground",
 ]
 exclude = ["fuzz"]
@@ -44,17 +20,12 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 repository = "https://github.com/s00d/vld"
-homepage = "https://github.com/s00d/vld"
 
 [workspace.dependencies]
 # Internal crates
 vld = { path = "crates/vld", version = "0.7.0" }
 vld-derive = { path = "crates/vld-derive", version = "0.7.0" }
-vld-http-common = { path = "crates/vld-http-common", version = "0.7.0" }
-vld-integration-common = { path = "crates/vld-integration-common", version = "0.7.0" }
-vld-utoipa = { path = "crates/vld-utoipa", version = "0.7.0" }
-# default-features off: dependents pick the schemars major themselves.
-vld-schemars = { path = "crates/vld-schemars", version = "0.7.0", default-features = false }
+vld-openapi = { path = "crates/vld-openapi", version = "0.7.0" }
 
 # Shared external
 serde = { version = "1.0.219", features = ["derive"] }

@@ -17,7 +17,3 @@ vld = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
-# Not released: cargo-release would otherwise bump and tag it (publish = false
-# only stops `cargo publish`).
-[package.metadata.release]
-release = false

@@ -55,6 +55,10 @@ where
     fn json_schema(&self) -> Value {
         json!({ "anyOf": [self.schema_a().json_schema(), self.schema_b().json_schema()] })
     }
+    /// A missing key is accepted when any branch accepts it.
+    fn is_required(&self) -> bool {
+        self.schema_a().is_required() && self.schema_b().is_required()
+    }
 }
 
 impl<A, B> CollectNestedSchemas for crate::combinators::ZUnion2<A, B>
@@ -82,6 +86,12 @@ where
                 self.schema_c().json_schema(),
             ]
         })
+    }
+    /// A missing key is accepted when any branch accepts it.
+    fn is_required(&self) -> bool {
+        self.schema_a().is_required()
+            && self.schema_b().is_required()
+            && self.schema_c().is_required()
     }
 }
 

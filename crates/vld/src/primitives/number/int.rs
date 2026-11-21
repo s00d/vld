@@ -169,6 +169,18 @@ impl<T: IntType> ZInteger<T> {
         self
     }
 
+    /// Must equal one of `values`; see [`ZNumber::one_of`].
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let level = vld::u8().one_of(&[1, 2, 4]);
+    /// assert_eq!(level.parse("4").unwrap(), 4);
+    /// assert!(level.parse("3").is_err());
+    /// ```
+    pub fn one_of(self, values: &[T]) -> Self {
+        self.with(|n| n.one_of_n(values.iter().map(|v| Num::I(v.to_i128())).collect()))
+    }
+
     /// Clamp instead of failing; see [`ZNumber::clamp`]. Also saturates to
     /// the integer type's range.
     pub fn clamp(self) -> Self {
@@ -269,7 +281,7 @@ impl<T: IntType> ZInteger<T> {
     /// Reject `i` outside the type range (`u8`: `0..=255`).
     fn type_range(&self, i: i128, value: &Value) -> Result<(), VldError> {
         if i < T::MIN {
-            return Err(VldError::from_code_with_value(
+            return Err(self.inner.range_error(
                 IssueCode::TooSmall {
                     origin: SizeOrigin::Number,
                     minimum: Num::I(T::MIN).json(),
@@ -279,7 +291,7 @@ impl<T: IntType> ZInteger<T> {
             ));
         }
         if i > T::MAX {
-            return Err(VldError::from_code_with_value(
+            return Err(self.inner.range_error(
                 IssueCode::TooBig {
                     origin: SizeOrigin::Number,
                     maximum: Num::I(T::MAX).json(),

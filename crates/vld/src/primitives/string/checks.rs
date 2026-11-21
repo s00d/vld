@@ -139,6 +139,9 @@ string_formats! {
 pub(super) enum Kind {
     Min(usize),
     Max(usize),
+    /// UTF-8 length in bytes.
+    MinBytes(usize),
+    MaxBytes(usize),
     Len(usize),
     NonEmpty,
     StartsWith(String),
@@ -161,8 +164,8 @@ impl Kind {
     /// Stable key identifying the check category (for `with_messages`).
     pub(super) fn key(&self) -> &str {
         match self {
-            Kind::Min(_) => "too_small",
-            Kind::Max(_) => "too_big",
+            Kind::Min(_) | Kind::MinBytes(_) => "too_small",
+            Kind::Max(_) | Kind::MaxBytes(_) => "too_big",
             Kind::Len(_) => "invalid_length",
             Kind::NonEmpty => "non_empty",
             Kind::StartsWith(_) => "invalid_starts_with",
@@ -191,6 +194,16 @@ impl Kind {
             Kind::Min(n) if len() < *n => Some(too_small(*n)),
             Kind::Max(n) if len() > *n => Some(IssueCode::TooBig {
                 origin: SizeOrigin::String,
+                maximum: (*n).into(),
+                inclusive: true,
+            }),
+            Kind::MinBytes(n) if s.len() < *n => Some(IssueCode::TooSmall {
+                origin: SizeOrigin::Bytes,
+                minimum: (*n).into(),
+                inclusive: true,
+            }),
+            Kind::MaxBytes(n) if s.len() > *n => Some(IssueCode::TooBig {
+                origin: SizeOrigin::Bytes,
                 maximum: (*n).into(),
                 inclusive: true,
             }),

@@ -1,0 +1,56 @@
+# cargo-mutants: run tests through nextest so the per-test timeouts in .config/nextest.toml apply.
+# How to run and how to read results: tests/README.md (Mutation testing).
+test_tool = "nextest"
+additional_cargo_test_args = ["--profile", "mutants"]
+exclude_re = [
+    # Equivalent: a divisor in [1e30, i128 range) takes the exact float path; an i64/u64 input is
+    # below it, so both paths give `a % b == a`, zero only for a == 0.
+    'number/mod\.rs:\d+:\d+: replace < with <= in is_multiple_of',
+    # Equivalent: with v == 0 (and a finite input) the quotient is inf / NaN and the tolerance check fails anyway.
+    'number/mod\.rs:\d+:25: replace \|\| with && in is_multiple_of',
+    # Equivalent: a doubled digit is even, never 9, so `v > 9` and `v >= 9` agree.
+    'formats/text\.rs:\d+:28: replace > with >= in is_valid_credit_card',
+    # Unobservable: only read by ZRecord::json_schema, where `{}` and `null` both mean "no propertyNames".
+    'collections/record\.rs:\d+:\d+: replace <impl crate::openapi::JsonSchema for AnyKey>::json_schema -> Value with Default::default\(\)',
+    # Equivalent: the two halves of each combined byte have disjoint bits (`v0 << 2` / `v1 >> 4`,
+    # `h << 4` / `l`, …), so `|` and `^` give the same byte.
+    'primitives/bytes\.rs:\d+:\d+: replace \| with \^ in decode_(base64|hex)',
+    # Equivalent: padding is added for rem 2 or 3, where `4 - rem == 4 / rem`; rem 1 is invalid either way.
+    'primitives/bytes\.rs:\d+:\d+: replace - with / in decode_base64_url',
+    # Equivalent: a string in array mode reaches the `Off` arm, which returns the same type error.
+    'primitives/bytes\.rs:\d+:\d+: replace match guard self\.string_mode != BytesStringMode::Off with true in <impl VldSchema for ZBytes>::parse_value',
+    # Equivalent: `digits` is only called on fixed-width non-empty slices.
+    'primitives/iso\.rs:\d+:21: replace \|\| with && in digits',
+    # Equivalent: `offset_suffix` gets the part after `T` of a string of at least 19 bytes, so at
+    # least 8 bytes: never empty and never shorter than 6.
+    'primitives/iso\.rs:\d+:\d+: delete match arm None in offset_suffix',
+    'primitives/iso\.rs:\d+:\d+: replace < with (==|<=) in offset_suffix',
+    # Equivalent: the backend constructor functions return `new()`, which is what `Default` returns.
+    'primitives/date/(chrono|jiff|time)\.rs:\d+:\d+: replace (date|datetime|time) -> Z(Date|DateTime|Time) with Default::default\(\)',
+    # Equivalent: `with_default` requires `Serialize`, and every backend's serde form of a date
+    # (`YYYY-MM-DD`) and of a time of day is the same text as `output_json` gives (the JSON Schema
+    # default is checked against the bound text in corpus_dates).
+    'primitives/date/common\.rs:\d+:\d+: replace <impl VldSchema for Z(Date|Time)<B>>::output_json -> Option<Value> with None',
+    # Equivalent: each `vld::<name>()` constructor returns `Z<Name>::new()`, and every such type's
+    # `Default` is `new()` (or derived with the same fields). `date` / `datetime` / `time_of_day`
+    # are also compiled out under --all-features (they exist only with a single date backend).
+    'crates/vld/src/lib\.rs:\d+:\d+: replace \w+ -> (primitives|object)::Z\w+ with Default::default\(\)',
+    # Unobservable under --all-features: the `cfg(not(feature = "openapi"))` copy of the blanket
+    # `DynSchema` impl is not compiled; its `cfg(feature = "openapi")` twin is tested. Line-pinned
+    # because both copies have the same mutant names.
+    'schema/dyn_schema\.rs:(51|55):\d+: replace <impl DynSchema for T>::dyn_parse',
+    # Equivalent: `Some(Value::Null)` keywords are dropped by `merge_keywords` exactly like `None`.
+    'rules\.rs:\d+:\d+: replace Rule::json_schema -> Option<Value> with Some\(Default::default\(\)\)',
+    # Equivalent: in serde attribute text a backslash occurs only inside string literals, so the
+    # `'\\' if quoted` guard is never reached with `quoted == false`.
+    'private\.rs:\d+:\d+: replace match guard quoted with true in split_top',
+    # Equivalent: equal strings are equal JSON values, which return before the comparison, so
+    # `b > a` / `b >= a` and `b < a` / `b <= a` agree.
+    'openapi/diff\.rs:\d+:\d+: replace (> with >=|< with <=) in diff_string_bound',
+    # Equivalent: only reached when the lengths differ, so `>` and `>=` agree.
+    'openapi/diff\.rs:\d+:\d+: replace > with >= in diff_prefix_items',
+    # Equivalent: only reached when |a - b| > EPSILON, so `b > a` / `b >= a` and `b < a` / `b <= a`
+    # agree (the guard's own `>`, col 45, is tested).
+    'openapi/diff\.rs:\d+:22: replace > with >= in diff_numeric_constraint',
+    'openapi/diff\.rs:\d+:25: replace < with <= in diff_numeric_constraint',
+]

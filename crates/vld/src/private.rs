@@ -97,12 +97,26 @@ fn split_top(s: &str) -> Vec<&str> {
     out
 }
 
-/// `"x"` → `x`.
+/// `"x"` → `x`, with the string literal's escapes (`\"`, `\\`, `\n`, …) resolved.
+// ponytail: `\x..` / `\u{..}` escapes are not decoded; add them if a key ever needs one.
 fn unquote(s: &str) -> Option<String> {
-    s.trim()
-        .strip_prefix('"')?
-        .strip_suffix('"')
-        .map(str::to_string)
+    let body = s.trim().strip_prefix('"')?.strip_suffix('"')?;
+    let mut out = String::with_capacity(body.len());
+    let mut chars = body.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        out.push(match chars.next()? {
+            'n' => '\n',
+            't' => '\t',
+            'r' => '\r',
+            '0' => '\0',
+            other => other,
+        });
+    }
+    Some(out)
 }
 
 /// `(deserialize, serialize)` values of `name = "x"` /
@@ -221,6 +235,29 @@ pub fn parse_field<S: VldSchema>(
             None
         }
     }
+}
+
+/// `validate_field` of a derived struct: parse `value` (`None` = absent key)
+/// and put the issues under `key`.
+pub fn check_field<S: VldSchema>(
+    key: &str,
+    value: Option<&Value>,
+    schema: &S,
+) -> Result<(), VldError> {
+    let r = match value {
+        Some(v) => schema.parse_value(v).map(drop),
+        None => schema
+            .parse_missing()
+            .map(drop)
+            .map_err(crate::error::absent_field_error),
+    };
+    r.map_err(|e| e.with_prefix(PathSegment::Field(key.to_string())))
+}
+
+/// `validate_field` for a name the struct does not have.
+pub fn unknown_field(key: &str) -> VldError {
+    VldError::from_code(crate::error::IssueCode::UnrecognizedField)
+        .with_prefix(PathSegment::Field(key.to_string()))
 }
 
 /// Validate one field into a [`FieldResult`] (output serialized to JSON).

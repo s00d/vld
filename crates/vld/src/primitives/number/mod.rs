@@ -182,8 +182,16 @@ fn is_multiple_of(n: Num, v: Num) -> bool {
         (_, Num::I(0)) => false,
         // `checked_rem` is `None` only for `i128::MIN % -1`, whose remainder is 0.
         (Num::I(a), Num::I(b)) => a.checked_rem(b).is_none_or(|r| r == 0),
+        // An integer and a whole divisor: exact, even past 2^53.
+        (Num::I(a), Num::F(b)) if b.fract() == 0.0 && b.abs() < 1e30 && b != 0.0 => {
+            a.checked_rem(b as i128).is_none_or(|r| r == 0)
+        }
         (n, v) => {
             let (n, v) = (n.as_f64(), v.as_f64());
+            // Whole numbers: `%` on floats is exact, also beyond `i128`.
+            if n.fract() == 0.0 && v.fract() == 0.0 && v != 0.0 && n.is_finite() {
+                return n % v == 0.0;
+            }
             if v == 0.0 || !n.is_finite() || !v.is_finite() {
                 return false;
             }

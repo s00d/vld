@@ -10,7 +10,8 @@ fn canonical(v: &Value) -> String {
         Value::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
             (Some(i), ..) => i.to_string(),
             (_, Some(u), _) => u.to_string(),
-            (_, _, Some(f)) if f.fract() == 0.0 && f.abs() < 9.2e18 => (f as i64).to_string(),
+            // `{:.0}` prints a whole float exactly; `+ 0.0` turns `-0.0` into `0`.
+            (_, _, Some(f)) if f.fract() == 0.0 => format!("{:.0}", f + 0.0),
             _ => n.to_string(),
         },
         Value::Array(a) => {

@@ -86,11 +86,8 @@ pub(crate) fn is_valid_cidr(s: &str) -> bool {
     let Some((ip, prefix)) = s.split_once('/') else {
         return false;
     };
-    // Digits only, no sign, no leading zeros.
-    if prefix.is_empty()
-        || prefix.len() > 3
-        || !prefix.bytes().all(|b| b.is_ascii_digit())
-        || (prefix.len() > 1 && prefix.starts_with('0'))
+    // Digits only, no sign, no leading zeros; empty or too long fails `parse`.
+    if !prefix.bytes().all(|b| b.is_ascii_digit()) || (prefix.len() > 1 && prefix.starts_with('0'))
     {
         return false;
     }

@@ -1,0 +1,103 @@
+[package]
+name = "vld-data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Database and message-queue integrations for the vld validation library: sqlx, diesel, SeaORM, SurrealDB, redis, lapin"
+documentation = "https://docs.rs/vld-data"
+keywords = ["validation", "database", "sqlx", "diesel", "vld"]
+categories = ["database", "web-programming"]
+readme = "README.md"
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+sqlx-0_8 = ["dep:sqlx08"]
+sqlx-0_9 = ["dep:sqlx09"]
+diesel = ["dep:diesel"]
+# SQL backends, for every enabled sqlx / diesel driver.
+postgres = ["sqlx08?/postgres", "sqlx09?/postgres", "diesel?/postgres"]
+mysql = ["sqlx08?/mysql", "sqlx09?/mysql", "diesel?/mysql"]
+sqlite = ["sqlx08?/sqlite", "sqlx09?/sqlite", "diesel?/sqlite"]
+sea-orm-1 = ["dep:sea-orm1"]
+sea-orm-2 = ["dep:sea-orm2"]
+# Map these SeaORM column types to JSON for `validate_active` / `before_save`
+# (also enables the matching SeaORM feature).
+with-json = ["sea-orm1?/with-json", "sea-orm2?/with-json"]
+with-chrono = ["sea-orm1?/with-chrono", "sea-orm2?/with-chrono"]
+with-uuid = ["sea-orm1?/with-uuid", "sea-orm2?/with-uuid"]
+with-rust_decimal = ["sea-orm1?/with-rust_decimal", "sea-orm2?/with-rust_decimal"]
+with-bigdecimal = ["sea-orm1?/with-bigdecimal", "sea-orm2?/with-bigdecimal"]
+with-time = ["sea-orm1?/with-time", "sea-orm2?/with-time"]
+postgres-array = ["sea-orm1?/postgres-array", "sea-orm2?/postgres-array"]
+redis-0 = ["dep:redis0"]
+redis-1 = ["dep:redis1"]
+# Async wrapper `AsyncRedisConn` over `redis::aio::ConnectionLike` (no runtime chosen).
+redis-aio = ["redis0?/aio", "redis1?/aio"]
+# `redis-aio` plus redis' tokio runtime support (`tokio-comp`).
+redis-aio-tokio = ["redis-aio", "redis0?/tokio-comp", "redis1?/tokio-comp"]
+lapin-2 = ["dep:lapin2"]
+lapin-3 = ["dep:lapin3"]
+lapin-4 = ["dep:lapin4"]
+
+[dependencies]
+vld = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx08 = { package = "sqlx", version = "0.8", default-features = false, optional = true }
+sqlx09 = { package = "sqlx", version = "0.9", default-features = false, optional = true }
+diesel = { version = "2", default-features = false, optional = true }
+sea-orm1 = { package = "sea-orm", version = "1", default-features = false, optional = true }
+sea-orm2 = { package = "sea-orm", version = "2", default-features = false, optional = true }
+redis0 = { package = "redis", version = ">=0.32, <1", optional = true }
+redis1 = { package = "redis", version = ">=1, <2", optional = true }
+lapin2 = { package = "lapin", version = "2", optional = true }
+lapin3 = { package = "lapin", version = "3", optional = true }
+lapin4 = { package = "lapin", version = "4.10", optional = true }
+
+# Test drivers: in-memory SQLite, SeaORM's MockDatabase, a redis runtime.
+# Tests of an integration compile only with its feature.
+[dev-dependencies]
+proptest = "1"
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+time = "0.3"
+sqlx08 = { package = "sqlx", version = "0.8", features = ["sqlite", "runtime-tokio"] }
+sqlx09 = { package = "sqlx", version = "0.9", features = ["sqlite", "runtime-tokio"] }
+diesel = { version = "2", features = ["sqlite"] }
+sea-orm1 = { package = "sea-orm", version = "1", default-features = false, features = ["macros", "mock"] }
+sea-orm2 = { package = "sea-orm", version = "2", default-features = false, features = ["macros", "mock"] }
+redis0 = { package = "redis", version = ">=0.32, <1", features = ["tokio-comp"] }
+redis1 = { package = "redis", version = ">=1, <2", features = ["tokio-comp"] }
+
+[[example]]
+name = "sqlx_basic"
+required-features = ["sqlx-0_9", "sqlite"]
+
+[[example]]
+name = "diesel_basic"
+required-features = ["diesel", "sqlite"]
+
+[[example]]
+name = "sea_basic"
+required-features = ["sea-orm-2"]
+
+[[example]]
+name = "surrealdb_basic"
+
+[[example]]
+name = "redis_basic"
+required-features = ["redis-1"]
+
+[[example]]
+name = "lapin_basic"
+required-features = ["lapin-4"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

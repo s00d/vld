@@ -13,11 +13,22 @@ unmaintained = "workspace"
 unsound = "workspace"
 ignore = [
     # rsa: Marvin attack (timing side channel), no fixed release exists.
-    # Only reachable through sqlx-mysql when vld-sqlx's optional `mysql`
+    # Only reachable through sqlx-mysql when vld-data's optional `mysql`
     # feature is enabled; vld never performs RSA operations itself.
     { id = "RUSTSEC-2023-0071", reason = "rsa via optional sqlx-mysql; no fix upstream" },
+    # libsqlite3-sys < 0.39 bundles SQLite < 3.54 (local attack: a crafted
+    # db + -wal pair). sqlx 0.8 requires libsqlite3-sys 0.30, and `links`
+    # allows one version per build, so the workspace (all majors at once)
+    # stays on 0.30. vld-data does not pin it: users on sqlx >= 0.9.1 or
+    # diesel >= 2.4 without sqlx 0.8 get the fix from `cargo update`.
+    { id = "RUSTSEC-2026-0459", reason = "sqlx 0.8 pins libsqlite3-sys 0.30; sqlx 0.9.1 / diesel 2.4 allow the fix" },
+    # chrono is marked unmaintained (the advisory recommends jiff or time,
+    # both supported by vld). vld's `chrono` feature stays for applications
+    # whose types are chrono's (sea-orm and sqlx columns among them); it is
+    # optional and off by default.
+    { id = "RUSTSEC-2026-0543", reason = "optional vld backend for chrono users; jiff / time are the alternatives" },
     # h2 0.3 unbounded empty DATA frames; fixed only in h2 >= 0.4.16.
-    # h2 0.3 is pinned by actix-http 3 (vld-actix); vld does not use h2
+    # h2 0.3 is pinned by actix-http 3 (vld-web `actix`); vld does not use h2
     # directly. Drop once actix-web moves to h2 0.4.
     { id = "RUSTSEC-2026-0258", reason = "h2 0.3 pinned by actix-http 3; fix only in h2 0.4" },
 ]

@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hash;
 
 use crate::collections::{ZArray, ZOrderedRecord, ZRecord, ZSet};
+use crate::combinators::ZTryTransform;
 use crate::modifiers::ZOptional;
 use crate::primitives::{ZBoolean, ZChar, ZF32, ZInteger, ZJsonValue, ZNumber, ZString};
 use crate::schema::{Schema, VldSchema};
@@ -11,7 +12,8 @@ use crate::schema::{Schema, VldSchema};
 /// The schema a type gets when a `#[derive(Validate)]` field has no
 /// `#[vld(...)]`: `String` → `vld::string()`, `u16` → `vld::u16()`,
 /// `Option<T>` → `T`'s schema `.optional()`, `Vec<T>` → `vld::array(...)`,
-/// `HashMap<String, T>` → `vld::record(...)`, a derived type → `vld::nested!`.
+/// `HashMap<String, T>` → `vld::record(...)`, `[T; N]` → an array of exactly
+/// `N` items, a derived type → `vld::nested!`.
 ///
 /// Derived non-generic structs and enums implement it; implement it for
 /// your own types to make them inferable.
@@ -71,6 +73,22 @@ impl<T: VldType> VldType for Vec<T> {
     fn vld_schema() -> Self::Schema {
         crate::array(T::vld_schema())
     }
+}
+
+/// `[T; N]`: an array of exactly `N` items (`vld::array(..).len(N)`).
+impl<T: VldType, const N: usize> VldType for [T; N] {
+    type Schema = ZTryTransform<ZArray<T::Schema>, fn(Vec<T>) -> Result<[T; N], String>, [T; N]>;
+    fn vld_schema() -> Self::Schema {
+        crate::array(T::vld_schema())
+            .len(N)
+            .try_transform(to_array::<T, N> as fn(Vec<T>) -> Result<[T; N], String>)
+    }
+}
+
+fn to_array<T, const N: usize>(v: Vec<T>) -> Result<[T; N], String> {
+    // `len(N)` has already checked the length.
+    v.try_into()
+        .map_err(|v: Vec<T>| format!("expected {N} items, got {}", v.len()))
 }
 
 impl<T: VldType + Eq + Hash> VldType for HashSet<T> {

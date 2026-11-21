@@ -26,6 +26,8 @@ pub struct ZNumber {
     pub(super) coerce: bool,
     /// `clamp()`: inclusive bounds clamp instead of failing.
     pub(super) clamp: bool,
+    /// `one_of(...)`: the allowed values.
+    one_of: Option<Vec<Num>>,
     custom_type_error: Option<String>,
     messages: crate::primitives::Messages,
 }
@@ -37,6 +39,7 @@ impl ZNumber {
             checks: vec![],
             coerce: false,
             clamp: false,
+            one_of: None,
             custom_type_error: None,
             messages: None,
         }
@@ -185,8 +188,25 @@ impl ZNumber {
         self
     }
 
+    /// Must equal one of `values` (`invalid_enum_value`; JSON Schema `enum`).
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let ratio = vld::number().one_of(&[0.5, 1.0, 2.0]);
+    /// assert_eq!(ratio.parse("1").unwrap(), 1.0);
+    /// assert_eq!(ratio.parse("3").unwrap_err().issues[0].code.key(), "invalid_enum_value");
+    /// ```
+    pub fn one_of(self, values: &[f64]) -> Self {
+        self.one_of_n(values.iter().map(|v| Num::F(*v)).collect())
+    }
+
+    pub(super) fn one_of_n(mut self, values: Vec<Num>) -> Self {
+        self.one_of = Some(values);
+        self
+    }
+
     /// Clamp values outside the inclusive bounds (`min` / `max`,
-    /// `non_negative` / `non_positive`) to the bound instead of failing.
+    /// `non_negative` / `non_positive`, `safe`) to the bound instead of failing.
     /// Integer schemas also saturate to their type (`u8`: `0..=255`), `f32`
     /// to its finite range. Exclusive bounds (`gt`, `lt`, `positive`,
     /// `negative`) still fail. The JSON Schema leaves out the clamped bounds.
@@ -245,12 +265,36 @@ impl ZNumber {
         }
     }
 
+    /// A type-range failure (`u8` above 255, `f32` overflow), with the
+    /// `with_messages` text for its key.
+    pub(super) fn range_error(&self, code: IssueCode, value: &Value) -> VldError {
+        let key = match code {
+            IssueCode::TooSmall { .. } => "too_small",
+            _ => "too_big",
+        };
+        let msg = self.messages.as_ref().and_then(|f| f(key));
+        ValidationIssue::with_override(code, msg.as_ref())
+            .with_received(value)
+            .into()
+    }
+
     pub(super) fn validate(&self, n: Num, value: &Value) -> Result<(), VldError> {
         let mut errors = VldError::new();
         for check in &self.checks {
             if let Some(code) = check.kind.failure(n) {
                 let bulk = || self.messages.as_ref().and_then(|f| f(check.kind.key()));
                 let msg = check.msg.clone().or_else(bulk);
+                errors
+                    .issues
+                    .push(ValidationIssue::with_override(code, msg.as_ref()).with_received(value));
+            }
+        }
+        if let Some(options) = &self.one_of {
+            if !options.iter().any(|o| n.cmp(*o) == Some(Ordering::Equal)) {
+                let code = IssueCode::InvalidEnumValue {
+                    options: options.iter().map(ToString::to_string).collect(),
+                };
+                let msg = self.messages.as_ref().and_then(|f| f("invalid_enum_value"));
                 errors
                     .issues
                     .push(ValidationIssue::with_override(code, msg.as_ref()).with_received(value));
@@ -274,9 +318,16 @@ impl VldSchema for ZNumber {
     type Output = f64;
 
     fn parse_value(&self, value: &Value) -> Result<f64, VldError> {
-        let n = self.clamped(Num::F(self.extract_number(value)?)).as_f64();
-        self.validate(Num::F(n), value)?;
-        Ok(n)
+        // A JSON integer is checked exactly (`multiple_of`, bounds beyond 2^53);
+        // a float is already exact as `f64` (float `%` and comparisons are exact).
+        let n = match value.as_number().map(|x| (x.as_i64(), x.as_u64())) {
+            Some((Some(i), _)) => Num::I(i.into()),
+            Some((_, Some(u))) => Num::I(u.into()),
+            _ => Num::F(self.extract_number(value)?),
+        };
+        let n = self.clamped(n);
+        self.validate(n, value)?;
+        Ok(n.as_f64())
     }
 }
 
@@ -341,6 +392,9 @@ impl ZNumber {
             .collect();
         if !rest.is_empty() {
             schema["allOf"] = Value::Array(rest);
+        }
+        if let Some(options) = &self.one_of {
+            schema["enum"] = options.iter().map(|o| o.json()).collect();
         }
         schema
     }
