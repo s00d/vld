@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "SeaORM integration for the vld validation library — validate ActiveModel before insert/update"
 documentation = "https://docs.rs/vld-sea"
 readme = "README.md"
@@ -40,12 +39,13 @@ vld-integration-common = { workspace = true }
 
 [dev-dependencies]
 vld = { workspace = true }
-# Entity derive macros emit `sea_orm::` paths: tests/integration.rs runs on
-# sea-orm 1, tests/sea_orm2.rs aliases `sea_orm2 as sea_orm`.
-sea-orm = { version = "1", default-features = false, features = ["macros"] }
-sea-orm2 = { package = "sea-orm", version = "2", default-features = false, features = ["macros"] }
+# Entity derive macros + `MockDatabase` for the selected major (tests use
+# `vld_sea::sea_orm`).
+sea-orm = { version = "1", default-features = false, features = ["macros", "mock"] }
+sea-orm2 = { package = "sea-orm", version = "2", default-features = false, features = ["macros", "mock"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 time = "0.3"
+proptest = "1"
 
 [[example]]
 name = "sea_basic"

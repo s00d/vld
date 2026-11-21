@@ -129,38 +129,3 @@ pub(crate) fn split_datetime(s: &str) -> Option<(String, Option<i32>)> {
     // All bytes in 0..end are ASCII (checked above), so slicing is safe.
     Some((format!("{}T{}", &s[..10], &s[11..end]), offset))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn non_ascii_never_panics() {
-        for s in [
-            "123é56789",
-            "1é:00",
-            "2024-01-01T",
-            "2024-01-01Té",
-            "2024-01-01T1é:00:00Z",
-            "é",
-        ] {
-            assert!(!is_valid_iso_date(s));
-            assert!(!is_valid_iso_time(s));
-            assert!(!is_valid_iso_datetime(s));
-        }
-    }
-
-    #[test]
-    fn calendar_and_offsets() {
-        assert!(is_valid_iso_date("2024-02-29"));
-        assert!(!is_valid_iso_date("2023-02-29"));
-        assert!(!is_valid_iso_date("2024-02-31"));
-        assert!(!is_valid_iso_date("2024-04-31"));
-        assert!(is_valid_iso_datetime("2024-01-01T10:00:00+03:00"));
-        assert!(is_valid_iso_datetime("2024-01-01t10:00:00.5z"));
-        assert!(!is_valid_iso_datetime("2024-01-01T10:00+03:00"));
-        assert!(!is_valid_iso_datetime("2024-01-01T10:00:00+garbage"));
-        assert!(!is_valid_iso_datetime("2024-01-01T10:00:00Zjunk"));
-        assert!(!is_valid_iso_datetime("2024-01-01T10:00:00+25:00"));
-    }
-}

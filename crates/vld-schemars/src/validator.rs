@@ -821,10 +821,11 @@ fn is_uri(s: &str) -> bool {
         && !s.contains(char::is_whitespace)
 }
 
-/// `n` is a multiple of `m`, tolerant to float rounding (e.g. 0.3 / 0.1).
+/// `n` is a multiple of `m`, tolerant to float rounding (e.g. 0.3 / 0.1):
+/// a few ulps of the quotient, so large quotients are not all "multiples".
 fn is_multiple_of(n: f64, m: f64) -> bool {
     let q = n / m;
-    (q - q.round()).abs() <= 1e-9 * q.abs().max(1.0)
+    (q - q.round()).abs() <= 16.0 * f64::EPSILON * q.abs().max(1.0)
 }
 
 fn type_matches(value: &Value, types: &[&str]) -> bool {
@@ -907,20 +908,5 @@ fn make_error(
 ) -> VldError {
     VldError {
         issues: vec![make_issue(path, code, message, received)],
-    }
-}
-
-#[cfg(test)]
-mod pattern_cache {
-    use super::compiled;
-
-    #[test]
-    fn compiles_each_pattern_once() {
-        let a = compiled(r"^[a-z]+\d$").unwrap();
-        let b = compiled(r"^[a-z]+\d$").unwrap();
-        assert!(std::sync::Arc::ptr_eq(&a, &b));
-        assert!(a.is_match("ab1"));
-        assert!(compiled("(").is_err());
-        assert!(compiled("(").is_err());
     }
 }

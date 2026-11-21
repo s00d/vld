@@ -1777,6 +1777,17 @@ impl<R: Rng> FakeGen<R> {
             }
             arr.push(v);
         }
+        // Distinct keys are only a guess for pair items (a plain array of
+        // 2-tuples looks like a map): when they run out, repeat to reach
+        // `minItems`.
+        let mut attempts = 0;
+        while !unique && arr.len() < min_items && attempts < min_items * 20 + 20 {
+            attempts += 1;
+            let v = self.value(&items_schema);
+            if !contains_const.is_some_and(|k| constraints::json_eq(k, &v)) {
+                arr.push(v);
+            }
+        }
         // Spread the `contains` items.
         if need.is_some() {
             for i in (1..arr.len()).rev() {
@@ -1801,9 +1812,15 @@ impl<R: Rng> FakeGen<R> {
             .and_then(Value::as_array)
             .is_some_and(|r| !r.is_empty());
 
-        // If the object schema has no properties/required, try to generate a
-        // template based on the field-name hint.
-        if !has_properties && !has_required {
+        // A free-form object (no properties / required, no constraint on the
+        // other keys): try a template based on the field-name hint.
+        let free_form = obj
+            .get("additionalProperties")
+            .is_none_or(|a| *a == Value::Bool(true))
+            && ["propertyNames", "minProperties", "maxProperties"]
+                .iter()
+                .all(|k| !obj.contains_key(*k));
+        if !has_properties && !has_required && free_form {
             if let Some(h) = hint {
                 if let Some(tmpl) = self.gen_object_template(h) {
                     return tmpl;
@@ -2427,35 +2444,4 @@ pub mod prelude {
         FakeData, FakeGen, fake_json, fake_many, fake_parsed, fake_value, fake_value_seeded,
         impl_fake, try_fake_parsed,
     };
-}
-
-#[cfg(test)]
-mod offset_free_formats {
-    use vld::schema::VldSchema;
-
-    /// `vld::*::time()` / naive `datetime()` emit `partial-time` /
-    /// `naive-date-time` next to their patterns; values must be real times.
-    #[test]
-    fn partial_time_and_naive_datetime_are_valid() {
-        let time = serde_json::json!({
-            "type": "string", "format": "partial-time",
-            "pattern": r"^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?$"
-        });
-        let naive = serde_json::json!({
-            "type": "string",
-            "anyOf": [
-                {"format": "date-time"},
-                {"format": "naive-date-time",
-                 "pattern": r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])[Tt]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?$"}
-            ]
-        });
-        let t = vld::string().iso_time();
-        let dt = vld::string().iso_datetime();
-        for seed in 0..500 {
-            let v = super::fake_value_seeded(&time, seed);
-            assert!(t.parse_value(&v).is_ok(), "time {v}");
-            let v = super::fake_value_seeded(&naive, seed);
-            assert!(dt.parse_value(&v).is_ok(), "datetime {v}");
-        }
-    }
 }

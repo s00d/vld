@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Breaking changes
+
+- vld-lapin: `VldLapinError` is `#[non_exhaustive]` and has a new variant `NotSettled`.
+
+### Added
+
+- `#[derive(Validate)]`: `T::validate_field(name, value)` checks one field by its deserialize name without the rest of the object.
+- `#[derive(Validate)]` honours `skip_serializing` / `skip_serializing_if`: `validate()` accepts a serialized form without those keys.
+- `[T; N]` implements `VldType` (an array of exactly `N` items).
+- Numbers: `one_of(&[..])` (`invalid_enum_value`, JSON Schema `enum`), keeping the numeric output.
+- Strings: `min_bytes` / `max_bytes` (UTF-8 bytes, origin `bytes`) and the `truncate(n)` transform.
+
+### Fixed
+
+- A type-range failure (`u8()` above 255, `f32()` overflow) now uses the `with_messages` text for `too_small` / `too_big`.
+- `number()` checks whole numbers exactly: `multiple_of` and bounds were judged in `f64` with a tolerance and accepted e.g. `2^63` as a multiple of 3.
+- Two `#[vld(...)]` attributes on one field were silently reduced to the first; now a compile error.
+- vld-lapin on lapin 3 / 4: an ack / nack / reject that sends nothing (delivery already settled, channel closed) returned `Ok(false)`, which the helpers dropped, so `ack_decode` reported success for an unacked message. They now return `VldLapinError::NotSettled`.
+- vld-sea `with-time`: time fractions are written in 3, 6 or 9 digits like chrono (`12:30:05.500`, was `12:30:05.5`), so `time` and chrono columns give the same text.
+- `number().multiple_of(..)` is exact for whole numbers beyond `i128` too.
+- `array().unique()` compares whole floats with integers by exact value at any magnitude (`9.3e18` and `9300000000000000000` are duplicates; floats at or above `9.2e18` were never equal to an integer).
+- `schema!`: a serde `rename` containing escapes (`rename = "a\"b"`) now gives the key serde uses (`a"b`); the escape text was kept verbatim.
+- A `union` with a branch that accepts a missing key (`optional()`, `with_default`, …) is no longer listed in the object's JSON Schema `required`.
+- vld-schemars `to_openapi3`: a null-only schema (`{"type": ["null"]}`, an `anyOf` of null branches) became `{"nullable": true}`, which allows any value; it now stays null-only.
+- vld-schemars validator: `multipleOf` with a fractional divisor accepted every value once the quotient passed ~1e9 (`100000000.35` for `0.1`); the tolerance is now 16 ulps.
+- vld-fake: field-name templates (e.g. `price`) replaced records, strict empty objects and objects with `propertyNames` / property counts, so the fake failed its own schema; they apply to free-form objects only.
+- vld-fake: arrays of 2-tuples could stop short of `minItems` when distinct keys ran out.
+- vld-ts Zod 4: `date-time` used `z.iso.datetime`, which accepts `HH:MM` and 10+ fraction digits and rejects lowercase `t` / `z`, unlike vld; it now uses the Zod 3 regex and calendar check, and `time` gets a seconds regex.
+
 ## [0.7.0] - 2026-11-07
 
 ### Breaking changes
@@ -256,32 +287,6 @@ See the [migration guide](https://s00d.github.io/vld/guides/migration).
 - Restore integration examples and tests build
 
 
-### chore
-
-
-- Downgrade workspace and crate versions to 0.3.0
-
-- Update dependencies and versions in Cargo files
-
-- Normalize integration dependency compatibility
-
-- Implement workspace-wide pre-release hook and update preflight script
-
-- Update pre-release hook and streamline release preflight script
-
-
-### ci
-
-
-- Unify workspace checks and restore crate version badges
-
-
-### release
-
-
-- V0.4.0 — unified utoipa OpenAPI, jiff/time date backends
-
-
 ## [0.3.0] - 2026-03-20
 
 
@@ -332,12 +337,6 @@ See the [migration guide](https://s00d.github.io/vld/guides/migration).
 - Stabilize clippy around optional combinator trait imports
 
 
-### chore
-
-
-- Automate changelog generation with git-cliff
-
-
 ## [0.2.0] - 2026-03-19
 
 
@@ -386,24 +385,6 @@ See the [migration guide](https://s00d.github.io/vld/guides/migration).
 - Formatting, clippy warnings, and missing imports across workspace
 
 
-### chore
-
-
-- Register vld-tonic and vld-leptos in workspace, update root README
-
-- Register vld-sqlx in workspace, update root README
-
-- Register vld-dioxus in workspace, update root README
-
-- Register vld-ntex in workspace, update root README
-
-- Register vld-aide in workspace, update root README
-
-- Register vld-surrealdb in workspace, update root README
-
-- Register vld-schemars in workspace, update root README
-
-
 ## [0.1.3] - 2026-03-19
 
 
@@ -414,12 +395,4 @@ See the [migration guide](https://s00d.github.io/vld/guides/migration).
 - Add health check endpoint and response schemas
 
 - Generate json_schema() for derive(Validate), enabling utoipa integration
-
-
-### chore
-
-
-- Bump workspace version to 0.1.2
-
-- Remove .idea/ from git tracking
 

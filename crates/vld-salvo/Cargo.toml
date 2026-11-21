@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version = "1.94"
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Salvo integration for the vld validation library"
 documentation = "https://docs.rs/vld-salvo"
 readme = "README.md"

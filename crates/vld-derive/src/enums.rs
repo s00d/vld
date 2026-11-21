@@ -10,7 +10,7 @@ use syn::{DataEnum, DeriveInput, Fields, LitStr};
 use crate::{
     FieldInfo, Names, RENAME_RULES, check_deny_unknown, collect_tokens, deny_tokens,
     field_parse_lets, infer_schema, named_field_infos, names, object_schema_tokens,
-    parse_vld_struct_attrs, schema_ref, serde_attrs, skip_meta, vld_type_impl,
+    parse_vld_struct_attrs, schema_ref, serde_attrs, skip_meta, vld_attr, vld_type_impl,
 };
 
 #[derive(Default)]
@@ -92,9 +92,7 @@ pub(crate) fn expand_enum(input: &DeriveInput, data: &DataEnum) -> syn::Result<T
         let ser_name = pick(attrs.rename.1, &serde.rename_all.1);
 
         let field_schema = |f: &syn::Field| -> syn::Result<Option<TokenStream2>> {
-            f.attrs
-                .iter()
-                .find(|a| a.path().is_ident("vld"))
+            vld_attr(f)?
                 .map(|a| a.parse_args::<TokenStream2>())
                 .transpose()
         };

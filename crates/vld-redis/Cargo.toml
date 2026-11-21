@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Redis integration for the vld validation library — validate payloads before set/publish and after get/subscribe"
 documentation = "https://docs.rs/vld-redis"
 readme = "README.md"
@@ -38,6 +37,7 @@ vld = { workspace = true }
 redis = { version = ">=0.32, <1", features = ["tokio-comp"] }
 redis1 = { package = "redis", version = ">=1, <2", features = ["tokio-comp"] }
 tokio = { workspace = true, features = ["rt", "macros"] }
+proptest = "1"
 
 [[example]]
 name = "redis_basic"

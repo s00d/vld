@@ -1,0 +1,9 @@
+//! vld-ts behaviour tests: models, stories and corpora, one test binary.
+//! See `TESTING.md` at the repository root for the layout and the rules.
+
+mod common;
+
+mod corpus_codegen;
+mod corpus_node;
+mod model_codegen;
+mod story_typescript_module;

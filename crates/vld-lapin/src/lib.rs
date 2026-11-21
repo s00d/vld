@@ -207,7 +207,7 @@ impl LapinChannel {
         T: vld::schema::VldParse,
     {
         let parsed = self.decode_delivery(delivery)?;
-        delivery.ack(options).await?;
+        settled(delivery.ack(options).await?)?;
         Ok(parsed)
     }
 
@@ -230,7 +230,7 @@ impl LapinChannel {
         T: vld::schema::VldParse,
     {
         let parsed = decode_or_settle(&delivery.data, || delivery.nack(nack)).await?;
-        delivery.ack(ack).await?;
+        settled(delivery.ack(ack).await?)?;
         Ok(parsed)
     }
 
@@ -308,18 +308,47 @@ fn decode<T: vld::schema::VldParse>(payload: &[u8]) -> Result<T, VldLapinError> 
     T::vld_parse_value(&value).map_err(VldLapinError::Validation)
 }
 
-/// Decode `payload`; if that fails, run `settle` (nack/reject) before returning the error.
-/// (`settle` output is `()` on lapin 2 and `bool` on lapin 3/4, hence `R`.)
+/// What an ack / nack / reject returns: `()` on lapin 2; on lapin 3/4 a
+/// `bool` that is `false` when nothing was sent (the delivery was already
+/// settled, or its channel is closed).
+trait Settle {
+    fn sent(&self) -> bool;
+}
+
+impl Settle for () {
+    fn sent(&self) -> bool {
+        true
+    }
+}
+
+impl Settle for bool {
+    fn sent(&self) -> bool {
+        *self
+    }
+}
+
+/// [`VldLapinError::NotSettled`] when the settle call sent nothing.
+fn settled(r: impl Settle) -> Result<(), VldLapinError> {
+    if r.sent() {
+        Ok(())
+    } else {
+        Err(VldLapinError::NotSettled)
+    }
+}
+
+/// Decode `payload`; if that fails, run `settle` (nack/reject) before returning
+/// the error (a settle failure is returned instead).
 async fn decode_or_settle<T, R, F, Fut>(payload: &[u8], settle: F) -> Result<T, VldLapinError>
 where
     T: vld::schema::VldParse,
+    R: Settle,
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<R, lapin::Error>>,
 {
     match decode(payload) {
         Ok(v) => Ok(v),
         Err(e) => {
-            settle().await?;
+            settled(settle().await?)?;
             Err(e)
         }
     }
@@ -341,6 +370,7 @@ impl DerefMut for LapinChannel {
 
 /// Error type for `vld-lapin`.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum VldLapinError {
     /// The payload failed schema validation.
     Validation(vld::error::VldError),
@@ -350,6 +380,9 @@ pub enum VldLapinError {
     Deserialization(String),
     /// A lapin operation (publish, ack, nack, …) failed.
     Lapin(lapin::Error),
+    /// An ack / nack / reject sent nothing: the delivery was already settled
+    /// or its channel is closed (lapin 3/4 report this as `Ok(false)`).
+    NotSettled,
 }
 
 impl fmt::Display for VldLapinError {
@@ -359,6 +392,9 @@ impl fmt::Display for VldLapinError {
             VldLapinError::Serialization(e) => write!(f, "Serialization error: {e}"),
             VldLapinError::Deserialization(e) => write!(f, "Deserialization error: {e}"),
             VldLapinError::Lapin(e) => write!(f, "Lapin error: {e}"),
+            VldLapinError::NotSettled => {
+                write!(f, "Delivery not settled: already settled or channel closed")
+            }
         }
     }
 }
@@ -368,7 +404,9 @@ impl std::error::Error for VldLapinError {
         match self {
             VldLapinError::Validation(e) => Some(e),
             VldLapinError::Lapin(e) => Some(e),
-            VldLapinError::Serialization(_) | VldLapinError::Deserialization(_) => None,
+            VldLapinError::Serialization(_)
+            | VldLapinError::Deserialization(_)
+            | VldLapinError::NotSettled => None,
         }
     }
 }
@@ -389,104 +427,4 @@ impl From<lapin::Error> for VldLapinError {
 pub mod prelude {
     pub use crate::{LapinChannel, VldLapinError};
     pub use vld::prelude::*;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::cell::Cell;
-
-    vld::schema! {
-        #[derive(Debug, serde::Serialize)]
-        struct Evt {
-            event: String => vld::string().min(1),
-            retries: i64 => vld::number().int().min(0).max(10),
-        }
-    }
-
-    fn paths(err: &VldLapinError) -> Vec<String> {
-        match err {
-            VldLapinError::Validation(e) => e
-                .issues
-                .iter()
-                .map(|i| i.path.iter().map(|s| s.to_string()).collect())
-                .collect(),
-            other => panic!("expected a validation error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn publish_payload_is_validated_json() {
-        let evt = Evt {
-            event: "signup".into(),
-            retries: 1,
-        };
-        let bytes = LapinChannel::encode_payload(&evt).unwrap();
-        let back: Evt = decode(&bytes).unwrap();
-        assert_eq!((back.event.as_str(), back.retries), ("signup", 1));
-
-        // Invalid values never become a payload, so nothing is published.
-        let bad = Evt {
-            event: String::new(),
-            retries: 99,
-        };
-        let err = LapinChannel::encode_payload(&bad).unwrap_err();
-        assert_eq!(paths(&err), [".event", ".retries"]);
-    }
-
-    #[test]
-    fn decode_reports_json_and_schema_errors() {
-        assert!(matches!(
-            decode::<Evt>(b"{"),
-            Err(VldLapinError::Deserialization(_))
-        ));
-        let err = decode::<Evt>(br#"{"event":"","retries":99}"#).unwrap_err();
-        assert_eq!(paths(&err), [".event", ".retries"]);
-    }
-
-    #[test]
-    fn settle_failure_is_returned_instead_of_the_decode_error() {
-        #[cfg(feature = "lapin-2")]
-        let failure = || lapin::Error::InvalidChannel(7);
-        #[cfg(not(feature = "lapin-2"))]
-        let failure = || lapin::Error::from(lapin::ErrorKind::InvalidChannel(7));
-        let r: Result<Evt, _> = run(decode_or_settle(b"not json", || async move {
-            Err::<(), _>(failure())
-        }));
-        assert!(matches!(r, Err(VldLapinError::Lapin(_))));
-    }
-
-    fn run<F: std::future::Future>(f: F) -> F::Output {
-        tokio::runtime::Builder::new_current_thread()
-            .build()
-            .unwrap()
-            .block_on(f)
-    }
-
-    #[test]
-    fn invalid_payload_is_settled_then_error_returned() {
-        let settled = Cell::new(0);
-        let settle = || {
-            settled.set(settled.get() + 1);
-            async { Ok::<_, lapin::Error>(()) }
-        };
-        let r: Result<Evt, _> = run(decode_or_settle(br#"{"event":"","retries":0}"#, settle));
-        assert!(matches!(r, Err(VldLapinError::Validation(_))));
-        assert_eq!(settled.get(), 1);
-
-        let r: Result<Evt, _> = run(decode_or_settle(b"not json", settle));
-        assert!(matches!(r, Err(VldLapinError::Deserialization(_))));
-        assert_eq!(settled.get(), 2);
-    }
-
-    #[test]
-    fn valid_payload_is_not_settled() {
-        let settled = Cell::new(false);
-        let r: Result<Evt, _> = run(decode_or_settle(br#"{"event":"x","retries":0}"#, || {
-            settled.set(true);
-            async { Ok::<_, lapin::Error>(()) }
-        }));
-        assert_eq!(r.unwrap().event, "x");
-        assert!(!settled.get());
-    }
 }

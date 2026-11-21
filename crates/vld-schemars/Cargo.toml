@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Bidirectional bridge between vld and schemars — convert JSON schemas in both directions, implement schemars::JsonSchema for vld types"
 documentation = "https://docs.rs/vld-schemars"
 readme = "README.md"
@@ -30,6 +29,7 @@ serde = { workspace = true }
 regex-lite = { workspace = true }
 
 [dev-dependencies]
+proptest = "1"
 vld = { workspace = true, features = ["openapi", "derive"] }
 serde = { workspace = true }
 

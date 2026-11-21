@@ -84,7 +84,7 @@ impl ZObject {
     ///
     /// With the `openapi` feature the field keeps its JSON Schema, its
     /// `required` status (`.optional()` / `.nullish()` / `.with_default(...)`
-    /// / `.nullable()` are not required) and its named nested schemas.
+    /// are not required; `.nullable()` is) and its named nested schemas.
     pub fn field<S: DynSchema + Send + Sync + 'static>(
         self,
         name: impl Into<String>,

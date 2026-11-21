@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Tauri IPC validation helpers for the vld validation library (framework-agnostic: no tauri dependency)"
 documentation = "https://docs.rs/vld-tauri"
 readme = "README.md"
@@ -24,3 +23,4 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 vld = { workspace = true }
+proptest = "1"

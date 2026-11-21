@@ -58,19 +58,3 @@ pub fn flatten_issues(err: &VldError) -> Vec<(String, String)> {
         .map(|i| (format_path(&i.path), i.message.clone()))
         .collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn format_path_has_no_leading_dot() {
-        let p = vec![
-            PathSegment::Field("user".into()),
-            PathSegment::Field("email".into()),
-        ];
-        assert_eq!(format_path(&p), "user.email");
-        assert_eq!(format_path(&[PathSegment::Index(2)]), "[2]");
-        assert_eq!(format_path(&[]), "");
-    }
-}

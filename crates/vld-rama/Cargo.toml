@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version = "1.96"
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Rama integration for the vld validation library"
 documentation = "https://docs.rs/vld-rama"
 readme = "README.md"

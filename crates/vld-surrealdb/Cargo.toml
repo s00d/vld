@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "SurrealDB helpers for the vld validation library — validate JSON documents before create/insert/update and after select (SDK-agnostic: no surrealdb dependency)"
 documentation = "https://docs.rs/vld-surrealdb"
 readme = "README.md"
@@ -24,6 +23,7 @@ vld-integration-common = { workspace = true }
 
 [dev-dependencies]
 vld = { workspace = true }
+proptest = "1"
 
 [[example]]
 name = "surrealdb_basic"

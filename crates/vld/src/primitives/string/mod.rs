@@ -15,6 +15,8 @@ enum StringTransform {
     Trim,
     ToLowerCase,
     ToUpperCase,
+    /// Keep the first `n` characters.
+    Truncate(usize),
 }
 
 /// Schema for string validation. Created via [`vld::string()`](crate::string).
@@ -104,6 +106,26 @@ impl ZString {
     /// Minimum string length in characters (inclusive).
     pub fn min(self, len: usize) -> Self {
         self.push(Kind::Min(len), None)
+    }
+
+    /// Minimum UTF-8 length in **bytes** (`too_small`, origin `bytes`):
+    /// for byte-limited storage. [`min`](Self::min) counts characters.
+    pub fn min_bytes(self, n: usize) -> Self {
+        self.push(Kind::MinBytes(n), None)
+    }
+
+    /// Maximum UTF-8 length in **bytes** (`too_big`, origin `bytes`).
+    /// Not expressible in JSON Schema (`maxLength` counts characters), so it
+    /// is left out of it.
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let name = vld::string().max_bytes(4);
+    /// assert!(name.parse(r#""abcd""#).is_ok());
+    /// assert!(name.parse(r#""абв""#).is_err()); // 3 characters, 6 bytes
+    /// ```
+    pub fn max_bytes(self, n: usize) -> Self {
+        self.push(Kind::MaxBytes(n), None)
     }
 
     /// Minimum string length with custom message.
@@ -227,6 +249,20 @@ impl ZString {
         self
     }
 
+    /// Keep at most the first `n` characters (before the checks, in the
+    /// order transforms were added): for storage limits that cut instead of
+    /// rejecting.
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let title = vld::string().trim().truncate(5);
+    /// assert_eq!(title.parse(r#"" Hello, world ""#).unwrap(), "Hello");
+    /// ```
+    pub fn truncate(mut self, n: usize) -> Self {
+        self.transforms.push(StringTransform::Truncate(n));
+        self
+    }
+
     /// Convert to uppercase before validation.
     pub fn to_uppercase(mut self) -> Self {
         self.transforms.push(StringTransform::ToUpperCase);
@@ -283,6 +319,10 @@ impl VldSchema for ZString {
                 StringTransform::Trim => s.trim().to_string(),
                 StringTransform::ToLowerCase => s.to_lowercase(),
                 StringTransform::ToUpperCase => s.to_uppercase(),
+                StringTransform::Truncate(n) => match s.char_indices().nth(*n) {
+                    Some((at, _)) => s[..at].to_string(),
+                    None => s,
+                },
             };
         }
 
@@ -336,6 +376,8 @@ impl crate::openapi::JsonSchema for ZString {
                     maxs.push(*n);
                 }
                 Kind::NonEmpty => mins.push(1),
+                // `maxLength` counts characters, not bytes.
+                Kind::MinBytes(_) | Kind::MaxBytes(_) => {}
                 Kind::StartsWith(p) => patterns.push(format!("^{}", regex_escape(p))),
                 Kind::EndsWith(p) => patterns.push(format!("{}$", regex_escape(p))),
                 Kind::Contains(p) => patterns.push(regex_escape(p)),

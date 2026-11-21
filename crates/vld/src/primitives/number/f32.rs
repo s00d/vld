@@ -123,7 +123,7 @@ impl VldSchema for ZF32 {
         // (values within half an ulp of f32::MAX round down to it).
         let limit = f64::from(f32::MAX);
         if out == f32::NEG_INFINITY {
-            return Err(VldError::from_code_with_value(
+            return Err(self.inner.range_error(
                 IssueCode::TooSmall {
                     origin: SizeOrigin::Number,
                     minimum: (-limit).into(),
@@ -133,7 +133,7 @@ impl VldSchema for ZF32 {
             ));
         }
         if out == f32::INFINITY {
-            return Err(VldError::from_code_with_value(
+            return Err(self.inner.range_error(
                 IssueCode::TooBig {
                     origin: SizeOrigin::Number,
                     maximum: limit.into(),

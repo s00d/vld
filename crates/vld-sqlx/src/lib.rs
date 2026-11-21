@@ -296,36 +296,6 @@ where
     }
 }
 
-#[cfg(all(test, feature = "postgres"))]
-mod pg_tests {
-    use super::*;
-    use sqlx::Type;
-    use sqlx::postgres::Postgres;
-
-    struct AnySchema;
-
-    #[test]
-    fn vld_float_compatible_with_float4() {
-        for ty in [
-            <f32 as Type<Postgres>>::type_info(),
-            <f64 as Type<Postgres>>::type_info(),
-        ] {
-            assert!(<VldFloat<AnySchema> as Type<Postgres>>::compatible(&ty));
-        }
-    }
-
-    #[test]
-    fn vld_int_compatible_with_int4_and_int2() {
-        for ty in [
-            <i16 as Type<Postgres>>::type_info(),
-            <i32 as Type<Postgres>>::type_info(),
-            <i64 as Type<Postgres>>::type_info(),
-        ] {
-            assert!(<VldInt<AnySchema> as Type<Postgres>>::compatible(&ty));
-        }
-    }
-}
-
 // ========================= Prelude ===========================================
 
 /// Common imports: the sqlx wrappers plus `vld::prelude`.

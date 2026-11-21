@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "SQLx integration for the vld validation library — validate before insert/update, typed column wrappers"
 documentation = "https://docs.rs/vld-sqlx"
 readme = "README.md"
@@ -36,6 +35,7 @@ sqlx08 = { package = "sqlx", version = "0.8", features = ["sqlite", "runtime-tok
 sqlx09 = { package = "sqlx", version = "0.9", features = ["sqlite", "runtime-tokio"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 serde_json = { workspace = true }
+proptest = "1"
 
 [[example]]
 name = "sqlx_basic"

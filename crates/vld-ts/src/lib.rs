@@ -93,7 +93,7 @@ where
 
 /// Convert a vld schema instance directly to Zod 4.
 ///
-/// Zod 4 idioms: top-level formats (`z.email()`, `z.iso.datetime()`, …),
+/// Zod 4 idioms: top-level formats (`z.email()`, `z.iso.date()`, …),
 /// `z.int()`, `z.strictObject` / `z.looseObject`, `{ error }` messages.
 ///
 /// # Example
@@ -709,9 +709,15 @@ fn zod4_format(fmt: &str) -> Option<(String, Vec<Act>)> {
         "ipv4" => "z.ipv4()",
         "ipv6" => "z.ipv6()",
         "date" => "z.iso.date()",
-        // vld: optional `Z` / `±HH:MM`, seconds required.
-        "date-time" => "z.iso.datetime({ offset: true, local: true })",
-        "time" => "z.iso.time()",
+        // `date-time` stays a `z.string()` chain: `z.iso.datetime()` rejects
+        // vld's lowercase `t` / `z` and takes `HH:MM` without seconds.
+        // vld's `HH:MM[:SS[.1-9 digits]]`; `z.iso.time()` takes any digits.
+        "time" => {
+            return Some((
+                "z.iso.time()".to_string(),
+                vec![plain(format!("regex(/^{}$/)", TIME_RE))],
+            ));
+        }
         _ => return None,
     };
     Some((base.to_string(), vec![]))

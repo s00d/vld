@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Type-safe runtime validation library for Rust, inspired by Zod"
 documentation = "https://docs.rs/vld"
 readme = "../../README.md"

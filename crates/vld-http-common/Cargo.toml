@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Shared HTTP helpers for vld web-framework integrations (internal)"
 documentation = "https://docs.rs/vld-http-common"
 readme = "README.md"
@@ -26,5 +25,4 @@ serde_json = { workspace = true }
 vld = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }
-vld = { workspace = true }
+proptest = "1"

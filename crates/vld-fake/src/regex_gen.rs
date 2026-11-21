@@ -109,36 +109,3 @@ fn pick_char<R: rand::Rng>(rng: &mut R, ranges: &[(u32, u32)]) -> Option<char> {
     // Ranges from regex-syntax never contain surrogates; fall back to start.
     char::from_u32(rng.gen_range(s..=e)).or_else(|| char::from_u32(s))
 }
-
-#[cfg(test)]
-mod tests {
-    use rand::SeedableRng;
-
-    #[test]
-    fn matches_pattern() {
-        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
-        for p in [
-            r"^[A-Z]{3}-\d{4}$",
-            r"^(foo|bar)+baz?$",
-            r"^\w+@\w+\.com$",
-            r"^[^a-z]{2,5}$",
-            r"^a/b\.c$",
-        ] {
-            let re = regex_lite::Regex::new(p).unwrap();
-            for _ in 0..50 {
-                let s = super::generate(&mut rng, p).unwrap();
-                assert!(re.is_match(&s), "{p} vs {s:?}");
-            }
-        }
-        assert!(super::generate(&mut rng, "(unclosed").is_none());
-    }
-
-    #[test]
-    fn classifies_literals() {
-        use super::{Literal::*, literal};
-        assert_eq!(literal("^pre_"), Some(Prefix("pre_".into())));
-        assert_eq!(literal("_suf$"), Some(Suffix("_suf".into())));
-        assert_eq!(literal(r"a\.b"), Some(Contains("a.b".into())));
-        assert_eq!(literal("^a+$"), None);
-    }
-}

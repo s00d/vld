@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Alias of vld-schemars for aide users: re-exports impl_json_schema!/vld_to_schemars (no aide dependency)"
 documentation = "https://docs.rs/vld-aide"
 readme = "README.md"

@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Config validation for vld — validate TOML/YAML/JSON/ENV configs at load time"
 documentation = "https://docs.rs/vld-config"
 readme = "README.md"
@@ -32,6 +31,7 @@ vld = { workspace = true }
 config = { version = ">=0.14, <0.16", features = ["toml", "json", "yaml"] }
 figment = { version = "0.10", features = ["toml", "json", "env", "test"] }
 tempfile = "3"
+proptest = "1"
 
 [[example]]
 name = "config_basic"

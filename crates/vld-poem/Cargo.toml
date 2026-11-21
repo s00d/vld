@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Poem integration for the vld validation library"
 documentation = "https://docs.rs/vld-poem"
 readme = "README.md"

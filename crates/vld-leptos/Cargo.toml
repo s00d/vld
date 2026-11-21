@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Leptos helpers for the vld validation library — shared validation for server functions and WASM clients (framework-agnostic: no leptos dependency)"
 documentation = "https://docs.rs/vld-leptos"
 readme = "README.md"

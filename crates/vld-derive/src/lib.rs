@@ -143,6 +143,9 @@ pub(crate) struct FieldInfo {
     flatten: bool,
     /// Value used when the key is missing (`#[serde(default)]`).
     default: Option<TokenStream2>,
+    /// `#[serde(skip_serializing(_if))]`: absent from the serialized form
+    /// `validate()` checks, so an absent key there takes `Default::default()`.
+    skip_ser: bool,
 }
 
 fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
@@ -215,7 +218,7 @@ pub(crate) fn named_field_infos<'a>(
         let key = pick(serde_field.rename.0, &rename_all.0);
         let ser_key = pick(serde_field.rename.1, &rename_all.1);
 
-        let vld_attr = field.attrs.iter().find(|a| a.path().is_ident("vld"));
+        let vld_attr = vld_attr(field)?;
         let schema = if serde_field.skip {
             None
         } else if serde_field.flatten {
@@ -239,6 +242,7 @@ pub(crate) fn named_field_infos<'a>(
         infos.push(FieldInfo {
             ident,
             ty: field.ty.clone(),
+            skip_ser: serde_field.skip_ser,
             flatten: serde_field.flatten && !serde_field.skip,
             key,
             ser_key,
@@ -247,6 +251,19 @@ pub(crate) fn named_field_infos<'a>(
         });
     }
     Ok(infos)
+}
+
+/// The field's `#[vld(...)]` attribute; a second one is a compile error.
+pub(crate) fn vld_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribute>> {
+    let mut attrs = field.attrs.iter().filter(|a| a.path().is_ident("vld"));
+    let first = attrs.next();
+    match attrs.next() {
+        Some(extra) => Err(syn::Error::new(
+            extra.span(),
+            "vld: one #[vld(...)] attribute per field (chain the checks in one schema)",
+        )),
+        None => Ok(first),
+    }
 }
 
 /// The schema of a field without `#[vld(...)]`: its type's
@@ -343,6 +360,18 @@ pub(crate) fn field_parse_lets(infos: &[FieldInfo], generic: bool) -> Vec<TokenS
                 if __vld_obj.contains_key(#key) { #parse } else { ::std::option::Option::Some(#d) }
             },
             None => parse,
+        };
+        // Serialization may leave the key out: `validate()` takes the default then.
+        let value = if f.skip_ser {
+            quote! {
+                if __vld_ser && !__vld_obj.contains_key(#ser_key) {
+                    ::std::option::Option::Some(::std::default::Default::default())
+                } else {
+                    #value
+                }
+            }
+        } else {
+            value
         };
         quote! {
             #[allow(non_snake_case)]
@@ -572,11 +601,41 @@ fn expand_struct(
         }
     };
 
+    let field_arms = infos.iter().filter(|f| !f.flatten).filter_map(|f| {
+        let schema = schema_ref(f.schema.as_ref()?);
+        let key = &f.key;
+        let missing_ok = f.default.is_some();
+        Some(quote! {
+            #key => {
+                if #missing_ok && __vld_value.is_none() {
+                    return ::std::result::Result::Ok(());
+                }
+                ::vld::__private::check_field(#key, __vld_value, #schema)
+            }
+        })
+    });
     let vld_type = vld_type_impl(input);
     Ok(quote! {
         #vld_type
 
         impl #impl_generics #name #ty_generics #where_clause {
+            /// Validate the value of one field, by its deserialize name, without
+            /// the rest of the object: `None` is an absent key. Issues carry the
+            /// field's path; an unknown name fails with `unrecognized_field`.
+            /// Flattened fields are not addressable by name.
+            #[allow(unused_variables)]
+            pub fn validate_field(
+                __vld_name: &str,
+                __vld_value: ::std::option::Option<&::vld::serde_json::Value>,
+            ) -> ::std::result::Result<(), ::vld::error::VldError> {
+                #[allow(unused_imports)]
+                use ::vld::schema::VldSchema as _;
+                match __vld_name {
+                    #( #field_arms )*
+                    _ => ::std::result::Result::Err(::vld::__private::unknown_field(__vld_name)),
+                }
+            }
+
             /// Parse and validate input data into this struct.
             ///
             /// Named `vld_parse` to avoid conflicts with other derive macros
@@ -746,6 +805,8 @@ struct SerdeStruct {
 pub(crate) struct SerdeField {
     rename: Names,
     skip: bool,
+    /// `skip_serializing` / `skip_serializing_if`.
+    skip_ser: bool,
     flatten: bool,
     default: Option<TokenStream2>,
 }
@@ -836,6 +897,9 @@ pub(crate) fn parse_serde_field_attrs(attrs: &[syn::Attribute]) -> syn::Result<S
                 });
             } else if p.is_ident("flatten") {
                 out.flatten = true;
+            } else if p.is_ident("skip_serializing") || p.is_ident("skip_serializing_if") {
+                out.skip_ser = true;
+                skip_meta(&meta)?;
             } else if p.is_ident("alias") {
                 return Err(meta.error(format!(
                     "vld: #[serde({})] is not supported by #[derive(Validate)]",

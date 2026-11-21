@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "tonic gRPC integration for the vld validation library — validate protobuf messages and metadata"
 documentation = "https://docs.rs/vld-tonic"
 readme = "README.md"

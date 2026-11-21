@@ -715,7 +715,8 @@ pub fn to_openapi3(value: &mut Value) {
                     map.insert("nullable".into(), Value::Bool(true));
                     match <[Value; 1]>::try_from(rest) {
                         Ok([one]) => map.insert("type".into(), one),
-                        Err(rest) if rest.is_empty() => map.remove("type"),
+                        // `["null"]`: a null-only schema, rewritten below.
+                        Err(rest) if rest.is_empty() => map.insert("type".into(), "null".into()),
                         Err(rest) => map.insert("type".into(), Value::Array(rest)),
                     };
                 }
@@ -744,7 +745,10 @@ pub fn to_openapi3(value: &mut Value) {
                     Ok([one]) => {
                         map.insert("allOf".into(), Value::Array(vec![one]));
                     }
-                    Err(rest) if rest.is_empty() => {}
+                    // Only `null` branches: a null-only schema, rewritten below.
+                    Err(rest) if rest.is_empty() => {
+                        map.insert("type".into(), "null".into());
+                    }
                     Err(rest) => {
                         map.insert(key.into(), Value::Array(rest));
                     }

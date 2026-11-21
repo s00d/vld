@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Lapin (RabbitMQ) integration for the vld validation library — validate message payloads before publish and after consume"
 documentation = "https://docs.rs/vld-lapin"
 readme = "README.md"
@@ -33,6 +32,7 @@ lapin4 = { package = "lapin", version = "4.10", optional = true }
 [dev-dependencies]
 vld = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+proptest = "1"
 
 [[example]]
 name = "lapin_basic"

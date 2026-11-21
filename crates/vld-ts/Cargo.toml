@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Generate TypeScript Zod schemas from vld schemas and types"
 documentation = "https://docs.rs/vld-ts"
 readme = "README.md"
@@ -25,6 +24,7 @@ name = "generate_zod"
 path = "examples/generate_zod.rs"
 
 [dev-dependencies]
+proptest = "1"
 insta = { workspace = true }
 vld = { workspace = true, features = ["openapi", "regex", "string-advanced", "derive"] }
 serde = { workspace = true }

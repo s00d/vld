@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "utoipa integration for the vld validation library — auto-generate OpenAPI schemas from vld definitions"
 documentation = "https://docs.rs/vld-utoipa"
 readme = "README.md"
@@ -28,6 +27,7 @@ utoipa6 = { package = "utoipa", version = "6", optional = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+proptest = "1"
 insta = { workspace = true }
 serde = { workspace = true }
 vld = { workspace = true, features = ["openapi", "derive"] }

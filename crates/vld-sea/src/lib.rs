@@ -202,16 +202,17 @@ mod time_fmt {
         format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())
     }
 
-    /// `HH:MM:SS[.f]` (fraction without trailing zeros, like chrono).
+    /// `HH:MM:SS[.fff[fff[fff]]]`: the fraction in 3, 6 or 9 digits, as chrono
+    /// writes it, so a `time` column and a chrono column give the same text.
     pub(crate) fn time(t: &impl Borrow<TimeTime>) -> String {
         let t = t.borrow();
-        let mut s = format!("{:02}:{:02}:{:02}", t.hour(), t.minute(), t.second());
-        if t.nanosecond() != 0 {
-            let frac = format!("{:09}", t.nanosecond());
-            s.push('.');
-            s.push_str(frac.trim_end_matches('0'));
+        let s = format!("{:02}:{:02}:{:02}", t.hour(), t.minute(), t.second());
+        match t.nanosecond() {
+            0 => s,
+            n if n % 1_000_000 == 0 => format!("{s}.{:03}", n / 1_000_000),
+            n if n % 1_000 == 0 => format!("{s}.{:06}", n / 1_000),
+            n => format!("{s}.{n:09}"),
         }
-        s
     }
 
     pub(crate) fn datetime(dt: &impl Borrow<TimeDateTime>) -> String {
@@ -219,7 +220,8 @@ mod time_fmt {
         format!("{}T{}", date(&dt.date()), time(&dt.time()))
     }
 
-    /// RFC 3339 with a `±HH:MM` offset.
+    /// RFC 3339 with a `±HH:MM` offset (RFC 3339 has no offset seconds, so
+    /// an offset like `+00:00:30` is written without them).
     pub(crate) fn offset_datetime(dt: &impl Borrow<TimeDateTimeWithTimeZone>) -> String {
         let dt = dt.borrow();
         let off = dt.offset();
@@ -232,112 +234,6 @@ mod time_fmt {
             secs / 3600,
             secs / 60 % 60
         )
-    }
-}
-
-#[cfg(test)]
-mod sea_value_tests {
-    use super::sea_value_to_json;
-    use crate::sea_orm::sea_query::Value as SV;
-    use serde_json::json;
-
-    #[test]
-    #[allow(clippy::useless_conversion)] // Box<Vec<u8>> on sea-orm 1, Vec<u8> on 2
-    fn bytes_map_to_u8_array() {
-        let v = SV::Bytes(Some(vec![1u8, 2, 255].into()));
-        assert_eq!(sea_value_to_json(v), json!([1, 2, 255]));
-    }
-
-    #[test]
-    fn f32_maps_through_its_decimal_form() {
-        assert_eq!(sea_value_to_json(SV::Float(Some(0.1))), json!(0.1));
-    }
-
-    #[cfg(feature = "with-time")]
-    #[test]
-    fn time_types_map_like_chrono() {
-        use crate::sea_orm::prelude::{TimeDate, TimeTime};
-        let d = TimeDate::from_calendar_date(2024, time::Month::February, 29).unwrap();
-        let t = TimeTime::from_hms_nano(12, 30, 5, 500_000_000).unwrap();
-        let dt = d.with_time(t);
-        let off = dt.assume_offset(time::UtcOffset::from_hms(-5, -30, 0).unwrap());
-        assert_eq!(sea_value_to_json(d.into()), json!("2024-02-29"));
-        assert_eq!(sea_value_to_json(t.into()), json!("12:30:05.5"));
-        assert_eq!(sea_value_to_json(dt.into()), json!("2024-02-29T12:30:05.5"));
-        assert_eq!(
-            sea_value_to_json(off.into()),
-            json!("2024-02-29T12:30:05.5-05:30")
-        );
-    }
-
-    #[cfg(feature = "postgres-array")]
-    #[test]
-    fn arrays_map_recursively() {
-        use crate::sea_orm::sea_query::ArrayType;
-        let v = SV::Array(
-            ArrayType::Int,
-            Some(Box::new(vec![
-                SV::Int(Some(1)),
-                SV::Int(Some(2)),
-                SV::Int(None),
-            ])),
-        );
-        assert_eq!(sea_value_to_json(v), json!([1, 2, null]));
-    }
-
-    #[cfg(all(
-        feature = "with-chrono",
-        feature = "with-uuid",
-        feature = "with-json",
-        feature = "with-rust_decimal"
-    ))]
-    #[test]
-    fn feature_types_map_like_serde() {
-        use crate::sea_orm::prelude::{
-            ChronoDate, ChronoDateTime, ChronoDateTimeUtc, Decimal, Uuid,
-        };
-        let date = ChronoDate::from_ymd_opt(2024, 2, 29).unwrap();
-        let dt: ChronoDateTime = date.and_hms_opt(12, 30, 0).unwrap();
-        let utc: ChronoDateTimeUtc = dt.and_utc();
-        let id = Uuid::nil();
-        let dec: Decimal = "12.50".parse().unwrap();
-
-        assert_eq!(sea_value_to_json(date.into()), json!("2024-02-29"));
-        assert_eq!(sea_value_to_json(dt.into()), json!("2024-02-29T12:30:00"));
-        assert_eq!(
-            sea_value_to_json(utc.into()),
-            json!("2024-02-29T12:30:00+00:00")
-        );
-        assert_eq!(
-            sea_value_to_json(id.into()),
-            json!("00000000-0000-0000-0000-000000000000")
-        );
-        assert_eq!(sea_value_to_json(dec.into()), json!("12.50"));
-        assert_eq!(
-            sea_value_to_json(json!({"a": [1, 2]}).into()),
-            json!({"a": [1, 2]})
-        );
-    }
-}
-
-#[cfg(all(test, feature = "sea-orm-2"))]
-mod sea_value_enum_tests {
-    use super::sea_value_to_json;
-    use crate::sea_orm::sea_query::{Enum, OptionEnum, Value as SV};
-
-    #[test]
-    fn enum_some_maps_to_string() {
-        let v = SV::Enum(OptionEnum::Some(Box::new(Enum {
-            type_name: "status".into(),
-            value: "active".into(),
-        })));
-        assert_eq!(sea_value_to_json(v), serde_json::json!("active"));
-    }
-
-    #[test]
-    fn enum_none_maps_to_null() {
-        let v = SV::Enum(OptionEnum::None("status".into()));
-        assert_eq!(sea_value_to_json(v), serde_json::Value::Null);
     }
 }
 

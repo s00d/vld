@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 description = "Generate fake / test data from vld JSON Schemas"
 documentation = "https://docs.rs/vld-fake"
 readme = "README.md"
@@ -24,5 +23,6 @@ rand = "0.10"
 regex-syntax = { version = "0.8", default-features = false, features = ["std", "unicode"] }
 
 [dev-dependencies]
+proptest = "1"
 vld = { workspace = true, features = ["openapi", "chrono", "regex", "string-advanced", "decimal", "net"] }
 serde = { workspace = true }
