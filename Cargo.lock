@@ -9504,7 +9504,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vld"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "criterion",
@@ -9535,7 +9535,7 @@ dependencies = [
 
 [[package]]
 name = "vld-app"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "clap",
  "config",
@@ -9549,7 +9549,7 @@ dependencies = [
 
 [[package]]
 name = "vld-data"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "diesel",
  "lapin 2.5.5",
@@ -9571,7 +9571,7 @@ dependencies = [
 
 [[package]]
 name = "vld-derive"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9580,7 +9580,7 @@ dependencies = [
 
 [[package]]
 name = "vld-openapi"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "insta",
  "proptest",
@@ -9596,7 +9596,7 @@ dependencies = [
 
 [[package]]
 name = "vld-web"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "actix-rt",
  "actix-web",
