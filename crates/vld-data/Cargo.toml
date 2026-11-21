@@ -9,7 +9,8 @@ description = "Database and message-queue integrations for the vld validation li
 documentation = "https://docs.rs/vld-data"
 keywords = ["validation", "database", "sqlx", "diesel", "vld"]
 categories = ["database", "web-programming"]
-include = ["/src/**", "/LICENSE", "/Cargo.toml"]
+readme = "README.md"
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [lints]
 workspace = true

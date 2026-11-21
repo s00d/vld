@@ -10,7 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking changes
 
+- **The 30 crates are merged into six**: `vld`, `vld-derive`, `vld-web`, `vld-openapi`, `vld-data`, `vld-app`, released together with one version. Every integration is a public module of its group crate behind a feature, with the items of the former crate (`VldJson`, its error type, `prelude`, …). The other 24 crates are no longer published. Guide: [migration](https://s00d.github.io/vld/guides/migration).
+- **No default features** in any crate: name what you use. Former defaults: `vld-ntex` → `ntex-4`; `vld-utoipa` → `utoipa-5`; `vld-schemars`, `vld-aide` → `schemars-0`; `vld-sqlx` → `sqlx-0_8` + `sqlite`; `vld-diesel` → `diesel` + `sqlite`; `vld-sea` → `sea-orm-1`; `vld-redis` → `redis-0`; `vld-lapin` → `lapin-2`; `vld-config` → `config-rs`.
+- **Majors are additive**: each supported major of a dependency is its own feature and module (`ntex3` / `ntex4`, `utoipa5` / `utoipa6`, `schemars0` / `schemars1`, `sqlx08` / `sqlx09`, `sea1` / `sea2`, `redis0` / `redis1`, `lapin2` / `lapin3` / `lapin4`), and any set can be enabled together; enabling two used to be a compile error.
+- **Macros moved from the crate root to their module**: `vld::ts::{impl_to_zod, impl_to_zod4, impl_to_valibot, impl_to_ts_type, impl_to_openapi}!`, `vld::fake::impl_fake!`, `vld::form::validate_args!`, `vld_openapi::utoipa5::impl_to_schema!` / `utoipa6::impl_to_schema!`, `vld_openapi::schemars0::{impl_json_schema, impl_vld_parse}!` / `schemars1::…`, `vld_web::tonic::impl_validate!`, `vld_data::sea1::impl_vld_before_save!` / `sea2::…`, `vld_data::surrealdb::validate_fields!`.
+- Renamed features: vld-redis `aio` / `aio-tokio` → `redis-aio` / `redis-aio-tokio`; vld-ntex `compress` → `ntex-compress`. vld-http-common's `conformance` feature is removed (the suite is test-only in `vld-web`).
+- `vld::form` (former vld-leptos / vld-dioxus) has no `prelude`; import its items directly.
 - vld-lapin: `VldLapinError` is `#[non_exhaustive]` and has a new variant `NotSettled`.
+
+### Migration
+
+| 0.7 crate | 0.8 crate + feature | Path |
+|---|---|---|
+| `vld-http-common` | `vld-web` | `vld_web::common` |
+| `vld-axum`, `vld-actix`, `vld-poem`, `vld-rocket`, `vld-salvo`, `vld-warp`, `vld-rama`, `vld-tower`, `vld-tonic` | `vld-web` + `<name>` | `vld_web::<name>` |
+| `vld-ntex` | `vld-web` + `ntex-3` / `ntex-4` (+ `ntex-compress`) | `vld_web::ntex3` / `vld_web::ntex4` |
+| `vld-utoipa` | `vld-openapi` + `utoipa-5` / `utoipa-6` | `vld_openapi::utoipa5` / `utoipa6` |
+| `vld-schemars`, `vld-aide` | `vld-openapi` + `schemars-0` / `schemars-1` | `vld_openapi::schemars0` / `schemars1`; validator: `vld_openapi::validator` (always on) |
+| `vld-ts` | `vld` + `ts` | `vld::ts` |
+| `vld-fake` | `vld` + `fake` | `vld::fake` |
+| `vld-leptos`, `vld-dioxus` | `vld` | `vld::form` |
+| `vld-sqlx` | `vld-data` + `sqlx-0_8` / `sqlx-0_9` + `postgres` / `mysql` / `sqlite` | `vld_data::sqlx08` / `sqlx09` |
+| `vld-diesel` | `vld-data` + `diesel` + `postgres` / `mysql` / `sqlite` | `vld_data::diesel` |
+| `vld-sea` | `vld-data` + `sea-orm-1` / `sea-orm-2` (+ `with-*`, `postgres-array`) | `vld_data::sea1` / `sea2` |
+| `vld-surrealdb` | `vld-data` | `vld_data::surrealdb` |
+| `vld-redis` | `vld-data` + `redis-0` / `redis-1` (+ `redis-aio`, `redis-aio-tokio`) | `vld_data::redis0` / `redis1` |
+| `vld-lapin` | `vld-data` + `lapin-2` / `lapin-3` / `lapin-4` | `vld_data::lapin2` / `lapin3` / `lapin4` |
+| `vld-config` | `vld-app` + `config-rs` / `figment` | `vld_app::config` |
+| `vld-clap` | `vld-app` + `clap` | `vld_app::clap` |
+| `vld-tauri` | `vld-app` | `vld_app::tauri` |
+| `vld-integration-common` | `vld` | `vld::form`, `vld::error::{format_path, flatten_issues}` |
+
+Using both SQLx majors in one process: each maps SQLite `":memory:"` to the same shared-cache name (`sqlx-in-memory-0`), so give in-memory databases distinct names.
 
 ### Added
 

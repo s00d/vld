@@ -8,7 +8,7 @@
 //! error body by hand. It is framework-agnostic: no HTTP framework or `http`
 //! crate dependency.
 //!
-//! Guide: <https://s00d.github.io/vld/integrations/shared/http-common>
+//! Guide: <https://s00d.github.io/vld/integrations/web/common>
 //! (the rules below, per framework:
 //! <https://s00d.github.io/vld/integrations/web/overview>).
 //!

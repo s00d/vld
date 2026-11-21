@@ -21,10 +21,14 @@ except checks the public API cannot make: `crates/vld/src/error/code.rs` and `er
 (the exhaustive match over the `#[non_exhaustive]` `IssueCode`, the template-table walks) and
 `crates/vld-derive/src/` (rename helpers and the derive's compile errors; no `trybuild`).
 
-Integration crates (`vld-axum`, `vld-sqlx`, …): stories through the real framework (a request
-through the router, a row through the database layer, a config file through the loader), covering
-every extractor / entry point the crate exports, the error response and the OpenAPI output. HTTP
-crates keep the shared conformance suite (`vld_http_common::conformance`).
+Group crates (`vld-web`, `vld-openapi`, `vld-data`, `vld-app`): one directory per integration,
+`crates/<group>/tests/it/<integration>/`, compiled by `main.rs` only with that integration's feature
+(`#[cfg(feature = "axum")] mod axum;`). A dependency with several majors has one wrapper file per
+major (`tests/it/sqlx08.rs`, `sqlx09.rs`, `ntex3.rs`, …) that compiles the shared directory against
+that major, the same way as `src/`. Tests are stories through the real framework (a request through
+the router, a row through the database layer, a config file through the loader), covering every
+extractor / entry point the module exports, the error response and the OpenAPI output. Every
+`vld-web` module also runs the shared HTTP conformance suite (`crates/vld-web/tests/it/conformance/`).
 
 ## Rules
 
@@ -44,11 +48,14 @@ crates keep the shared conformance suite (`vld_http_common::conformance`).
 ```bash
 cargo nextest run -p vld --all-features                # one crate
 cargo nextest run -p vld --all-features -E 'test(/^story_api_request::/)'   # one area
-just test                                              # what CI runs (CONTRIBUTING.md)
+cargo nextest run -p vld-web --features axum           # one integration
+just test-group web                                    # one group, as its CI job runs it
+just test                                              # every group (CONTRIBUTING.md)
 ```
 
-Snapshots (`vld`, `vld-utoipa`, `vld-aide`) are insta files in `tests/it/snapshots/` (`vld::ts`: `tests/it/ts/snapshots/`):
-`cargo insta test -p <crate>`, then `cargo insta review`. The `vld::ts` Node cross-check runs only
+Snapshots are insta files in `crates/vld/tests/it/snapshots/`, `crates/vld/tests/it/ts/snapshots/`
+and `crates/vld-openapi/tests/it/{utoipa,schemars}/snapshots/`: `cargo insta test -p <crate>
+--all-features`, then `cargo insta review`. The `vld::ts` Node cross-check runs only
 with `VLD_TS_NODE_DIR` set (see `CONTRIBUTING.md`).
 
 ## Mutation testing

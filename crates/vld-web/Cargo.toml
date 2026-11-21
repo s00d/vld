@@ -9,7 +9,8 @@ description = "Web framework integrations for the vld validation library: axum, 
 documentation = "https://docs.rs/vld-web"
 keywords = ["validation", "web", "http", "extractor", "vld"]
 categories = ["web-programming", "web-programming::http-server"]
-include = ["/src/**", "/LICENSE", "/Cargo.toml"]
+readme = "README.md"
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [lints]
 workspace = true

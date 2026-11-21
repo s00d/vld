@@ -5,12 +5,13 @@
 | Path | Contents |
 |---|---|
 | `crates/vld` | core crate: `src/`, `tests/it/` (one test binary), `benches/` (Criterion) |
-| `crates/vld-*` | integration crates |
+| `crates/vld-derive` | `#[derive(Validate)]` |
+| `crates/vld-web`, `vld-openapi`, `vld-data`, `vld-app` | integration groups: one module per integration in `src/`, tests in `tests/it/<integration>/` |
 | `fuzz/` | `cargo-fuzz` targets (own workspace) |
 | `examples/playground` | an app that uses many crates together |
 | `docs/` | documentation site (Nuxt Content) |
 
-All crates share one version and are released together (`PUBLISHING.md`). How tests are written: `TESTING.md`.
+All crates share one version and are released together (`PUBLISHING.md`). How the crates are split and how several majors of a dependency are supported: `ARCHITECTURE.md`. How tests are written: `TESTING.md`.
 
 ## CI recipes
 
@@ -22,34 +23,39 @@ just          # list recipes
 just ci       # what CI runs on every push
 ```
 
+Groups: `core` (`vld` + `vld-derive`), `web`, `openapi`, `data`, `app` (`vld-<group>`). CI runs one job per group (`just group <name>`) plus one for `misc`.
+
 | Recipe | What it does |
 |---|---|
+| `group <name>` | `lint-group` then `test-group`: what one CI job runs |
+| `lint-group <name>` | clippy `-D warnings` with all features, then each feature alone (`cargo hack --each-feature`) |
+| `test-group <name>` | tests and doctests with all features (`core`: also without default features) |
+| `lint`, `test` | `lint-group` / `test-group` for every group |
+| `misc` | `fmt`, `docs`, `deny`, `package`, `fuzz`, `playground`, `cargo shear` |
 | `fmt` | `cargo fmt --check` |
-| `lint` | `cargo shear`, then clippy `-D warnings`: workspace, each `vld` feature alone and all together, feature pairs of integration crates |
-| `test` | tests and doctests with the same feature sets as `lint` |
-| `docs` | `cargo doc` with `-D warnings` |
+| `docs` | `cargo doc` with `-D warnings`, all features |
 | `deny` | `cargo deny` (advisories, licenses, duplicates) |
 | `package` | `cargo package` dry run |
 | `fuzz` | the fuzz targets compile |
 | `playground` | runs the playground |
 | `trim` | caps `target/` at 10 GB with `cargo sweep` (oldest artifacts first) |
-| `wasm` | `vld`, `vld-leptos`, `vld-dioxus` for `wasm32` |
+| `wasm` | `vld` (with `vld::form`) for `wasm32` |
 | `powerset` | every pair of `vld` features compiles (slow) |
-| `msrv` | every crate on its `rust-version` (`MSRV.md`) |
+| `msrv` | every crate on its `rust-version`, and the features that need more on theirs (`MSRV.md`) |
 | `minimal` | lowest allowed dependency versions (nightly) |
 | `semver` | `cargo semver-checks` against the latest crates.io release |
 | `clean` | `cargo clean` and `fuzz/target` |
 
 `wasm`, `powerset`, `msrv`, `minimal` and the Windows / macOS tests run only before a release (Actions → CI → Run workflow).
 
-Crates with one feature per supported major of a dependency (`redis-0` / `redis-1`, `sqlx-0_8` / `sqlx-0_9`, …) are listed in `feature_crates` in the `justfile`; the majors never combine, so never use `--all-features` on those crates. Builds are `--locked` and use the `ci` profile (`target/ci`). diesel's `postgres` / `mysql` need `libpq` / `libmysqlclient`.
+Every supported major of a dependency is its own feature (`redis-0` / `redis-1`, `sqlx-0_8` / `sqlx-0_9`, …) and the majors combine, so `--all-features` builds every integration and every major of a group at once. Builds are `--locked` and use the `ci` profile (`target/ci`). vld-data's diesel `postgres` / `mysql` need `libpq` / `libmysqlclient`.
 
 ## Snapshots
 
-`vld` (its `ts` module too: `tests/it/ts/snapshots/`), `vld-utoipa` and `vld-aide` use [insta](https://insta.rs) snapshots (`tests/it/snapshots/`). After an intended output change:
+[insta](https://insta.rs) snapshots live in `crates/vld/tests/it/snapshots/`, `crates/vld/tests/it/ts/snapshots/` and `crates/vld-openapi/tests/it/{utoipa,schemars}/snapshots/`. After an intended output change:
 
 ```bash
-cargo insta test -p vld --all-features
+cargo insta test -p vld --all-features            # or -p vld-openapi
 cargo insta review
 ```
 

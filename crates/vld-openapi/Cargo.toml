@@ -7,10 +7,10 @@ license.workspace = true
 repository.workspace = true
 description = "OpenAPI bridges for the vld validation library: utoipa and schemars (aide) schemas from vld types, and a JSON Schema validator"
 documentation = "https://docs.rs/vld-openapi"
-readme = "../../README.md"
 keywords = ["validation", "openapi", "utoipa", "schemars", "json-schema"]
 categories = ["web-programming", "development-tools"]
-include = ["/src/**", "/LICENSE", "/Cargo.toml"]
+readme = "README.md"
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [lints]
 workspace = true
