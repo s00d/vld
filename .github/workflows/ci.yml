@@ -173,7 +173,8 @@ jobs:
   #    [X.Y.Z] in CHANGELOG.md (fails when [Unreleased] is empty); `just semver`;
   # 3. commits `chore: release vX.Y.Z` to `main`, tags `vX.Y.Z`;
   # 4. publishes the crates with crates.io trusted publishing (no stored token);
-  # 5. creates the GitHub release from the CHANGELOG.md section.
+  # 5. creates the GitHub release from the CHANGELOG.md section;
+  # 6. rebuilds the docs site (docs.yml), which shows the changelog.
   # Re-running with the same version resumes once the tag exists: it publishes only what
   # is not on crates.io yet and creates the GitHub release if missing.
   release:
@@ -186,6 +187,8 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      # dispatches docs.yml: the bot's push to main starts no workflow
+      actions: write
     env:
       VERSION: ${{ inputs.release }}
     steps:
@@ -265,3 +268,9 @@ jobs:
           just release-notes "${VERSION}" > "$RUNNER_TEMP/notes.md"
           gh release create "v${VERSION}" --title "v${VERSION}" --latest --notes-file "$RUNNER_TEMP/notes.md"
           gh release view "v${VERSION}" --json body --jq .body | head -5
+      # A push made with GITHUB_TOKEN starts no workflow, so docs.yml would miss the release
+      # commit; workflow_dispatch is the exception.
+      - name: Rebuild docs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run docs.yml --ref main

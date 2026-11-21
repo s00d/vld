@@ -23,7 +23,8 @@ published from a laptop and no crates.io token is stored anywhere.
    - publishes the crates in dependency order with crates.io trusted
      publishing;
    - creates the GitHub release with the `CHANGELOG.md` section
-     (`just release-notes X.Y.Z`).
+     (`just release-notes X.Y.Z`);
+   - starts the `docs` workflow, so the site's changelog shows the release.
 
    If it fails after tagging (network, crates.io), run it again with the same
    version: it publishes only what is missing and creates the GitHub release
