@@ -2,10 +2,11 @@
 //! when valid, emits and emit-with-ack validated both ways, and server
 //! callbacks answered with validated values.
 
-use super::server::FakeSocketIo;
 use crate::issues::{of, pairs};
+use serde_json::Value;
 use serde_json::json;
 use socketio_next::{Client, ClientBuilder, Event, Payload, TransportType};
+use socketio_next_testing::fake::{Data, Namespace, Server};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use vld::schema::{VldParse, VldSchema};
@@ -59,18 +60,21 @@ fn issues<T: std::fmt::Debug>(r: Result<T, VldSocketIoError>) -> Vec<(String, St
     }
 }
 
-fn builder(server: &FakeSocketIo) -> ClientBuilder {
-    ClientBuilder::new(server.url.as_str())
+fn builder(server: &Server) -> ClientBuilder {
+    ClientBuilder::new(server.url())
         .transport_type(TransportType::Websocket)
         .reconnection(false)
         .no_proxy()
 }
 
-/// The ack id and the rest of an EVENT packet `2[/nsp,]<id>[…]`.
-fn ack_id(packet: &str) -> (u64, &str) {
-    let body = packet.strip_prefix('2').expect("an EVENT packet");
-    let digits = body.find('[').unwrap();
-    (body[..digits].parse().unwrap(), &body[digits..])
+/// Forwards every `event` the server receives on a namespace, as its JSON
+/// arguments.
+fn record(event: &str, ns: Namespace) -> (Namespace, mpsc::UnboundedReceiver<Vec<Value>>) {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let ns = ns.on(event, move |_s, e| {
+        tx.send(e.data().values().to_vec()).unwrap()
+    });
+    (ns, rx)
 }
 
 /// Given ack replies and event arguments as socketio-next hands them over,
@@ -137,7 +141,8 @@ fn payloads_are_decoded_by_position() {
 /// validated.
 #[tokio::test]
 async fn handlers_run_only_with_valid_arguments() {
-    let mut server = FakeSocketIo::start().await;
+    let (ns, mut rejected) = record("rejected", Namespace::new());
+    let server = Server::builder().namespace("/", ns).start();
     let (orders, mut orders_rx) = mpsc::unbounded_channel();
     let (raw, mut raw_rx) = mpsc::unbounded_channel::<Event>();
     let _client = builder(&server)
@@ -170,20 +175,24 @@ async fn handlers_run_only_with_valid_arguments() {
         .connect()
         .await
         .unwrap();
+    let push = |event: &str, data: Data| server.broadcast("/", event, data);
 
-    server.send(r#"2["order",{"id":"o-1","qty":2}]"#);
-    server.send(r#"2["order",{"id":"","qty":2}]"#);
-    server.send(r#"2["order",{"id":"o-3","qty":1}]"#);
+    push("order", Data::new([json!({"id": "o-1", "qty": 2})]));
+    push("order", Data::new([json!({"id": "", "qty": 2})]));
+    push("order", Data::new([json!({"id": "o-3", "qty": 1})]));
     assert_eq!(orders_rx.recv().await.unwrap(), order("o-1", 2));
     assert_eq!(orders_rx.recv().await.unwrap(), order("o-3", 1));
 
-    server.send(r#"2["strict",{"id":"","qty":0}]"#);
+    push("strict", Data::new([json!({"id": "", "qty": 0})]));
     assert_eq!(
-        server.recv().await,
-        r#"2["rejected",{"event":"strict","issues":2}]"#
+        rejected.recv().await.unwrap(),
+        [json!({"event": "strict", "issues": 2})]
     );
 
-    server.send(r#"2["raw",{"id":"o-4","qty":4},{"id":"x","qty":0}]"#);
+    push(
+        "raw",
+        Data::new([json!({"id": "o-4", "qty": 4}), json!({"id": "x", "qty": 0})]),
+    );
     let event = raw_rx.recv().await.unwrap();
     assert_eq!(decode::<Order>(&event).unwrap(), order("o-4", 4));
     assert_eq!(
@@ -199,8 +208,10 @@ async fn handlers_run_only_with_valid_arguments() {
         pairs(&[("[0]", "invalid_type"), ("[1]", "invalid_type")])
     );
 
-    server.send(r#"51-["raw",{"id":"o-5","qty":1},{"_placeholder":true,"num":0}]"#);
-    server.send_binary(&[7, 8]);
+    push(
+        "raw",
+        Data::new([json!({"id": "o-5", "qty": 1})]).binary_arg(vec![7u8, 8]),
+    );
     let event = raw_rx.recv().await.unwrap();
     assert_eq!(decode::<Order>(&event).unwrap(), order("o-5", 1));
     assert!(matches!(
@@ -211,16 +222,30 @@ async fn handlers_run_only_with_valid_arguments() {
     assert_eq!(orders_rx.try_recv().ok(), None);
 }
 
-/// Given a connected client,
-/// when it emits a valid order, an invalid one and another valid one, then
-/// calls `emit_with_ack` with a valid request answered validly, an invalid
-/// request, a request answered with an invalid sum, and one answered with
-/// no arguments,
+/// Given a server that records `order` events and answers `add` with
+/// `{"sum": a + b}` (no arguments for `0 + 0`),
+/// when the client emits a valid order, an invalid one and another valid
+/// one, then calls `emit_with_ack` with a valid request answered validly, an
+/// invalid request, a request answered with an invalid sum, and one answered
+/// with no arguments,
 /// then the server receives only valid values, and each ack comes back as
 /// the typed reply, a validation error or `NoArgument`.
 #[tokio::test]
 async fn emits_and_acks_are_validated_both_ways() {
-    let mut server = FakeSocketIo::start().await;
+    let (ns, mut orders) = record("order", Namespace::new());
+    let (adds, mut adds_rx) = mpsc::unbounded_channel();
+    let ns = ns.on("add", move |s, e| {
+        let req = e.data().values()[0].clone();
+        let (a, b) = (req["a"].as_i64().unwrap(), req["b"].as_i64().unwrap());
+        adds.send(req).unwrap();
+        let reply = if (a, b) == (0, 0) {
+            Data::default()
+        } else {
+            Data::new([json!({"sum": a + b})])
+        };
+        s.ack(&e, reply);
+    });
+    let server = Server::builder().namespace("/", ns).start();
     let client = builder(&server).connect().await.unwrap();
 
     emit(&client, "order", &order("o-1", 2)).unwrap();
@@ -229,61 +254,68 @@ async fn emits_and_acks_are_validated_both_ways() {
         pairs(&[(".id", "too_small"), (".qty", "too_small")])
     );
     emit(&client, "order", &order("o-2", 1)).unwrap();
-    assert_eq!(server.recv().await, r#"2["order",{"id":"o-1","qty":2}]"#);
-    assert_eq!(server.recv().await, r#"2["order",{"id":"o-2","qty":1}]"#);
+    assert_eq!(
+        orders.recv().await.unwrap(),
+        [json!({"id": "o-1", "qty": 2})]
+    );
+    assert_eq!(
+        orders.recv().await.unwrap(),
+        [json!({"id": "o-2", "qty": 1})]
+    );
 
     let timeout = Duration::from_secs(30);
-    let call = |req: Add| {
+    let call = |a, b| {
         let client = client.clone();
-        tokio::spawn(async move { emit_with_ack::<Add, Sum>(&client, "add", &req, timeout).await })
+        async move { emit_with_ack::<Add, Sum>(&client, "add", &Add { a, b }, timeout).await }
     };
 
-    let ok = call(Add { a: 2, b: 3 });
-    let packet = server.recv().await;
-    let (id, args) = ack_id(&packet);
-    assert_eq!(args, r#"["add",{"a":2,"b":3}]"#);
-    server.send(&format!(r#"3{id}[{{"sum":5}}]"#));
-    assert_eq!(ok.await.unwrap().unwrap(), Sum { sum: 5 });
-
-    assert_eq!(
-        issues(call(Add { a: 1, b: -1 }).await.unwrap()),
-        pairs(&[(".b", "too_small")])
-    );
-
-    let bad_reply = call(Add { a: -3, b: 1 });
-    let packet = server.recv().await;
-    let (id, args) = ack_id(&packet);
-    assert_eq!(args, r#"["add",{"a":-3,"b":1}]"#);
-    server.send(&format!(r#"3{id}[{{"sum":-2}}]"#));
-    assert_eq!(
-        issues(bad_reply.await.unwrap()),
-        pairs(&[(".sum", "too_small")])
-    );
-
-    let empty_reply = call(Add { a: 0, b: 0 });
-    let packet = server.recv().await;
-    let (id, _) = ack_id(&packet);
-    server.send(&format!("3{id}[]"));
+    assert_eq!(call(2, 3).await.unwrap(), Sum { sum: 5 });
+    assert_eq!(issues(call(1, -1).await), pairs(&[(".b", "too_small")]));
+    assert_eq!(issues(call(-3, 1).await), pairs(&[(".sum", "too_small")]));
     assert!(matches!(
-        empty_reply.await.unwrap(),
+        call(0, 0).await,
         Err(VldSocketIoError::NoArgument(0))
     ));
+
+    // the invalid request never left the client
+    for sent in [
+        json!({"a": 2, "b": 3}),
+        json!({"a": -3, "b": 1}),
+        json!({"a": 0, "b": 0}),
+    ] {
+        assert_eq!(adds_rx.recv().await.unwrap(), sent);
+    }
+    assert!(adds_rx.try_recv().is_err());
 }
 
 /// Given a client on namespace `/math` that answers `add` with `answer`,
 /// `add-checked` with `answer_or` (acking an error value), and `manual` by
-/// hand with `ack`,
-/// when the server emits these events with callbacks (and `manual` once
-/// without),
+/// hand with `ack`, and a server that emits what the client asks for in a
+/// `call` event (with a callback unless `"ack": false`),
+/// when the server emits these events,
 /// then valid requests are answered with the validated sum, an invalid
 /// request or an invalid sum is acked with the error value, and `ack`
 /// refuses an invalid value and an event without callback.
 #[tokio::test]
 async fn server_callbacks_are_answered_with_validated_values() {
-    let mut server = FakeSocketIo::start().await;
+    let (replies, mut replies_rx) = mpsc::unbounded_channel::<Vec<Value>>();
+    let ns = Namespace::new().on("call", move |s, e| {
+        let call = e.data().values()[0].clone();
+        let event = call["event"].as_str().unwrap().to_owned();
+        let data = Data::new(call.get("arg").cloned());
+        if call["ack"] == json!(false) {
+            s.emit(event, data);
+        } else {
+            let replies = replies.clone();
+            s.emit_with_ack(event, data, move |_s, reply| {
+                replies.send(reply.values().to_vec()).unwrap()
+            });
+        }
+    });
+    let server = Server::builder().namespace("/math", ns).start();
     let (manual, mut manual_rx) = mpsc::unbounded_channel();
     let add = |a: Add, _client: Client| async move { Sum { sum: a.a + a.b } };
-    let _client = builder(&server)
+    let client = builder(&server)
         .namespace("/math")
         .on("add", answer(add))
         .on(
@@ -310,25 +342,34 @@ async fn server_callbacks_are_answered_with_validated_values() {
         .connect()
         .await
         .unwrap();
+    let call = |call: Value| client.emit("call", call).unwrap();
 
-    server.send(r#"2/math,5["add",{"a":2,"b":3}]"#);
-    assert_eq!(server.recv().await, r#"3/math,5[{"sum":5}]"#);
+    for (event, arg, reply) in [
+        ("add", json!({"a": 2, "b": 3}), json!({"sum": 5})),
+        (
+            "add-checked",
+            json!({"a": 1, "b": -1}),
+            json!({"error": "validation"}),
+        ),
+        (
+            "add-checked",
+            json!({"a": -5, "b": 1}),
+            json!({"error": "validation"}),
+        ),
+        ("add-checked", json!({"a": 4, "b": 4}), json!({"sum": 8})),
+    ] {
+        call(json!({"event": event, "arg": arg}));
+        assert_eq!(replies_rx.recv().await.unwrap(), [reply], "{event} {arg}");
+    }
 
-    server.send(r#"2/math,6["add-checked",{"a":1,"b":-1}]"#);
-    assert_eq!(server.recv().await, r#"3/math,6[{"error":"validation"}]"#);
-    server.send(r#"2/math,7["add-checked",{"a":-5,"b":1}]"#);
-    assert_eq!(server.recv().await, r#"3/math,7[{"error":"validation"}]"#);
-    server.send(r#"2/math,8["add-checked",{"a":4,"b":4}]"#);
-    assert_eq!(server.recv().await, r#"3/math,8[{"sum":8}]"#);
-
-    server.send(r#"2/math,["manual"]"#);
+    call(json!({"event": "manual", "ack": false}));
     let (invalid, valid) = manual_rx.recv().await.unwrap();
     assert!(matches!(invalid, Err(VldSocketIoError::NoAck)));
     assert!(matches!(valid, Err(VldSocketIoError::NoAck)));
 
-    server.send(r#"2/math,9["manual"]"#);
+    call(json!({"event": "manual"}));
     let (invalid, valid) = manual_rx.recv().await.unwrap();
     assert_eq!(issues(invalid), pairs(&[(".sum", "too_small")]));
     valid.unwrap();
-    assert_eq!(server.recv().await, r#"3/math,9[{"sum":1}]"#);
+    assert_eq!(replies_rx.recv().await.unwrap(), [json!({"sum": 1})]);
 }

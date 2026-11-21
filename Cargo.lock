@@ -9009,6 +9009,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "socketio-next-testing"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef1ad352fc01ecfb5af710e5163682224e881c10f581e3fef3c1d4360a18b7d9"
+dependencies = [
+ "base64 0.23.1",
+ "bytes",
+ "futures-util",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "url",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10597,11 +10612,11 @@ dependencies = [
  "serde",
  "serde_json",
  "socketio-next",
+ "socketio-next-testing",
  "sqlx 0.8.6",
  "sqlx 0.9.0",
  "time",
  "tokio",
- "tokio-tungstenite 0.30.0",
  "tracing",
  "vld",
 ]

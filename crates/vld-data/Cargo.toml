@@ -99,7 +99,7 @@ flume = { version = "0.11", default-features = false, features = ["async"] }
 clickhouse = { version = "0.15", default-features = false, features = ["test-util"] }
 async-nats = { version = "0.53", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
-tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+socketio-next-testing = "0.2.1"
 
 [[example]]
 name = "sqlx_basic"
