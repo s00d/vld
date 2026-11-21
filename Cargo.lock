@@ -8989,9 +8989,9 @@ dependencies = [
 
 [[package]]
 name = "socketio-next"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26802bc6d44e3778023143981ef82216ef32b9d9327fbee9fe5cd4ad76dc77c9"
+checksum = "511d2a9a4f06655e66de9caca12a3722b586ea3f3c954e470ac6f610401b5aa2"
 dependencies = [
  "base64 0.23.1",
  "bytes",

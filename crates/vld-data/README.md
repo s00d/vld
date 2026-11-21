@@ -47,7 +47,7 @@ assert!(validate_insert::<NewUserSchema, _>(&user).is_err()); // check before IN
 | `rumqttc` | `rumqttc` | MQTT (rumqttc 0.25) |
 | `nats` | `nats` | NATS (async-nats 0.53) |
 | `centrifuge` | `centrifuge` | Centrifugo client (centrifuge-client 0.1) |
-| `socketio` | `socketio` | Socket.IO client (socketio-next 0.1) |
+| `socketio` | `socketio` | Socket.IO client (socketio-next 0.2) |
 | `csv` | `csv` | CSV import (csv 1), failing rows with their line |
 
 No feature is on by default; any set can be enabled together.

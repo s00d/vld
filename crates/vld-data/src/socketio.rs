@@ -27,10 +27,10 @@
 //! unanswered). Pass your own callback to [`validated_or`] / [`answer_or`] to
 //! emit an error event or ack an error instead.
 //!
-//! Feature `socketio` (socketio-next 0.1 with its default features off: no
+//! Feature `socketio` (socketio-next 0.2 with its default features off: no
 //! TLS backend, so `http://` / `ws://` only — enable `socketio-next`'s
 //! `rustls` or `native-tls` feature in your own `Cargo.toml` for `https`).
-//! **socketio-next is 0.1: its API may change in a minor release.**
+//! **socketio-next is 0.2: its API may change in a minor release.**
 //!
 //! ```no_run
 //! use std::time::Duration;

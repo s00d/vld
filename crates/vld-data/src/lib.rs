@@ -23,7 +23,7 @@
 //! | `rumqttc` | `rumqttc` | validated JSON publish / decode for MQTT (rumqttc) |
 //! | `nats` | `nats` | validated JSON publish / request / respond / decode for NATS (async-nats) |
 //! | `centrifuge` | `centrifuge` | validated JSON publish / RPC / decode for the Centrifugo client (centrifuge-client 0.1) |
-//! | `socketio` | `socketio` | validated emit / emit-with-ack / handler wrappers / acks for the Socket.IO client (socketio-next 0.1) |
+//! | `socketio` | `socketio` | validated emit / emit-with-ack / handler wrappers / acks for the Socket.IO client (socketio-next 0.2) |
 //! | `csv` | `csv` | validated CSV import: every record as a vld type, failing rows with their line |
 //!
 //! The majors of one dependency are additive: any set of features compiles
