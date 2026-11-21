@@ -10,7 +10,7 @@ documentation = "https://docs.rs/vld"
 readme = "../../README.md"
 keywords = ["validation", "schema", "json", "zod", "parsing"]
 categories = ["parsing", "web-programming"]
-include = ["/src/**", "/locales/*.json", "/LICENSE", "/Cargo.toml"]
+include = ["/src/**", "/tests/**", "/examples/**", "/benches/**", "/locales/*.json", "/LICENSE", "/Cargo.toml"]
 
 [lints]
 workspace = true
