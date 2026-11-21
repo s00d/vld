@@ -97,6 +97,7 @@ conformance_suite! {
         path_invalid,
         path_percent_decoding,
         path_no_double_decoding,
+        #[ignore = "salvo >= 1.2 rejects request paths that are not UTF-8 (400 \"invalid request path\") before routing"]
         path_invalid_utf8,
         path_no_params_optional,
         headers_valid,

@@ -6,7 +6,7 @@ use vld_web::ntex4 as vld_ntex;
 /// Registers app state (`VldBodyLimit`) on the app.
 macro_rules! with_state {
     ($app:expr, $cfg:expr) => {
-        $app.with_config(ntex::web::WebAppConfig::new().set_state($cfg))
+        $app.with_config(ntex::web::WebAppConfig::new().set_value($cfg))
     };
 }
 

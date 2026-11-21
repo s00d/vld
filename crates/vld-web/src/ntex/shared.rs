@@ -70,9 +70,7 @@ impl VldNtexError {
 /// Read the body up to the [`VldBodyLimit`] app state, or
 /// [`DEFAULT_BODY_LIMIT`].
 async fn read_body(req: &HttpRequest, payload: &mut Payload) -> Result<Vec<u8>, VldHttpError> {
-    let limit = req
-        .app_state::<VldBodyLimit>()
-        .map_or(DEFAULT_BODY_LIMIT, |l| l.0);
+    let limit = super::compat::app_value::<VldBodyLimit>(req).map_or(DEFAULT_BODY_LIMIT, |l| l.0);
     // With `ntex-compress`, decode `Content-Encoding` like ntex's own body
     // extractors; the limit applies to the decoded size.
     #[cfg(feature = "ntex-compress")]

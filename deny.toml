@@ -17,14 +17,16 @@ ignore = [
     # feature is enabled; vld never performs RSA operations itself.
     { id = "RUSTSEC-2023-0071", reason = "rsa via optional sqlx-mysql; no fix upstream" },
     # libsqlite3-sys < 0.39 bundles SQLite < 3.54 (local attack: a crafted
-    # db + -wal pair). sqlx 0.8 / 0.9 and diesel 2 cap it below 0.39, and the
-    # version is the one the user's own sqlx / diesel resolve; vld-data does
-    # not open databases itself. Drop once they allow 0.39.
-    { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys capped below the fix by sqlx 0.8/0.9 and diesel 2" },
-    # chrono is marked unmaintained, with no replacement crate to move to;
-    # vld's `chrono` feature is optional (`jiff` and `time` are alternatives)
-    # and sea-orm requires chrono. Revisit when a successor exists.
-    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, no successor; optional vld backend" },
+    # db + -wal pair). sqlx 0.8 requires libsqlite3-sys 0.30, and `links`
+    # allows one version per build, so the workspace (all majors at once)
+    # stays on 0.30. vld-data does not pin it: users on sqlx >= 0.9.1 or
+    # diesel >= 2.4 without sqlx 0.8 get the fix from `cargo update`.
+    { id = "RUSTSEC-2026-0459", reason = "sqlx 0.8 pins libsqlite3-sys 0.30; sqlx 0.9.1 / diesel 2.4 allow the fix" },
+    # chrono is marked unmaintained (the advisory recommends jiff or time,
+    # both supported by vld). vld's `chrono` feature stays for applications
+    # whose types are chrono's (sea-orm and sqlx columns among them); it is
+    # optional and off by default.
+    { id = "RUSTSEC-2026-0543", reason = "optional vld backend for chrono users; jiff / time are the alternatives" },
     # h2 0.3 unbounded empty DATA frames; fixed only in h2 >= 0.4.16.
     # h2 0.3 is pinned by actix-http 3 (vld-web `actix`); vld does not use h2
     # directly. Drop once actix-web moves to h2 0.4.

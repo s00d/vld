@@ -26,7 +26,7 @@
 //! [`VldJson`] and [`VldForm`] read the body themselves up to
 //! [`DEFAULT_BODY_LIMIT`](crate::common::DEFAULT_BODY_LIMIT) (2 MiB); ntex's
 //! `JsonConfig` / `PayloadConfig` do not apply. Register [`VldBodyLimit`] as
-//! app state to change it: `App::new().with_config(WebAppConfig::new().set_state(VldBodyLimit(n)))`. Compressed request bodies are decoded only
+//! app state to change it: `App::new().with_config(WebAppConfig::new().set_value(VldBodyLimit(n)))`. Compressed request bodies are decoded only
 //! with the `ntex-compress` feature (the limit then applies to the decoded
 //! size).
 //!
@@ -85,6 +85,11 @@ mod compat {
     use ntex::web::FromRequest;
     use ntex::web::error::WebResponseError;
     use ntex::web::{HttpRequest, HttpResponse};
+
+    /// A value registered on the app (`app_value` (ntex >= 4.7; `app_state` is deprecated)).
+    pub(super) fn app_value<T: 'static>(req: &HttpRequest) -> Option<&T> {
+        req.app_value::<T>()
+    }
     use vld::schema::VldParse;
 
     impl<St, Err> WebResponseError<St, Err> for VldNtexError {

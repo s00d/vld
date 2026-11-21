@@ -85,6 +85,11 @@ mod compat {
     use ntex::web::error::WebResponseError;
     use ntex::web::{ErrorRenderer, FromRequest};
     use ntex::web::{HttpRequest, HttpResponse};
+
+    /// A value registered on the app (the app state is `app_state` on ntex 3).
+    pub(super) fn app_value<T: 'static>(req: &HttpRequest) -> Option<&T> {
+        req.app_state::<T>()
+    }
     use vld::schema::VldParse;
 
     impl<Err: ErrorRenderer> WebResponseError<Err> for VldNtexError {
