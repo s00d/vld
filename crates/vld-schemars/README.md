@@ -1,5 +1,14 @@
 # vld-schemars
 
+> **Deprecated.** `vld-schemars` is not developed any more. Since vld 0.8 it is part of
+> [`vld-openapi`](https://crates.io/crates/vld-openapi): `vld_openapi::schemars1` / `vld_openapi::schemars0`.
+>
+> ```toml
+> vld-openapi = { version = "0.8", features = ["schemars-1"] }  # or "schemars-0"
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-schemars.svg)](https://crates.io/crates/vld-schemars)
 [![docs.rs](https://img.shields.io/docsrs/vld-schemars)](https://docs.rs/vld-schemars)
 

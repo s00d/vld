@@ -1,12 +1,12 @@
 [package]
 name = "vld-fake"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Generate fake / test data from vld JSON Schemas"
+description = "DEPRECATED: moved to vld 0.8 (vld::fake). Generate fake / test data from vld JSON Schemas"
 documentation = "https://docs.rs/vld-fake"
 readme = "README.md"
 keywords = ["validation", "fake", "testing", "json-schema", "generator"]

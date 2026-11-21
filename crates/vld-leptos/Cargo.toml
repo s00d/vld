@@ -1,12 +1,12 @@
 [package]
 name = "vld-leptos"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Leptos helpers for the vld validation library — shared validation for server functions and WASM clients (framework-agnostic: no leptos dependency)"
+description = "DEPRECATED: moved to vld 0.8 (vld::form). Leptos helpers for the vld validation library — shared validation for server functions and WASM clients (framework-agnostic: no leptos dependency)"
 documentation = "https://docs.rs/vld-leptos"
 readme = "README.md"
 keywords = ["validation", "leptos", "wasm", "server-functions", "vld"]

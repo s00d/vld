@@ -1,5 +1,14 @@
 # vld-tonic
 
+> **Deprecated.** `vld-tonic` is not developed any more. Since vld 0.8 it is part of
+> [`vld-web`](https://crates.io/crates/vld-web): `vld_web::tonic`.
+>
+> ```toml
+> vld-web = { version = "0.8", features = ["tonic"] }
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-tonic.svg)](https://crates.io/crates/vld-tonic)
 [![docs.rs](https://img.shields.io/docsrs/vld-tonic)](https://docs.rs/vld-tonic)
 

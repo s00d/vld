@@ -1,12 +1,12 @@
 [package]
 name = "vld-schemars"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Bidirectional bridge between vld and schemars — convert JSON schemas in both directions, implement schemars::JsonSchema for vld types"
+description = "DEPRECATED: moved to vld-openapi 0.8 (vld_openapi::schemars1 / vld_openapi::schemars0). Bidirectional bridge between vld and schemars — convert JSON schemas in both directions, implement schemars::JsonSchema for vld types"
 documentation = "https://docs.rs/vld-schemars"
 readme = "README.md"
 keywords = ["validation", "schemars", "json-schema", "openapi", "vld"]

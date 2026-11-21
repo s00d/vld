@@ -1,12 +1,12 @@
 [package]
 name = "vld-rama"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version = "1.96"
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Rama integration for the vld validation library"
+description = "DEPRECATED: moved to vld-web 0.8 (vld_web::rama). Rama integration for the vld validation library"
 documentation = "https://docs.rs/vld-rama"
 readme = "README.md"
 keywords = ["validation", "rama", "web", "json", "extractor"]

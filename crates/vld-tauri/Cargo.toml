@@ -1,12 +1,12 @@
 [package]
 name = "vld-tauri"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Tauri IPC validation helpers for the vld validation library (framework-agnostic: no tauri dependency)"
+description = "DEPRECATED: moved to vld-app 0.8 (vld_app::tauri). Tauri IPC validation helpers for the vld validation library (framework-agnostic: no tauri dependency)"
 documentation = "https://docs.rs/vld-tauri"
 readme = "README.md"
 keywords = ["validation", "tauri", "ipc", "desktop", "json"]

@@ -1,5 +1,14 @@
 # vld-clap
 
+> **Deprecated.** `vld-clap` is not developed any more. Since vld 0.8 it is part of
+> [`vld-app`](https://crates.io/crates/vld-app): `vld_app::clap`.
+>
+> ```toml
+> vld-app = { version = "0.8", features = ["clap"] }
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-clap.svg)](https://crates.io/crates/vld-clap)
 [![docs.rs](https://img.shields.io/docsrs/vld-clap)](https://docs.rs/vld-clap)
 

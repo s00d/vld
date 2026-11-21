@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-data`](https://docs.rs/vld-data) 0.8 (`vld_data::sea1` / `vld_data::sea2`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-sea — SeaORM integration for `vld`
 //!
 //! Validate [`ActiveModel`](crate::sea_orm::ActiveModelTrait) fields against a

@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-data`](https://docs.rs/vld-data) 0.8 (`vld_data::diesel`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-diesel — Diesel integration for `vld`
 //!
 //! Validate values against a [`vld`] schema before Diesel writes them

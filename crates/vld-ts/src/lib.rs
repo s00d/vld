@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld`](https://docs.rs/vld) 0.8 (`vld::ts`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-ts — TypeScript Zod / Valibot schemas and types from `vld`
 //!
 //! Generates [Zod](https://zod.dev/) 3 / 4 or [Valibot](https://valibot.dev/) 1

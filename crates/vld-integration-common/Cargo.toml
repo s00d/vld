@@ -1,12 +1,12 @@
 [package]
 name = "vld-integration-common"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Shared helpers for vld integration crates (internal)"
+description = "DEPRECATED: moved to vld 0.8 (vld::form, vld::error::{format_path, flatten_issues}). Shared helpers for vld integration crates (internal)"
 documentation = "https://docs.rs/vld-integration-common"
 readme = "README.md"
 keywords = ["validation", "vld", "helpers"]

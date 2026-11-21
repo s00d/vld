@@ -1,12 +1,12 @@
 [package]
 name = "vld-ts"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Generate TypeScript Zod schemas from vld schemas and types"
+description = "DEPRECATED: moved to vld 0.8 (vld::ts). Generate TypeScript Zod schemas from vld schemas and types"
 documentation = "https://docs.rs/vld-ts"
 readme = "README.md"
 keywords = ["validation", "typescript", "zod", "codegen", "json-schema"]

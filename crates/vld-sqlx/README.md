@@ -1,5 +1,14 @@
 # vld-sqlx
 
+> **Deprecated.** `vld-sqlx` is not developed any more. Since vld 0.8 it is part of
+> [`vld-data`](https://crates.io/crates/vld-data): `vld_data::sqlx08` / `vld_data::sqlx09`.
+>
+> ```toml
+> vld-data = { version = "0.8", features = ["sqlx-0_8", "sqlite"] }  # or "sqlx-0_9"
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-sqlx.svg)](https://crates.io/crates/vld-sqlx)
 [![docs.rs](https://docs.rs/vld-sqlx/badge.svg)](https://docs.rs/vld-sqlx)
 

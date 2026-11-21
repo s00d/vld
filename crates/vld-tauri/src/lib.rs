@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-app`](https://docs.rs/vld-app) 0.8 (`vld_app::tauri`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-tauri — Tauri IPC validation for `vld`
 //!
 //! Validate [Tauri](https://tauri.app/) IPC commands, events, state, plugin

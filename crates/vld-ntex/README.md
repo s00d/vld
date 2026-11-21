@@ -1,5 +1,14 @@
 # vld-ntex
 
+> **Deprecated.** `vld-ntex` is not developed any more. Since vld 0.8 it is part of
+> [`vld-web`](https://crates.io/crates/vld-web): `vld_web::ntex4` / `vld_web::ntex3`.
+>
+> ```toml
+> vld-web = { version = "0.8", features = ["ntex-4"] }  # or "ntex-3"
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-ntex)](https://crates.io/crates/vld-ntex)
 [![docs.rs](https://img.shields.io/docsrs/vld-ntex)](https://docs.rs/vld-ntex)
 

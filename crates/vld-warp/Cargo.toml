@@ -1,12 +1,12 @@
 [package]
 name = "vld-warp"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Warp integration for the vld validation library"
+description = "DEPRECATED: moved to vld-web 0.8 (vld_web::warp). Warp integration for the vld validation library"
 documentation = "https://docs.rs/vld-warp"
 readme = "README.md"
 keywords = ["validation", "warp", "web", "json", "filter"]

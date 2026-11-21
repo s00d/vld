@@ -1,5 +1,14 @@
 # vld-dioxus
 
+> **Deprecated.** `vld-dioxus` is not developed any more. Since vld 0.8 it is part of
+> [`vld`](https://crates.io/crates/vld): `vld::form`.
+>
+> ```toml
+> vld = "0.8"
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-dioxus.svg)](https://crates.io/crates/vld-dioxus)
 [![docs.rs](https://docs.rs/vld-dioxus/badge.svg)](https://docs.rs/vld-dioxus)
 

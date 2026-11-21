@@ -1,5 +1,14 @@
 # vld-tauri
 
+> **Deprecated.** `vld-tauri` is not developed any more. Since vld 0.8 it is part of
+> [`vld-app`](https://crates.io/crates/vld-app): `vld_app::tauri`.
+>
+> ```toml
+> vld-app = "0.8"
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-tauri.svg)](https://crates.io/crates/vld-tauri)
 [![docs.rs](https://docs.rs/vld-tauri/badge.svg)](https://docs.rs/vld-tauri)
 

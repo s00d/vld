@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld`](https://docs.rs/vld) 0.8 (`vld::form`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-dioxus — Dioxus helpers for `vld`
 //!
 //! Shared validation for Dioxus server functions and WASM clients: define the

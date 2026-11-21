@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-openapi`](https://docs.rs/vld-openapi) 0.8 (`vld_openapi::schemars0` / `vld_openapi::schemars1`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-aide — `vld` types in aide OpenAPI documents
 //!
 //! [aide](https://docs.rs/aide) generates OpenAPI from `schemars::JsonSchema`.

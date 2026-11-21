@@ -1,12 +1,12 @@
 [package]
 name = "vld-utoipa"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "utoipa integration for the vld validation library — auto-generate OpenAPI schemas from vld definitions"
+description = "DEPRECATED: moved to vld-openapi 0.8 (vld_openapi::utoipa5 / vld_openapi::utoipa6). utoipa integration for the vld validation library — auto-generate OpenAPI schemas from vld definitions"
 documentation = "https://docs.rs/vld-utoipa"
 readme = "README.md"
 keywords = ["validation", "utoipa", "openapi", "schema", "vld"]

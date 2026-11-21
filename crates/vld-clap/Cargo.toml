@@ -1,12 +1,12 @@
 [package]
 name = "vld-clap"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Clap integration for the vld validation library — validate CLI arguments after parsing"
+description = "DEPRECATED: moved to vld-app 0.8 (vld_app::clap). Clap integration for the vld validation library — validate CLI arguments after parsing"
 documentation = "https://docs.rs/vld-clap"
 readme = "README.md"
 keywords = ["validation", "clap", "cli", "arguments", "parsing"]

@@ -1,12 +1,12 @@
 [package]
 name = "vld-sea"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "SeaORM integration for the vld validation library — validate ActiveModel before insert/update"
+description = "DEPRECATED: moved to vld-data 0.8 (vld_data::sea1 / vld_data::sea2). SeaORM integration for the vld validation library — validate ActiveModel before insert/update"
 documentation = "https://docs.rs/vld-sea"
 readme = "README.md"
 keywords = ["validation", "sea-orm", "orm", "activemodel", "database"]

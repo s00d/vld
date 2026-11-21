@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-data`](https://docs.rs/vld-data) 0.8 (`vld_data::surrealdb`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-surrealdb — SurrealDB helpers for `vld`
 //!
 //! Validate JSON documents against a [`vld`] schema **before** create /

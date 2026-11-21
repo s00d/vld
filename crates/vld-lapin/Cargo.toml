@@ -1,12 +1,12 @@
 [package]
 name = "vld-lapin"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Lapin (RabbitMQ) integration for the vld validation library — validate message payloads before publish and after consume"
+description = "DEPRECATED: moved to vld-data 0.8 (vld_data::lapin2 / lapin3 / lapin4). Lapin (RabbitMQ) integration for the vld validation library — validate message payloads before publish and after consume"
 documentation = "https://docs.rs/vld-lapin"
 readme = "README.md"
 keywords = ["validation", "lapin", "rabbitmq", "amqp", "vld"]

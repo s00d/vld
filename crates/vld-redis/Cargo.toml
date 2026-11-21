@@ -1,12 +1,12 @@
 [package]
 name = "vld-redis"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Redis integration for the vld validation library — validate payloads before set/publish and after get/subscribe"
+description = "DEPRECATED: moved to vld-data 0.8 (vld_data::redis0 / vld_data::redis1). Redis integration for the vld validation library — validate payloads before set/publish and after get/subscribe"
 documentation = "https://docs.rs/vld-redis"
 readme = "README.md"
 keywords = ["validation", "redis", "pubsub", "json", "vld"]

@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-openapi`](https://docs.rs/vld-openapi) 0.8 (`vld_openapi::schemars1` / `vld_openapi::schemars0`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-schemars — two-way bridge between `vld` and `schemars`
 //!
 //! Crates such as aide or okapi consume `schemars::JsonSchema`. This crate

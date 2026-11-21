@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-web`](https://docs.rs/vld-web) 0.8 (`vld_web::common`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-http-common — Shared HTTP helpers for `vld` web integrations
 //!
 //! This crate provides the common parsing helpers and the shared

@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-openapi`](https://docs.rs/vld-openapi) 0.8 (`vld_openapi::utoipa5` / `vld_openapi::utoipa6`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-utoipa — `vld` schemas as utoipa OpenAPI types
 //!
 //! [`impl_to_schema!`] implements utoipa's `PartialSchema`, `ToSchema` and

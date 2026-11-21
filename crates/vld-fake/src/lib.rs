@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld`](https://docs.rs/vld) 0.8 (`vld::fake`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-fake — random test data that passes `vld` schemas
 //!
 //! Generates values that satisfy a JSON Schema produced by `vld` (or written

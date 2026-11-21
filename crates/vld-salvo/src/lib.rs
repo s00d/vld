@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-web`](https://docs.rs/vld-web) 0.8 (`vld_web::salvo`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-salvo — Salvo integration for `vld`
 //!
 //! Validation extractors for [Salvo](https://salvo.rs) 1.x. Every extractor

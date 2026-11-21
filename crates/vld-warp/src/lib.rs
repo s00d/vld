@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-web`](https://docs.rs/vld-web) 0.8 (`vld_web::warp`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-warp — Warp integration for `vld`
 //!
 //! Validation [filters](warp::Filter) for [Warp](https://docs.rs/warp) 0.3

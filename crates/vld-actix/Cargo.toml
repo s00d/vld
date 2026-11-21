@@ -1,12 +1,12 @@
 [package]
 name = "vld-actix"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Actix-web integration for the vld validation library"
+description = "DEPRECATED: moved to vld-web 0.8 (vld_web::actix). Actix-web integration for the vld validation library"
 documentation = "https://docs.rs/vld-actix"
 readme = "README.md"
 keywords = ["validation", "actix", "web", "json", "extractor"]

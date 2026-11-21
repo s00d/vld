@@ -1,5 +1,14 @@
 # vld-sea
 
+> **Deprecated.** `vld-sea` is not developed any more. Since vld 0.8 it is part of
+> [`vld-data`](https://crates.io/crates/vld-data): `vld_data::sea1` / `vld_data::sea2`.
+>
+> ```toml
+> vld-data = { version = "0.8", features = ["sea-orm-1"] }  # or "sea-orm-2"
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-sea.svg)](https://crates.io/crates/vld-sea)
 [![docs.rs](https://docs.rs/vld-sea/badge.svg)](https://docs.rs/vld-sea)
 

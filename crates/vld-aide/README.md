@@ -1,5 +1,14 @@
 # vld-aide
 
+> **Deprecated.** `vld-aide` is not developed any more. Since vld 0.8 it is part of
+> [`vld-openapi`](https://crates.io/crates/vld-openapi): `vld_openapi::schemars0` / `vld_openapi::schemars1`.
+>
+> ```toml
+> vld-openapi = { version = "0.8", features = ["schemars-0"] }  # aide 0.15; aide 0.16: "schemars-1"
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-aide.svg)](https://crates.io/crates/vld-aide)
 [![docs.rs](https://img.shields.io/docsrs/vld-aide)](https://docs.rs/vld-aide)
 

@@ -1,12 +1,12 @@
 [package]
 name = "vld-aide"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Alias of vld-schemars for aide users: re-exports impl_json_schema!/vld_to_schemars (no aide dependency)"
+description = "DEPRECATED: moved to vld-openapi 0.8 (vld_openapi::schemars0 / vld_openapi::schemars1). Alias of vld-schemars for aide users: re-exports impl_json_schema!/vld_to_schemars (no aide dependency)"
 documentation = "https://docs.rs/vld-aide"
 readme = "README.md"
 keywords = ["validation", "aide", "openapi", "schemars", "vld"]

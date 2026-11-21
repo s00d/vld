@@ -1,5 +1,14 @@
 # vld-integration-common
 
+> **Deprecated.** `vld-integration-common` is not developed any more. Since vld 0.8 it is part of
+> [`vld`](https://crates.io/crates/vld): `vld::form`, `vld::error::{format_path, flatten_issues}`.
+>
+> ```toml
+> vld = "0.8"
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-integration-common.svg)](https://crates.io/crates/vld-integration-common)
 [![docs.rs](https://docs.rs/vld-integration-common/badge.svg)](https://docs.rs/vld-integration-common)
 

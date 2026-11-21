@@ -1,12 +1,12 @@
 [package]
 name = "vld-http-common"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Shared HTTP helpers for vld web-framework integrations (internal)"
+description = "DEPRECATED: moved to vld-web 0.8 (vld_web::common). Shared HTTP helpers for vld web-framework integrations (internal)"
 documentation = "https://docs.rs/vld-http-common"
 readme = "README.md"
 keywords = ["validation", "http", "helpers", "vld"]

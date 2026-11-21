@@ -1,12 +1,12 @@
 [package]
 name = "vld-diesel"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Diesel integration for the vld validation library — validate before insert/update"
+description = "DEPRECATED: moved to vld-data 0.8 (vld_data::diesel). Diesel integration for the vld validation library — validate before insert/update"
 documentation = "https://docs.rs/vld-diesel"
 readme = "README.md"
 keywords = ["validation", "diesel", "orm", "database", "vld"]

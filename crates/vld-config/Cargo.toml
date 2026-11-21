@@ -1,12 +1,12 @@
 [package]
 name = "vld-config"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Config validation for vld — validate TOML/YAML/JSON/ENV configs at load time"
+description = "DEPRECATED: moved to vld-app 0.8 (vld_app::config). Config validation for vld — validate TOML/YAML/JSON/ENV configs at load time"
 documentation = "https://docs.rs/vld-config"
 readme = "README.md"
 keywords = ["validation", "config", "toml", "yaml", "vld"]

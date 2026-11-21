@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-web`](https://docs.rs/vld-web) 0.8 (`vld_web::rama`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-rama — Rama integration for `vld`
 //!
 //! Extractors and a [`ValidateJsonLayer`] that validate HTTP request data

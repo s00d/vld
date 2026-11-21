@@ -1,5 +1,14 @@
 # vld-diesel
 
+> **Deprecated.** `vld-diesel` is not developed any more. Since vld 0.8 it is part of
+> [`vld-data`](https://crates.io/crates/vld-data): `vld_data::diesel`.
+>
+> ```toml
+> vld-data = { version = "0.8", features = ["diesel", "sqlite"] }
+> ```
+>
+> Migration guide: <https://s00d.github.io/vld/guides/migration#from-07-to-08>. This version (0.7.1) is 0.7.0 unchanged, with this notice.
+
 [![crates.io](https://img.shields.io/crates/v/vld-diesel.svg)](https://crates.io/crates/vld-diesel)
 [![docs.rs](https://docs.rs/vld-diesel/badge.svg)](https://docs.rs/vld-diesel)
 

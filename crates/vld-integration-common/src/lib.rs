@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld`](https://docs.rs/vld) 0.8 (`vld::form`, `vld::error::{format_path, flatten_issues}`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-integration-common — shared helpers for `vld` integration crates
 //!
 //! **Internal crate** with no stable API of its own: depend on the

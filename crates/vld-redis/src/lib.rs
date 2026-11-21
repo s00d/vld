@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-data`](https://docs.rs/vld-data) 0.8 (`vld_data::redis0` / `vld_data::redis1`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-redis — Redis integration for `vld`
 //!
 //! Wrap a connection in a validating wrapper:

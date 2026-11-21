@@ -1,12 +1,12 @@
 [package]
 name = "vld-ntex"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version = "1.97"
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "ntex integration for the vld validation library — validated extractors for JSON, query, path, form, headers, cookies"
+description = "DEPRECATED: moved to vld-web 0.8 (vld_web::ntex4 / vld_web::ntex3). ntex integration for the vld validation library — validated extractors for JSON, query, path, form, headers, cookies"
 documentation = "https://docs.rs/vld-ntex"
 readme = "README.md"
 keywords = ["validation", "ntex", "web", "json", "extractor"]

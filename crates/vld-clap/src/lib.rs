@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-app`](https://docs.rs/vld-app) 0.8 (`vld_app::clap`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-clap — validate clap arguments with `vld`
 //!
 //! clap parses types, defaults and required arguments; `vld-clap` checks the

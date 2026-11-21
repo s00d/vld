@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-app`](https://docs.rs/vld-app) 0.8 (`vld_app::config`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-config — validate configuration with `vld`
 //!
 //! Load configuration with [config-rs](https://docs.rs/config) (feature

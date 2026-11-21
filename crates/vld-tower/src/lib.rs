@@ -1,3 +1,6 @@
+//! **Deprecated:** moved to [`vld-web`](https://docs.rs/vld-web) 0.8 (`vld_web::tower`); see the
+//! [migration guide](https://s00d.github.io/vld/guides/migration#from-07-to-08).
+//!
 //! # vld-tower — Tower middleware for `vld`
 //!
 //! A [`tower::Layer`](tower_layer::Layer) that validates JSON request bodies

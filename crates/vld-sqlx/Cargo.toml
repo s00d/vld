@@ -1,12 +1,12 @@
 [package]
 name = "vld-sqlx"
-version.workspace = true
+version = "0.7.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "SQLx integration for the vld validation library — validate before insert/update, typed column wrappers"
+description = "DEPRECATED: moved to vld-data 0.8 (vld_data::sqlx08 / vld_data::sqlx09). SQLx integration for the vld validation library — validate before insert/update, typed column wrappers"
 documentation = "https://docs.rs/vld-sqlx"
 readme = "README.md"
 keywords = ["validation", "sqlx", "database", "sql", "vld"]
