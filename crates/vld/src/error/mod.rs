@@ -98,6 +98,44 @@ impl fmt::Display for PathSegment {
     }
 }
 
+/// Format a validation path as a clean dotted path: `user.email`, `items[0].name`.
+///
+/// No leading dot (unlike [`ValidationIssue::path_string`]); an empty path
+/// gives an empty string.
+///
+/// ```
+/// use vld::error::PathSegment;
+/// let p = [PathSegment::Field("items".into()), PathSegment::Index(0), PathSegment::Field("name".into())];
+/// assert_eq!(vld::error::format_path(&p), "items[0].name");
+/// ```
+pub fn format_path(path: &[PathSegment]) -> String {
+    let mut out = String::new();
+    for seg in path {
+        match seg {
+            PathSegment::Field(name) => {
+                if !out.is_empty() {
+                    out.push('.');
+                }
+                out.push_str(name);
+            }
+            PathSegment::Index(idx) => {
+                out.push('[');
+                out.push_str(&idx.to_string());
+                out.push(']');
+            }
+        }
+    }
+    out
+}
+
+/// Flatten a [`VldError`] into `(path, message)` pairs using [`format_path`].
+pub fn flatten_issues(err: &VldError) -> Vec<(String, String)> {
+    err.issues
+        .iter()
+        .map(|i| (format_path(&i.path), i.message.clone()))
+        .collect()
+}
+
 /// A single validation issue with path, message and received value.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ValidationIssue {

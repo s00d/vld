@@ -129,7 +129,7 @@ fn issue_line(i: &vld::error::ValidationIssue, cmd: Option<&clap::Command>) -> S
     });
     let field = match arg {
         Some((n, arg)) => {
-            let rest = vld_integration_common::format_path(&i.path[n + 1..]);
+            let rest = vld::error::format_path(&i.path[n + 1..]);
             let name = if let Some(long) = arg.get_long() {
                 format!("--{long}")
             } else if let Some(short) = arg.get_short() {
@@ -151,7 +151,7 @@ fn issue_line(i: &vld::error::ValidationIssue, cmd: Option<&clap::Command>) -> S
             format!("{name}{sep}{rest}")
         }
         None => {
-            let field = vld_integration_common::format_path(&i.path).replace('_', "-");
+            let field = vld::error::format_path(&i.path).replace('_', "-");
             if field.is_empty() {
                 return i.message.clone();
             }

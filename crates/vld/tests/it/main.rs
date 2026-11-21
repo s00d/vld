@@ -24,6 +24,7 @@ mod story_api_request;
 mod story_collections_objects;
 #[cfg(feature = "diff")]
 mod story_diff;
+mod story_form;
 mod story_inputs;
 mod story_lenient_report;
 mod story_messages_i18n;
@@ -34,3 +35,21 @@ mod story_settings_migration;
 #[cfg(feature = "derive")]
 mod story_tagged_enums;
 mod story_untrusted_input;
+
+// Optional modules; their tests also use the schema features listed.
+#[cfg(all(
+    feature = "fake",
+    feature = "chrono",
+    feature = "regex",
+    feature = "string-advanced",
+    feature = "decimal",
+    feature = "net"
+))]
+mod fake;
+#[cfg(all(
+    feature = "ts",
+    feature = "regex",
+    feature = "string-advanced",
+    feature = "derive"
+))]
+mod ts;

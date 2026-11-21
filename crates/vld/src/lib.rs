@@ -57,6 +57,8 @@
 //! | `net` | `ip_network()` (`ipnet`) |
 //! | `file` / `file-advanced` | `file()` with size / type checks; hashes, image size, EXIF |
 //! | `string-advanced` | `url_strict()`, `uri()`, `uuid_v4()` & co, `phone_e164_strict()`, `semver_full()` |
+//! | `ts` | `vld::ts`: TypeScript Zod 3 / 4, Valibot and type code (implies `openapi`) |
+//! | `fake` | `vld::fake`: random values that pass a schema (implies `openapi`) |
 //!
 //! ## Module map
 //!
@@ -65,8 +67,12 @@
 //!   [`parse_coerced`](schema::parse_coerced)
 //! - [`error`] — [`VldError`](error::VldError), [`IssueCode`](error::IssueCode),
 //!   formatting ([`error::format`]) and translations ([`error::i18n`])
+//! - [`form`] — field-level errors for forms and server functions
+//!   ([`form::VldServerError`], [`form::validate_args!`])
 //! - [`primitives`], [`collections`], [`combinators`], [`modifiers`], [`mod@object`] — schema types
 //! - `openapi` (feature `openapi`) — JSON Schema / OpenAPI generation and schema diffs
+//! - `ts` (feature `ts`) — TypeScript / Zod / Valibot code generation
+//! - `fake` (feature `fake`) — fake data generation
 //! - [`prelude`] — everything needed for day-to-day use
 //!
 //! ## Size method names
@@ -94,6 +100,10 @@ pub mod collections;
 pub mod combinators;
 pub mod de;
 pub mod error;
+#[cfg(feature = "fake")]
+#[cfg_attr(docsrs, doc(cfg(feature = "fake")))]
+pub mod fake;
+pub mod form;
 mod macros;
 /// Optional, nullable, nullish and default wrappers.
 pub mod modifiers;
@@ -107,6 +117,9 @@ pub mod primitives;
 pub mod rules;
 /// The `VldSchema` / `VldParse` traits and nested-schema helpers.
 pub mod schema;
+#[cfg(feature = "ts")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ts")))]
+pub mod ts;
 
 #[doc(hidden)]
 #[path = "private.rs"]

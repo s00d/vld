@@ -46,21 +46,21 @@ Crates with one feature per supported major of a dependency (`redis-0` / `redis-
 
 ## Snapshots
 
-`vld`, `vld-utoipa`, `vld-aide` and `vld-ts` use [insta](https://insta.rs) snapshots (`tests/it/snapshots/`). After an intended output change:
+`vld` (its `ts` module too: `tests/it/ts/snapshots/`), `vld-utoipa` and `vld-aide` use [insta](https://insta.rs) snapshots (`tests/it/snapshots/`). After an intended output change:
 
 ```bash
-cargo insta test -p vld-ts
+cargo insta test -p vld --all-features
 cargo insta review
 ```
 
-## vld-ts against Node
+## vld::ts against Node
 
 The generated Zod 3, Zod 4 and Valibot code is run under Node when `VLD_TS_NODE_DIR` points at a directory with `zod` (>= 3.25, for `zod/v3` and `zod/v4`) and, optionally, `valibot@1`; otherwise the check is skipped.
 
 ```bash
 mkdir -p .ts-check && echo '{"private":true}' > .ts-check/package.json
 npm --prefix .ts-check install zod@^3.25 valibot@1
-VLD_TS_NODE_DIR=$PWD/.ts-check cargo test -p vld-ts
+VLD_TS_NODE_DIR=$PWD/.ts-check cargo test -p vld --all-features --test it ts::
 ```
 
 ## Fuzzing

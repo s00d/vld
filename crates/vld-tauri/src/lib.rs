@@ -215,7 +215,7 @@ impl VldTauriError {
             .issues
             .iter()
             .map(|i| TauriIssue {
-                path: vld_integration_common::format_path(&i.path),
+                path: vld::error::format_path(&i.path),
                 message: i.message.clone(),
                 code: i.code.key().to_string(),
                 params: i
@@ -412,7 +412,7 @@ pub type VldEvent<T> = VldPayload<T>;
 // ---------------------------------------------------------------------------
 
 fn format_vld_error_inline(e: &vld::error::VldError) -> String {
-    let issues: Vec<String> = vld_integration_common::flatten_issues(e)
+    let issues: Vec<String> = vld::error::flatten_issues(e)
         .into_iter()
         .map(|(path, message)| {
             if path.is_empty() {

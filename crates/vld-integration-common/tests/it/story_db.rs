@@ -69,12 +69,7 @@ fn issue_codes(e: &DbError) -> Vec<(String, String)> {
         DbError::Validation(v) => v
             .issues
             .iter()
-            .map(|i| {
-                (
-                    vld_integration_common::format_path(&i.path),
-                    i.code.key().to_string(),
-                )
-            })
+            .map(|i| (vld::error::format_path(&i.path), i.code.key().to_string()))
             .collect(),
         DbError::Serialization(m) => panic!("serialization error: {m}"),
     }

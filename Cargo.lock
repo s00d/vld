@@ -9548,7 +9548,9 @@ dependencies = [
  "md-5 0.11.0",
  "phonenumber",
  "proptest",
+ "rand 0.10.3",
  "regex-lite",
+ "regex-syntax 0.8.11",
  "rust_decimal",
  "semver",
  "serde",
@@ -9610,7 +9612,6 @@ dependencies = [
  "serde",
  "serde_json",
  "vld",
- "vld-integration-common",
 ]
 
 [[package]]
@@ -9647,29 +9648,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vld-dioxus"
-version = "0.7.0"
-dependencies = [
- "serde",
- "serde_json",
- "vld",
- "vld-integration-common",
-]
-
-[[package]]
-name = "vld-fake"
-version = "0.7.0"
-dependencies = [
- "proptest",
- "rand 0.10.3",
- "regex-lite",
- "regex-syntax 0.8.11",
- "serde",
- "serde_json",
- "vld",
-]
-
-[[package]]
 name = "vld-http-common"
 version = "0.7.0"
 dependencies = [
@@ -9700,16 +9678,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "vld",
-]
-
-[[package]]
-name = "vld-leptos"
-version = "0.7.0"
-dependencies = [
- "serde",
- "serde_json",
- "vld",
- "vld-integration-common",
 ]
 
 [[package]]
@@ -9845,7 +9813,6 @@ dependencies = [
  "serde",
  "serde_json",
  "vld",
- "vld-integration-common",
 ]
 
 [[package]]
@@ -9876,17 +9843,6 @@ dependencies = [
  "tower-service",
  "vld",
  "vld-http-common",
-]
-
-[[package]]
-name = "vld-ts"
-version = "0.7.0"
-dependencies = [
- "insta",
- "proptest",
- "serde",
- "serde_json",
- "vld",
 ]
 
 [[package]]

@@ -47,8 +47,8 @@ cargo nextest run -p vld --all-features -E 'test(/^story_api_request::/)'   # on
 just test                                              # what CI runs (CONTRIBUTING.md)
 ```
 
-Snapshots (`vld`, `vld-utoipa`, `vld-aide`, `vld-ts`) are insta files in `tests/it/snapshots/`:
-`cargo insta test -p <crate>`, then `cargo insta review`. The vld-ts Node cross-check runs only
+Snapshots (`vld`, `vld-utoipa`, `vld-aide`) are insta files in `tests/it/snapshots/` (`vld::ts`: `tests/it/ts/snapshots/`):
+`cargo insta test -p <crate>`, then `cargo insta review`. The `vld::ts` Node cross-check runs only
 with `VLD_TS_NODE_DIR` set (see `CONTRIBUTING.md`).
 
 ## Mutation testing

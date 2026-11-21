@@ -1,0 +1,213 @@
+---
+source: crates/vld/tests/it/ts/corpus_codegen.rs
+expression: out
+---
+email Zod: z.string().email()
+email Zod4: z.email()
+email Valibot: v.pipe(v.string(), v.email())
+email Zod4 fragment: z.string().refine((s) => z.email().safeParse(s).success, { error: "Invalid email" })
+
+uri Zod: z.string().url().regex(/^https?:\/\/\S+$/)
+uri Zod4: z.url().regex(/^https?:\/\/\S+$/)
+uri Valibot: v.pipe(v.string(), v.url(), v.regex(/^https?:\/\/\S+$/))
+uri Zod4 fragment: z.string().regex(/^https?:\/\/\S+$/).refine((s) => z.url().safeParse(s).success, { error: "Invalid uri" })
+
+url Zod: z.string().url().regex(/^https?:\/\/\S+$/)
+url Zod4: z.url().regex(/^https?:\/\/\S+$/)
+url Valibot: v.pipe(v.string(), v.url(), v.regex(/^https?:\/\/\S+$/))
+url Zod4 fragment: z.string().regex(/^https?:\/\/\S+$/).refine((s) => z.url().safeParse(s).success, { error: "Invalid url" })
+
+url-strict Zod: z.string().url().regex(/^https?:\/\/\S+$/)
+url-strict Zod4: z.url().regex(/^https?:\/\/\S+$/)
+url-strict Valibot: v.pipe(v.string(), v.url(), v.regex(/^https?:\/\/\S+$/))
+url-strict Zod4 fragment: z.string().regex(/^https?:\/\/\S+$/).refine((s) => z.url().safeParse(s).success, { error: "Invalid url-strict" })
+
+uuid Zod: z.string().uuid()
+uuid Zod4: z.guid()
+uuid Valibot: v.pipe(v.string(), v.uuid())
+uuid Zod4 fragment: z.string().refine((s) => z.guid().safeParse(s).success, { error: "Invalid uuid" })
+
+uuid-v1 Zod: z.string().uuid().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-1/)
+uuid-v1 Zod4: z.guid().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-1/)
+uuid-v1 Valibot: v.pipe(v.string(), v.uuid(), v.regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-1/))
+uuid-v1 Zod4 fragment: z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-1/).refine((s) => z.guid().safeParse(s).success, { error: "Invalid uuid-v1" })
+
+uuid-v4 Zod: z.string().uuid().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4/)
+uuid-v4 Zod4: z.guid().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4/)
+uuid-v4 Valibot: v.pipe(v.string(), v.uuid(), v.regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4/))
+uuid-v4 Zod4 fragment: z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4/).refine((s) => z.guid().safeParse(s).success, { error: "Invalid uuid-v4" })
+
+uuid-v7 Zod: z.string().uuid().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7/)
+uuid-v7 Zod4: z.guid().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7/)
+uuid-v7 Valibot: v.pipe(v.string(), v.uuid(), v.regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7/))
+uuid-v7 Zod4 fragment: z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7/).refine((s) => z.guid().safeParse(s).success, { error: "Invalid uuid-v7" })
+
+ipv4 Zod: z.string().ip({ version: "v4" })
+ipv4 Zod4: z.ipv4()
+ipv4 Valibot: v.pipe(v.string(), v.ipv4())
+ipv4 Zod4 fragment: z.string().refine((s) => z.ipv4().safeParse(s).success, { error: "Invalid ipv4" })
+
+ipv6 Zod: z.string().ip({ version: "v6" })
+ipv6 Zod4: z.ipv6()
+ipv6 Valibot: v.pipe(v.string(), v.ipv6())
+ipv6 Zod4 fragment: z.string().refine((s) => z.ipv6().safeParse(s).success, { error: "Invalid ipv6" })
+
+ip Zod: z.string().ip()
+ip Zod4: z.string().refine((s) => z.ipv4().safeParse(s).success || z.ipv6().safeParse(s).success, { error: "Invalid IP" })
+ip Valibot: v.pipe(v.string(), v.ip())
+ip Zod4 fragment: z.string().refine((s) => z.ipv4().safeParse(s).success || z.ipv6().safeParse(s).success, { error: "Invalid IP" })
+
+cidr Zod: z.string().refine((s) => { const i = s.indexOf("/"); if (i < 0) return false; const a = s.slice(0, i), p = s.slice(i + 1); if (!/^(0|[1-9]\d{0,2})$/.test(p)) return false; return z.string().ip({ version: "v4" }).safeParse(a).success ? +p <= 32 : z.string().ip({ version: "v6" }).safeParse(a).success && +p <= 128; }, "Invalid CIDR")
+cidr Zod4: z.string().refine((s) => { const i = s.indexOf("/"); if (i < 0) return false; const a = s.slice(0, i), p = s.slice(i + 1); if (!/^(0|[1-9]\d{0,2})$/.test(p)) return false; return z.ipv4().safeParse(a).success ? +p <= 32 : z.ipv6().safeParse(a).success && +p <= 128; }, { error: "Invalid CIDR" })
+cidr Valibot: v.pipe(v.string(), v.check((s) => { const i = s.indexOf("/"); if (i < 0) return false; const a = s.slice(0, i), p = s.slice(i + 1); if (!/^(0|[1-9]\d{0,2})$/.test(p)) return false; return v.safeParse(v.pipe(v.string(), v.ipv4()), a).success ? +p <= 32 : v.safeParse(v.pipe(v.string(), v.ipv6()), a).success && +p <= 128; }, "Invalid CIDR"))
+cidr Zod4 fragment: z.string().refine((s) => { const i = s.indexOf("/"); if (i < 0) return false; const a = s.slice(0, i), p = s.slice(i + 1); if (!/^(0|[1-9]\d{0,2})$/.test(p)) return false; return z.ipv4().safeParse(a).success ? +p <= 32 : z.ipv6().safeParse(a).success && +p <= 128; }, { error: "Invalid CIDR" })
+
+date Zod: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => { const d = new Date(s.slice(0, 10) + "T00:00:00Z"); return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s.slice(0, 10); }, "Invalid date")
+date Zod4: z.iso.date()
+date Valibot: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}-\d{2}$/), v.check((s) => { const d = new Date(s.slice(0, 10) + "T00:00:00Z"); return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s.slice(0, 10); }, "Invalid date"))
+date Zod4 fragment: z.string().refine((s) => z.iso.date().safeParse(s).success, { error: "Invalid date" })
+
+date-time Zod: z.string().regex(/^\d{4}-\d{2}-\d{2}[Tt]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?([Zz]|[+-]([01]\d|2[0-3]):[0-5]\d)?$/).refine((s) => { const d = new Date(s.slice(0, 10) + "T00:00:00Z"); return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s.slice(0, 10); }, "Invalid datetime")
+date-time Zod4: z.string().regex(/^\d{4}-\d{2}-\d{2}[Tt]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?([Zz]|[+-]([01]\d|2[0-3]):[0-5]\d)?$/).refine((s) => { const d = new Date(s.slice(0, 10) + "T00:00:00Z"); return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s.slice(0, 10); }, { error: "Invalid datetime" })
+date-time Valibot: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}-\d{2}[Tt]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?([Zz]|[+-]([01]\d|2[0-3]):[0-5]\d)?$/), v.check((s) => { const d = new Date(s.slice(0, 10) + "T00:00:00Z"); return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s.slice(0, 10); }, "Invalid datetime"))
+date-time Zod4 fragment: z.string().regex(/^\d{4}-\d{2}-\d{2}[Tt]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?([Zz]|[+-]([01]\d|2[0-3]):[0-5]\d)?$/).refine((s) => { const d = new Date(s.slice(0, 10) + "T00:00:00Z"); return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s.slice(0, 10); }, { error: "Invalid datetime" })
+
+time Zod: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?$/)
+time Zod4: z.iso.time().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?$/)
+time Valibot: v.pipe(v.string(), v.regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?$/))
+time Zod4 fragment: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?$/).refine((s) => z.iso.time().safeParse(s).success, { error: "Invalid time" })
+
+hostname Zod: z.string().regex(/^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/)
+hostname Zod4: z.string().regex(/^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/)
+hostname Valibot: v.pipe(v.string(), v.regex(/^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/))
+hostname Zod4 fragment: z.string().regex(/^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/)
+
+mac Zod: z.string().regex(/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/)
+mac Zod4: z.string().regex(/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/)
+mac Valibot: v.pipe(v.string(), v.regex(/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/))
+mac Zod4 fragment: z.string().regex(/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/)
+
+hex Zod: z.string().regex(/^[0-9A-Fa-f]+$/)
+hex Zod4: z.string().regex(/^[0-9A-Fa-f]+$/)
+hex Valibot: v.pipe(v.string(), v.regex(/^[0-9A-Fa-f]+$/))
+hex Zod4 fragment: z.string().regex(/^[0-9A-Fa-f]+$/)
+
+slug Zod: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
+slug Zod4: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
+slug Valibot: v.pipe(v.string(), v.regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/))
+slug Zod4 fragment: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
+
+semver Zod: z.string().regex(/^v?\d+\.\d+\.\d+(?:[-+][\s\S]*)?$/)
+semver Zod4: z.string().regex(/^v?\d+\.\d+\.\d+(?:[-+][\s\S]*)?$/)
+semver Valibot: v.pipe(v.string(), v.regex(/^v?\d+\.\d+\.\d+(?:[-+][\s\S]*)?$/))
+semver Zod4 fragment: z.string().regex(/^v?\d+\.\d+\.\d+(?:[-+][\s\S]*)?$/)
+
+jwt Zod: z.string().regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/)
+jwt Zod4: z.string().regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/)
+jwt Valibot: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/))
+jwt Zod4 fragment: z.string().regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/)
+
+ascii Zod: z.string().regex(/^[\x00-\x7F]*$/)
+ascii Zod4: z.string().regex(/^[\x00-\x7F]*$/)
+ascii Valibot: v.pipe(v.string(), v.regex(/^[\x00-\x7F]*$/))
+ascii Zod4 fragment: z.string().regex(/^[\x00-\x7F]*$/)
+
+alpha Zod: z.string().regex(/^[A-Za-z]*$/)
+alpha Zod4: z.string().regex(/^[A-Za-z]*$/)
+alpha Valibot: v.pipe(v.string(), v.regex(/^[A-Za-z]*$/))
+alpha Zod4 fragment: z.string().regex(/^[A-Za-z]*$/)
+
+alphanumeric Zod: z.string().regex(/^[A-Za-z0-9]*$/)
+alphanumeric Zod4: z.string().regex(/^[A-Za-z0-9]*$/)
+alphanumeric Valibot: v.pipe(v.string(), v.regex(/^[A-Za-z0-9]*$/))
+alphanumeric Zod4 fragment: z.string().regex(/^[A-Za-z0-9]*$/)
+
+lowercase Zod: z.string().refine((s) => s === s.toLowerCase(), "Must be lowercase")
+lowercase Zod4: z.string().refine((s) => s === s.toLowerCase(), { error: "Must be lowercase" })
+lowercase Valibot: v.pipe(v.string(), v.check((s) => s === s.toLowerCase(), "Must be lowercase"))
+lowercase Zod4 fragment: z.string().refine((s) => s === s.toLowerCase(), { error: "Must be lowercase" })
+
+uppercase Zod: z.string().refine((s) => s === s.toUpperCase(), "Must be uppercase")
+uppercase Zod4: z.string().refine((s) => s === s.toUpperCase(), { error: "Must be uppercase" })
+uppercase Valibot: v.pipe(v.string(), v.check((s) => s === s.toUpperCase(), "Must be uppercase"))
+uppercase Zod4 fragment: z.string().refine((s) => s === s.toUpperCase(), { error: "Must be uppercase" })
+
+locale Zod: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/)
+locale Zod4: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/)
+locale Valibot: v.pipe(v.string(), v.regex(/^[a-z]{2}(-[A-Z]{2})?$/))
+locale Zod4 fragment: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/)
+
+country-code Zod: z.string().regex(/^[A-Z]{2}$/)
+country-code Zod4: z.string().regex(/^[A-Z]{2}$/)
+country-code Valibot: v.pipe(v.string(), v.regex(/^[A-Z]{2}$/))
+country-code Zod4 fragment: z.string().regex(/^[A-Z]{2}$/)
+
+currency-code Zod: z.string().regex(/^[A-Z]{3}$/)
+currency-code Zod4: z.string().regex(/^[A-Z]{3}$/)
+currency-code Valibot: v.pipe(v.string(), v.regex(/^[A-Z]{3}$/))
+currency-code Zod4 fragment: z.string().regex(/^[A-Z]{3}$/)
+
+cron Zod: z.string().regex(/^\s*[\d*\/,?-]+(\s+[\d*\/,?-]+){4,5}\s*$/)
+cron Zod4: z.string().regex(/^\s*[\d*\/,?-]+(\s+[\d*\/,?-]+){4,5}\s*$/)
+cron Valibot: v.pipe(v.string(), v.regex(/^\s*[\d*\/,?-]+(\s+[\d*\/,?-]+){4,5}\s*$/))
+cron Zod4 fragment: z.string().regex(/^\s*[\d*\/,?-]+(\s+[\d*\/,?-]+){4,5}\s*$/)
+
+credit-card Zod: z.string().refine((s) => { if (!/^[\d -]*$/.test(s)) return false; const d = s.replace(/\D/g, ""); if (d.length < 12 || d.length > 19) return false; let sum = 0; for (let i = 0; i < d.length; i++) { let n = +d[d.length - 1 - i]; if (i % 2) { n *= 2; if (n > 9) n -= 9; } sum += n; } return sum % 10 === 0; }, "Invalid credit card")
+credit-card Zod4: z.string().refine((s) => { if (!/^[\d -]*$/.test(s)) return false; const d = s.replace(/\D/g, ""); if (d.length < 12 || d.length > 19) return false; let sum = 0; for (let i = 0; i < d.length; i++) { let n = +d[d.length - 1 - i]; if (i % 2) { n *= 2; if (n > 9) n -= 9; } sum += n; } return sum % 10 === 0; }, { error: "Invalid credit card" })
+credit-card Valibot: v.pipe(v.string(), v.check((s) => { if (!/^[\d -]*$/.test(s)) return false; const d = s.replace(/\D/g, ""); if (d.length < 12 || d.length > 19) return false; let sum = 0; for (let i = 0; i < d.length; i++) { let n = +d[d.length - 1 - i]; if (i % 2) { n *= 2; if (n > 9) n -= 9; } sum += n; } return sum % 10 === 0; }, "Invalid credit card"))
+credit-card Zod4 fragment: z.string().refine((s) => { if (!/^[\d -]*$/.test(s)) return false; const d = s.replace(/\D/g, ""); if (d.length < 12 || d.length > 19) return false; let sum = 0; for (let i = 0; i < d.length; i++) { let n = +d[d.length - 1 - i]; if (i % 2) { n *= 2; if (n > 9) n -= 9; } sum += n; } return sum % 10 === 0; }, { error: "Invalid credit card" })
+
+phone Zod: z.string().regex(/^\+(?=(?:\D*\d){8,15}\D*$)[\d ()-]*$/)
+phone Zod4: z.string().regex(/^\+(?=(?:\D*\d){8,15}\D*$)[\d ()-]*$/)
+phone Valibot: v.pipe(v.string(), v.regex(/^\+(?=(?:\D*\d){8,15}\D*$)[\d ()-]*$/))
+phone Zod4 fragment: z.string().regex(/^\+(?=(?:\D*\d){8,15}\D*$)[\d ()-]*$/)
+
+phone-e164 Zod: z.string().regex(/^\+[1-9]\d{1,14}$/)
+phone-e164 Zod4: z.string().regex(/^\+[1-9]\d{1,14}$/)
+phone-e164 Valibot: v.pipe(v.string(), v.regex(/^\+[1-9]\d{1,14}$/))
+phone-e164 Zod4 fragment: z.string().regex(/^\+[1-9]\d{1,14}$/)
+
+color Zod: z.string().regex(/^(?:#(?:[0-9a-f]{6}|[0-9a-f]{8})|rgb\(\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*,\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*,\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*\)|hsl\(\s*\+?0*(?:360|3[0-5]\d|[12]?\d?\d)\s*,\s*\+?0*(?:100|[1-9]?\d)%\s*,\s*\+?0*(?:100|[1-9]?\d)%\s*\))$/i)
+color Zod4: z.string().regex(/^(?:#(?:[0-9a-f]{6}|[0-9a-f]{8})|rgb\(\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*,\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*,\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*\)|hsl\(\s*\+?0*(?:360|3[0-5]\d|[12]?\d?\d)\s*,\s*\+?0*(?:100|[1-9]?\d)%\s*,\s*\+?0*(?:100|[1-9]?\d)%\s*\))$/i)
+color Valibot: v.pipe(v.string(), v.regex(/^(?:#(?:[0-9a-f]{6}|[0-9a-f]{8})|rgb\(\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*,\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*,\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*\)|hsl\(\s*\+?0*(?:360|3[0-5]\d|[12]?\d?\d)\s*,\s*\+?0*(?:100|[1-9]?\d)%\s*,\s*\+?0*(?:100|[1-9]?\d)%\s*\))$/i))
+color Zod4 fragment: z.string().regex(/^(?:#(?:[0-9a-f]{6}|[0-9a-f]{8})|rgb\(\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*,\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*,\s*\+?0*(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\s*\)|hsl\(\s*\+?0*(?:360|3[0-5]\d|[12]?\d?\d)\s*,\s*\+?0*(?:100|[1-9]?\d)%\s*,\s*\+?0*(?:100|[1-9]?\d)%\s*\))$/i)
+
+byte Zod: z.string().regex(/^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{4}|[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)$/)
+byte Zod4: z.string().regex(/^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{4}|[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)$/)
+byte Valibot: v.pipe(v.string(), v.regex(/^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{4}|[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)$/))
+byte Zod4 fragment: z.string().regex(/^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{4}|[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)$/)
+
+base64url Zod: z.string().regex(/^(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{4}|[A-Za-z0-9_-]{2}(?:==?)?|[A-Za-z0-9_-]{3}=?)$/)
+base64url Zod4: z.string().regex(/^(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{4}|[A-Za-z0-9_-]{2}(?:==?)?|[A-Za-z0-9_-]{3}=?)$/)
+base64url Valibot: v.pipe(v.string(), v.regex(/^(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{4}|[A-Za-z0-9_-]{2}(?:==?)?|[A-Za-z0-9_-]{3}=?)$/))
+base64url Zod4 fragment: z.string().regex(/^(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{4}|[A-Za-z0-9_-]{2}(?:==?)?|[A-Za-z0-9_-]{3}=?)$/)
+
+json Zod: z.string().refine((s) => { try { JSON.parse(s); return true; } catch { return false; } }, "Invalid JSON")
+json Zod4: z.string().refine((s) => { try { JSON.parse(s); return true; } catch { return false; } }, { error: "Invalid JSON" })
+json Valibot: v.pipe(v.string(), v.check((s) => { try { JSON.parse(s); return true; } catch { return false; } }, "Invalid JSON"))
+json Zod4 fragment: z.string().refine((s) => { try { JSON.parse(s); return true; } catch { return false; } }, { error: "Invalid JSON" })
+
+cuid2 Zod: z.string().regex(/^[a-z][a-z0-9]{1,31}$/)
+cuid2 Zod4: z.string().regex(/^[a-z][a-z0-9]{1,31}$/)
+cuid2 Valibot: v.pipe(v.string(), v.regex(/^[a-z][a-z0-9]{1,31}$/))
+cuid2 Zod4 fragment: z.string().regex(/^[a-z][a-z0-9]{1,31}$/)
+
+ulid Zod: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i)
+ulid Zod4: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i)
+ulid Valibot: v.pipe(v.string(), v.regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i))
+ulid Zod4 fragment: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i)
+
+nanoid Zod: z.string().regex(/^[A-Za-z0-9_-]+$/)
+nanoid Zod4: z.string().regex(/^[A-Za-z0-9_-]+$/)
+nanoid Valibot: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]+$/))
+nanoid Zod4 fragment: z.string().regex(/^[A-Za-z0-9_-]+$/)
+
+emoji Zod: z.string().regex(/^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{2600}-\u{26FF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{231A}-\u{231B}\u{23E9}-\u{23F3}\u{23F8}-\u{23FA}\u{E0020}-\u{E007F}\u{20E3}\u{200D}\u{2B50}]+$/u)
+emoji Zod4: z.string().regex(/^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{2600}-\u{26FF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{231A}-\u{231B}\u{23E9}-\u{23F3}\u{23F8}-\u{23FA}\u{E0020}-\u{E007F}\u{20E3}\u{200D}\u{2B50}]+$/u)
+emoji Valibot: v.pipe(v.string(), v.regex(/^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{2600}-\u{26FF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{231A}-\u{231B}\u{23E9}-\u{23F3}\u{23F8}-\u{23FA}\u{E0020}-\u{E007F}\u{20E3}\u{200D}\u{2B50}]+$/u))
+emoji Zod4 fragment: z.string().regex(/^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{2600}-\u{26FF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{231A}-\u{231B}\u{23E9}-\u{23F3}\u{23F8}-\u{23FA}\u{E0020}-\u{E007F}\u{20E3}\u{200D}\u{2B50}]+$/u)
+
+decimal Zod: z.string()
+decimal Zod4: z.string()
+decimal Valibot: v.string()
+decimal Zod4 fragment: z.string()

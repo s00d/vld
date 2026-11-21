@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v5
       # diesel postgres / mysql backends link libpq / libmysqlclient.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev libmysqlclient-dev
-      # vld-ts cross-checks generated Zod/Valibot code against vld under node.
+      # vld::ts (feature `ts`) cross-checks generated Zod/Valibot code against vld under node.
       - uses: actions/setup-node@v5
         with:
           node-version: 22

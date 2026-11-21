@@ -14,7 +14,7 @@ ci_flags := "--profile ci --locked"
 feature_crates := "vld-config: vld-diesel: vld-http-common: vld-utoipa:utoipa-5,utoipa-6 vld-schemars:schemars-0,schemars-1 vld-aide:schemars-0,schemars-1 vld-redis:redis-0,redis-1 vld-lapin:lapin-2,lapin-3,lapin-4 vld-ntex:ntex-3,ntex-4 vld-sqlx:sqlx-0_8,sqlx-0_9 vld-sea:sea-orm-1,sea-orm-2"
 # vld-sea's column-type features are tested together, not one by one.
 sea_types := "with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array"
-vld_all := "chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced"
+vld_all := "chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced,ts,fake"
 
 [private]
 default:
@@ -77,9 +77,9 @@ fuzz:
 playground:
     cargo run -p playground {{ ci_flags }}
 
-# vld, vld-leptos and vld-dioxus build for wasm32 (rustup target add wasm32-unknown-unknown)
+# vld (the `form` module included) builds for wasm32 (rustup target add wasm32-unknown-unknown)
 wasm:
-    cargo check --target wasm32-unknown-unknown -p vld -p vld-leptos -p vld-dioxus {{ ci_flags }}
+    cargo check --target wasm32-unknown-unknown -p vld {{ ci_flags }}
 
 # Every pair of vld features compiles (slow: ~100 builds)
 powerset:

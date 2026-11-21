@@ -51,7 +51,7 @@ vld_integration_common::__vld_db_error!(
 );
 
 /// A single field error (`field` is a clean path such as `user.email` or `items[0]`).
-pub use vld_integration_common::form::FieldError;
+pub use vld::form::FieldError;
 
 /// Serializable validation error for API responses.
 ///
@@ -67,7 +67,7 @@ pub struct VldSurrealResponse {
 impl VldSurrealResponse {
     /// Create from a validation error.
     pub fn from_vld_error(e: &vld::error::VldError) -> Self {
-        let fields = vld_integration_common::flatten_issues(e)
+        let fields = vld::error::flatten_issues(e)
             .into_iter()
             .map(|(field, message)| FieldError { field, message })
             .collect();
