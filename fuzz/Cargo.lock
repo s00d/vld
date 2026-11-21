@@ -186,11 +186,11 @@ dependencies = [
  "libfuzzer-sys",
  "serde_json",
  "vld",
- "vld-http-common",
+ "vld-web",
 ]
 
 [[package]]
-name = "vld-http-common"
+name = "vld-web"
 version = "0.7.0"
 dependencies = [
  "serde",

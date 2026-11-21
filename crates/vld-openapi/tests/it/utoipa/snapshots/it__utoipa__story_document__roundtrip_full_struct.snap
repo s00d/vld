@@ -1,0 +1,26 @@
+---
+source: crates/vld-openapi/tests/it/utoipa/story_document.rs
+expression: value
+---
+{
+  "properties": {
+    "age": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "email": {
+      "format": "email",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 50,
+      "minLength": 2,
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "email"
+  ],
+  "type": "object"
+}

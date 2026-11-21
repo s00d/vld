@@ -1,0 +1,58 @@
+[package]
+name = "vld-openapi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "OpenAPI bridges for the vld validation library: utoipa and schemars (aide) schemas from vld types, and a JSON Schema validator"
+documentation = "https://docs.rs/vld-openapi"
+readme = "../../README.md"
+keywords = ["validation", "openapi", "utoipa", "schemars", "json-schema"]
+categories = ["web-programming", "development-tools"]
+include = ["/src/**", "/LICENSE", "/Cargo.toml"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+utoipa-5 = ["dep:utoipa5"]
+utoipa-6 = ["dep:utoipa6"]
+schemars-0 = ["dep:schemars0", "dep:serde"]
+schemars-1 = ["dep:schemars1", "dep:serde"]
+
+[dependencies]
+vld = { workspace = true, features = ["openapi"] }
+serde_json = { workspace = true }
+regex-lite = { workspace = true }
+serde = { workspace = true, optional = true }
+utoipa5 = { package = "utoipa", version = "5", optional = true }
+utoipa6 = { package = "utoipa", version = "6", optional = true }
+schemars0 = { package = "schemars", version = ">=0.9, <1", optional = true }
+schemars1 = { package = "schemars", version = ">=1, <2", optional = true }
+
+[dev-dependencies]
+proptest = "1"
+insta = { workspace = true }
+serde = { workspace = true }
+vld = { workspace = true, features = ["openapi", "derive"] }
+
+[[example]]
+name = "utoipa_basic"
+path = "examples/utoipa_basic.rs"
+required-features = ["utoipa-5"]
+
+[[example]]
+name = "schemars_basic"
+path = "examples/schemars_basic.rs"
+required-features = ["schemars-1"]
+
+[[example]]
+name = "aide_basic"
+path = "examples/aide_basic.rs"
+required-features = ["schemars-0"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

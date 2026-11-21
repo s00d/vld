@@ -9564,46 +9564,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vld-actix"
-version = "0.7.0"
-dependencies = [
- "actix-rt",
- "actix-web",
- "serde",
- "serde_json",
- "vld",
- "vld-http-common",
-]
-
-[[package]]
-name = "vld-aide"
-version = "0.7.0"
-dependencies = [
- "insta",
- "serde",
- "serde_json",
- "vld",
- "vld-schemars",
-]
-
-[[package]]
-name = "vld-axum"
-version = "0.7.0"
-dependencies = [
- "axum",
- "bytes",
- "http 1.5.0",
- "serde",
- "serde_json",
- "tokio",
- "tower",
- "utoipa 5.5.0",
- "vld",
- "vld-http-common",
- "vld-utoipa",
-]
-
-[[package]]
 name = "vld-clap"
 version = "0.7.0"
 dependencies = [
@@ -9648,16 +9608,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vld-http-common"
-version = "0.7.0"
-dependencies = [
- "proptest",
- "serde",
- "serde_json",
- "vld",
-]
-
-[[package]]
 name = "vld-integration-common"
 version = "0.7.0"
 dependencies = [
@@ -9681,39 +9631,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "vld-ntex"
+name = "vld-openapi"
 version = "0.7.0"
 dependencies = [
- "flate2",
- "ntex 3.12.3",
- "ntex 4.6.0",
- "serde_json",
- "vld",
- "vld-http-common",
-]
-
-[[package]]
-name = "vld-poem"
-version = "0.7.0"
-dependencies = [
- "poem",
+ "insta",
+ "proptest",
+ "regex-lite",
+ "schemars 0.9.0",
+ "schemars 1.2.3",
  "serde",
  "serde_json",
- "tokio",
+ "utoipa 5.5.0",
+ "utoipa 6.0.0",
  "vld",
- "vld-http-common",
-]
-
-[[package]]
-name = "vld-rama"
-version = "0.7.0"
-dependencies = [
- "rama",
- "serde",
- "serde_json",
- "tokio",
- "vld",
- "vld-http-common",
 ]
 
 [[package]]
@@ -9726,42 +9656,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "vld",
-]
-
-[[package]]
-name = "vld-rocket"
-version = "0.7.0"
-dependencies = [
- "rocket",
- "serde",
- "serde_json",
- "vld",
- "vld-http-common",
-]
-
-[[package]]
-name = "vld-salvo"
-version = "0.7.0"
-dependencies = [
- "salvo",
- "serde",
- "serde_json",
- "tokio",
- "vld",
- "vld-http-common",
-]
-
-[[package]]
-name = "vld-schemars"
-version = "0.7.0"
-dependencies = [
- "proptest",
- "regex-lite",
- "schemars 0.9.0",
- "schemars 1.2.3",
- "serde",
- "serde_json",
  "vld",
 ]
 
@@ -9816,61 +9710,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "vld-tonic"
+name = "vld-web"
 version = "0.7.0"
 dependencies = [
- "serde",
- "serde_json",
- "tonic",
- "vld",
- "vld-http-common",
-]
-
-[[package]]
-name = "vld-tower"
-version = "0.7.0"
-dependencies = [
+ "actix-rt",
+ "actix-web",
  "axum",
  "bytes",
+ "flate2",
+ "futures-util",
  "http 1.5.0",
  "http-body",
  "http-body-util",
+ "ntex 3.12.3",
+ "ntex 4.6.0",
+ "poem",
+ "proptest",
+ "rama",
+ "rocket",
+ "salvo",
  "serde",
  "serde_json",
  "tokio",
+ "tonic",
  "tower",
  "tower-layer",
  "tower-service",
- "vld",
- "vld-http-common",
-]
-
-[[package]]
-name = "vld-utoipa"
-version = "0.7.0"
-dependencies = [
- "insta",
- "proptest",
- "serde",
- "serde_json",
  "utoipa 5.5.0",
- "utoipa 6.0.0",
  "vld",
-]
-
-[[package]]
-name = "vld-warp"
-version = "0.7.0"
-dependencies = [
- "bytes",
- "futures-util",
- "http-body-util",
- "serde",
- "serde_json",
- "tokio",
- "tower",
- "vld",
- "vld-http-common",
+ "vld-openapi",
  "warp",
 ]
 

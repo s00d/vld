@@ -11,7 +11,7 @@ ci_flags := "--profile ci --locked"
 # Crates with optional features, run over feature pairs: `crate:majors`. The majors
 # (one feature per supported major of the dependency, `compile_error!` unless exactly
 # one is on) never combine. vld-diesel postgres/mysql need libpq / libmysqlclient.
-feature_crates := "vld-config: vld-diesel: vld-http-common: vld-utoipa:utoipa-5,utoipa-6 vld-schemars:schemars-0,schemars-1 vld-aide:schemars-0,schemars-1 vld-redis:redis-0,redis-1 vld-lapin:lapin-2,lapin-3,lapin-4 vld-ntex:ntex-3,ntex-4 vld-sqlx:sqlx-0_8,sqlx-0_9 vld-sea:sea-orm-1,sea-orm-2"
+feature_crates := "vld-config: vld-diesel: vld-redis:redis-0,redis-1 vld-lapin:lapin-2,lapin-3,lapin-4 vld-sqlx:sqlx-0_8,sqlx-0_9 vld-sea:sea-orm-1,sea-orm-2"
 # vld-sea's column-type features are tested together, not one by one.
 sea_types := "with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array"
 vld_all := "chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced,ts,fake"
