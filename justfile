@@ -168,7 +168,7 @@ minimal:
     cargo +nightly check --locked --manifest-path "$m" -p vld-app --features config-rs,figment
     cargo +nightly check --locked --manifest-path "$m" -p vld-data --features redis-0,redis-1,redis-aio-tokio
 
-# Crates not on crates.io yet are skipped; the baselines' rustdoc builds are removed.
+# Crates with no release on crates.io (none or a 0.0.0 placeholder) are skipped.
 # Public API changes vs crates.io match the version bump (all features)
 semver:
     #!/usr/bin/env bash
@@ -176,15 +176,17 @@ semver:
     trap 'rm -rf target/semver-checks || true' EXIT
     # vld-derive is a proc-macro: no library API for semver-checks to compare.
     for c in vld vld-web vld-openapi vld-data vld-app; do
-      if cargo info --registry crates-io "${c}" >/dev/null 2>&1; then
-        features=(--all-features)
-        # lapin 2 -> async-io 1 -> rustix 0.37, which reads the RUSTC_BOOTSTRAP that
-        # semver-checks sets as "nightly" and fails to build: vld_data::lapin2 is not checked.
-        [[ "${c}" == vld-data ]] && features=(--features "{{ data_semver }}")
-        cargo semver-checks -p "${c}" "${features[@]}"
-      else
-        echo "semver: ${c} is not on crates.io yet, skipped"
+      published="$(cargo info --registry crates-io "${c}" 2>/dev/null | sed -n 's/^version: \([^ ]*\).*/\1/p')"
+      if [[ -z "${published}" || "${published}" == 0.0.0 ]]; then
+        echo "semver: ${c} has no release on crates.io yet (${published:-none}), skipped"
+        continue
       fi
+      features=(--all-features)
+      # lapin 2 -> async-io 1 -> rustix 0.37 (linux_raw backend), which reads the
+      # RUSTC_BOOTSTRAP that semver-checks sets as "nightly" and fails to build:
+      # vld_data::lapin2 is not checked. `--features` alone only adds to the default set.
+      [[ "${c}" == vld-data ]] && features=(--only-explicit-features --features "{{ data_semver }}")
+      cargo semver-checks -p "${c}" "${features[@]}"
     done
 
 # Per-feature builds leave one artifact set per feature behind; needs cargo-sweep.
