@@ -10,7 +10,7 @@ documentation = "https://docs.rs/vld-web"
 keywords = ["validation", "web", "http", "extractor", "vld"]
 categories = ["web-programming", "web-programming::http-server"]
 readme = "README.md"
-include = ["/src/**", "/tests/**", "/examples/**", "/README.md", "/LICENSE", "/Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [lints]
 workspace = true

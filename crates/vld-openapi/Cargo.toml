@@ -10,7 +10,7 @@ documentation = "https://docs.rs/vld-openapi"
 keywords = ["validation", "openapi", "utoipa", "schemars", "json-schema"]
 categories = ["web-programming", "development-tools"]
 readme = "README.md"
-include = ["/src/**", "/tests/**", "/examples/**", "/README.md", "/LICENSE", "/Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [lints]
 workspace = true

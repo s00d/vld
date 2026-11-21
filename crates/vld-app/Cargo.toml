@@ -10,7 +10,7 @@ documentation = "https://docs.rs/vld-app"
 keywords = ["validation", "config", "clap", "tauri", "vld"]
 categories = ["config", "command-line-interface", "gui"]
 readme = "README.md"
-include = ["/src/**", "/tests/**", "/examples/**", "/README.md", "/LICENSE", "/Cargo.toml"]
+include = ["/src/**", "/README.md", "/LICENSE", "/Cargo.toml"]
 
 [lints]
 workspace = true
