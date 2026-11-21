@@ -117,7 +117,7 @@ pub struct PropertyInfo {
     pub schema: Value,
 }
 
-/// Extract property information from a JSON Schema object.
+/// Extract property information from a JSON Schema object, sorted by name.
 ///
 /// Works with both `schemars::Schema` (via `as_value()`) and raw `serde_json::Value`.
 ///
@@ -164,6 +164,8 @@ pub fn list_properties(schema: &Value) -> Vec<PropertyInfo> {
         });
     }
 
+    // Name order whatever map order serde_json uses (`preserve_order`).
+    result.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     result
 }
 

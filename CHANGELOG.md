@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `string().cron()` parses the fields: values and ranges must be in range (minutes 0–59, hours 0–23, days 1–31, months 1–12 or `JAN`–`DEC`, weekdays 0–7 or `SUN`–`SAT`), steps are `1..=max`, `?` only in the day fields; `@daily` & co. are accepted. It used to accept any 5 or 6 fields of digits and `*/,-?`.
 - The `jiff` feature enables jiff's time zone database (`tzdb-bundle-platform`, `tzdb-zoneinfo`) for `string().timezone()`.
 
+### Fixed
+
+- vld-openapi validator and `list_properties`: object keys in name order whatever map order serde_json uses; enabling `serde_json/preserve_order` anywhere in a build (vld-data `bson-2` does) changed issue order.
+
 ## [0.8.0] - 2026-11-21
 
 ### Breaking changes

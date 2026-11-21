@@ -664,7 +664,11 @@ fn validate_object(
     }
     let additional = schema.get("additionalProperties");
 
-    for (key, prop_value) in obj {
+    // Keys in name order: issue order must not depend on serde_json's
+    // `preserve_order` (another crate in the build may turn it on).
+    let mut entries: Vec<_> = obj.iter().collect();
+    entries.sort_unstable_by(|a, b| a.0.cmp(b.0));
+    for (key, prop_value) in entries {
         let mut prop_path = path.to_vec();
         prop_path.push(PathSegment::Field(key.clone()));
         let mut subs: Vec<&Value> = properties.and_then(|p| p.get(key)).into_iter().collect();
@@ -697,7 +701,9 @@ fn validate_object(
 
     // propertyNames: every key is a string valid against the schema.
     if let Some(names) = schema.get("propertyNames") {
-        for key in obj.keys() {
+        let mut keys: Vec<_> = obj.keys().collect();
+        keys.sort_unstable();
+        for key in keys {
             let mut key_path = path.to_vec();
             key_path.push(PathSegment::Field(key.clone()));
             let k = Value::String(key.clone());
