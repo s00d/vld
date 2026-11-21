@@ -10535,7 +10535,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vld"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "blake2",
  "chrono",
@@ -10572,7 +10572,7 @@ dependencies = [
 
 [[package]]
 name = "vld-app"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "config",
@@ -10587,7 +10587,7 @@ dependencies = [
 
 [[package]]
 name = "vld-data"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-nats",
  "bson 2.15.0",
@@ -10623,7 +10623,7 @@ dependencies = [
 
 [[package]]
 name = "vld-derive"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10632,7 +10632,7 @@ dependencies = [
 
 [[package]]
 name = "vld-openapi"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "insta",
  "poem",
@@ -10651,7 +10651,7 @@ dependencies = [
 
 [[package]]
 name = "vld-web"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -10681,7 +10681,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
- "tungstenite 0.30.0",
+ "tungstenite 0.29.0",
  "utoipa 5.5.0",
  "vld",
  "vld-openapi",
