@@ -764,6 +764,18 @@ fn expand_struct(
                     #parameter_in_expr
                 }
             }
+
+            ::vld::__vld_if_llm! {
+                impl #impl_generics ::vld::llm::LlmSchema for #name #ty_generics #where_clause {
+                    fn __vld_llm_parts() -> (
+                        &'static str,
+                        ::vld::serde_json::Value,
+                        ::std::vec::Vec<::vld::openapi::NestedSchemaEntry>,
+                    ) {
+                        (stringify!(#name), Self::json_schema(), Self::__vld_nested_schemas())
+                    }
+                }
+            }
         }
     })
 }
@@ -921,10 +933,10 @@ fn get_into_params_parameter_in(attrs: &[syn::Attribute]) -> Option<String> {
         let _ = attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("parameter_in") {
                 let expr: syn::Expr = meta.value()?.parse()?;
-                if let syn::Expr::Path(path) = expr {
-                    if let Some(ident) = path.path.get_ident() {
-                        found = Some(ident.to_string().to_ascii_lowercase());
-                    }
+                if let syn::Expr::Path(path) = expr
+                    && let Some(ident) = path.path.get_ident()
+                {
+                    found = Some(ident.to_string().to_ascii_lowercase());
                 }
             } else {
                 skip_meta(&meta)?;

@@ -82,6 +82,9 @@
 //! `path` is `""` for the root (e.g. malformed JSON), `.field` for fields and
 //! `[0]` for array items (`.items[0].name`); `code` is
 //! [`IssueCode::key()`](vld::error::IssueCode::key).
+/// Coerce a raw string value (query, form, path, header, cookie) into JSON:
+/// the core [`vld::schema::coerce_text`] (same rules, one implementation).
+pub use vld::schema::coerce_text as coerce_value;
 pub use vld::schema::parse_coerced;
 
 /// Default max request body size (2 MiB — same as axum `DefaultBodyLimit`).
@@ -106,67 +109,6 @@ pub const MAX_FORM_FIELDS: usize = 1000;
 /// Without it those adapters use [`DEFAULT_BODY_LIMIT`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VldBodyLimit(pub usize);
-
-/// Coerce a raw string value (query, form, path, header, cookie) into JSON.
-///
-/// Coercion never loses information: a value is only converted when the
-/// conversion round-trips to exactly the same text.
-///
-/// - `"true"` / `"false"` (lowercase only) → `Bool`
-/// - canonical integers (`0`, `42`, `-7`; no `+`, no leading zeros) that fit
-///   `i64`/`u64` → `Number`
-/// - canonical decimals (`3.14`, `-0.5`; no exponent, no trailing zeros, no
-///   precision loss in `f64`) → `Number`
-/// - everything else — including `""`, `"null"`, `"01234"`, `"+1555"`,
-///   `"1e3"`, `"TRUE"` and ids beyond `u64` — stays a `String`
-///
-/// Use `vld::string().coerce()` / `vld::number().coerce()` in schemas when a
-/// field must accept both forms (e.g. a string field that may look numeric).
-pub fn coerce_value(raw: &str) -> serde_json::Value {
-    use serde_json::Value;
-    match raw {
-        "true" => return Value::Bool(true),
-        "false" => return Value::Bool(false),
-        _ => {}
-    }
-    if is_canonical_number(raw) {
-        if !raw.contains('.') {
-            if let Ok(n) = raw.parse::<i64>() {
-                return Value::Number(n.into());
-            }
-            if let Ok(n) = raw.parse::<u64>() {
-                return Value::Number(n.into());
-            }
-        } else if let Ok(f) = raw.parse::<f64>() {
-            // `f64` Display is the shortest round-trip form: `1.50` → `1.5`,
-            // `0.1000000000000000001` → `0.1`; both stay strings.
-            if f.is_finite() && f.to_string() == raw {
-                if let Some(n) = serde_json::Number::from_f64(f) {
-                    return Value::Number(n);
-                }
-            }
-        }
-    }
-    Value::String(raw.to_string())
-}
-
-/// `-?(0|[1-9][0-9]*)(\.[0-9]+)?`, excluding `-0`.
-fn is_canonical_number(s: &str) -> bool {
-    let negative = s.starts_with('-');
-    let digits = s.strip_prefix('-').unwrap_or(s);
-    let (int, frac) = match digits.split_once('.') {
-        Some((i, f)) => (i, Some(f)),
-        None => (digits, None),
-    };
-    let all_digits = |p: &str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
-    if !all_digits(int) || (int.len() > 1 && int.starts_with('0')) {
-        return false;
-    }
-    if frac.is_some_and(|f| !all_digits(f)) {
-        return false;
-    }
-    !(negative && frac.is_none() && int == "0")
-}
 
 /// Parse a URL query string (or `application/x-www-form-urlencoded` body)
 /// into a `serde_json::Map`.
@@ -615,12 +557,12 @@ pub fn percent_decode(input: &str) -> String {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' {
-            if let (Some(h), Some(l)) = (hex(i + 1), hex(i + 2)) {
-                out.push((h * 16 + l) as u8);
-                i += 3;
-                continue;
-            }
+        if bytes[i] == b'%'
+            && let (Some(h), Some(l)) = (hex(i + 1), hex(i + 2))
+        {
+            out.push((h * 16 + l) as u8);
+            i += 3;
+            continue;
         }
         out.push(bytes[i]);
         i += 1;

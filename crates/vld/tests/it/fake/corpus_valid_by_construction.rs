@@ -59,6 +59,16 @@ fn string_formats() {
         "iso_time" => s().iso_time(); "hostname" => s().hostname(); "cuid2" => s().cuid2();
         "ulid" => s().ulid(); "nanoid" => s().nanoid(); "emoji" => s().emoji();
         "json" => s().json(); "base64url" => s().base64url();
+        "country" => s().country(); "country_alpha3" => s().country_alpha3();
+        "iban" => s().iban(); "bic" => s().bic();
+        "isbn" => s().isbn(); "ean" => s().ean(); "vin" => s().vin();
+        "timezone" => s().timezone(); "mime" => s().mime(); "object_id" => s().object_id();
+        "regex_syntax" => s().regex_syntax();
+        "password" => s().min(12).require_lowercase().require_uppercase().require_digit()
+            .require_symbol().max_repeat(1);
+        "password_short" => s().max(6).require_symbol().require_digit();
+        "password_long" => s().min(40).max(41).require_uppercase();
+        "password_ascii" => s().ascii().require_lowercase().min(10);
         // lengths
         "base64url_len" => s().base64url().len(8); "email_max" => s().email().max(20);
         "hex_40" => s().hex().min(40).max(40); "alpha_1_3" => s().alpha().min(1).max(3);
@@ -226,5 +236,52 @@ fn core_shapes_are_generated_validly() {
         let v = fake_value(&ulid);
         let first = v.as_str().unwrap().as_bytes()[0];
         assert!((b'0'..=b'7').contains(&first), "{v}");
+    }
+}
+
+/// Given decimals with scale / precision, money in every kind of currency, the number presets,
+/// ranges over numbers and dates, and Unix-timestamp datetimes (also past / future), when fakes
+/// are generated, then each passes: amounts fit the currency's minor units, range ends are
+/// ordered, timestamps lie in range and on the right side of now.
+#[test]
+fn units_ranges_and_timestamps() {
+    table! {
+        "decimal_scale0" => vld::decimal().max_scale(0);
+        "decimal_scale3_exact" => vld::decimal().scale(3);
+        "decimal_precision" => vld::decimal().max_precision(4).max_scale(2);
+        "decimal_precision_exact" => vld::decimal().scale(2).max_precision(3);
+        "decimal_exclusive" => vld::decimal().gt("0").lt("0.05").max_scale(2);
+        "decimal_negative" => vld::decimal().negative().max_scale(1);
+        "money" => vld::money();
+        "money_allow_list" => vld::money().currencies(&["JPY", "BHD", "CLF"]);
+        "money_positive" => vld::money().amount(vld::decimal().positive());
+        "percent" => vld::percent();
+        "ratio" => vld::ratio();
+        "range_int" => vld::range(vld::i32());
+        "range_number" => vld::range(vld::number().min(-5.0).max(5.0));
+        "range_decimal" => vld::range(vld::decimal());
+        "range_date" => vld::range(vld::chrono::date()).keys("from", "to");
+        "range_datetime" => vld::range(vld::chrono::datetime().with_timezone_only());
+        "range_unix" => vld::range(vld::chrono::datetime().unix_millis());
+        "unix_seconds" => vld::chrono::datetime().unix_seconds();
+        "unix_millis_past" => vld::chrono::datetime().unix_millis().past();
+        "unix_future" => vld::chrono::datetime().unix_seconds().future();
+        "unix_bounded" => vld::chrono::datetime().unix_seconds().min("2020-01-01T00:00:00Z").max("2020-01-02T00:00:00Z");
+    }
+}
+
+/// Given every geo schema (coordinates, points, each GeoJSON type, features), when fakes are
+/// generated, then each passes: rings are closed, pairs are `[lng, lat]` in range.
+#[cfg(feature = "geo")]
+#[test]
+fn geo_shapes() {
+    table! {
+        "latitude" => vld::latitude();
+        "longitude" => vld::longitude();
+        "geo_point" => vld::geo_point();
+        "geojson" => vld::geojson();
+        "polygons" => vld::geojson().types(&["Polygon", "MultiPolygon"]);
+        "lines" => vld::geojson().types(&["LineString", "MultiLineString"]);
+        "features" => vld::geojson().types(&["Feature", "FeatureCollection"]);
     }
 }

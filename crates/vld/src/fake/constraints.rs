@@ -31,7 +31,10 @@ impl StrCheck {
             .iter()
             .filter_map(|f| f.strip_prefix("uuid-v").and_then(|v| v.parse().ok()))
             .collect();
-        let formats = fmts.iter().filter_map(|f| format_schema(f)).collect();
+        let mut formats: Vec<_> = fmts.iter().filter_map(|f| format_schema(f)).collect();
+        if let Some(Value::Object(rules)) = obj.get("x-password") {
+            formats.push(password_schema(rules));
+        }
         let temporal = temporal_formats(obj)
             .into_iter()
             .map(|f| {
@@ -104,6 +107,29 @@ pub(crate) fn all_of_values(obj: &Map<String, Value>, key: &str) -> Vec<String> 
         .collect()
 }
 
+/// vld's password rules from an `x-password` keyword (`minScore` is not
+/// checked: the generator's passwords are random, not dictionary words).
+fn password_schema(rules: &Map<String, Value>) -> crate::primitives::ZString {
+    let mut s = crate::string();
+    let on = |k: &str| rules.get(k).and_then(Value::as_bool) == Some(true);
+    if on("lowercase") {
+        s = s.require_lowercase();
+    }
+    if on("uppercase") {
+        s = s.require_uppercase();
+    }
+    if on("digit") {
+        s = s.require_digit();
+    }
+    if on("symbol") {
+        s = s.require_symbol();
+    }
+    if let Some(n) = rules.get("maxRepeat").and_then(Value::as_u64) {
+        s = s.max_repeat(n as usize);
+    }
+    s
+}
+
 /// vld's own check for a JSON Schema `format` name (string-advanced formats
 /// fall back to the base check of the same family).
 fn format_schema(fmt: &str) -> Option<crate::primitives::ZString> {
@@ -144,6 +170,16 @@ fn format_schema(fmt: &str) -> Option<crate::primitives::ZString> {
         "ulid" => s.ulid(),
         "nanoid" => s.nanoid(),
         "emoji" => s.emoji(),
+        "iso3166-alpha2" => s.country(),
+        "iso3166-alpha3" => s.country_alpha3(),
+        "iban" => s.iban(),
+        "bic" => s.bic(),
+        "isbn" => s.isbn(),
+        "ean" => s.ean(),
+        "vin" => s.vin(),
+        "timezone" => s.timezone(),
+        "mime" => s.mime(),
+        "objectid" => s.object_id(),
         _ => return None,
     })
 }

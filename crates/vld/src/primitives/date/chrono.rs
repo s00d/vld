@@ -52,6 +52,15 @@ impl DateBackend for Chrono {
     fn format_datetime(dt: &Self::DateTime) -> String {
         dt.to_rfc3339()
     }
+
+    fn from_unix_nanos(nanos: i128) -> Option<Self::DateTime> {
+        let secs = i64::try_from(nanos.div_euclid(1_000_000_000)).ok()?;
+        ::chrono::DateTime::from_timestamp(secs, nanos.rem_euclid(1_000_000_000) as u32)
+    }
+
+    fn unix_nanos(dt: &Self::DateTime) -> i128 {
+        i128::from(dt.timestamp()) * 1_000_000_000 + i128::from(dt.timestamp_subsec_nanos())
+    }
 }
 
 /// Date schema producing `chrono::NaiveDate`.

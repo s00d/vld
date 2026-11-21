@@ -51,6 +51,22 @@ macro_rules! __vld_if_openapi {
     ($($tt:tt)*) => {};
 }
 
+/// Emit the given tokens only when the `llm` feature is enabled on `vld`.
+#[cfg(feature = "llm")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __vld_if_llm {
+    ($($tt:tt)*) => { $($tt)* };
+}
+
+/// No-op: `llm` feature is disabled.
+#[cfg(not(feature = "llm"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __vld_if_llm {
+    ($($tt:tt)*) => {};
+}
+
 #[cfg(feature = "openapi")]
 #[doc(hidden)]
 #[macro_export]

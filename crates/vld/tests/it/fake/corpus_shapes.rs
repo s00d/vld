@@ -38,7 +38,7 @@ fn isbn13(text: &str) -> bool {
         .enumerate()
         .map(|(i, x)| if i % 2 == 0 { *x } else { x * 3 })
         .sum();
-    d.len() == 13 && (text.starts_with("978") || text.starts_with("979")) && sum % 10 == 0
+    d.len() == 13 && (text.starts_with("978") || text.starts_with("979")) && sum.is_multiple_of(10)
 }
 
 fn pattern(p: &str) -> Value {

@@ -15,7 +15,7 @@ mod nested;
 
 pub(crate) use dyn_schema::to_json_value;
 
-pub use coerced::parse_coerced;
+pub use coerced::{coerce_text, parse_coerced};
 pub use dyn_schema::DynSchema;
 pub use infer::VldType;
 pub use input::VldInput;
@@ -297,6 +297,22 @@ pub trait VldSchema: Sized {
     /// ```
     fn message(self, msg: impl Into<String>) -> crate::combinators::ZMessage<Self> {
         crate::combinators::ZMessage::new(self, msg)
+    }
+
+    /// Keep the input out of this schema's errors: every issue (nested
+    /// ones included) gets `received: "[redacted]"`; paths, codes and
+    /// messages stay. For passwords, tokens and personal data — see
+    /// [`ZRedact`](crate::combinators::ZRedact).
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let token = vld::string().len(32).redact();
+    /// let err = token.parse(r#""s3cr3t""#).unwrap_err();
+    /// assert_eq!(err.issues[0].received, Some(serde_json::json!("[redacted]")));
+    /// assert!(!err.to_string().contains("s3cr3t"));
+    /// ```
+    fn redact(self) -> crate::combinators::ZRedact<Self> {
+        crate::combinators::ZRedact::new(self)
     }
 }
 

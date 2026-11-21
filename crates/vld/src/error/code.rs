@@ -46,6 +46,10 @@ pub enum SizeOrigin {
     Port,
     /// Number of array items equal to the `contains(...)` value.
     Contains,
+    /// Digits after a decimal's point (`decimal().max_scale(n)` / `.scale(n)`, `money()`).
+    Scale,
+    /// Significant digits of a decimal (`decimal().max_precision(p)`).
+    Precision,
 }
 
 impl SizeOrigin {
@@ -70,6 +74,8 @@ impl SizeOrigin {
             SizeOrigin::ImageHeight => "image_height",
             SizeOrigin::Port => "port",
             SizeOrigin::Contains => "contains",
+            SizeOrigin::Scale => "scale",
+            SizeOrigin::Precision => "precision",
         }
     }
 }
@@ -124,6 +130,8 @@ pub enum FormatKind {
     Image,
     /// A `FromStr` parse failed ([`vld::from_str()`](crate::from_str)).
     FromStr,
+    /// An ISO 8601 duration with years or months (not a fixed length).
+    DurationCalendarUnit,
 }
 
 impl FormatKind {
@@ -140,6 +148,7 @@ impl FormatKind {
             FormatKind::Hex => "hex",
             FormatKind::Image => "image",
             FormatKind::FromStr => "from_str",
+            FormatKind::DurationCalendarUnit => "duration_calendar_unit",
         }
     }
 }
@@ -176,6 +185,42 @@ impl FileTypeKind {
     }
 }
 
+/// Why a cryptocurrency address was rejected ([`IssueCode::InvalidCryptoAddress`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum CryptoAddressReason {
+    /// Characters outside the encoding's alphabet, or undecodable data.
+    Encoding,
+    /// Wrong character or decoded byte length.
+    Length,
+    /// Wrong version byte, hrp, prefix or header.
+    Prefix,
+    /// Checksum mismatch (Base58Check, bech32 polymod, EIP-55 case, …).
+    Checksum,
+    /// Mixed case in a case-insensitive encoding (bech32, CashAddr).
+    Case,
+    /// A testnet address where mainnet is required, or the reverse.
+    Network,
+    /// An address kind that is not allowed.
+    Kind,
+}
+
+impl CryptoAddressReason {
+    /// Stable snake_case key (`"checksum"`, `"length"`, …).
+    pub fn key(&self) -> &'static str {
+        match self {
+            CryptoAddressReason::Encoding => "encoding",
+            CryptoAddressReason::Length => "length",
+            CryptoAddressReason::Prefix => "prefix",
+            CryptoAddressReason::Checksum => "checksum",
+            CryptoAddressReason::Case => "case",
+            CryptoAddressReason::Network => "network",
+            CryptoAddressReason::Kind => "kind",
+        }
+    }
+}
+
 /// Type of string validation that failed.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
@@ -202,7 +247,7 @@ pub enum StringValidation {
     Slug,
     /// CSS hex color.
     Color,
-    /// ISO 4217 currency code.
+    /// Active ISO 4217 currency code (`currency_code()`).
     Currency,
     /// ISO 3166-1 alpha-2 country code.
     CountryCode,
@@ -281,6 +326,48 @@ pub enum StringValidation {
     Nanoid,
     /// Emoji only.
     Emoji,
+    /// Assigned ISO 3166-1 alpha-2 country code (`country()`).
+    Country,
+    /// Assigned ISO 3166-1 alpha-3 country code.
+    CountryAlpha3,
+    /// IBAN (registry length + mod-97).
+    Iban,
+    /// BIC / SWIFT code.
+    Bic,
+    /// ISBN-10 / ISBN-13.
+    Isbn,
+    /// EAN / GTIN.
+    Ean,
+    /// Vehicle identification number.
+    Vin,
+    /// IANA time zone name.
+    Timezone,
+    /// Media (MIME) type.
+    Mime,
+    /// MongoDB ObjectId.
+    ObjectId,
+    /// The value is not a valid regular expression (`regex_syntax()`).
+    RegexSyntax,
+    /// Mixes scripts (`single_script()`).
+    SingleScript,
+    /// Password without a lowercase letter.
+    PasswordLowercase,
+    /// Password without an uppercase letter.
+    PasswordUppercase,
+    /// Password without a digit.
+    PasswordDigit,
+    /// Password without a symbol (neither letter, digit nor whitespace).
+    PasswordSymbol,
+    /// Password repeats one character more than `max_repeat` times in a row.
+    PasswordRepeat {
+        /// Longest allowed run of one character.
+        max_repeat: usize,
+    },
+    /// Password strength estimate below `min_score` (zxcvbn, 0-4).
+    PasswordStrength {
+        /// Required zxcvbn score.
+        min_score: u8,
+    },
 }
 
 impl StringValidation {
@@ -334,6 +421,24 @@ impl StringValidation {
             Ulid => "ulid",
             Nanoid => "nanoid",
             Emoji => "emoji",
+            Country => "country",
+            CountryAlpha3 => "country_alpha3",
+            Iban => "iban",
+            Bic => "bic",
+            Isbn => "isbn",
+            Ean => "ean",
+            Vin => "vin",
+            Timezone => "timezone",
+            Mime => "mime",
+            ObjectId => "object_id",
+            RegexSyntax => "regex_syntax",
+            SingleScript => "single_script",
+            PasswordLowercase => "password_lowercase",
+            PasswordUppercase => "password_uppercase",
+            PasswordDigit => "password_digit",
+            PasswordSymbol => "password_symbol",
+            PasswordRepeat { .. } => "password_repeat",
+            PasswordStrength { .. } => "password_strength",
         }
     }
 }
@@ -446,6 +551,15 @@ pub enum IssueCode {
     DuplicateKey,
     /// Map entry is not a `[key, value]` pair.
     InvalidMapEntry,
+    /// A GeoJSON polygon ring whose last position differs from its first.
+    RingNotClosed,
+    /// The end of a [`vld::range()`](crate::range) is before its start.
+    RangeOrder {
+        /// Name of the start field.
+        start: String,
+        /// Name of the end field.
+        end: String,
+    },
     /// Required field is missing or null.
     MissingField,
     /// Field not declared by a strict object.
@@ -490,6 +604,15 @@ pub enum IssueCode {
     FileTypeUnknown {
         /// Which property could not be detected.
         kind: FileTypeKind,
+    },
+    /// Not a valid cryptocurrency address for `network`
+    /// (`vld::crypto`, feature `crypto`).
+    InvalidCryptoAddress {
+        /// Network name (`"bitcoin"`; several joined with `|` when none
+        /// recognised the shape).
+        network: String,
+        /// What was wrong.
+        reason: CryptoAddressReason,
     },
     /// File hash differs (`algorithm` is `"SHA-256"` or `"MD5"`).
     ChecksumMismatch {
@@ -558,6 +681,8 @@ impl IssueCode {
             MissingContains => "missing_contains",
             DuplicateKey => "duplicate_key",
             InvalidMapEntry => "invalid_map_entry",
+            RingNotClosed => "ring_not_closed",
+            RangeOrder { .. } => "range_order",
             MissingField => "missing_field",
             UnrecognizedField => "unrecognized_field",
             PathOutsideBase { .. } => "path_outside_base",
@@ -570,6 +695,7 @@ impl IssueCode {
             FileTypeNotAllowed { .. } => "file_type_not_allowed",
             FileTypeDenied { .. } => "file_type_denied",
             FileTypeUnknown { .. } => "file_type_unknown",
+            InvalidCryptoAddress { .. } => "invalid_crypto_address",
             ChecksumMismatch { .. } => "checksum_mismatch",
             MissingExif => "missing_exif",
             SerializeError { .. } => "serialize_error",
@@ -668,6 +794,12 @@ impl IssueCode {
                 (StringValidation::Contains { substring }, "substring") => {
                     Some(Cow::Borrowed(substring))
                 }
+                (StringValidation::PasswordRepeat { max_repeat }, "max_repeat") => {
+                    Some(Cow::Owned(max_repeat.to_string()))
+                }
+                (StringValidation::PasswordStrength { min_score }, "min_score") => {
+                    Some(Cow::Owned(min_score.to_string()))
+                }
                 _ => None,
             },
             (InvalidFormat { format }, "format") => b(format.key()),
@@ -683,6 +815,8 @@ impl IssueCode {
             (InvalidDiscriminator { options }, "options") => {
                 Some(Cow::Owned(join(options, |o| o.to_string())))
             }
+            (RangeOrder { start, .. }, "start") => Some(Cow::Borrowed(start)),
+            (RangeOrder { end, .. }, "end") => Some(Cow::Borrowed(end)),
             (PathOutsideBase { base }, "base") => Some(Cow::Borrowed(base)),
             (JsonTooDeep { max_depth }, "max_depth") => Some(Cow::Owned(max_depth.to_string())),
             (FileTypeNotAllowed { kind, .. }, "kind")
@@ -692,6 +826,8 @@ impl IssueCode {
             | (FileTypeDenied { actual, .. }, "actual") => Some(Cow::Borrowed(actual)),
             (FileTypeNotAllowed { allowed, .. }, "allowed") => Some(Cow::Owned(allowed.join(", "))),
             (ChecksumMismatch { algorithm }, "algorithm") => Some(Cow::Borrowed(algorithm)),
+            (InvalidCryptoAddress { network, .. }, "network") => Some(Cow::Borrowed(network)),
+            (InvalidCryptoAddress { reason, .. }, "reason") => b(reason.key()),
             (SerializeError { detail }, "detail") => Some(Cow::Borrowed(detail)),
             (Custom { code }, "code") => Some(Cow::Borrowed(code)),
             _ => None,
@@ -778,15 +914,21 @@ const PARAM_NAMES: &[&str] = &[
     "prefix",
     "suffix",
     "substring",
+    "max_repeat",
+    "min_score",
     "format",
     "kind",
     "divisor",
     "options",
+    "start",
+    "end",
     "base",
     "max_depth",
     "actual",
     "allowed",
     "algorithm",
+    "network",
+    "reason",
     "detail",
     "code",
 ];
@@ -853,6 +995,11 @@ mod tests {
             MissingContains,
             DuplicateKey,
             InvalidMapEntry,
+            RingNotClosed,
+            RangeOrder {
+                start: "start".into(),
+                end: "end".into(),
+            },
             MissingField,
             UnrecognizedField,
             PathOutsideBase { base: "/b".into() },
@@ -873,6 +1020,10 @@ mod tests {
             },
             FileTypeUnknown {
                 kind: FileTypeKind::MagicType,
+            },
+            InvalidCryptoAddress {
+                network: "bitcoin".into(),
+                reason: CryptoAddressReason::Checksum,
             },
             ChecksumMismatch {
                 algorithm: "MD5".into(),
@@ -909,6 +1060,8 @@ mod tests {
                 | MissingContains
                 | DuplicateKey
                 | InvalidMapEntry
+                | RingNotClosed
+                | RangeOrder { .. }
                 | MissingField
                 | UnrecognizedField
                 | PathOutsideBase { .. }
@@ -921,6 +1074,7 @@ mod tests {
                 | FileTypeNotAllowed { .. }
                 | FileTypeDenied { .. }
                 | FileTypeUnknown { .. }
+                | InvalidCryptoAddress { .. }
                 | ChecksumMismatch { .. }
                 | MissingExif
                 | SerializeError { .. }

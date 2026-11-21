@@ -132,33 +132,33 @@ impl<T: VldSchema> VldSchema for ZArray<T> {
         let mut failed = false;
 
         // Length checks
-        if let Some(min) = self.min_len {
-            if arr.len() < min {
-                errors.push_code(IssueCode::TooSmall {
-                    origin: SizeOrigin::Array,
-                    minimum: min.into(),
-                    inclusive: true,
-                });
-            }
+        if let Some(min) = self.min_len
+            && arr.len() < min
+        {
+            errors.push_code(IssueCode::TooSmall {
+                origin: SizeOrigin::Array,
+                minimum: min.into(),
+                inclusive: true,
+            });
         }
 
-        if let Some(max) = self.max_len {
-            if arr.len() > max {
-                errors.push_code(IssueCode::TooBig {
-                    origin: SizeOrigin::Array,
-                    maximum: max.into(),
-                    inclusive: true,
-                });
-            }
+        if let Some(max) = self.max_len
+            && arr.len() > max
+        {
+            errors.push_code(IssueCode::TooBig {
+                origin: SizeOrigin::Array,
+                maximum: max.into(),
+                inclusive: true,
+            });
         }
 
-        if let Some(exact) = self.exact_len {
-            if arr.len() != exact {
-                errors.push_code(IssueCode::InvalidLength {
-                    origin: SizeOrigin::Array,
-                    expected: exact,
-                });
-            }
+        if let Some(exact) = self.exact_len
+            && arr.len() != exact
+        {
+            errors.push_code(IssueCode::InvalidLength {
+                origin: SizeOrigin::Array,
+                expected: exact,
+            });
         }
 
         if self.unique {
@@ -189,14 +189,14 @@ impl<T: VldSchema> VldSchema for ZArray<T> {
                 }
                 _ => {}
             }
-            if let Some(max_contains) = self.max_contains {
-                if count > max_contains {
-                    errors.push_code(IssueCode::TooBig {
-                        origin: SizeOrigin::Contains,
-                        maximum: max_contains.into(),
-                        inclusive: true,
-                    });
-                }
+            if let Some(max_contains) = self.max_contains
+                && count > max_contains
+            {
+                errors.push_code(IssueCode::TooBig {
+                    origin: SizeOrigin::Contains,
+                    maximum: max_contains.into(),
+                    inclusive: true,
+                });
             }
         }
 

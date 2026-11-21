@@ -300,6 +300,163 @@ macro_rules! backend_suite {
                 }
             }
 
+            /// Given `datetime().unix_seconds()` / `.unix_millis()`, bare, bounded, past / future and
+            /// coercing
+            /// When integers at and beyond the common range, whole floats, fractions, strings and
+            /// other JSON arrive
+            /// Then integers in `0000-01-01T00:00:00Z ..= 9999-12-30T22:00:00(.999)Z` give the
+            /// instant (milliseconds keep their fraction), anything beyond is `invalid_date`, a
+            /// fraction `not_int`, a string `invalid_type` (`integer`) unless `coerce()` accepts
+            /// digits with an optional `-`; bounds and past / future apply as for strings; the JSON
+            /// Schema is an integer with the range (bounds rounded inward) and a default prints as
+            /// the integer.
+            #[test]
+            fn unix_timestamps() {
+                let secs = datetime().unix_seconds();
+                for (n, want) in [
+                    (json!(0), "1970-01-01T00:00:00Z"),
+                    (json!(1_700_000_000), "2023-11-14T22:13:20Z"),
+                    (json!(-1), "1969-12-31T23:59:59Z"),
+                    (json!(1_000.0), "1970-01-01T00:16:40Z"),
+                    (json!(-62_167_219_200i64), "0000-01-01T00:00:00Z"),
+                    (json!(253_402_207_200i64), "9999-12-30T22:00:00Z"),
+                ] {
+                    assert_eq!(secs.parse_value(&n).unwrap(), dt(want), "{n}");
+                }
+                for bad in [
+                    json!(-62_167_219_201i64),
+                    json!(253_402_207_201i64),
+                    json!(i64::MAX),
+                    json!(i64::MIN),
+                    json!(u64::MAX),
+                    json!(1e300),
+                ] {
+                    assert_eq!(first(secs.parse_value(&bad)), IssueCode::InvalidDate { kind: DateKind::DateTime }, "{bad}");
+                }
+                assert_eq!(issues(&secs.parse_value(&json!(1.5)).unwrap_err()), root("not_int"));
+                for bad in [json!("1700000000"), json!(null), json!(true), json!([1])] {
+                    let err = secs.parse_value(&bad).unwrap_err();
+                    assert!(matches!(&err.issues[0].code, IssueCode::InvalidType { expected, .. } if expected == "integer"), "{bad}");
+                }
+                let coerced = datetime().unix_seconds().coerce();
+                assert_eq!(coerced.parse_value(&json!("1700000000")).unwrap(), dt("2023-11-14T22:13:20Z"));
+                assert_eq!(coerced.parse_value(&json!("-1")).unwrap(), dt("1969-12-31T23:59:59Z"));
+                assert_eq!(first(coerced.parse_value(&json!("99999999999999999999999999"))), IssueCode::InvalidDate { kind: DateKind::DateTime });
+                for bad in ["", "-", "+1", "1e3", " 1", "1.0", "１"] {
+                    assert_eq!(issues(&coerced.parse_value(&json!(bad)).unwrap_err()), root("invalid_type"), "{bad:?}");
+                }
+
+                let ms = datetime().unix_millis();
+                assert_eq!(ms.parse_value(&json!(1_700_000_000_123i64)).unwrap(), dt("2023-11-14T22:13:20.123Z"));
+                assert_eq!(ms.parse_value(&json!(-1)).unwrap(), dt("1969-12-31T23:59:59.999Z"));
+                assert!(ms.parse_value(&json!(-62_167_219_200_000i64)).is_ok());
+                assert_eq!(ms.parse_value(&json!(253_402_207_200_999i64)).unwrap(), dt("9999-12-30T22:00:00.999Z"));
+                for bad in [-62_167_219_200_001i64, 253_402_207_201_000] {
+                    assert_eq!(first(ms.parse_value(&json!(bad))), IssueCode::InvalidDate { kind: DateKind::DateTime }, "{bad}");
+                }
+
+                let y2k = datetime().unix_seconds().min("2000-01-01T00:00:00Z").max("2000-12-31T23:59:59Z");
+                assert!(y2k.parse_value(&json!(946_684_800)).is_ok());
+                assert!(y2k.parse_value(&json!(978_307_199)).is_ok());
+                assert_eq!(issues(&y2k.parse_value(&json!(946_684_799)).unwrap_err()), root("too_small"));
+                assert_eq!(issues(&y2k.parse_value(&json!(978_307_200)).unwrap_err()), root("too_big"));
+                assert!(datetime().unix_seconds().past().parse_value(&json!(0)).is_ok());
+                assert_eq!(
+                    first(datetime().unix_seconds().past().parse_value(&json!(253_402_207_200i64))),
+                    IssueCode::NotInPast { kind: DateKind::DateTime }
+                );
+                assert_eq!(
+                    first(datetime().unix_millis().future().parse_value(&json!(0))),
+                    IssueCode::NotInFuture { kind: DateKind::DateTime }
+                );
+
+                #[cfg(feature = "openapi")]
+                {
+                    use vld::openapi::JsonSchema;
+                    assert_eq!(
+                        secs.json_schema(),
+                        json!({
+                            "type": "integer",
+                            "format": "unix-time",
+                            "description": "Unix timestamp in seconds",
+                            "minimum": -62_167_219_200i64,
+                            "maximum": 253_402_207_200i64,
+                        })
+                    );
+                    let narrow = datetime()
+                        .unix_millis()
+                        .min("2000-01-01T00:00:00.0005Z")
+                        .max("2000-01-01T00:00:01.9999Z")
+                        .past();
+                    assert_eq!(
+                        narrow.json_schema(),
+                        json!({
+                            "type": "integer",
+                            "format": "unix-time-ms",
+                            "description": "Unix timestamp in milliseconds",
+                            "minimum": 946_684_800_001i64,
+                            "maximum": 946_684_801_999i64,
+                            "x-past": true,
+                        })
+                    );
+                    let js = datetime().unix_seconds().with_default(dt("2023-11-14T22:13:20Z")).json_schema();
+                    assert_eq!(js["default"], json!(1_700_000_000));
+                    let validator = jsonschema::draft202012::new(&y2k.json_schema()).unwrap();
+                    for n in [946_684_799i64, 946_684_800, 978_307_199, 978_307_200] {
+                        assert_eq!(validator.is_valid(&json!(n)), y2k.parse_value(&json!(n)).is_ok(), "{n}");
+                    }
+                }
+            }
+
+            /// Given `vld::range()` of this backend's `date()`, `datetime()` and unix datetimes
+            /// When ordered, equal and reversed pairs (also across offsets) arrive
+            /// Then ends compare as instants, not text: equal ends pass, a reversed pair is one
+            /// `range_order` at the end field; item issues are reported per field.
+            #[test]
+            fn date_ranges() {
+                let days = vld::range(date());
+                let r = days.parse_value(&json!({"start": "2024-01-01", "end": "2024-01-31"})).unwrap();
+                assert_eq!((r.start().to_string(), r.end().to_string()), ("2024-01-01".into(), "2024-01-31".into()));
+                assert!(days.parse_value(&json!({"start": "2024-01-01", "end": "2024-01-01"})).is_ok());
+                assert_eq!(
+                    issues(&days.parse_value(&json!({"start": "2024-02-01", "end": "2024-01-31"})).unwrap_err()),
+                    [(".end".into(), "range_order".into())]
+                );
+                assert_eq!(
+                    issues(&days.parse_value(&json!({"start": "2024-13-01", "end": "x"})).unwrap_err()),
+                    [(".start".into(), "invalid_date".into()), (".end".into(), "invalid_date".into())]
+                );
+                let stay = vld::range(datetime().with_timezone_only()).keys("from", "to");
+                // 08:00Z <= 09:00Z although the text sorts the other way.
+                assert!(stay.parse_value(&json!({"from": "2024-01-01T10:00:00+02:00", "to": "2024-01-01T09:00:00Z"})).is_ok());
+                assert_eq!(
+                    issues(&stay.parse_value(&json!({"from": "2024-01-01T09:00:00Z", "to": "2024-01-01T10:00:00+02:00"})).unwrap_err()),
+                    [(".to".into(), "range_order".into())]
+                );
+                let unix = vld::range(datetime().unix_seconds());
+                assert!(unix.parse_value(&json!({"start": 0, "end": 1})).is_ok());
+                assert_eq!(
+                    issues(&unix.parse_value(&json!({"start": 1, "end": 0})).unwrap_err()),
+                    [(".end".into(), "range_order".into())]
+                );
+                #[cfg(feature = "openapi")]
+                {
+                    use vld::openapi::JsonSchema;
+                    assert_eq!(
+                        days.json_schema(),
+                        json!({
+                            "type": "object",
+                            "properties": {
+                                "start": {"type": "string", "format": "date"},
+                                "end": {"type": "string", "format": "date"},
+                            },
+                            "required": ["start", "end"],
+                            "x-rangeOrder": ["start", "end"],
+                        })
+                    );
+                }
+            }
+
             vld::schema! {
                 #[derive(Debug)]
                 pub struct Event {

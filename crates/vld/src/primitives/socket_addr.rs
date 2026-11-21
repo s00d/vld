@@ -64,29 +64,29 @@ impl VldSchema for ZSocketAddr {
             )
         })?;
         let port = addr.port();
-        if let Some(min) = self.min_port {
-            if port < min {
-                return Err(VldError::from_code_with_value(
-                    IssueCode::TooSmall {
-                        origin: SizeOrigin::Port,
-                        minimum: min.into(),
-                        inclusive: true,
-                    },
-                    value,
-                ));
-            }
+        if let Some(min) = self.min_port
+            && port < min
+        {
+            return Err(VldError::from_code_with_value(
+                IssueCode::TooSmall {
+                    origin: SizeOrigin::Port,
+                    minimum: min.into(),
+                    inclusive: true,
+                },
+                value,
+            ));
         }
-        if let Some(max) = self.max_port {
-            if port > max {
-                return Err(VldError::from_code_with_value(
-                    IssueCode::TooBig {
-                        origin: SizeOrigin::Port,
-                        maximum: max.into(),
-                        inclusive: true,
-                    },
-                    value,
-                ));
-            }
+        if let Some(max) = self.max_port
+            && port > max
+        {
+            return Err(VldError::from_code_with_value(
+                IssueCode::TooBig {
+                    origin: SizeOrigin::Port,
+                    maximum: max.into(),
+                    inclusive: true,
+                },
+                value,
+            ));
         }
         Ok(addr)
     }

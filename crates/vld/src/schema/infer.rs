@@ -53,6 +53,12 @@ leaf! {
     serde_json::Value => ZJsonValue = crate::json_value();
 }
 
+#[cfg(feature = "string-advanced")]
+leaf! {
+    uuid::Uuid => crate::primitives::ZUuid = crate::uuid();
+    url::Url => crate::primitives::ZUrl = crate::url();
+}
+
 macro_rules! ints {
     ($($ty:ident)*) => {$(
         leaf! { $ty => ZInteger<$ty> = crate::$ty(); }
@@ -60,6 +66,17 @@ macro_rules! ints {
 }
 
 ints!(i8 i16 i32 i64 isize u8 u16 u32 u64 usize);
+
+#[cfg(feature = "decimal")]
+leaf! {
+    rust_decimal::Decimal => crate::primitives::ZDecimal = crate::decimal();
+    crate::primitives::Money => crate::primitives::ZMoney = crate::money();
+}
+
+#[cfg(feature = "geo")]
+leaf! {
+    crate::primitives::GeoPoint => crate::primitives::ZGeoPoint = crate::geo_point();
+}
 
 impl<T: VldType> VldType for Option<T> {
     type Schema = ZOptional<T::Schema>;

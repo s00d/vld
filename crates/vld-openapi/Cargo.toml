@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "OpenAPI bridges for the vld validation library: utoipa and schemars (aide) schemas from vld types, and a JSON Schema validator"
+description = "OpenAPI bridges for the vld validation library: utoipa, schemars (aide) and poem-openapi schemas from vld types, and a JSON Schema validator"
 documentation = "https://docs.rs/vld-openapi"
 keywords = ["validation", "openapi", "utoipa", "schemars", "json-schema"]
 categories = ["web-programming", "development-tools"]
@@ -21,6 +21,7 @@ utoipa-5 = ["dep:utoipa5"]
 utoipa-6 = ["dep:utoipa6"]
 schemars-0 = ["dep:schemars0", "dep:serde"]
 schemars-1 = ["dep:schemars1", "dep:serde"]
+poem-openapi = ["dep:poem-openapi", "dep:poem", "dep:serde"]
 
 [dependencies]
 vld = { workspace = true, features = ["openapi"] }
@@ -31,12 +32,16 @@ utoipa5 = { package = "utoipa", version = "5", optional = true }
 utoipa6 = { package = "utoipa", version = "6", optional = true }
 schemars0 = { package = "schemars", version = ">=0.9, <1", optional = true }
 schemars1 = { package = "schemars", version = ">=1, <2", optional = true }
+poem-openapi = { version = "5", default-features = false, optional = true }
+poem = { version = "3", default-features = false, optional = true }
 
 [dev-dependencies]
 proptest = "1"
 insta = { workspace = true }
 serde = { workspace = true }
 vld = { workspace = true, features = ["openapi", "derive"] }
+poem = { version = "3", features = ["test"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
 
 [[example]]
 name = "utoipa_basic"

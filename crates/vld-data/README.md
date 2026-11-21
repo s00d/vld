@@ -41,6 +41,14 @@ assert!(validate_insert::<NewUserSchema, _>(&user).is_err()); // check before IN
 | `surrealdb` | — | any SurrealDB SDK (through serde) |
 | `redis0` / `redis1` | `redis-0` / `redis-1` (+ `redis-aio`, `redis-aio-tokio`) | redis 0.32+ / 1 |
 | `lapin2` / `lapin3` / `lapin4` | `lapin-2` / `lapin-3` / `lapin-4` | lapin (RabbitMQ) 2 / 3 / 4 |
+| `bson2` / `bson3` | `bson-2` / `bson-3` | MongoDB documents (bson 2 / 3) |
+| `postgres_types` | `tokio-postgres` | tokio-postgres / postgres (`postgres-types` 0.2) |
+| `clickhouse` | `clickhouse` | clickhouse 0.15 |
+| `rumqttc` | `rumqttc` | MQTT (rumqttc 0.25) |
+| `nats` | `nats` | NATS (async-nats 0.53) |
+| `centrifuge` | `centrifuge` | Centrifugo client (centrifuge-client 0.1) |
+| `socketio` | `socketio` | Socket.IO client (socketio-next 0.2) |
+| `csv` | `csv` | CSV import (csv 1), failing rows with their line |
 
 No feature is on by default; any set can be enabled together.
 

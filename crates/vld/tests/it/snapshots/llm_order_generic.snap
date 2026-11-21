@@ -1,0 +1,128 @@
+---
+source: crates/vld/tests/it/story_llm.rs
+expression: value
+---
+{
+  "$defs": {
+    "Address": {
+      "properties": {
+        "city": {
+          "maxLength": 80,
+          "minLength": 2,
+          "type": "string"
+        },
+        "zip": {
+          "pattern": "^[0-9]{5}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "city"
+      ],
+      "type": "object"
+    },
+    "Contact": {
+      "oneOf": [
+        {
+          "properties": {
+            "address": {
+              "format": "email",
+              "type": "string"
+            },
+            "kind": {
+              "const": "email",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "address"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "phone",
+              "type": "string"
+            },
+            "number": {
+              "minLength": 7,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "number"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "bill_to": {
+      "$ref": "#/$defs/Address"
+    },
+    "cc": {
+      "format": "email",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "contact": {
+      "$ref": "#/$defs/Contact"
+    },
+    "customer": {
+      "maxLength": 40,
+      "minLength": 3,
+      "type": "string"
+    },
+    "note": {
+      "maxLength": 500,
+      "type": "string"
+    },
+    "price": {
+      "minimum": 0.0,
+      "multipleOf": 0.01,
+      "type": "number"
+    },
+    "priority": {
+      "enum": [
+        "low",
+        "normal",
+        "high"
+      ],
+      "type": "string"
+    },
+    "quantity": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "ship_to": {
+      "$ref": "#/$defs/Address"
+    },
+    "tags": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 5,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "customer",
+    "quantity",
+    "price",
+    "priority",
+    "cc",
+    "ship_to",
+    "contact",
+    "tags"
+  ],
+  "type": "object"
+}

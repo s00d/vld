@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Web framework integrations for the vld validation library: axum, actix-web, ntex, poem, Rocket, salvo, warp, rama, Tower, tonic"
+description = "Web framework integrations for the vld validation library: axum, actix-web, ntex, poem, Rocket, salvo, warp, rama, Tower, tonic, async-graphql, WebSocket (tungstenite, axum), AWS Lambda"
 documentation = "https://docs.rs/vld-web"
 keywords = ["validation", "web", "http", "extractor", "vld"]
 categories = ["web-programming", "web-programming::http-server"]
@@ -30,6 +30,15 @@ warp = ["dep:warp", "dep:bytes", "dep:futures-util"]
 rama = ["dep:rama"]
 tower = ["dep:tower-layer", "dep:tower-service", "dep:http", "dep:http-body", "dep:http-body-util", "dep:bytes"]
 tonic = ["dep:tonic"]
+# axum WebSocket messages (`vld_web::axum::ws`).
+axum-ws = ["axum", "axum/ws"]
+async-graphql = ["dep:async-graphql"]
+tungstenite = ["dep:tungstenite"]
+lambda = ["dep:lambda_http"]
+# MCP tool arguments validated by vld, errors as `isError` results (`vld_web::rmcp`).
+rmcp = ["dep:rmcp", "vld/llm"]
+# rig tools whose arguments are validated by vld (`vld_web::rig`).
+rig = ["dep:rig-core", "vld/llm"]
 
 [dependencies]
 vld = { workspace = true }
@@ -54,6 +63,11 @@ tower-service = { version = "0.3", optional = true }
 http-body = { version = "1", optional = true }
 http-body-util = { workspace = true, optional = true }
 tonic = { version = ">=0.12, <0.15", default-features = false, optional = true }
+async-graphql = { version = "7", default-features = false, optional = true }
+tungstenite = { version = ">=0.26, <0.31", default-features = false, optional = true }
+lambda_http = { version = "1", optional = true }
+rmcp = { version = "3.11", default-features = false, features = ["server"], optional = true }
+rig-core = { version = "0.47", default-features = false, optional = true }
 
 # Test runtimes and framework test features; tests of a framework compile
 # only with its feature.
@@ -77,6 +91,11 @@ warp = { version = "0.4", features = ["server", "test"] }
 vld = { workspace = true, features = ["openapi"] }
 vld-openapi = { workspace = true, features = ["utoipa-5"] }
 utoipa = "5"
+# axum-ws: a WebSocket client for the real-socket story
+tokio-tungstenite = "0.29"
+futures-util = { version = "0.3.28", default-features = false, features = ["sink"] }
+# rmcp: an in-process MCP client and server over a duplex pipe
+rmcp = { version = "3.11", default-features = false, features = ["server", "client", "macros"] }
 
 [[example]]
 name = "axum_basic"

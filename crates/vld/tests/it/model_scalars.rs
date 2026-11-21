@@ -417,6 +417,139 @@ proptest! {
     }
 }
 
+// ---------------------------------------------------------------- decimal digits
+
+/// A decimal string as written: sign, integer digits, fraction digits (trailing zeros kept).
+#[cfg(feature = "decimal")]
+fn dec_text() -> impl Strategy<Value = (bool, String, String)> {
+    (
+        any::<bool>(),
+        prop_oneof![Just("0".to_string()), "[1-9][0-9]{0,4}"],
+        "[0-9]{0,5}",
+    )
+}
+
+#[cfg(feature = "decimal")]
+proptest! {
+    /// Given `decimal()` with random `max_scale` / `scale` / `max_precision`
+    /// When a decimal string with random integer and fraction digits (trailing zeros included)
+    /// is parsed
+    /// Then the scale is the fraction digits as written and the precision the significant digits
+    /// (at least the scale): the first failing check in the order `max_scale` (`too_big`,
+    /// origin `scale`), `scale` (`invalid_length`, origin `scale`), `max_precision` (`too_big`,
+    /// origin `precision`) is reported, or the value prints back unchanged; the JSON Schema
+    /// carries `x-maxScale` / `x-scale` / `x-maxPrecision`.
+    #[test]
+    fn decimal_digits_model(
+        (neg, int, frac) in dec_text(),
+        max_scale in prop::option::of(0u32..6),
+        scale in prop::option::of(0u32..6),
+        max_precision in prop::option::of(1u32..9),
+    ) {
+        let mantissa = format!("{int}{frac}");
+        let significant = mantissa.trim_start_matches('0').len().max(1) as u32;
+        let zero = mantissa.bytes().all(|b| b == b'0');
+        let sign = if neg && !zero { "-" } else { "" };
+        let text = if frac.is_empty() { format!("{sign}{int}") } else { format!("{sign}{int}.{frac}") };
+        let (s_len, precision) = (frac.len() as u32, significant.max(frac.len() as u32));
+
+        let mut s = vld::decimal();
+        if let Some(n) = max_scale { s = s.max_scale(n); }
+        if let Some(n) = scale { s = s.scale(n); }
+        if let Some(n) = max_precision { s = s.max_precision(n); }
+        let want = [
+            max_scale.filter(|&m| s_len > m).map(|m| IssueCode::TooBig { origin: SizeOrigin::Scale, maximum: json!(m), inclusive: true }),
+            scale.filter(|&n| s_len != n).map(|n| IssueCode::InvalidLength { origin: SizeOrigin::Scale, expected: n as usize }),
+            max_precision.filter(|&p| precision > p).map(|p| IssueCode::TooBig { origin: SizeOrigin::Precision, maximum: json!(p), inclusive: true }),
+        ]
+        .into_iter()
+        .flatten()
+        .next();
+        match (s.parse_value(&json!(text)), want) {
+            (Ok(out), None) => prop_assert_eq!(out.to_string(), text),
+            (Err(err), Some(code)) => {
+                prop_assert_eq!(issues(&err), vec![(String::new(), code.key().to_string())]);
+                prop_assert_eq!(&err.issues[0].code, &code);
+            }
+            (got, want) => prop_assert!(false, "{text}: got {got:?}, want {want:?}"),
+        }
+
+        #[cfg(feature = "openapi")]
+        {
+            use vld::openapi::JsonSchema;
+            let mut want = json!({ "type": ["string", "number"], "format": "decimal" });
+            for (k, v) in [("x-maxScale", max_scale), ("x-scale", scale), ("x-maxPrecision", max_precision)] {
+                if let Some(v) = v { want[k] = json!(v); }
+            }
+            prop_assert_eq!(s.json_schema(), want);
+        }
+    }
+}
+
+// ---------------------------------------------------------------- ISO 8601 durations
+
+/// A number written with an optional fraction: `(whole, fraction digits)`.
+fn iso_num() -> impl Strategy<Value = (u64, String)> {
+    (0u64..400, prop_oneof![Just(String::new()), "[0-9]{1,9}"])
+}
+
+/// An ISO duration body: weeks alone, or days and hours / minutes / seconds.
+#[derive(Debug, Clone)]
+enum IsoDur {
+    Weeks((u64, String)),
+    Parts([Option<(u64, String)>; 4]),
+}
+
+fn iso_dur() -> impl Strategy<Value = IsoDur> {
+    let part = || prop::option::of(iso_num());
+    prop_oneof![
+        iso_num().prop_map(IsoDur::Weeks),
+        [part(), part(), part(), part()]
+            .prop_filter("at least one part", |p| p.iter().any(Option::is_some))
+            .prop_map(IsoDur::Parts),
+    ]
+}
+
+proptest! {
+    /// Given `duration()`
+    /// When an ISO 8601 duration built from random weeks, or days / hours / minutes / seconds
+    /// (each optional, any of them fractional) is parsed
+    /// Then it is accepted exactly when only the last number has a fraction, and equals the sum
+    /// of its parts (a week is 604 800 s, a day 86 400 s, fractions truncated to nanoseconds);
+    /// otherwise it is `invalid_type`.
+    #[test]
+    fn iso_duration_model(d in iso_dur()) {
+        const UNITS: [(char, u128); 4] = [('D', 86_400), ('H', 3_600), ('M', 60), ('S', 1)];
+        let nanos = |(w, f): &(u64, String), unit: u128| {
+            let unit = unit * 1_000_000_000;
+            let frac = if f.is_empty() { 0 } else { f.parse::<u128>().unwrap() * unit / 10u128.pow(f.len() as u32) };
+            u128::from(*w) * unit + frac
+        };
+        let text_of = |(w, f): &(u64, String), c: char| if f.is_empty() { format!("{w}{c}") } else { format!("{w}.{f}{c}") };
+        let (text, total, fractions_ok) = match &d {
+            IsoDur::Weeks(n) => (format!("P{}", text_of(n, 'W')), nanos(n, 604_800), true),
+            IsoDur::Parts(parts) => {
+                let mut text = "P".to_string();
+                let present: Vec<usize> = (0..4).filter(|&i| parts[i].is_some()).collect();
+                for &i in &present {
+                    if i > 0 && !text.contains('T') { text.push('T'); }
+                    text.push_str(&text_of(parts[i].as_ref().unwrap(), UNITS[i].0));
+                }
+                let total = present.iter().map(|&i| nanos(parts[i].as_ref().unwrap(), UNITS[i].1)).sum();
+                let ok = present.iter().rev().skip(1).all(|&i| parts[i].as_ref().unwrap().1.is_empty());
+                (text, total, ok)
+            }
+        };
+        let got = vld::duration().parse_value(&json!(text));
+        if fractions_ok {
+            let want = std::time::Duration::new((total / 1_000_000_000) as u64, (total % 1_000_000_000) as u32);
+            prop_assert_eq!(got.ok(), Some(want), "{}", text);
+        } else {
+            prop_assert_eq!(issues(&got.unwrap_err()), vec![(String::new(), "invalid_type".to_string())], "{}", text);
+        }
+    }
+}
+
 // ---------------------------------------------------------------- duration, ports
 
 /// A duration input and the milliseconds it means (`None`: a negative number).

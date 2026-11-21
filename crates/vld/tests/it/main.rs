@@ -4,6 +4,8 @@
 #[macro_use]
 mod common;
 
+#[cfg(feature = "crypto")]
+mod model_crypto;
 mod model_numbers;
 mod model_scalars;
 mod model_schema;
@@ -11,13 +13,18 @@ mod model_strings;
 
 mod model_robustness;
 
+#[cfg(feature = "crypto")]
+mod corpus_crypto;
 #[cfg(any(feature = "chrono", feature = "jiff", feature = "time"))]
 mod corpus_dates;
 mod corpus_files_paths_net;
 mod corpus_formats;
+#[cfg(feature = "geo")]
+mod corpus_geo;
 #[cfg(feature = "openapi")]
 mod corpus_json_schema;
 mod corpus_numbers_strings;
+mod corpus_units;
 
 #[cfg(feature = "derive")]
 mod story_api_request;
@@ -27,8 +34,11 @@ mod story_diff;
 mod story_form;
 mod story_inputs;
 mod story_lenient_report;
+#[cfg(all(feature = "llm", feature = "derive", feature = "regex"))]
+mod story_llm;
 mod story_messages_i18n;
 mod story_optional_fields;
+mod story_redaction;
 mod story_scalars_adapters;
 mod story_schema_macro;
 mod story_settings_migration;

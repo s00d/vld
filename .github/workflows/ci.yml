@@ -33,7 +33,7 @@ env:
   CARGO_TERM_COLOR: always
   # Pinned so new clippy lints / rustdoc checks cannot break CI unannounced; the
   # extended job's latest-stable clippy warns about them early. Bump deliberately.
-  RUST_TOOLCHAIN: "1.99.1"
+  RUST_TOOLCHAIN: "1.100.0"
 
 jobs:
   # Linux: clippy (all features, each feature alone) and tests per crate group
@@ -147,7 +147,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - run: |
-          for tc in 1.85 1.88 1.94 1.96 1.97; do rustup toolchain install "${tc}" --profile minimal; done
+          for tc in 1.90 1.94 1.96 1.97 1.97.1; do rustup toolchain install "${tc}" --profile minimal; done
           rustup toolchain install nightly --profile minimal
           rustup toolchain install stable --profile minimal --component clippy
       - uses: taiki-e/install-action@v2

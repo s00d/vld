@@ -38,6 +38,25 @@ fn rows() -> Vec<(Value, Vec<(Target, Want)>)> {
     described["description"] = json!("B");
     let p = |p: &str| json!({"type": "string", "pattern": p});
     let mut rows = vec![
+        // password rules: `format: password` + `x-password` checks
+        (
+            vld::string()
+                .min(8)
+                .require_lowercase()
+                .require_symbol()
+                .max_repeat(2)
+                .json_schema(),
+            vec![
+                (
+                    Zod,
+                    Eq(
+                        r#"z.string().min(8).refine((s) => /\p{Lowercase}/u.test(s), "Must contain a lowercase letter").refine((s) => /[^\p{Alphabetic}\p{N}\s]/u.test(s), "Must contain a symbol").refine((s) => !/(.)\1{2}/su.test(s), "Must not repeat a character more than 2 times in a row")"#,
+                    ),
+                ),
+                (Valibot, Has(r#"v.check((s) => !/(.)\1{2}/su.test(s)"#)),
+                (Ts, Eq("string")),
+            ],
+        ),
         // strings, numbers, nullable, unions
         (
             vld::string().min(2).max(50).email().json_schema(),
@@ -899,6 +918,7 @@ fn rows() -> Vec<(Value, Vec<(Target, Want)>)> {
             vec![(Ts, Eq("number | string"))],
         ),
     ]);
+    rows.extend(unit_rows());
     for bad in [
         "a(?i)b",
         r"\p{L}",
@@ -1000,6 +1020,19 @@ fn every_format_has_its_check() {
         "ulid",
         "nanoid",
         "emoji",
+        "iso3166-alpha2",
+        "iso3166-alpha3",
+        "iban",
+        "bic",
+        "isbn",
+        "ean",
+        "vin",
+        "timezone",
+        "mime",
+        "objectid",
+        "regex",
+        "single-script",
+        "password",
         "decimal",
     ];
     let mut out = String::new();
@@ -1012,4 +1045,106 @@ fn every_format_has_its_check() {
         out.push_str(&format!("{f} Zod4 fragment: {}\n\n", emit(Zod4, &fragment)));
     }
     insta::assert_snapshot!("formats", out);
+}
+
+/// Rows for the presets and value schemas: `percent()`, `decimal()` digits, `money()`,
+/// `range()`, Unix-timestamp datetimes and the geo schemas.
+fn unit_rows() -> Vec<(Value, Vec<(Target, Want)>)> {
+    #[allow(unused_mut)]
+    let mut rows = vec![
+        (
+            vld::percent().json_schema(),
+            vec![
+                (Zod, Eq("z.number().min(0).max(100)")),
+                (
+                    Valibot,
+                    Eq("v.pipe(v.number(), v.minValue(0), v.maxValue(100))"),
+                ),
+                (Ts, Eq("number")),
+            ],
+        ),
+        (
+            vld::ratio().json_schema(),
+            vec![(Zod4, Eq("z.number().min(0).max(1)"))],
+        ),
+        (
+            vld::range(vld::i32()).keys("from", "to").json_schema(),
+            vec![
+                (
+                    Zod,
+                    Eq(
+                        "z.object({\n  from: z.number().int().min(-2147483648).max(2147483647),\n  to: z.number().int().min(-2147483648).max(2147483647)\n})",
+                    ),
+                ),
+                (Ts, Eq("{\n  from: number;\n  to: number;\n}")),
+            ],
+        ),
+    ];
+    #[cfg(feature = "decimal")]
+    rows.extend([
+        (
+            vld::decimal().max_scale(2).max_precision(10).json_schema(),
+            vec![(Zod, Eq("z.union([z.string(), z.number()])")), (Ts, Eq("string | number"))],
+        ),
+        (
+            vld::money().json_schema(),
+            vec![
+                (
+                    Zod,
+                    Starts("z.object({\n  amount: z.union([z.string(), z.number()]),\n  currency: z.string().regex(/^(?:AED|AFN|"),
+                ),
+                (
+                    Valibot,
+                    Starts("v.object({\n  amount: v.union([v.string(), v.number()]),\n  currency: v.pipe(v.string(), v.regex(/^(?:AED|AFN|"),
+                ),
+                (Ts, Eq("{\n  amount: string | number;\n  currency: string;\n}")),
+            ],
+        ),
+    ]);
+    #[cfg(feature = "chrono")]
+    rows.extend([(
+        vld::chrono::datetime().unix_seconds().json_schema(),
+        vec![
+            (
+                Zod,
+                Eq(r#"z.number().int().min(-62167219200).max(253402207200).describe("Unix timestamp in seconds")"#),
+            ),
+            (
+                Zod4,
+                Eq(r#"z.int().min(-62167219200).max(253402207200).describe("Unix timestamp in seconds")"#),
+            ),
+            (Ts, Eq("number")),
+        ],
+    )]);
+    #[cfg(feature = "geo")]
+    rows.extend([
+        (
+            vld::geo_point().json_schema(),
+            vec![
+                (
+                    Zod,
+                    Eq("z.union([z.object({\n  lat: z.number().min(-90).max(90),\n  lng: z.number().min(-180).max(180)\n}), z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])])"),
+                ),
+                (Ts, Eq("{\n  lat: number;\n  lng: number;\n} | [number, number]")),
+            ],
+        ),
+        (
+            vld::geojson().types(&["Point", "LineString"]).json_schema(),
+            vec![
+                (
+                    Zod,
+                    Eq("z.discriminatedUnion(\"type\", [z.object({\n  type: z.literal(\"Point\"),\n  coordinates: z.array(z.number()).min(2)\n}), z.object({\n  type: z.literal(\"LineString\"),\n  coordinates: z.array(z.array(z.number()).min(2)).min(2)\n})])"),
+                ),
+                (
+                    Valibot,
+                    Eq("v.variant(\"type\", [v.object({\n  type: v.literal(\"Point\"),\n  coordinates: v.pipe(v.array(v.number()), v.minLength(2))\n}), v.object({\n  type: v.literal(\"LineString\"),\n  coordinates: v.pipe(v.array(v.pipe(v.array(v.number()), v.minLength(2))), v.minLength(2))\n})])"),
+                ),
+                (
+                    Ts,
+                    Eq("{\n  type: \"Point\";\n  coordinates: number[];\n} | {\n  type: \"LineString\";\n  coordinates: number[][];\n}"),
+                ),
+            ],
+        ),
+    ]);
+    rows
 }

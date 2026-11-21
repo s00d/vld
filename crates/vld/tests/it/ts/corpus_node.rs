@@ -169,7 +169,10 @@ fn node_cases() -> Vec<Case> {
             s(&["en", "en-US", "EN", "en_US", "en-us"]),
         ),
         case(vld::string().country_code(), s(&["US", "us", "USA"])),
-        case(vld::string().currency_code(), s(&["USD", "usd", "US"])),
+        case(
+            vld::string().currency_code(),
+            s(&["USD", "usd", "US", "HRK", "XAU"]),
+        ),
         case(
             vld::string().cron(),
             s(&["*/5 * * * *", "0 0 * * * *", "* * *", "a * * * *"]),
@@ -229,6 +232,117 @@ fn node_cases() -> Vec<Case> {
             s(&["V1StGXR8_Z5jdHi6B-myT", "a b", ""]),
         ),
         case(vld::string().emoji(), s(&["😀", "😀a", ""])),
+        case(
+            vld::string().cron(),
+            s(&[
+                "0 9-17 * * MON-FRI",
+                "30 2 1,15 * ?",
+                "@daily",
+                "@reboot",
+                "60 * * * *",
+                "*/0 * * * *",
+                "5-1 * * * *",
+                "? * * * *",
+                "1/2/3 * * * *",
+                "0 0 * * 7",
+                "0 0 1 jan *",
+            ]),
+        ),
+        case(vld::string().country(), s(&["US", "UK", "us", "ZW", "XX"])),
+        case(
+            vld::string().country_alpha3(),
+            s(&["USA", "UKR", "XXX", "GB"]),
+        ),
+        case(
+            vld::string().iban(),
+            s(&[
+                "DE89370400440532013000",
+                "DE89 3704 0044 0532 0130 00",
+                "DE89370400440532013001",
+                "DE8937040044053201300",
+                "DE89  3704 0044 0532 0130 00",
+                "NO9386011117947",
+                "XX89370400440532013000",
+            ]),
+        ),
+        case(
+            vld::string().bic(),
+            s(&[
+                "DEUTDEFF",
+                "DEUTDEFF500",
+                "DEUTZZFF",
+                "BKPRXKPR",
+                "deutdeff",
+            ]),
+        ),
+        case(
+            vld::string().isbn(),
+            s(&[
+                "978-3-16-148410-0",
+                "978-3-16-148410-1",
+                "080442957X",
+                "080442957x",
+                "0 306 40615 2",
+                "0--306406152",
+                "9773161484100",
+            ]),
+        ),
+        case(
+            vld::string().ean(),
+            s(&[
+                "4006381333931",
+                "4006381333932",
+                "73513537",
+                "036000291452",
+                "123456789",
+            ]),
+        ),
+        case(
+            vld::string().vin(),
+            s(&[
+                "1M8GDM9AXKP042788",
+                "1M8GDM9A1KP042788",
+                "11111111111111111",
+                "IM8GDM9AXKP042788",
+            ]),
+        ),
+        case(
+            vld::string().mime(),
+            s(&[
+                "text/html; charset=utf-8",
+                "application/vnd.api+json",
+                "multipart/form-data; boundary=\"a b\"",
+                "text/html;",
+                "text/html; charset=\"open",
+                "text",
+            ]),
+        ),
+        case(
+            vld::string().object_id(),
+            s(&[
+                "507f1f77bcf86cd799439011",
+                "507f1f77bcf86cd79943901g",
+                "507f",
+            ]),
+        ),
+        case(
+            vld::string()
+                .min(8)
+                .require_lowercase()
+                .require_uppercase()
+                .require_digit()
+                .require_symbol()
+                .max_repeat(2),
+            s(&[
+                "Abcdef1!",
+                "abcdef1!",
+                "ABCDEF1!",
+                "Abcdefg!",
+                "Abcdefg1",
+                "Abbbcd1!",
+                "Ab cd1 é",
+            ]),
+        ),
         case(
             vld::string().email().starts_with("ab"),
             s(&["ab@x.io", "b@x.io"]),

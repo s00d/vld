@@ -6,9 +6,17 @@ use crate::schema::VldSchema;
 mod checks;
 mod formats;
 
+#[cfg(any(feature = "ts", feature = "fake"))]
+pub(crate) use formats::{COUNTRIES_ALPHA2, COUNTRIES_ALPHA3, IBAN_LENGTHS};
+
 #[cfg(feature = "openapi")]
 use checks::regex_escape;
-use checks::{Kind, StringCheck};
+use checks::{Kind, PasswordRule, StringCheck};
+
+#[cfg(feature = "string-advanced")]
+mod typed;
+#[cfg(feature = "string-advanced")]
+pub use typed::{ZParsedString, ZUrl, ZUuid};
 
 #[derive(Clone)]
 enum StringTransform {
@@ -17,6 +25,10 @@ enum StringTransform {
     ToUpperCase,
     /// Keep the first `n` characters.
     Truncate(usize),
+    #[cfg(feature = "unicode")]
+    Nfc,
+    #[cfg(feature = "unicode")]
+    Nfkc,
 }
 
 /// Schema for string validation. Created via [`vld::string()`](crate::string).
@@ -269,6 +281,134 @@ impl ZString {
         self
     }
 
+    /// Normalize to Unicode NFC (canonical composition) before the checks:
+    /// `e` + U+0301 becomes `é`, so equal-looking input compares and
+    /// counts equal. Requires the `unicode` feature.
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let name = vld::string().normalize_nfc().max(4);
+    /// assert_eq!(name.parse("\"Cafe\u{301}\"").unwrap(), "Caf\u{e9}");
+    /// ```
+    #[cfg(feature = "unicode")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "unicode")))]
+    pub fn normalize_nfc(mut self) -> Self {
+        self.transforms.push(StringTransform::Nfc);
+        self
+    }
+
+    /// Normalize to Unicode NFKC (compatibility composition) before the
+    /// checks: also folds full-width forms and ligatures (`ｆｉ` → `fi`,
+    /// `ﬁ` → `fi`) — the form to compare identifiers / usernames in.
+    /// Requires the `unicode` feature.
+    #[cfg(feature = "unicode")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "unicode")))]
+    pub fn normalize_nfkc(mut self) -> Self {
+        self.transforms.push(StringTransform::Nfkc);
+        self
+    }
+
+    /// Password rule: at least one lowercase letter (Unicode `Lowercase`).
+    ///
+    /// Every password rule reports its own issue
+    /// (`invalid_string` / `password_lowercase`, `password_uppercase`,
+    /// `password_digit`, `password_symbol`, `password_repeat`,
+    /// `password_strength`), so a form can list every unmet rule. Combine
+    /// with [`min`](Self::min) and [`redact`](crate::schema::VldSchema::redact)
+    /// so the password never appears in errors:
+    ///
+    /// ```
+    /// use vld::prelude::*;
+    /// let password = vld::string()
+    ///     .min(12)
+    ///     .require_lowercase()
+    ///     .require_uppercase()
+    ///     .require_digit()
+    ///     .require_symbol()
+    ///     .max_repeat(2)
+    ///     .redact();
+    /// let err = password.parse(r#""aaapassword""#).unwrap_err();
+    /// let keys: Vec<_> = err.issues.iter().map(|i| i.code.message_keys()[0].clone()).collect();
+    /// assert_eq!(keys, [
+    ///     "too_small.string",
+    ///     "invalid_string.password_uppercase",
+    ///     "invalid_string.password_digit",
+    ///     "invalid_string.password_symbol",
+    ///     "invalid_string.password_repeat",
+    /// ]);
+    /// assert!(!err.to_string().contains("aaapassword"));
+    /// ```
+    pub fn require_lowercase(self) -> Self {
+        self.push(Kind::Password(PasswordRule::Lowercase), None)
+    }
+
+    /// [`require_lowercase`](Self::require_lowercase) with a custom message.
+    pub fn require_lowercase_msg(self, msg: impl Into<String>) -> Self {
+        self.push(Kind::Password(PasswordRule::Lowercase), Some(msg.into()))
+    }
+
+    /// Password rule: at least one uppercase letter (Unicode `Uppercase`).
+    pub fn require_uppercase(self) -> Self {
+        self.push(Kind::Password(PasswordRule::Uppercase), None)
+    }
+
+    /// [`require_uppercase`](Self::require_uppercase) with a custom message.
+    pub fn require_uppercase_msg(self, msg: impl Into<String>) -> Self {
+        self.push(Kind::Password(PasswordRule::Uppercase), Some(msg.into()))
+    }
+
+    /// Password rule: at least one ASCII digit.
+    pub fn require_digit(self) -> Self {
+        self.push(Kind::Password(PasswordRule::Digit), None)
+    }
+
+    /// [`require_digit`](Self::require_digit) with a custom message.
+    pub fn require_digit_msg(self, msg: impl Into<String>) -> Self {
+        self.push(Kind::Password(PasswordRule::Digit), Some(msg.into()))
+    }
+
+    /// Password rule: at least one symbol — a character that is neither
+    /// alphanumeric nor whitespace (`!`, `_`, `€`, …).
+    pub fn require_symbol(self) -> Self {
+        self.push(Kind::Password(PasswordRule::Symbol), None)
+    }
+
+    /// [`require_symbol`](Self::require_symbol) with a custom message.
+    pub fn require_symbol_msg(self, msg: impl Into<String>) -> Self {
+        self.push(Kind::Password(PasswordRule::Symbol), Some(msg.into()))
+    }
+
+    /// Password rule: no character repeated more than `n` times in a row
+    /// (`max_repeat(2)` rejects `aaa`).
+    pub fn max_repeat(self, n: usize) -> Self {
+        self.push(Kind::Password(PasswordRule::MaxRepeat(n)), None)
+    }
+
+    /// [`max_repeat`](Self::max_repeat) with a custom message.
+    pub fn max_repeat_msg(self, n: usize, msg: impl Into<String>) -> Self {
+        self.push(Kind::Password(PasswordRule::MaxRepeat(n)), Some(msg.into()))
+    }
+
+    /// Password rule: the [zxcvbn](https://docs.rs/zxcvbn) strength
+    /// estimate is at least `min_score` (0 = too guessable … 4 = very
+    /// unguessable; 3 is a common minimum). Requires the
+    /// `password-strength` feature.
+    #[cfg(feature = "password-strength")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "password-strength")))]
+    pub fn password_strength(self, min_score: u8) -> Self {
+        self.push(Kind::Password(PasswordRule::Strength(min_score)), None)
+    }
+
+    /// [`password_strength`](Self::password_strength) with a custom message.
+    #[cfg(feature = "password-strength")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "password-strength")))]
+    pub fn password_strength_msg(self, min_score: u8, msg: impl Into<String>) -> Self {
+        self.push(
+            Kind::Password(PasswordRule::Strength(min_score)),
+            Some(msg.into()),
+        )
+    }
+
     /// Coerce non-string values (numbers, booleans) to string.
     pub fn coerce(mut self) -> Self {
         self.coerce = true;
@@ -323,6 +463,14 @@ impl VldSchema for ZString {
                     Some((at, _)) => s[..at].to_string(),
                     None => s,
                 },
+                #[cfg(feature = "unicode")]
+                StringTransform::Nfc => {
+                    unicode_normalization::UnicodeNormalization::nfc(s.as_str()).collect()
+                }
+                #[cfg(feature = "unicode")]
+                StringTransform::Nfkc => {
+                    unicode_normalization::UnicodeNormalization::nfkc(s.as_str()).collect()
+                }
             };
         }
 
@@ -359,6 +507,9 @@ impl VldSchema for ZString {
 /// - Formats: the first goes into `format`, further ones into `allOf`.
 /// - `pattern`/`starts_with`/`ends_with`/`contains` become `pattern`s
 ///   (first in `pattern`, further ones in `allOf`).
+/// - Password rules add `format: "password"` and an `x-password` object
+///   (`lowercase`, `uppercase`, `digit`, `symbol`: `true`; `maxRepeat`,
+///   `minScore`: numbers).
 #[cfg(feature = "openapi")]
 impl crate::openapi::JsonSchema for ZString {
     fn json_schema(&self) -> serde_json::Value {
@@ -367,6 +518,7 @@ impl crate::openapi::JsonSchema for ZString {
         let mut formats: Vec<&str> = vec![];
         let mut patterns: Vec<String> = vec![];
         let mut extra = vec![];
+        let mut password = serde_json::Map::new();
         for check in &self.checks {
             match &check.kind {
                 Kind::Min(n) => mins.push(*n),
@@ -384,10 +536,19 @@ impl crate::openapi::JsonSchema for ZString {
                 #[cfg(feature = "regex")]
                 Kind::Pattern(p) => patterns.push(p.as_str().to_string()),
                 Kind::Rule(r) => extra.extend(r.json_schema()),
+                #[cfg(feature = "crypto")]
+                Kind::Crypto(c) => extra.push(c.json_schema()),
                 Kind::Format(f) => {
                     if !formats.contains(&f.schema_format()) {
                         formats.push(f.schema_format());
                     }
+                }
+                Kind::Password(r) => {
+                    if !formats.contains(&"password") {
+                        formats.push("password");
+                    }
+                    let (name, value) = r.schema_entry();
+                    password.insert(name.to_string(), value);
                 }
             }
         }
@@ -405,6 +566,11 @@ impl crate::openapi::JsonSchema for ZString {
         all_of.extend(patterns.map(|p| serde_json::json!({ "pattern": p })));
         if !all_of.is_empty() {
             schema["allOf"] = serde_json::Value::Array(all_of);
+        }
+        // Password rules: OpenAPI's `format: password` plus the rules (not
+        // expressible as ECMA patterns without look-arounds).
+        if !password.is_empty() {
+            schema["x-password"] = serde_json::Value::Object(password);
         }
         for keywords in extra {
             crate::rules::merge_keywords(&mut schema, keywords);

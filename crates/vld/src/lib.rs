@@ -53,10 +53,12 @@
 //! | `diff` | breaking-change detection between JSON Schemas (implies `openapi`) |
 //! | `regex` | `string().pattern(...)`, `rules::Pattern` (via `regex-lite`) |
 //! | `chrono` / `jiff` / `time` | `vld::chrono`, `vld::jiff`, `vld::time` date schemas (additive) |
-//! | `decimal` | `decimal()` (`rust_decimal`) |
+//! | `decimal` | `decimal()`, `money()` (`rust_decimal`) |
+//! | `geo` | `latitude()`, `longitude()`, `geo_point()`, `geojson()` (no dependencies) |
 //! | `net` | `ip_network()` (`ipnet`) |
 //! | `file` / `file-advanced` | `file()` with size / type checks; hashes, image size, EXIF |
 //! | `string-advanced` | `url_strict()`, `uri()`, `uuid_v4()` & co, `phone_e164_strict()`, `semver_full()` |
+//! | `crypto` | `vld::crypto`, `string().crypto_address(...)`: wallet addresses with checksums (`sha2`, `sha3`, `blake2`) |
 //! | `ts` | `vld::ts`: TypeScript Zod 3 / 4, Valibot and type code (implies `openapi`) |
 //! | `fake` | `vld::fake`: random values that pass a schema (implies `openapi`) |
 //!
@@ -64,7 +66,7 @@
 //!
 //! - [`mod@schema`] — the [`VldSchema`](schema::VldSchema) trait, [`VldParse`](schema::VldParse),
 //!   [`DynSchema`](schema::DynSchema), input sources, nested schemas and
-//!   [`parse_coerced`](schema::parse_coerced)
+//!   [`coerce_text`](schema::coerce_text) / [`parse_coerced`](schema::parse_coerced)
 //! - [`error`] — [`VldError`](error::VldError), [`IssueCode`](error::IssueCode),
 //!   formatting ([`error::format`]) and translations ([`error::i18n`])
 //! - [`form`] — field-level errors for forms and server functions
@@ -104,6 +106,9 @@ pub mod error;
 #[cfg_attr(docsrs, doc(cfg(feature = "fake")))]
 pub mod fake;
 pub mod form;
+#[cfg(feature = "llm")]
+#[cfg_attr(docsrs, doc(cfg(feature = "llm")))]
+pub mod llm;
 mod macros;
 /// Optional, nullable, nullish and default wrappers.
 pub mod modifiers;
@@ -136,6 +141,10 @@ pub use openapi::diff;
 pub use schema::Schema;
 pub use schema::input;
 
+#[cfg(feature = "crypto")]
+#[cfg_attr(docsrs, doc(cfg(feature = "crypto")))]
+pub use primitives::crypto;
+
 // Date backends: additive, each in its own module.
 #[cfg(feature = "chrono")]
 #[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
@@ -167,6 +176,37 @@ pub use vld_derive::Validate;
 /// Create a string validation schema.
 pub fn string() -> primitives::ZString {
     primitives::ZString::new()
+}
+
+/// A UUID string parsed into [`uuid::Uuid`] (`string().uuid()` gives a
+/// `String`). JSON Schema `format: uuid`; issues as `string().uuid()`.
+///
+/// ```
+/// use vld::prelude::*;
+/// let id = vld::uuid().parse(r#""550e8400-e29b-41d4-a716-446655440000""#).unwrap();
+/// assert_eq!(id.get_version_num(), 4);
+/// ```
+#[cfg(feature = "string-advanced")]
+#[cfg_attr(docsrs, doc(cfg(feature = "string-advanced")))]
+pub fn uuid() -> primitives::ZUuid {
+    primitives::ZUuid::new()
+}
+
+/// An absolute URL (any scheme, as `string().uri()`) parsed into
+/// [`url::Url`]. JSON Schema `format: uri`. Narrow it with
+/// [`checks`](primitives::ZParsedString::checks): `vld::url().checks(|s| s.url())`
+/// for http(s) only, `.url_strict()` for public hosts.
+///
+/// ```
+/// use vld::prelude::*;
+/// let u = vld::url().parse(r#""https://example.com/a?b=1""#).unwrap();
+/// assert_eq!(u.host_str(), Some("example.com"));
+/// assert!(vld::url().parse(r#""/relative""#).is_err());
+/// ```
+#[cfg(feature = "string-advanced")]
+#[cfg_attr(docsrs, doc(cfg(feature = "string-advanced")))]
+pub fn url() -> primitives::ZUrl {
+    primitives::ZUrl::new()
 }
 
 /// Create a number validation schema (`f64`).
@@ -211,6 +251,81 @@ pub fn bytes() -> primitives::ZBytes {
 #[cfg_attr(docsrs, doc(cfg(feature = "decimal")))]
 pub fn decimal() -> primitives::ZDecimal {
     primitives::ZDecimal::new()
+}
+
+/// Create a money schema: `{"amount": <decimal>, "currency": "<ISO 4217>"}`
+/// into [`primitives::Money`], the amount's scale checked against the
+/// currency's minor units (see [`primitives::ZMoney`]).
+#[cfg(feature = "decimal")]
+#[cfg_attr(docsrs, doc(cfg(feature = "decimal")))]
+pub fn money() -> primitives::ZMoney {
+    primitives::ZMoney::new()
+}
+
+/// Create a percentage schema: a number in `0..=100` (`number().min(0).max(100)`).
+///
+/// ```
+/// use vld::prelude::*;
+/// assert_eq!(vld::percent().parse("12.5").unwrap(), 12.5);
+/// assert!(vld::percent().parse("100.01").is_err());
+/// ```
+pub fn percent() -> primitives::ZNumber {
+    number().min(0.0).max(100.0)
+}
+
+/// Create a ratio (fraction) schema: a number in `0..=1` (`number().min(0).max(1)`).
+///
+/// ```
+/// use vld::prelude::*;
+/// assert_eq!(vld::ratio().parse("0.25").unwrap(), 0.25);
+/// assert!(vld::ratio().parse("1.5").is_err());
+/// ```
+pub fn ratio() -> primitives::ZNumber {
+    number().min(0.0).max(1.0)
+}
+
+/// Create a latitude schema: degrees in `-90..=90` (`number().min(-90).max(90)`).
+#[cfg(feature = "geo")]
+#[cfg_attr(docsrs, doc(cfg(feature = "geo")))]
+pub fn latitude() -> primitives::ZNumber {
+    number().min(-90.0).max(90.0)
+}
+
+/// Create a longitude schema: degrees in `-180..=180` (`number().min(-180).max(180)`).
+#[cfg(feature = "geo")]
+#[cfg_attr(docsrs, doc(cfg(feature = "geo")))]
+pub fn longitude() -> primitives::ZNumber {
+    number().min(-180.0).max(180.0)
+}
+
+/// Create a geographic point schema: `{"lat", "lng"}` or GeoJSON-order
+/// `[lng, lat]` into [`primitives::GeoPoint`] (see [`primitives::ZGeoPoint`]).
+#[cfg(feature = "geo")]
+#[cfg_attr(docsrs, doc(cfg(feature = "geo")))]
+pub fn geo_point() -> primitives::ZGeoPoint {
+    primitives::ZGeoPoint::new()
+}
+
+/// Create a GeoJSON (RFC 7946) schema; geometries by default (see
+/// [`primitives::ZGeoJson`]).
+#[cfg(feature = "geo")]
+#[cfg_attr(docsrs, doc(cfg(feature = "geo")))]
+pub fn geojson() -> primitives::ZGeoJson {
+    primitives::ZGeoJson::new()
+}
+
+/// Create a range schema `{"start": a, "end": b}` with `a <= b` into
+/// `RangeInclusive<T>`, both ends parsed by `item` (dates, datetimes,
+/// numbers, …; see [`primitives::ZRange`]).
+///
+/// ```
+/// use vld::prelude::*;
+/// let r = vld::range(vld::number()).parse(r#"{"start": 1.5, "end": 2}"#).unwrap();
+/// assert_eq!(r, 1.5..=2.0);
+/// assert!(vld::range(vld::number()).parse(r#"{"start": 3, "end": 2}"#).is_err());
+/// ```
+pub fn range<S: schema::VldSchema>(item: S) -> primitives::ZRange<S> {
+    primitives::ZRange::new(item)
 }
 
 /// Create an IP network/CIDR schema (`ipnet::IpNet`).

@@ -21,6 +21,12 @@
 //! | `rama` | `rama` | rama 0.4 extractors and a validation layer |
 //! | `tower` | `tower` | a Tower layer validating JSON bodies (any Tower-based framework) |
 //! | `tonic` | `tonic` | tonic 0.12 – 0.14 message and metadata validation |
+//! | `async_graphql` | `async-graphql` | async-graphql 7 input validator and errors with `extensions.issues` |
+//! | `tungstenite` | `tungstenite` | tungstenite 0.26 – 0.30 WebSocket messages (also tokio-/async-tungstenite) |
+//! | `axum::ws` | `axum-ws` | axum WebSocket messages |
+//! | `lambda` | `lambda` | AWS Lambda: `lambda_http` 1 requests and raw `lambda_runtime` events |
+//! | `rmcp` | `rmcp` | MCP tools (rmcp 3): vld-validated arguments, `isError` results with model feedback |
+//! | `rig` | `rig` | rig 0.47 tools: vld-validated arguments, schema per LLM provider |
 //!
 //! Every HTTP module answers with the same error bodies (422 / 413 / 415,
 //! see [`common#error-bodies`](common#error-bodies)) and parses query
@@ -57,10 +63,17 @@ pub(crate) use impl_deref;
 
 pub mod common;
 
+#[cfg(any(feature = "tungstenite", feature = "axum-ws"))]
+mod ws;
+
 #[cfg(feature = "actix")]
 pub mod actix;
+#[cfg(feature = "async-graphql")]
+pub mod async_graphql;
 #[cfg(feature = "axum")]
 pub mod axum;
+#[cfg(feature = "lambda")]
+pub mod lambda;
 #[cfg(feature = "ntex-3")]
 pub mod ntex3;
 #[cfg(feature = "ntex-4")]
@@ -69,6 +82,10 @@ pub mod ntex4;
 pub mod poem;
 #[cfg(feature = "rama")]
 pub mod rama;
+#[cfg(feature = "rig")]
+pub mod rig;
+#[cfg(feature = "rmcp")]
+pub mod rmcp;
 #[cfg(feature = "rocket")]
 pub mod rocket;
 #[cfg(feature = "salvo")]
@@ -77,5 +94,7 @@ pub mod salvo;
 pub mod tonic;
 #[cfg(feature = "tower")]
 pub mod tower;
+#[cfg(feature = "tungstenite")]
+pub mod tungstenite;
 #[cfg(feature = "warp")]
 pub mod warp;

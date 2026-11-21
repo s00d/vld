@@ -255,13 +255,13 @@ impl Session {
                         let mut s = self.state.lock().unwrap();
                         s.published
                             .push((exchange.clone(), key.clone(), body.clone()));
-                        if exchange.is_empty() {
-                            if let Some(q) = s.queues.get_mut(&key) {
-                                q.push_back(Message {
-                                    body,
-                                    redelivered: false,
-                                });
-                            }
+                        if exchange.is_empty()
+                            && let Some(q) = s.queues.get_mut(&key)
+                        {
+                            q.push_back(Message {
+                                body,
+                                redelivered: false,
+                            });
                         }
                         s.nack_publishes
                     };
@@ -326,11 +326,11 @@ impl Session {
                         }
                     };
                     s.settled.push(settle);
-                    if let Some((queue, mut m)) = s.unacked.remove(&tag) {
-                        if requeue {
-                            m.redelivered = true;
-                            s.queues.entry(queue).or_default().push_front(m);
-                        }
+                    if let Some((queue, mut m)) = s.unacked.remove(&tag)
+                        && requeue
+                    {
+                        m.redelivered = true;
+                        s.queues.entry(queue).or_default().push_front(m);
                     }
                 }
                 other => panic!("FakeBroker: unsupported method {other:?}"),

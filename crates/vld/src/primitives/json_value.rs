@@ -102,13 +102,13 @@ impl VldSchema for ZJsonValue {
                 }
             }
         }
-        if let Some(max_depth) = self.max_depth {
-            if depth(value) > max_depth {
-                return Err(VldError::from_code_with_value(
-                    IssueCode::JsonTooDeep { max_depth },
-                    value,
-                ));
-            }
+        if let Some(max_depth) = self.max_depth
+            && depth(value) > max_depth
+        {
+            return Err(VldError::from_code_with_value(
+                IssueCode::JsonTooDeep { max_depth },
+                value,
+            ));
         }
         Ok(value.clone())
     }

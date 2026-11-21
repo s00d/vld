@@ -10,6 +10,7 @@ crate::openapi::forward_inner_schema! {
     impl[S, F, U] crate::combinators::ZTransform<S, F, U>, inner = S, where [F: Fn(S::Output) -> U];
     impl[S, F, U, E] crate::combinators::ZTryTransform<S, F, U>, inner = S, where [F: Fn(S::Output) -> Result<U, E>, E: std::fmt::Display];
     impl[S] crate::combinators::ZMessage<S>, inner = S;
+    impl[S] crate::combinators::ZRedact<S>, inner = S;
     impl[S, F] crate::combinators::ZSuperRefine<S, F>, inner = S,
         where [F: Fn(&S::Output, &mut crate::error::VldError)];
     impl[F, S] crate::combinators::ZPreprocess<F, S>, inner = S, where [F: Fn(&Value) -> Value];

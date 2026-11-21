@@ -10,7 +10,7 @@ documentation = "https://docs.rs/vld"
 readme = "../../README.md"
 keywords = ["validation", "schema", "json", "zod", "parsing"]
 categories = ["parsing", "web-programming"]
-include = ["/src/**", "/LICENSE", "/Cargo.toml"]
+include = ["/src/**", "/build.rs", "/locales/*.json", "/LICENSE", "/Cargo.toml"]
 
 [lints]
 workspace = true
@@ -21,23 +21,61 @@ regex = ["dep:regex-lite"]
 derive = ["dep:vld-derive"]
 openapi = []
 diff = ["openapi"]
+# Provider-ready JSON Schemas, reply parsing and model feedback (`vld::llm`).
+llm = ["openapi"]
 chrono = ["dep:chrono"]
 jiff = ["dep:jiff"]
 time = ["dep:time"]
 decimal = ["dep:rust_decimal"]
+geo = []
 net = ["dep:ipnet"]
 file = ["dep:infer"]
 file-advanced = ["file", "dep:sha2", "dep:md-5", "dep:image", "dep:kamadak-exif"]
 string-advanced = ["dep:semver", "dep:url", "dep:uuid", "dep:phonenumber"]
+crypto = ["dep:sha2", "dep:sha3", "dep:blake2"]
 ts = ["openapi"]
 fake = ["openapi", "dep:regex-lite", "dep:rand", "dep:regex-syntax"]
+unicode = ["dep:unicode-normalization", "dep:unicode-security"]
+password-strength = ["dep:zxcvbn"]
+# Embedded translations of every message (`locales/*.json`) through i18n-next (`vld::i18n::translator`).
+# Error-message translations through i18n-next: `i18n` embeds English, Russian, German and
+# Spanish; `i18n-<lang>` adds one more language, `i18n-all` every shipped one.
+i18n = ["dep:i18n-next"]
+i18n-all = ["i18n-ar", "i18n-bg", "i18n-cs", "i18n-da", "i18n-el", "i18n-fi", "i18n-fr", "i18n-he", "i18n-hi", "i18n-hu", "i18n-id", "i18n-it", "i18n-ja", "i18n-ko", "i18n-nb", "i18n-nl", "i18n-pl", "i18n-pt", "i18n-ro", "i18n-sv", "i18n-th", "i18n-tr", "i18n-uk", "i18n-vi", "i18n-zh"]
+i18n-ar = ["i18n"]
+i18n-bg = ["i18n"]
+i18n-cs = ["i18n"]
+i18n-da = ["i18n"]
+i18n-el = ["i18n"]
+i18n-fi = ["i18n"]
+i18n-fr = ["i18n"]
+i18n-he = ["i18n"]
+i18n-hi = ["i18n"]
+i18n-hu = ["i18n"]
+i18n-id = ["i18n"]
+i18n-it = ["i18n"]
+i18n-ja = ["i18n"]
+i18n-ko = ["i18n"]
+i18n-nb = ["i18n"]
+i18n-nl = ["i18n"]
+i18n-pl = ["i18n"]
+i18n-pt = ["i18n"]
+i18n-ro = ["i18n"]
+i18n-sv = ["i18n"]
+i18n-th = ["i18n"]
+i18n-tr = ["i18n"]
+i18n-uk = ["i18n"]
+i18n-vi = ["i18n"]
+i18n-zh = ["i18n"]
 
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
 regex-lite = { workspace = true, optional = true }
 chrono = { version = "0.4.38", optional = true, default-features = false, features = ["std", "clock", "serde"] }
-jiff = { version = "0.2.1", optional = true, default-features = false, features = ["std", "serde"] }
+# tzdb-*: the time zone database behind `string().timezone()` (bundled on
+# Windows / wasm, the system zoneinfo elsewhere: jiff's defaults).
+jiff = { version = "0.2.1", optional = true, default-features = false, features = ["std", "serde", "tzdb-bundle-platform", "tzdb-zoneinfo"] }
 time = { version = "0.3.36", optional = true, default-features = false, features = ["std", "parsing", "formatting", "macros", "serde-human-readable"] }
 vld-derive = { workspace = true, optional = true }
 infer = { version = "0.22.0", optional = true }
@@ -56,6 +94,13 @@ md-5 = { version = "0.11.0", optional = true }
 kamadak-exif = { version = "0.6.1", optional = true }
 rand = { version = "0.10", optional = true }
 regex-syntax = { version = "0.8", optional = true, default-features = false, features = ["std", "unicode"] }
+sha3 = { version = "0.12.0", optional = true, default-features = false }
+blake2 = { version = "0.11.0", optional = true, default-features = false }
+unicode-normalization = { version = "0.1.24", optional = true }
+unicode-security = { version = "0.1.2", optional = true }
+zxcvbn = { version = "3.1.0", optional = true, default-features = false }
+# The micro build: catalog, fallback chains and CLDR plurals, no formats / time zones / global.
+i18n-next = { version = "0.2.0", optional = true, default-features = false }
 
 [dev-dependencies]
 criterion = { version = ">=0.5, <0.9", features = ["html_reports"] }
@@ -64,6 +109,9 @@ proptest = "1"
 insta = { workspace = true }
 jsonschema = { version = "0.60.2", default-features = false }
 tempfile = "3.27.0"
+# The typed outputs of `vld::uuid()` / `vld::url()` (string-advanced).
+url = "2.5.8"
+uuid = "1.26.1"
 
 [[bench]]
 name = "validation_bench"
@@ -79,5 +127,5 @@ required-features = ["fake"]
 
 [package.metadata.docs.rs]
 # Every additive feature (all three date backends can be enabled together).
-features = ["derive", "regex", "openapi", "diff", "chrono", "jiff", "time", "decimal", "net", "file", "file-advanced", "string-advanced", "ts", "fake"]
+features = ["derive", "regex", "openapi", "diff", "llm", "chrono", "jiff", "time", "decimal", "geo", "net", "file", "file-advanced", "string-advanced", "crypto", "ts", "fake", "unicode", "password-strength", "i18n", "i18n-all"]
 rustdoc-args = ["--cfg", "docsrs"]

@@ -11,6 +11,7 @@
 //! | Module | Feature | Library |
 //! |---|---|---|
 //! | `config` | `config-rs` and / or `figment` | config-rs 0.14 – 0.15, figment 0.10 |
+//! | `env` | `env` and / or `dotenv` | environment variables (std); `.env` files (dotenvy 0.15) |
 //! | `clap` | `clap` | clap 4 argument validation (enables `vld/derive`) |
 //! | [`tauri`] | — | Tauri IPC payloads (no `tauri` dependency) |
 //!
@@ -23,4 +24,6 @@
 pub mod clap;
 #[cfg(any(feature = "config-rs", feature = "figment"))]
 pub mod config;
+#[cfg(feature = "env")]
+pub mod env;
 pub mod tauri;

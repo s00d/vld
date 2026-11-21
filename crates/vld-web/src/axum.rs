@@ -412,6 +412,9 @@ where
 
 crate::impl_deref!(VldJson, VldQuery, VldPath, VldForm, VldHeaders, VldCookie);
 
+#[cfg(feature = "axum-ws")]
+pub mod ws;
+
 /// Prelude — import everything you need.
 pub mod prelude {
     pub use super::{VldCookie, VldForm, VldHeaders, VldJson, VldJsonRejection, VldPath, VldQuery};

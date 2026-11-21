@@ -8,6 +8,7 @@
 //! |---|---|---|
 //! | [`utoipa5`] / [`utoipa6`] | `utoipa-5` / `utoipa-6` | `impl_to_schema!`: utoipa `ToSchema` / `IntoParams` from a vld type |
 //! | [`schemars0`] / [`schemars1`] | `schemars-0` / `schemars-1` | `impl_json_schema!` (vld → `schemars::JsonSchema`, also for aide) and `impl_vld_parse!` (schemars type → vld validation) |
+//! | [`poem_openapi`] | `poem-openapi` | `impl_type!`: poem-openapi `Type` / `ParseFromJSON` from a vld type; `VldJson<T>` request body answering 422 with every issue |
 //! | [`validator`] | always | validate JSON against a JSON Schema, inspect and combine schemas, `to_openapi3` |
 //!
 //! ```toml
@@ -30,6 +31,9 @@ mod macros;
 
 pub mod validator;
 
+#[cfg(feature = "poem-openapi")]
+#[cfg_attr(docsrs, doc(cfg(feature = "poem-openapi")))]
+pub mod poem_openapi;
 #[cfg(feature = "schemars-0")]
 #[cfg_attr(docsrs, doc(cfg(feature = "schemars-0")))]
 pub mod schemars0;

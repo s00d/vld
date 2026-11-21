@@ -75,24 +75,24 @@ where
             }
         }
 
-        if let Some(min) = self.min_size {
-            if result.len() < min {
-                errors.push_code(IssueCode::TooSmall {
-                    origin: SizeOrigin::Set,
-                    minimum: min.into(),
-                    inclusive: true,
-                });
-            }
+        if let Some(min) = self.min_size
+            && result.len() < min
+        {
+            errors.push_code(IssueCode::TooSmall {
+                origin: SizeOrigin::Set,
+                minimum: min.into(),
+                inclusive: true,
+            });
         }
 
-        if let Some(max) = self.max_size {
-            if result.len() > max {
-                errors.push_code(IssueCode::TooBig {
-                    origin: SizeOrigin::Set,
-                    maximum: max.into(),
-                    inclusive: true,
-                });
-            }
+        if let Some(max) = self.max_size
+            && result.len() > max
+        {
+            errors.push_code(IssueCode::TooBig {
+                origin: SizeOrigin::Set,
+                maximum: max.into(),
+                inclusive: true,
+            });
         }
 
         if errors.is_empty() && !failed {

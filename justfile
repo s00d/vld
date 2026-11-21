@@ -11,12 +11,14 @@ ci_flags := "--profile ci --locked"
 # Crate groups (ARCHITECTURE.md): `core` = vld + vld-derive, the others = vld-<group>.
 # CI runs one job per group. vld-data's diesel postgres/mysql need libpq / libmysqlclient.
 groups := "core web openapi data app"
-vld_all := "chrono,jiff,time,derive,regex,openapi,diff,decimal,net,file,string-advanced,file-advanced,ts,fake"
+app_all := "config-rs,figment,clap,env,dotenv"
+i18n_langs_but_fr := "i18n-ar,i18n-bg,i18n-cs,i18n-da,i18n-el,i18n-fi,i18n-he,i18n-hi,i18n-hu,i18n-id,i18n-it,i18n-ja,i18n-ko,i18n-nb,i18n-nl,i18n-pl,i18n-pt,i18n-ro,i18n-sv,i18n-th,i18n-tr,i18n-uk,i18n-vi,i18n-zh"
+vld_all := "regex,derive,openapi,diff,llm,chrono,jiff,time,decimal,geo,net,file,file-advanced,string-advanced,crypto,ts,fake,unicode,password-strength,i18n-all"
 # vld-data for semver-checks: every feature but lapin-2 (see `semver`)
-data_semver := "sqlx-0_8,sqlx-0_9,diesel,postgres,mysql,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio,redis-aio-tokio,lapin-3,lapin-4"
+data_semver := "sqlx-0_8,sqlx-0_9,diesel,postgres,mysql,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio,redis-aio-tokio,lapin-3,lapin-4,bson-2,bson-3,tokio-postgres,rumqttc,nats,clickhouse,centrifuge,socketio,csv"
 # vld-data without the postgres / mysql backends (diesel links libpq / libmysqlclient,
 # which only the Linux CI image has): what `test-group data` runs on macOS / Windows.
-data_portable := "sqlx-0_8,sqlx-0_9,diesel,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3,lapin-4"
+data_portable := "sqlx-0_8,sqlx-0_9,diesel,sqlite,sea-orm-1,sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3,lapin-4,bson-2,bson-3,tokio-postgres,rumqttc,nats,clickhouse,centrifuge,socketio,csv"
 
 [private]
 default:
@@ -51,7 +53,8 @@ lint-group name:
     case "{{ name }}" in
       core)
         cargo clippy -p vld -p vld-derive -p playground --all-features --all-targets {{ ci_flags }} -- -D warnings
-        cargo hack clippy -p vld --each-feature --all-targets {{ ci_flags }} -- -D warnings ;;
+        # one `i18n-<lang>` stands for all of them: they only embed another JSON catalog
+        cargo hack clippy -p vld --each-feature --skip "{{ i18n_langs_but_fr }}" --all-targets {{ ci_flags }} -- -D warnings ;;
       web|openapi|data|app)
         cargo clippy -p vld-{{ name }} --all-features --all-targets {{ ci_flags }} -- -D warnings
         cargo hack clippy -p vld-{{ name }} --each-feature --lib {{ ci_flags }} -- -D warnings ;;
@@ -124,20 +127,18 @@ msrv:
         && CARGO_TARGET_DIR="${target}-${tc}" cargo "+${tc}" check -q --locked)
       rm -rf "${dir}"
     }
-    probe 1.85 vld "{{ vld_all }}"
-    probe 1.85 vld-derive
-    probe 1.85 vld-web axum,actix,poem,rocket,warp,tower,tonic
-    probe 1.88 vld-web ntex-3
+    probe 1.90 vld "{{ vld_all }}"
+    probe 1.90 vld-derive
+    probe 1.90 vld-web axum,axum-ws,actix,poem,rocket,warp,tower,tonic,tungstenite,lambda,async-graphql,ntex-3,rmcp
     probe 1.94 vld-web salvo
     probe 1.96 vld-web rama
     probe 1.97 vld-web ntex-4,ntex-compress
-    probe 1.85 vld-openapi utoipa-5,schemars-0,schemars-1
-    probe 1.88 vld-openapi utoipa-6
-    probe 1.85 vld-data "sqlx-0_8,diesel,sqlite,sea-orm-1,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3"
+    probe 1.97.1 vld-web rig
+    probe 1.90 vld-openapi utoipa-5,utoipa-6,schemars-0,schemars-1,poem-openapi
+    probe 1.90 vld-data "sqlx-0_8,diesel,sqlite,sea-orm-1,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array,redis-0,redis-1,redis-aio-tokio,lapin-2,lapin-3,lapin-4,bson-2,bson-3,tokio-postgres,rumqttc,centrifuge,csv,nats,clickhouse"
     probe 1.94 vld-data "sqlx-0_9,postgres,mysql,sqlite"
     probe 1.94 vld-data "sea-orm-2,with-json,with-chrono,with-uuid,with-rust_decimal,with-bigdecimal,with-time,postgres-array"
-    probe 1.88 vld-data lapin-4
-    probe 1.85 vld-app config-rs,figment,clap
+    probe 1.90 vld-app "{{ app_all }}"
 
 # Lowest allowed versions of direct dependencies compile (nightly; crates with wide version ranges)
 minimal:

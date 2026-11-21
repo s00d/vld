@@ -68,6 +68,14 @@ impl DateBackend for Time {
     fn format_datetime(dt: &Self::DateTime) -> String {
         dt.format(&Rfc3339).unwrap_or_else(|_| dt.to_string())
     }
+
+    fn from_unix_nanos(nanos: i128) -> Option<Self::DateTime> {
+        OffsetDateTime::from_unix_timestamp_nanos(nanos).ok()
+    }
+
+    fn unix_nanos(dt: &Self::DateTime) -> i128 {
+        dt.unix_timestamp_nanos()
+    }
 }
 
 /// Date schema producing `time::Date`.

@@ -2,3 +2,6 @@
 
 mod conformance;
 mod story_api;
+mod story_loco;
+#[cfg(feature = "axum-ws")]
+mod story_ws;

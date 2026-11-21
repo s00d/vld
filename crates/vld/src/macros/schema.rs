@@ -397,6 +397,18 @@ macro_rules! schema {
                     $crate::schema!(@param_in $(#[ $($struct_attr)* ])*)
                 }
             }
+
+            $crate::__vld_if_llm! {
+                impl $crate::llm::LlmSchema for $name {
+                    fn __vld_llm_parts() -> (
+                        &'static str,
+                        $crate::serde_json::Value,
+                        ::std::vec::Vec<$crate::openapi::NestedSchemaEntry>,
+                    ) {
+                        (stringify!($name), Self::json_schema(), Self::__vld_nested_schemas())
+                    }
+                }
+            }
         }
             }
         }
