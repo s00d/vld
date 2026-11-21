@@ -83,7 +83,7 @@ Moved in 0.8: the former per-integration crates (`vld-axum`, `vld-sqlx`, `vld-ts
 
 ## Minimum supported Rust version
 
-`vld` needs Rust **1.85** with every feature. Some integration features need a newer compiler; see [MSRV.md](https://github.com/s00d/vld/blob/main/MSRV.md).
+`vld` needs Rust **1.90** with every feature. Some integration features need a newer compiler; see [MSRV.md](https://github.com/s00d/vld/blob/main/MSRV.md).
 
 ## Contributing
 

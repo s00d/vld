@@ -114,11 +114,9 @@ mysql backends link libpq / libmysqlclient.
 
 ## Rust versions
 
-Every crate declares `rust-version = "1.85"`: what its default (empty) feature
-set needs. A feature whose dependency needs a newer compiler (ntex 4: 1.97,
-rama: 1.96, salvo / sqlx 0.9 / sea-orm 2: 1.94, utoipa 6 / lapin 4 / ntex 3:
-1.88) is listed in MSRV.md; cargo reports the dependency's `rust-version` when
-a user's compiler is older.
+Every crate declares `rust-version = "1.90"`; features whose dependencies need a newer
+compiler (salvo, rama, ntex 4, rig, sqlx 0.9, sea-orm 2) are listed in MSRV.md. CI builds
+with the pinned Rust 1.100.
 
 ## Tests
 
